@@ -12,7 +12,7 @@ type apiError struct {
 	Err    error  `json:"-"`
 }
 
-func httpError(w http.ResponseWriter, msg string, status int, err error) apiError {
+func writeHttpError(w http.ResponseWriter, msg string, status int, err error) apiError {
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 	if err != nil {
@@ -22,6 +22,6 @@ func httpError(w http.ResponseWriter, msg string, status int, err error) apiErro
 }
 
 // HTTP Errors
-func HTTPUnauthorized(w http.ResponseWriter, msg string, err error) apiError {
-	return httpError(w, msg, http.StatusUnauthorized, err)
+func WriteHTTPUnauthorized(w http.ResponseWriter, msg string, err error) apiError {
+	return writeHttpError(w, msg, http.StatusUnauthorized, err)
 }

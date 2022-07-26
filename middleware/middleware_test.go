@@ -3,7 +3,6 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/livepeer/dms-api/handlers"
@@ -19,7 +18,7 @@ func TestNoAuthHeader(t *testing.T) {
 	h.ServeHTTP(rr, req)
 
 	require.Equal(rr.Code, 401, "should return 401")
-	require.Equal(strings.TrimRight(rr.Body.String(), "\n"), `{"error":"No authorization header"}`)
+	require.JSONEq(rr.Body.String(), `{"error":"No authorization header"}`)
 }
 
 func TestWrongKey(t *testing.T) {
@@ -33,5 +32,5 @@ func TestWrongKey(t *testing.T) {
 	h.ServeHTTP(rr, req)
 
 	require.Equal(rr.Code, 401, "should return 401")
-	require.Equal(strings.TrimRight(rr.Body.String(), "\n"), `{"error":"Invalid Token"}`)
+	require.JSONEq(rr.Body.String(), `{"error":"Invalid Token"}`)
 }
