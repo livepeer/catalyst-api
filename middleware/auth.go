@@ -14,14 +14,14 @@ func IsAuthorized(next http.HandlerFunc) http.HandlerFunc {
 		authHeader := r.Header.Get("Authorization")
 
 		if authHeader == "" {
-			errors.HTTPUnauthorized(w, "No authorization header", nil)
+			errors.WriteHTTPUnauthorized(w, "No authorization header", nil)
 			return
 		}
 
 		token := strings.TrimPrefix(authHeader, "Bearer ")
 
 		if token != testToken {
-			errors.HTTPUnauthorized(w, "Invalid Token", nil)
+			errors.WriteHTTPUnauthorized(w, "Invalid Token", nil)
 			return
 		}
 
