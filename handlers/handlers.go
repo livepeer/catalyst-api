@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 
+	"github.com/livepeer/dms-api/errors"
 	"github.com/livepeer/go-livepeer/drivers"
 )
 
@@ -60,12 +60,12 @@ func (d *DMSAPIHandlersCollection) UploadVOD() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != "POST" {
 			w.Header().Add("Allow", "POST")
-			replyError(405, w)
+			errors.WriteHTTPMethodNotAlloed(w, "Method Not Allowed", nil)
 			return
 		}
 
 		if req.Header.Get("Content-Type") != "application/json" {
-			replyError(400, w)
+			errors.WriteHTTPBadRequest(w, "Unsupported content type", nil)
 			return
 		}
 
@@ -74,44 +74,23 @@ func (d *DMSAPIHandlersCollection) UploadVOD() http.HandlerFunc {
 		var err error
 
 		if payload, err = ioutil.ReadAll(req.Body); err != nil {
-			replyError(500, w)
+			errors.WriteHTTPInternalServerError(w, "Cannot read payload", err)
 			return
 		}
 
 		if err = json.Unmarshal(payload, &uploadVOD); err != nil {
-			replyError(400, w)
+			errors.WriteHTTPBadRequest(w, "Cannot unmarshal JSON to UploadVODRequest struct", err)
 			return
 		}
 
 		if len(uploadVOD.OutputLocations) == 0 {
-			replyError(400, w)
+			errors.WriteHTTPBadRequest(w, "Empty output locations", nil)
 			return
 
 		}
 
 		// Do something with uploadVOD
-		log.Println(len(uploadVOD.OutputLocations))
-		replyOK("OK", w)
+		w.WriteHeader(200)
+		io.WriteString(w, "OK")
 	})
-}
-
-func replyError(code int, w http.ResponseWriter) {
-	var response string
-	switch code {
-	case 400:
-		response = "Bad Request"
-	case 405:
-		response = "Method Not Allowed"
-	default:
-		code = 500
-		response = "Internal Server Error"
-	}
-
-	w.WriteHeader(code)
-	io.WriteString(w, response)
-}
-
-func replyOK(payload string, w http.ResponseWriter) {
-	w.WriteHeader(200)
-	io.WriteString(w, payload)
 }
