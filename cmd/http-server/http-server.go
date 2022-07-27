@@ -21,6 +21,7 @@ func StartDMSAPIServer(addr string) http.Server {
 	http.DefaultServeMux = http.NewServeMux()
 
 	mux.Handle("/ok", middleware.IsAuthorized(handlers.DMSAPIHandlers.Ok()))
+	mux.Handle("/api/vod", middleware.IsAuthorized(handlers.DMSAPIHandlers.UploadVOD()))
 
 	log.Println("DMS API server listening on", addr)
 	server.Handler = mux
