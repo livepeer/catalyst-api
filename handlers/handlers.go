@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -21,46 +22,26 @@ func (d *DMSAPIHandlersCollection) Ok() http.HandlerFunc {
 	})
 }
 
-type OSURL struct {
-	drivers.OSDriver
-}
-
-type URL struct {
-	*url.URL
-}
-
-func (j *OSURL) UnmarshalJSON(b []byte) error {
-	driver, err := drivers.ParseOSURL(string(b[1:len(b)-1]), true)
-
-	if err == nil {
-		j.OSDriver = driver
-	}
-
-	return err
-}
-
-func (j *URL) UnmarshalJSON(b []byte) error {
-	url, err := url.Parse(string(b[1 : len(b)-1]))
-
-	if err == nil {
-		j.URL = url
-	}
-
-	return err
-}
-
-type UploadVODRequest struct {
-	Url             URL     `json:"url,omitempty"`
-	CallbackUrl     URL     `json:"callback_url,omitempty"`
-	OutputLocations []OSURL `json:"output_locations,omitempty"`
-	Mp4Output       bool    `json:"mp4_output,omitempty"`
+type UploadVOD struct {
+	Url             url.URL
+	CallbackUrl     url.URL
+	Mp4Output       bool
+	OutputLocations []drivers.OSDriver
 }
 
 func (d *DMSAPIHandlersCollection) UploadVOD() http.HandlerFunc {
+	type UploadVODRequest struct {
+		Url             *string   `json:"url,omitempty"`
+		CallbackUrl     *string   `json:"callback_url,omitempty"`
+		Mp4Output       *bool     `json:"mp4_output,omitempty"`
+		OutputLocations *[]string `json:"output_locations,omitempty"`
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		drivers.Testing = true
 		if req.Method != "POST" {
 			w.Header().Add("Allow", "POST")
-			errors.WriteHTTPMethodNotAlloed(w, "Method Not Allowed", nil)
+			errors.WriteHTTPMethodNotAlloed(w, "Method not allowed", nil)
 			return
 		}
 
@@ -69,7 +50,7 @@ func (d *DMSAPIHandlersCollection) UploadVOD() http.HandlerFunc {
 			return
 		}
 
-		var uploadVOD UploadVODRequest
+		var uploadVODRequest UploadVODRequest
 		var payload []byte
 		var err error
 
@@ -78,19 +59,68 @@ func (d *DMSAPIHandlersCollection) UploadVOD() http.HandlerFunc {
 			return
 		}
 
-		if err = json.Unmarshal(payload, &uploadVOD); err != nil {
+		if err = json.Unmarshal(payload, &uploadVODRequest); err != nil {
 			errors.WriteHTTPBadRequest(w, "Cannot unmarshal JSON to UploadVODRequest struct", err)
 			return
 		}
 
-		if len(uploadVOD.OutputLocations) == 0 {
-			errors.WriteHTTPBadRequest(w, "Empty output locations", nil)
+		if uploadVODRequest.Url == nil {
+			errors.WriteHTTPBadRequest(w, "Missing url", nil)
 			return
+		}
 
+		if uploadVODRequest.CallbackUrl == nil {
+			errors.WriteHTTPBadRequest(w, "Missing callback_url", nil)
+			return
+		}
+
+		if uploadVODRequest.OutputLocations == nil {
+			errors.WriteHTTPBadRequest(w, "Missing output_locations", nil)
+			return
+		}
+
+		var mp4Output bool
+		if uploadVODRequest.Mp4Output == nil {
+			mp4Output = false
+		}
+
+		var sourceUrl *url.URL
+		sourceUrl, err = url.Parse(*uploadVODRequest.Url)
+		if err != nil {
+			errors.WriteHTTPBadRequest(w, "Invalid url", err)
+			return
+		}
+
+		var callbackUrl *url.URL
+		callbackUrl, err = url.Parse(*uploadVODRequest.CallbackUrl)
+		if err != nil {
+			errors.WriteHTTPBadRequest(w, "Invalid callback_url", err)
+			return
+		}
+
+		if len(*uploadVODRequest.OutputLocations) == 0 {
+			errors.WriteHTTPBadRequest(w, "Empty output_locations", nil)
+			return
+		}
+
+		outputLocations := []drivers.OSDriver{}
+		for _, location := range *uploadVODRequest.OutputLocations {
+			if driver, err := drivers.ParseOSURL(location, true); err == nil {
+				outputLocations = append(outputLocations, driver)
+			} else {
+				errors.WriteHTTPBadRequest(w, "Invalid output_locations entry", err)
+				return
+			}
+		}
+
+		uploadVod := UploadVOD{
+			Url:             *sourceUrl,
+			CallbackUrl:     *callbackUrl,
+			Mp4Output:       mp4Output,
+			OutputLocations: outputLocations,
 		}
 
 		// Do something with uploadVOD
-		w.WriteHeader(200)
-		io.WriteString(w, "OK")
+		io.WriteString(w, fmt.Sprint(len(uploadVod.OutputLocations)))
 	})
 }
