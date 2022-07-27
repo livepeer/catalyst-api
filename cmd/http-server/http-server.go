@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/livepeer/dms-api/handlers"
+	"github.com/livepeer/dms-api/middleware"
 )
 
 func main() {
@@ -19,7 +20,7 @@ func StartDMSAPIServer(addr string) http.Server {
 	mux := http.DefaultServeMux
 	http.DefaultServeMux = http.NewServeMux()
 
-	mux.Handle("/ok", handlers.DMSAPIHandlers.Ok())
+	mux.Handle("/ok", middleware.IsAuthorized(handlers.DMSAPIHandlers.Ok()))
 
 	log.Println("DMS API server listening on", addr)
 	server.Handler = mux
