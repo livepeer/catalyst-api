@@ -53,8 +53,7 @@ func (d *DMSAPIHandlersCollection) UploadVOD() httprouter.Handle {
 							"required": [ "type", "pinata_access_key" ],
 							"additional_properties": false
 						}
-					],
-					"additional_properties": false
+					]
 				},
 				"minItems": 1
 		  	}
