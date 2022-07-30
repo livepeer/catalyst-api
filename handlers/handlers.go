@@ -5,122 +5,119 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"mime"
 	"net/http"
-	"net/url"
+	"strings"
 
+	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/dms-api/errors"
-	"github.com/livepeer/go-livepeer/drivers"
+	"github.com/xeipuuv/gojsonschema"
 )
 
 type DMSAPIHandlersCollection struct{}
 
 var DMSAPIHandlers = DMSAPIHandlersCollection{}
 
-func (d *DMSAPIHandlersCollection) Ok() http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+func (d *DMSAPIHandlersCollection) Ok() httprouter.Handle {
+	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 		io.WriteString(w, "OK")
-	})
+	}
 }
 
-type UploadVOD struct {
-	Url             url.URL
-	CallbackUrl     url.URL
-	Mp4Output       bool
-	OutputLocations []drivers.OSDriver
-}
+func (d *DMSAPIHandlersCollection) UploadVOD() httprouter.Handle {
+	schemaLoader := gojsonschema.NewStringLoader(`{
+		"type": "object",
+		"properties": {
+			"url": { "type": "string", "format": "uri" },
+		  	"callback_url": { "type": "string", "format": "uri" },
+		  	"mp4_output": { "type": "boolean" },
+		  	"output_locations": {
+				"type": "array",
+				"items": {
+					"oneOf": [
+						{
+							"type": "object",
+			  				"properties": {
+								"type": { "type": "string", "const": "object_store" },
+								"url": { "type": "string", "format": "uri" }
+				  			},
+							"required": [ "type", "url" ],
+							"additional_properties": false
+						},
+						{
+							"type": "object",
+			  				"properties": {
+								"type": { "type": "string", "const": "pinata" },
+								"pinata_access_key": { "type": "string", "minLength": 1 }
+				  			},
+							"required": [ "type", "pinata_access_key" ],
+							"additional_properties": false
+						}
+					],
+					"additional_properties": false
+				},
+				"minItems": 1
+		  	}
+		},
+		"required": [ "url", "callback_url", "output_locations" ],
+		"additional_properties": false
+	}`)
 
-func (d *DMSAPIHandlersCollection) UploadVOD() http.HandlerFunc {
-	type UploadVODRequest struct {
-		Url             *string   `json:"url,omitempty"`
-		CallbackUrl     *string   `json:"callback_url,omitempty"`
-		Mp4Output       *bool     `json:"mp4_output,omitempty"`
-		OutputLocations *[]string `json:"output_locations,omitempty"`
+	schema, err := gojsonschema.NewSchema(schemaLoader)
+	if err != nil {
+		panic(err)
 	}
 
-	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		drivers.Testing = true
-		if req.Method != "POST" {
-			w.Header().Add("Allow", "POST")
-			errors.WriteHTTPMethodNotAlloed(w, "Method not allowed", nil)
-			return
-		}
+	type UploadVODRequest struct {
+		Url             string `json:"url"`
+		CallbackUrl     string `json:"callback_url"`
+		Mp4Output       bool   `json:"mp4_output"`
+		OutputLocations []struct {
+			Type            string `json:"type"`
+			URL             string `json:"url"`
+			PinataAccessKey string `json:"pinata_access_key"`
+		} `json:"output_locations,omitempty"`
+	}
 
-		if req.Header.Get("Content-Type") != "application/json" {
-			errors.WriteHTTPBadRequest(w, "Unsupported content type", nil)
-			return
-		}
-
+	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 		var uploadVODRequest UploadVODRequest
-		var payload []byte
-		var err error
 
-		if payload, err = ioutil.ReadAll(req.Body); err != nil {
+		if !HasContentType(req, "application/json") {
+			errors.WriteHTTPUnsupportedMediaType(w, "Requires application/json content type", nil)
+			return
+		} else if payload, err := ioutil.ReadAll(req.Body); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot read payload", err)
 			return
-		}
-
-		if err = json.Unmarshal(payload, &uploadVODRequest); err != nil {
-			errors.WriteHTTPBadRequest(w, "Cannot unmarshal JSON to UploadVODRequest struct", err)
+		} else if result, err := schema.Validate(gojsonschema.NewBytesLoader(payload)); err != nil {
+			errors.WriteHTTPInternalServerError(w, "Cannot validate payload", err)
+			return
+		} else if !result.Valid() {
+			errors.WriteHTTPBadRequest(w, "Invalid request payload", nil)
+			return
+		} else if err := json.Unmarshal(payload, &uploadVODRequest); err != nil {
+			errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 			return
 		}
 
-		if uploadVODRequest.Url == nil {
-			errors.WriteHTTPBadRequest(w, "Missing url", nil)
-			return
-		}
+		// Do something with uploadVODRequest
+		io.WriteString(w, fmt.Sprint(len(uploadVODRequest.OutputLocations)))
+	}
+}
 
-		if uploadVODRequest.CallbackUrl == nil {
-			errors.WriteHTTPBadRequest(w, "Missing callback_url", nil)
-			return
-		}
+func HasContentType(r *http.Request, mimetype string) bool {
+	contentType := r.Header.Get("Content-Type")
+	if contentType == "" {
+		return mimetype == "application/octet-stream"
+	}
 
-		if uploadVODRequest.OutputLocations == nil {
-			errors.WriteHTTPBadRequest(w, "Missing output_locations", nil)
-			return
-		}
-
-		var mp4Output bool
-		if uploadVODRequest.Mp4Output == nil {
-			mp4Output = false
-		}
-
-		var sourceUrl *url.URL
-		sourceUrl, err = url.Parse(*uploadVODRequest.Url)
+	for _, v := range strings.Split(contentType, ",") {
+		t, _, err := mime.ParseMediaType(v)
 		if err != nil {
-			errors.WriteHTTPBadRequest(w, "Invalid url", err)
-			return
+			break
 		}
-
-		var callbackUrl *url.URL
-		callbackUrl, err = url.Parse(*uploadVODRequest.CallbackUrl)
-		if err != nil {
-			errors.WriteHTTPBadRequest(w, "Invalid callback_url", err)
-			return
+		if t == mimetype {
+			return true
 		}
-
-		if len(*uploadVODRequest.OutputLocations) == 0 {
-			errors.WriteHTTPBadRequest(w, "Empty output_locations", nil)
-			return
-		}
-
-		outputLocations := []drivers.OSDriver{}
-		for _, location := range *uploadVODRequest.OutputLocations {
-			if driver, err := drivers.ParseOSURL(location, true); err == nil {
-				outputLocations = append(outputLocations, driver)
-			} else {
-				errors.WriteHTTPBadRequest(w, "Invalid output_locations entry", err)
-				return
-			}
-		}
-
-		uploadVod := UploadVOD{
-			Url:             *sourceUrl,
-			CallbackUrl:     *callbackUrl,
-			Mp4Output:       mp4Output,
-			OutputLocations: outputLocations,
-		}
-
-		// Do something with uploadVOD
-		io.WriteString(w, fmt.Sprint(len(uploadVod.OutputLocations)))
-	})
+	}
+	return false
 }

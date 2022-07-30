@@ -4,13 +4,14 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/dms-api/errors"
 )
 
 var testToken = "IAmAuthorized"
 
-func IsAuthorized(next http.HandlerFunc) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func IsAuthorized(next httprouter.Handle) httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		authHeader := r.Header.Get("Authorization")
 
 		if authHeader == "" {
@@ -25,6 +26,6 @@ func IsAuthorized(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		next(w, r)
-	})
+		next(w, r, ps)
+	}
 }

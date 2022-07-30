@@ -10,9 +10,8 @@ func TestInitServer(t *testing.T) {
 	require := require.New(t)
 
 	const listen = "localhost:8081"
-	server := StartDMSAPIServer(listen)
+	router := StartDMSAPIRouter()
 
-	require.Equal(server.Addr, listen)
-
-	server.Close()
+	handle, _, _ := router.Lookup("GET", "/ok")
+	require.NotNil(handle)
 }
