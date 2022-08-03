@@ -25,3 +25,15 @@ func writeHttpError(w http.ResponseWriter, msg string, status int, err error) ap
 func WriteHTTPUnauthorized(w http.ResponseWriter, msg string, err error) apiError {
 	return writeHttpError(w, msg, http.StatusUnauthorized, err)
 }
+
+func WriteHTTPBadRequest(w http.ResponseWriter, msg string, err error) apiError {
+	return writeHttpError(w, msg, http.StatusBadRequest, err)
+}
+
+func WriteHTTPUnsupportedMediaType(w http.ResponseWriter, msg string, err error) apiError {
+	return writeHttpError(w, msg, http.StatusUnsupportedMediaType, err)
+}
+
+func WriteHTTPInternalServerError(w http.ResponseWriter, msg string, err error) apiError {
+	return writeHttpError(w, msg, http.StatusInternalServerError, err)
+}
