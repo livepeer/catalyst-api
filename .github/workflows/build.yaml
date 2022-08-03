@@ -16,6 +16,7 @@ jobs:
           - linux
         arch:
           - arm64
+          - amd64
     name: Build binaries for ${{ matrix.platform }} platform (${{ matrix.arch }})
     runs-on: ubuntu-20.04
     steps:
