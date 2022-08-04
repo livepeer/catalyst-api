@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	port := flag.Int("port", 4949, "Port to listen on (default 4949)")
+	port := flag.Int("port", 4949, "Port to listen on")
 	flag.Parse()
 
 	listen := fmt.Sprintf("localhost:%d", *port)
