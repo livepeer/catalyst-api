@@ -1,6 +1,8 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -10,10 +12,13 @@ import (
 )
 
 func main() {
-	listen := "localhost:8080"
-	router := StartDMSAPIRouter()
-	log.Println("DMS API server listening on", listen)
+	port := flag.Int("port", 4949, "Port to listen on (default 4949)")
+	flag.Parse()
 
+	listen := fmt.Sprintf("localhost:%d", *port)
+	router := StartDMSAPIRouter()
+
+	log.Println("Starting DMS API server listening on", listen)
 	err := http.ListenAndServe(listen, router)
 	log.Fatal(err)
 }
