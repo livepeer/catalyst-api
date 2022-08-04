@@ -8,8 +8,6 @@ import (
 
 func TestInitServer(t *testing.T) {
 	require := require.New(t)
-
-	const listen = "localhost:8081"
 	router := StartDMSAPIRouter()
 
 	handle, _, _ := router.Lookup("GET", "/ok")
