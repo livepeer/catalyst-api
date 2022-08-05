@@ -8,7 +8,7 @@ import (
 
 func TestInitServer(t *testing.T) {
 	require := require.New(t)
-	router := StartDMSAPIRouter()
+	router := StartCatalystAPIRouter()
 
 	handle, _, _ := router.Lookup("GET", "/ok")
 	require.NotNil(handle)
