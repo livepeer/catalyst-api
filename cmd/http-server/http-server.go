@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
@@ -18,14 +19,14 @@ func main() {
 	flag.Parse()
 
 	if *mistJson {
-		mistconnector.PrintMistConfigJson("mist-api-connector", "Sidecar for connecting Mist with Catalyst API", "Mist API Connector", "1", flag.CommandLine)
+		mistconnector.PrintMistConfigJson("mist-api-connector", "Sidecar for connecting Mist with Catalyst API", "Mist API Connector", config.Version, flag.CommandLine)
 		return
 	}
 
 	listen := fmt.Sprintf("localhost:%d", *port)
 	router := StartCatalystAPIRouter()
 
-	log.Println("Starting Catalyst API server listening on", listen)
+	log.Println("Starting Catalyst API version", config.Version, "listening on", listen)
 	err := http.ListenAndServe(listen, router)
 	log.Fatal(err)
 
