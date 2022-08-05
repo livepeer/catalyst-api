@@ -19,7 +19,7 @@ func main() {
 	flag.Parse()
 
 	if *mistJson {
-		mistconnector.PrintMistConfigJson("catalyst-api", "Sidecar for connecting Mist with Catalyst API", "Catalyst API", config.Version, flag.CommandLine)
+		mistconnector.PrintMistConfigJson("catalyst-api", "HTTP API server for translating Catalyst API requests into Mist calls", "Catalyst API", config.Version, flag.CommandLine)
 		return
 	}
 
