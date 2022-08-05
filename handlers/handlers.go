@@ -14,17 +14,17 @@ import (
 	"github.com/xeipuuv/gojsonschema"
 )
 
-type DMSAPIHandlersCollection struct{}
+type CatalystAPIHandlersCollection struct{}
 
-var DMSAPIHandlers = DMSAPIHandlersCollection{}
+var CatalystAPIHandlers = CatalystAPIHandlersCollection{}
 
-func (d *DMSAPIHandlersCollection) Ok() httprouter.Handle {
+func (d *CatalystAPIHandlersCollection) Ok() httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 		io.WriteString(w, "OK")
 	}
 }
 
-func (d *DMSAPIHandlersCollection) UploadVOD() httprouter.Handle {
+func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 	schemaLoader := gojsonschema.NewStringLoader(`{
 		"type": "object",
 		"properties": {
