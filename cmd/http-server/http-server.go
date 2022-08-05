@@ -7,8 +7,8 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/dms-api/handlers"
-	"github.com/livepeer/dms-api/middleware"
+	"github.com/livepeer/catalyst-api/handlers"
+	"github.com/livepeer/catalyst-api/middleware"
 )
 
 func main() {

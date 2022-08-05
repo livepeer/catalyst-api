@@ -1,4 +1,4 @@
-module github.com/livepeer/dms-api
+module github.com/livepeer/catalyst-api
 
 go 1.18
 
