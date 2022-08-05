@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/dms-api/errors"
+	"github.com/livepeer/catalyst-api/errors"
 	"github.com/xeipuuv/gojsonschema"
 )
 
