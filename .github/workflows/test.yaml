@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Test the dms-api project
+    name: Test the catalyst-api project
     runs-on: ubuntu-20.04
     steps:
       - name: Check out code
@@ -48,5 +48,5 @@ jobs:
         uses: codecov/codecov-action@v3
         with:
           files: ./coverage.out
-          name: dms-api
+          name: catalyst-api
           verbose: true
