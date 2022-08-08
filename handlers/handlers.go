@@ -146,13 +146,19 @@ func processUploadVOD(url string) error {
 	// TODO: This should be done in a separate Goroutine after the processing is done
 	defer mc.DeleteTrigger(streamName, "PUSH_END")
 
+	if err := mc.RegisterTrigger(streamName, "RECORDING_END"); err != nil {
+		return err
+	}
+	// TODO: This should be done in a separate Goroutine after the processing is done
+	defer mc.DeleteTrigger(streamName, "RECORDING_END")
+
 	// TODO: Change the output to the value from the request
 	if err := mc.PushStart(streamName, "/media/recording/result.ts"); err != nil {
 		return err
 	}
 
 	// TODO: Change to async, first return the response and them do the actual processing
-	time.Sleep(5 * time.Second)
+	time.Sleep(10 * time.Second)
 
 	return nil
 }

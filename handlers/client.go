@@ -7,11 +7,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sync"
 )
 
 type MistClient struct {
 	apiUrl          string
 	triggerCallback string
+	configMu        sync.Mutex
 }
 
 func (mc *MistClient) AddStream(streamName, url string) error {
@@ -33,34 +35,67 @@ func (mc *MistClient) PushStart(streamName, targetURL string) error {
 	return err
 }
 
-func (mc *MistClient) PushList(streamName string) (string, error) {
-	// TODO: Do we need it at all?
-	return "", nil
-}
-
 func (mc *MistClient) DeleteStream(streamName string) error {
 	command := commandDeleteStream(streamName)
 	_, err := mc.sendCommand(command)
 	return err
 }
 
+// RegisterTrigger adds a trigger with the name `triggerName` for the stream `streamName`.
+// Note that Mist API supports only overriding the whole trigger configuration, therefore this function needs to:
+// 1. Acquire a lock
+// 2. Get current triggers
+// 3. Add a new trigger (or update the existing one)
+// 4. Override the triggers
+// 5. Release the lock
 func (mc *MistClient) RegisterTrigger(streamName, triggerName string) error {
-	command := commandRegisterTrigger(streamName, triggerName, mc.triggerCallback)
-	_, err := mc.sendCommand(command)
+	mc.configMu.Lock()
+	defer mc.configMu.Unlock()
+	triggers, err := mc.getCurrentTriggers()
+	if err != nil {
+		return err
+	}
+	command := commandRegisterTrigger(streamName, triggerName, mc.triggerCallback, triggers)
+	_, err = mc.sendCommand(command)
 	return err
 }
 
-func (mc *MistClient) DeleteTrigger(streamName, triggerName string) (string, error) {
-	command := commandDeleteTrigger(streamName, triggerName, mc.triggerCallback)
-	return mc.sendCommand(command)
+// DeleteTrigger deletes triggers with the name `triggerName` for the stream `streamName`.
+// Note that Mist API supports only overriding the whole trigger configuration, therefore this function needs to:
+// 1. Acquire a lock
+// 2. Get current triggers
+// 3. Add a new trigger (or update the existing one)
+// 4. Override the triggers
+// 5. Release the lock
+func (mc *MistClient) DeleteTrigger(streamName, triggerName string) error {
+	mc.configMu.Lock()
+	defer mc.configMu.Unlock()
+	triggers, err := mc.getCurrentTriggers()
+	if err != nil {
+		return err
+	}
+	command := commandDeleteTrigger(streamName, triggerName, mc.triggerCallback, triggers)
+	_, err = mc.sendCommand(command)
+	return err
 }
 
-func toCommandString(command interface{}) (string, error) {
-	res, err := json.Marshal(command)
+func (mc *MistClient) getCurrentTriggers() (Triggers, error) {
+	command := commandGetTriggers()
+	res, err := mc.sendCommand(command)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return string(res), nil
+
+	cc := ConfigCommand{}
+	if err := json.Unmarshal([]byte(res), &cc); err != nil {
+		return nil, err
+	}
+
+	if cc.Config.Triggers == nil {
+		return Triggers{}, nil
+	}
+
+	return cc.Config.Triggers, nil
 }
 
 func validAddStreamResponse(name, resp string) bool {
@@ -72,6 +107,14 @@ func validAddStreamResponse(name, resp string) bool {
 	}
 	_, ok := result.Streams[name]
 	return ok
+}
+
+func toCommandString(command interface{}) (string, error) {
+	res, err := json.Marshal(command)
+	if err != nil {
+		return "", err
+	}
+	return string(res), nil
 }
 
 func payloadFor(command string) string {
@@ -124,7 +167,7 @@ func commandPushStart(streamName, target string) pushStartCommand {
 	}
 }
 
-type configCommand struct {
+type ConfigCommand struct {
 	Config Config `json:"config"`
 }
 
@@ -134,29 +177,57 @@ type ConfigTrigger struct {
 	Sync    bool     `json:"sync"`
 }
 
+type Triggers map[string][]ConfigTrigger
+
 type Config struct {
-	Triggers map[string][]ConfigTrigger `json:"triggers"`
+	Triggers map[string][]ConfigTrigger `json:"triggers,omitempty"`
 }
 
-func commandRegisterTrigger(streamName, triggerName, handlerUrl string) configCommand {
-	// TODO: Read current trigger and add new one instead of overriding all triggers
-	triggersMap := map[string][]ConfigTrigger{}
-	var triggers []ConfigTrigger
-	triggers = append(triggers, ConfigTrigger{
+func commandRegisterTrigger(streamName, triggerName, handlerUrl string, currentTriggers Triggers) ConfigCommand {
+	newTrigger := ConfigTrigger{
 		Handler: handlerUrl,
 		Streams: []string{streamName},
 		Sync:    false,
-	})
-	triggersMap[triggerName] = triggers
-	return configCommand{Config{Triggers: triggersMap}}
+	}
+	return commandUpdateTrigger(streamName, triggerName, currentTriggers, newTrigger)
 }
 
-func commandDeleteTrigger(streamName, triggerName, handlerUrl string) configCommand {
-	// TODO: Change removing all triggers to deleting only one single trigger
-	triggersMap := map[string][]ConfigTrigger{}
-	var triggers []ConfigTrigger
+func commandDeleteTrigger(streamName, triggerName, handlerUrl string, currentTriggers Triggers) ConfigCommand {
+	return commandUpdateTrigger(streamName, triggerName, currentTriggers, ConfigTrigger{})
+}
+
+func commandUpdateTrigger(streamName, triggerName string, currentTriggers Triggers, newTrigger ConfigTrigger) ConfigCommand {
+	triggersMap := currentTriggers
+
+	triggers := triggersMap[triggerName]
+	triggers = deleteAllTriggersFor(triggers, streamName)
+	if len(newTrigger.Streams) != 0 {
+		triggers = append(triggers, newTrigger)
+	}
+
 	triggersMap[triggerName] = triggers
-	return configCommand{Config{Triggers: triggersMap}}
+	return ConfigCommand{Config{Triggers: triggersMap}}
+}
+
+func deleteAllTriggersFor(triggers []ConfigTrigger, streamName string) []ConfigTrigger {
+	var res []ConfigTrigger
+	for _, t := range triggers {
+		f := false
+		for _, s := range t.Streams {
+			if s == streamName {
+				f = true
+				break
+			}
+		}
+		if !f {
+			res = append(res, t)
+		}
+	}
+	return res
+}
+
+func commandGetTriggers() ConfigCommand {
+	return ConfigCommand{}
 }
 
 func (mc *MistClient) sendCommand(command interface{}) (string, error) {
