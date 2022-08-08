@@ -5,53 +5,53 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"net/url"
-	"time"
 )
 
 type MistClient struct {
-	apiUrl         string
-	triggerHandler string
+	apiUrl          string
+	triggerCallback string
 }
 
-func (mc *MistClient) AddStream(url string) (string, error) {
-	name := randomStreamName("catalyst_vod_")
-	command := commandAddStream(name, url)
+func (mc *MistClient) AddStream(streamName, url string) error {
+	command := commandAddStream(streamName, url)
 
 	resp, err := mc.sendCommand(command)
 	if err != nil {
-		return "", err
+		return err
 	}
-	if !validAddStreamResponse(name, resp) {
-		return "", fmt.Errorf("stream '%s' could not be created", name)
+	if !validAddStreamResponse(streamName, resp) {
+		return fmt.Errorf("stream '%s' could not be created", streamName)
 	}
-	return name, nil
+	return nil
 }
 
-func (mc *MistClient) PushStart(name, target string) (string, error) {
-	command := commandPushStart(name, target)
-	resp, err := mc.sendCommand(command)
-	if err != nil {
-		return "", err
-	}
-	return resp, nil
-}
-
-func (mc *MistClient) PushList(name string) (string, error) {
-	// TODO:?
-	return "", nil
-}
-
-func (mc *MistClient) DeleteStream(name string) error {
-	command := commandDeleteStream(name)
+func (mc *MistClient) PushStart(streamName, targetURL string) error {
+	command := commandPushStart(streamName, targetURL)
 	_, err := mc.sendCommand(command)
 	return err
 }
 
-func (mc *MistClient) RegisterTrigger(streamName, triggerName string) (string, error) {
-	command := commandRegisterTrigger(streamName, triggerName, mc.triggerHandler)
+func (mc *MistClient) PushList(streamName string) (string, error) {
+	// TODO: Do we need it at all?
+	return "", nil
+}
+
+func (mc *MistClient) DeleteStream(streamName string) error {
+	command := commandDeleteStream(streamName)
+	_, err := mc.sendCommand(command)
+	return err
+}
+
+func (mc *MistClient) RegisterTrigger(streamName, triggerName string) error {
+	command := commandRegisterTrigger(streamName, triggerName, mc.triggerCallback)
+	_, err := mc.sendCommand(command)
+	return err
+}
+
+func (mc *MistClient) DeleteTrigger(streamName, triggerName string) (string, error) {
+	command := commandDeleteTrigger(streamName, triggerName, mc.triggerCallback)
 	return mc.sendCommand(command)
 }
 
@@ -78,12 +78,12 @@ func payloadFor(command string) string {
 	return fmt.Sprintf("command=%s", url.QueryEscape(command))
 }
 
-type Stream struct {
-	Source string `json:"source"`
-}
-
 type addStreamCommand struct {
 	Addstream map[string]Stream `json:"addstream"`
+}
+
+type Stream struct {
+	Source string `json:"source"`
 }
 
 func commandAddStream(name, url string) interface{} {
@@ -106,13 +106,13 @@ func commandDeleteStream(name string) deleteStreamCommand {
 	}
 }
 
+type pushStartCommand struct {
+	PushStart PushStart `json:"push_start"`
+}
+
 type PushStart struct {
 	Stream string `json:"stream"`
 	Target string `json:"target"`
-}
-
-type pushStartCommand struct {
-	PushStart PushStart `json:"push_start"`
 }
 
 func commandPushStart(streamName, target string) pushStartCommand {
@@ -151,6 +151,14 @@ func commandRegisterTrigger(streamName, triggerName, handlerUrl string) configCo
 	return configCommand{Config{Triggers: triggersMap}}
 }
 
+func commandDeleteTrigger(streamName, triggerName, handlerUrl string) configCommand {
+	// TODO: Change removing all triggers to deleting only one single trigger
+	triggersMap := map[string][]ConfigTrigger{}
+	var triggers []ConfigTrigger
+	triggersMap[triggerName] = triggers
+	return configCommand{Config{Triggers: triggersMap}}
+}
+
 func (mc *MistClient) sendCommand(command interface{}) (string, error) {
 	c, err := toCommandString(command)
 	if err != nil {
@@ -167,18 +175,6 @@ func (mc *MistClient) sendCommand(command interface{}) (string, error) {
 		return "", err
 	}
 	return string(body), err
-}
-
-func randomStreamName(prefix string) string {
-	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
-	const length = 8
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	res := make([]byte, length)
-	for i := 0; i < length; i++ {
-		res[i] = charset[r.Intn(length)]
-	}
-	return fmt.Sprintf("%s%s", prefix, string(res))
 }
 
 // TODO: Delete auth, since DMS API will run on localhost, so it does not need authentation

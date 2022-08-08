@@ -6,9 +6,11 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"mime"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/dms-api/errors"
@@ -100,14 +102,12 @@ func (d *DMSAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			return
 		}
 
-		processUploadVOD(uploadVODRequest.Url)
+		if err := processUploadVOD(uploadVODRequest.Url); err != nil {
+			errors.WriteHTTPInternalServerError(w, "Cannot process upload VOD request", err)
+		}
 
 		io.WriteString(w, fmt.Sprint(len(uploadVODRequest.OutputLocations)))
 	}
-}
-
-func processUploadVOD(url string) {
-	// TODO
 }
 
 func HasContentType(r *http.Request, mimetype string) bool {
@@ -126,6 +126,47 @@ func HasContentType(r *http.Request, mimetype string) bool {
 		}
 	}
 	return false
+}
+
+func processUploadVOD(url string) error {
+	// TODO: Update hostnames and ports
+	mc := MistClient{apiUrl: "http://localhost:4242/api2", triggerCallback: "http://host.docker.internal:8080/api/mist/trigger"}
+
+	streamName := randomStreamName("catalyst_vod_")
+	if err := mc.AddStream(streamName, url); err != nil {
+		return err
+	}
+
+	// TODO: This should be done in a separate Goroutine after the processing is done
+	defer mc.DeleteStream(streamName)
+
+	if err := mc.RegisterTrigger(streamName, "PUSH_END"); err != nil {
+		return err
+	}
+	// TODO: This should be done in a separate Goroutine after the processing is done
+	defer mc.DeleteTrigger(streamName, "PUSH_END")
+
+	// TODO: Change the output to the value from the request
+	if err := mc.PushStart(streamName, "/media/recording/result.ts"); err != nil {
+		return err
+	}
+
+	// TODO: Change to async, first return the response and them do the actual processing
+	time.Sleep(5 * time.Second)
+
+	return nil
+}
+
+func randomStreamName(prefix string) string {
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	const length = 8
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	res := make([]byte, length)
+	for i := 0; i < length; i++ {
+		res[i] = charset[r.Intn(length)]
+	}
+	return fmt.Sprintf("%s%s", prefix, string(res))
 }
 
 type MistCallbackHandlersCollection struct{}

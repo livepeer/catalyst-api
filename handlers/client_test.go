@@ -31,25 +31,6 @@ func testPayloadFor(t *testing.T, command interface{}) string {
 // TODO: Remove after initial testing
 func TestWorkflow(t *testing.T) {
 	// first copy file into /home/Big_Buck_Bunny_1080_10s_1MB.mp4
-	mc := MistClient{apiUrl: "http://localhost:4242/api2", triggerHandler: "http://host.docker.internal:8080/api/mist/trigger"}
-	//
-	//streamName, err := mc.AddStream("/home/Big_Buck_Bunny_1080_10s_1MB.mp4")
-	//fmt.Println(streamName)
-	//fmt.Println(err)
 
-	streamName := "catalyst_vod_hgeecgbc"
-	defer mc.DeleteStream(streamName)
-
-	//streamName := "catalyst_vod_bhhdbgbe"
-	//fmt.Println("Registering the triggers")
-	//resp, err := mc.RegisterTrigger(streamName, "PUSH_END")
-	//fmt.Println(resp)
-	//fmt.Println(err)
-
-	//fmt.Println("Push Start...")
-	//respPushStart, err := mc.PushStart(streamName, "/media/recording/result.ts")
-	//fmt.Println(respPushStart)
-	//fmt.Println(err)
-	//// wait until push it complete
-	//time.Sleep(5 * time.Second)
+	processUploadVOD("/home/Big_Buck_Bunny_1080_10s_1MB.mp4")
 }
