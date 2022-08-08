@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"mime"
 	"net/http"
 	"strings"
@@ -72,6 +73,7 @@ func (d *DMSAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		CallbackUrl     string `json:"callback_url"`
 		Mp4Output       bool   `json:"mp4_output"`
 		OutputLocations []struct {
+			uploadSource    bool
 			Type            string `json:"type"`
 			URL             string `json:"url"`
 			PinataAccessKey string `json:"pinata_access_key"`
@@ -98,9 +100,14 @@ func (d *DMSAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			return
 		}
 
-		// Do something with uploadVODRequest
+		processUploadVOD(uploadVODRequest.Url)
+
 		io.WriteString(w, fmt.Sprint(len(uploadVODRequest.OutputLocations)))
 	}
+}
+
+func processUploadVOD(url string) {
+	// TODO
 }
 
 func HasContentType(r *http.Request, mimetype string) bool {
@@ -119,4 +126,22 @@ func HasContentType(r *http.Request, mimetype string) bool {
 		}
 	}
 	return false
+}
+
+type MistCallbackHandlersCollection struct{}
+
+var MistCallbackHandlers = MistCallbackHandlersCollection{}
+
+func (d *MistCallbackHandlersCollection) Ok() httprouter.Handle {
+	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+		log.Println("Received OK request")
+		payload, err := ioutil.ReadAll(req.Body)
+		if err != nil {
+			errors.WriteHTTPInternalServerError(w, "Cannot read payload", err)
+			return
+		}
+		// TODO: Handle trigger results
+		fmt.Println(string(payload))
+		io.WriteString(w, "OK")
+	}
 }

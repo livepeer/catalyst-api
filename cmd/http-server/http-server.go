@@ -23,6 +23,7 @@ func StartDMSAPIRouter() *httprouter.Router {
 
 	router.GET("/ok", middleware.IsAuthorized(handlers.DMSAPIHandlers.Ok()))
 	router.POST("/api/vod", middleware.IsAuthorized(handlers.DMSAPIHandlers.UploadVOD()))
+	router.POST("/api/mist/trigger", handlers.MistCallbackHandlers.Ok())
 
 	return router
 }
