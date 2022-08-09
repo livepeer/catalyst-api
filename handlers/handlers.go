@@ -137,27 +137,28 @@ func processUploadVOD(url string) error {
 		return err
 	}
 
-	// TODO: This should be done in a separate Goroutine after the processing is done
+	// TODO: Move it to `Trigger()`
 	defer mc.DeleteStream(streamName)
 
 	if err := mc.AddTrigger(streamName, "PUSH_END"); err != nil {
 		return err
 	}
-	// TODO: This should be done in a separate Goroutine after the processing is done
+	// TODO: Move it to `Trigger()`
 	defer mc.DeleteTrigger(streamName, "PUSH_END")
 
 	if err := mc.AddTrigger(streamName, "RECORDING_END"); err != nil {
 		return err
 	}
-	// TODO: This should be done in a separate Goroutine after the processing is done
+
+	// TODO: Move it to `Trigger()`
 	defer mc.DeleteTrigger(streamName, "RECORDING_END")
 
-	// TODO: Change the output to the value from the request
+	// TODO: Change the output to the value from the request instead of the hardcoded "/media/recording/result.ts"
 	if err := mc.PushStart(streamName, "/media/recording/result.ts"); err != nil {
 		return err
 	}
 
-	// TODO: Change to async, first return the response and them do the actual processing
+	// TODO: After moving cleanup to `Trigger()`, this is no longer needed
 	time.Sleep(10 * time.Second)
 
 	return nil
@@ -179,15 +180,16 @@ type MistCallbackHandlersCollection struct{}
 
 var MistCallbackHandlers = MistCallbackHandlersCollection{}
 
-func (d *MistCallbackHandlersCollection) Ok() httprouter.Handle {
+func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-		log.Println("Received OK request")
+		log.Println("Received Mist Trigger")
 		payload, err := ioutil.ReadAll(req.Body)
 		if err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot read payload", err)
 			return
 		}
-		// TODO: Handle trigger results
+
+		// TODO: Handle trigger results: 1) Check the trigger name, 2) Call callbackURL, 3) Perform stream cleanup
 		fmt.Println(string(payload))
 		io.WriteString(w, "OK")
 	}

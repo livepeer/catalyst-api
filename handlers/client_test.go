@@ -148,8 +148,7 @@ func TestResponseValidation(t *testing.T) {
 }
 
 // TODO: Remove after initial testing
-//func TestWorkflow(t *testing.T) {
-//	// first copy file into /home/Big_Buck_Bunny_1080_10s_1MB.mp4
-//
-//	processUploadVOD("/home/Big_Buck_Bunny_1080_10s_1MB.mp4")
-//}
+func TestWorkflow(t *testing.T) {
+	// first copy file into /home/Big_Buck_Bunny_1080_10s_1MB.mp4
+	require.NoError(t, processUploadVOD("/home/Big_Buck_Bunny_1080_10s_1MB.mp4"))
+}
