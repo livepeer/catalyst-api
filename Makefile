@@ -1,6 +1,10 @@
+GO_BUILD_DIR?=build/
+
+ldflags := -X 'github.com/livepeer/catalyst-api/config.Version=$(shell git rev-parse HEAD)'
+
 .PHONY: all
 all: build-server
 
 .PHONY: build-server
 build-server:
-	go build -ldflags="$(GO_LDFLAG_VERSION)" -o build/http-server cmd/http-server/http-server.go
+	go build -ldflags="$(ldflags)" -o "$(GO_BUILD_DIR)catalyst-api" cmd/http-server/http-server.go

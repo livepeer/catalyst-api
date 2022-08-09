@@ -8,9 +8,7 @@ import (
 
 func TestInitServer(t *testing.T) {
 	require := require.New(t)
-
-	const listen = "localhost:8081"
-	router := StartDMSAPIRouter()
+	router := StartCatalystAPIRouter()
 
 	handle, _, _ := router.Lookup("GET", "/ok")
 	require.NotNil(handle)

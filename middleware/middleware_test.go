@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/dms-api/handlers"
+	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,7 +16,7 @@ func TestNoAuthHeader(t *testing.T) {
 	router := httprouter.New()
 	req, _ := http.NewRequest("GET", "/ok", nil)
 	rr := httptest.NewRecorder()
-	router.GET("/ok", IsAuthorized(handlers.DMSAPIHandlers.Ok()))
+	router.GET("/ok", IsAuthorized(handlers.CatalystAPIHandlers.Ok()))
 	router.ServeHTTP(rr, req)
 
 	require.Equal(rr.Code, 401, "should return 401")
@@ -31,7 +31,7 @@ func TestWrongKey(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer gibberish")
 
 	rr := httptest.NewRecorder()
-	router.GET("/ok", IsAuthorized(handlers.DMSAPIHandlers.Ok()))
+	router.GET("/ok", IsAuthorized(handlers.CatalystAPIHandlers.Ok()))
 	router.ServeHTTP(rr, req)
 
 	require.Equal(rr.Code, 401, "should return 401")

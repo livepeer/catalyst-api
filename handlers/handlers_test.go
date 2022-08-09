@@ -16,7 +16,7 @@ func TestOKHandler(t *testing.T) {
 	router := httprouter.New()
 	req, _ := http.NewRequest("GET", "/ok", nil)
 	rr := httptest.NewRecorder()
-	router.GET("/ok", DMSAPIHandlers.Ok())
+	router.GET("/ok", CatalystAPIHandlers.Ok())
 	router.ServeHTTP(rr, req)
 
 	require.Equal(rr.Body.String(), "OK")
@@ -46,7 +46,7 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
-	router.POST("/api/vod", DMSAPIHandlers.UploadVOD())
+	router.POST("/api/vod", CatalystAPIHandlers.UploadVOD())
 	router.ServeHTTP(rr, req)
 
 	require.Equal(rr.Result().StatusCode, 200)
@@ -106,7 +106,7 @@ func TestInvalidPayloadVODUploadHandler(t *testing.T) {
 
 	router := httprouter.New()
 
-	router.POST("/api/vod", DMSAPIHandlers.UploadVOD())
+	router.POST("/api/vod", CatalystAPIHandlers.UploadVOD())
 	for _, payload := range badRequests {
 		req, _ := http.NewRequest("POST", "/api/vod", bytes.NewBuffer(payload))
 		req.Header.Set("Content-Type", "application/json")
@@ -136,7 +136,7 @@ func TestWrongContentTypeVODUploadHandler(t *testing.T) {
 	req.Header.Set("Content-Type", "json")
 
 	rr := httptest.NewRecorder()
-	router.POST("/api/vod", DMSAPIHandlers.UploadVOD())
+	router.POST("/api/vod", CatalystAPIHandlers.UploadVOD())
 	router.ServeHTTP(rr, req)
 
 	require.Equal(rr.Result().StatusCode, 415)
