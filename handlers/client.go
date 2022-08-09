@@ -96,7 +96,7 @@ func (mc *MistClient) sendCommand(command interface{}) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	payload := payloadFor(auth(c))
+	payload := payloadFor(c)
 	resp, err := http.Post(mc.apiUrl, "application/json", bytes.NewBuffer([]byte(payload)))
 	if err != nil {
 		return "", err
@@ -333,9 +333,4 @@ func wrapErr(err error, streamName string) error {
 		return fmt.Errorf("error in processing stream '%s': %w", streamName, err)
 	}
 	return nil
-}
-
-// TODO: Delete auth, since DMS API will run on localhost, so it does not need authentation
-func auth(command string) string {
-	return fmt.Sprintf("{%s,%s}", `"authorize":{"username":"test","password":"f0c5a517021bae2634bad2b2c390bbe9"}`, command)
 }
