@@ -27,6 +27,8 @@ func (d *CatalystAPIHandlersCollection) Ok() httprouter.Handle {
 	}
 }
 
+var processUpload = processUploadVOD
+
 func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 	schemaLoader := gojsonschema.NewStringLoader(`{
 		"type": "object",
@@ -101,7 +103,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			return
 		}
 
-		if err := processUploadVOD(uploadVODRequest.Url); err != nil {
+		if err := processUpload(uploadVODRequest.Url); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot process upload VOD request", err)
 		}
 
