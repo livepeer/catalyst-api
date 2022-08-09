@@ -37,7 +37,7 @@ func StartCatalystAPIRouter() *httprouter.Router {
 
 	router.GET("/ok", middleware.IsAuthorized(handlers.CatalystAPIHandlers.Ok()))
 	router.POST("/api/vod", middleware.IsAuthorized(handlers.CatalystAPIHandlers.UploadVOD()))
-  router.POST("/api/mist/trigger", handlers.MistCallbackHandlers.Trigger())
+	router.POST("/api/mist/trigger", handlers.MistCallbackHandlers.Trigger())
 
 	return router
 }
