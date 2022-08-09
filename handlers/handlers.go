@@ -75,7 +75,6 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		CallbackUrl     string `json:"callback_url"`
 		Mp4Output       bool   `json:"mp4_output"`
 		OutputLocations []struct {
-			uploadSource    bool
 			Type            string `json:"type"`
 			URL             string `json:"url"`
 			PinataAccessKey string `json:"pinata_access_key"`
@@ -129,6 +128,8 @@ func HasContentType(r *http.Request, mimetype string) bool {
 }
 
 func processUploadVOD(url string) error {
+	// TODO: This function is only a scaffold for now
+
 	// TODO: Update hostnames and ports
 	mc := MistClient{apiUrl: "http://localhost:4242/api2", triggerCallback: "http://host.docker.internal:8080/api/mist/trigger"}
 
