@@ -91,7 +91,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			errors.WriteHTTPInternalServerError(w, "Cannot validate payload", err)
 			return
 		} else if !result.Valid() {
-			errors.WriteHTTPBadRequest(w, "Invalid request payload", nil)
+			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("%v", result.Errors()))
 			return
 		} else if err := json.Unmarshal(payload, &uploadVODRequest); err != nil {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
