@@ -1,22 +1,41 @@
 package handlers
 
-import "github.com/xeipuuv/gojsonschema"
+import (
+	"embed"
+	"path/filepath"
+	"strings"
 
-var inputSchemas map[string]string = map[string]string{
-	"TranscodeSegment": TranscodeSegmentRequestSchemaDefinition,
-	"UploadVOD":        UploadVODRequestSchemaDefinition,
-}
+	"github.com/xeipuuv/gojsonschema"
+)
+
+//go:embed schemas/*
+var schemasDir embed.FS
 
 func compileJsonSchemas() map[string]*gojsonschema.Schema {
 	compiled := make(map[string]*gojsonschema.Schema, 0)
-	for name, text := range inputSchemas {
-		schema, err := gojsonschema.NewSchema(gojsonschema.NewStringLoader(text))
+	inputSchemas, err := schemasDir.ReadDir("schemas")
+
+	if err != nil {
+		panic(err)
+	}
+
+	for _, file := range inputSchemas {
+		text, err := schemasDir.ReadFile("schemas/" + file.Name())
+
+		if err != nil {
+			panic(err)
+		}
+
+		schema, err := gojsonschema.NewSchema(gojsonschema.NewStringLoader(string(text)))
 		if err != nil {
 			// rase panic on program start
 			panic(err) // fix schema text
 		}
+
+		name := strings.TrimSuffix(file.Name(), filepath.Ext(file.Name()))
 		compiled[name] = schema
 	}
+
 	return compiled
 }
 

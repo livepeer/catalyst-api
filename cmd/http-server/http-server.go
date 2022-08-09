@@ -33,7 +33,7 @@ func main() {
 	}
 
 	listen := fmt.Sprintf("0.0.0.0:%d", *port)
-	router := StartCatalystAPIRouter(mc)
+	router := NewCatalystAPIRouter(mc)
 
 	stdlog.Println("Starting Catalyst API version", config.Version, "listening on", listen)
 	err := http.ListenAndServe(listen, router)
@@ -41,7 +41,7 @@ func main() {
 
 }
 
-func StartCatalystAPIRouter(mc *handlers.MistClient) *httprouter.Router {
+func NewCatalystAPIRouter(mc *handlers.MistClient) *httprouter.Router {
 	router := httprouter.New()
 
 	var logger log.Logger

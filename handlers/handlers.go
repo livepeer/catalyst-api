@@ -35,6 +35,7 @@ func (d *CatalystAPIHandlersCollection) Ok() httprouter.Handle {
 
 func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 	schema := inputSchemasCompiled["TranscodeSegment"]
+
 	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 		var transcodeRequest TranscodeSegmentRequest
 		payload, err := ioutil.ReadAll(req.Body)
@@ -132,6 +133,7 @@ func HasContentType(r *http.Request, mimetype string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 

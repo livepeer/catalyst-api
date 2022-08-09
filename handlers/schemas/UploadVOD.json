@@ -1,0 +1,66 @@
+{
+    "type": "object",
+    "properties": {
+        "url": {
+            "type": "string",
+            "format": "uri"
+        },
+        "callback_url": {
+            "type": "string",
+            "format": "uri"
+        },
+        "mp4_output": {
+            "type": "boolean"
+        },
+        "output_locations": {
+            "type": "array",
+            "items": {
+                "oneOf": [
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "const": "object_store"
+                            },
+                            "url": {
+                                "type": "string",
+                                "format": "uri"
+                            }
+                        },
+                        "required": [
+                            "type",
+                            "url"
+                        ],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "const": "pinata"
+                            },
+                            "pinata_access_key": {
+                                "type": "string",
+                                "minLength": 1
+                            }
+                        },
+                        "required": [
+                            "type",
+                            "pinata_access_key"
+                        ],
+                        "additionalProperties": false
+                    }
+                ]
+            },
+            "minItems": 1
+        }
+    },
+    "required": [
+        "url",
+        "callback_url",
+        "output_locations"
+    ],
+    "additionalProperties": false
+}
