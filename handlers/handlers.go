@@ -140,13 +140,13 @@ func processUploadVOD(url string) error {
 	// TODO: This should be done in a separate Goroutine after the processing is done
 	defer mc.DeleteStream(streamName)
 
-	if err := mc.RegisterTrigger(streamName, "PUSH_END"); err != nil {
+	if err := mc.AddTrigger(streamName, "PUSH_END"); err != nil {
 		return err
 	}
 	// TODO: This should be done in a separate Goroutine after the processing is done
 	defer mc.DeleteTrigger(streamName, "PUSH_END")
 
-	if err := mc.RegisterTrigger(streamName, "RECORDING_END"); err != nil {
+	if err := mc.AddTrigger(streamName, "RECORDING_END"); err != nil {
 		return err
 	}
 	// TODO: This should be done in a separate Goroutine after the processing is done
