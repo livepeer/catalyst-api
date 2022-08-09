@@ -49,7 +49,6 @@ func TestItEventuallyStopsRetrying(t *testing.T) {
 		require.NoError(t, err)
 		require.JSONEq(t, `{"completion_ratio":1, "status":"completed"}`, string(body))
 
-		// Return HTTP error codes the first two times
 		tries += 1
 
 		// Return an error code
