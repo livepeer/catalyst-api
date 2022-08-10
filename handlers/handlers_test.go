@@ -98,14 +98,6 @@ func TestSegmentBodyFormat(t *testing.T) {
 			"manifestID": "somestream",
 			"verificationFreq": 1
 		}`),
-		// empty profiles
-		[]byte(`{
-			"source_location": "http://localhost/input",
-			"callback_url": "http://localhost:8080/callback",
-			"manifestID": "somestream",
-			"profiles": [],
-			"verificationFreq": 1
-		}`),
 		// missing name
 		[]byte(`{
 			"source_location": "http://localhost/input",

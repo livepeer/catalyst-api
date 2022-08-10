@@ -46,11 +46,6 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 			return
 		}
-		if len(transcodeRequest.Profiles) == 0 {
-			// TODO: Check if this is correct. What if we only do detection?
-			errors.WriteHTTPBadRequest(w, "profiles array must contain at least one encoding profile", nil)
-			return
-		}
 
 		go invokeTestCallback(&transcodeRequest)
 		io.WriteString(w, "OK") // TODO later
