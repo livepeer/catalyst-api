@@ -19,7 +19,9 @@ type CallbackClient struct {
 
 func NewCallbackClient() CallbackClient {
 	return CallbackClient{
-		httpClient: &http.Client{},
+		httpClient: &http.Client{
+			Timeout: 5 * time.Second,
+		},
 	}
 }
 
