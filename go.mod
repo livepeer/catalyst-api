@@ -10,6 +10,9 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/go-kit/kit v0.12.0 // indirect
+	github.com/go-kit/log v0.2.0 // indirect
+	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/livepeer/livepeer-data v0.4.19 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
