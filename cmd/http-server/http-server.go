@@ -36,6 +36,7 @@ func StartCatalystAPIRouter() *httprouter.Router {
 	router := httprouter.New()
 
 	router.GET("/ok", middleware.IsAuthorized(handlers.CatalystAPIHandlers.Ok()))
+	router.POST("/api/transcode/file", middleware.IsAuthorized(handlers.CatalystAPIHandlers.TranscodeSegment()))
 	router.POST("/api/vod", middleware.IsAuthorized(handlers.CatalystAPIHandlers.UploadVOD()))
 
 	return router

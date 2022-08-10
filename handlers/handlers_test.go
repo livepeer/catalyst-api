@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/require"
@@ -20,6 +21,143 @@ func TestOKHandler(t *testing.T) {
 	router.ServeHTTP(rr, req)
 
 	require.Equal(rr.Body.String(), "OK")
+}
+
+func TestSegmentCallback(t *testing.T) {
+	callbacks := NewWebhookReceiver(8080)
+	defer callbacks.Stop()
+
+	var jsonData = []byte(`{
+		"source_location": "http://localhost/input",
+		"callback_url": "http://localhost:8080/callback",
+		"manifestID": "somestream",
+		"profiles": [
+			{
+				"name": "720p",
+				"width": 1280,
+				"height": 720,
+				"bitrate": 700000,
+				"fps": 30
+			}, {
+				"name": "360p",
+				"width": 640,
+				"height": 360,
+				"bitrate": 200000,
+				"fps": 30
+			}
+		],
+		"verificationFreq": 1
+	}`)
+
+	router := httprouter.New()
+
+	req, _ := http.NewRequest("POST", "/api/transcode/file", bytes.NewBuffer(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	router.POST("/api/transcode/file", CatalystAPIHandlers.TranscodeSegment())
+	router.ServeHTTP(rr, req)
+
+	require.Equal(t, 200, rr.Result().StatusCode)
+	require.Equal(t, "OK", rr.Body.String())
+
+	// Wait for callback
+	event := string(callbacks.WaitForCallback(t, 300*time.Millisecond))
+	require.Equal(t, `{"source_location":"http://localhost/input","status":"error","error_message":"NYI - not yet implemented"}`, event)
+}
+
+func TestSegmentBodyFormat(t *testing.T) {
+	require := require.New(t)
+
+	badRequests := [][]byte{
+		// missing source_location
+		[]byte(`{
+			"callback_url": "http://localhost:8080/callback",
+			"manifestID": "somestream",
+			"profiles": [{"name": "t","width": 1280,"height": 720,"bitrate": 70000,"fps": 30}],
+			"verificationFreq": 1
+		}`),
+		// missing callback_url
+		[]byte(`{
+			"source_location": "http://localhost/input",
+			"manifestID": "somestream",
+			"profiles": [{"name": "t","width": 1280,"height": 720,"bitrate": 70000,"fps": 30}],
+			"verificationFreq": 1
+		}`),
+		// missing manifestID
+		[]byte(`{
+			"source_location": "http://localhost/input",
+			"callback_url": "http://localhost:8080/callback",
+			"profiles": [{"name": "t","width": 1280,"height": 720,"bitrate": 70000,"fps": 30}],
+			"verificationFreq": 1
+		}`),
+		// missing profiles
+		[]byte(`{
+			"source_location": "http://localhost/input",
+			"callback_url": "http://localhost:8080/callback",
+			"manifestID": "somestream",
+			"verificationFreq": 1
+		}`),
+		// empty profiles
+		[]byte(`{
+			"source_location": "http://localhost/input",
+			"callback_url": "http://localhost:8080/callback",
+			"manifestID": "somestream",
+			"profiles": [],
+			"verificationFreq": 1
+		}`),
+		// missing name
+		[]byte(`{
+			"source_location": "http://localhost/input",
+			"callback_url": "http://localhost:8080/callback",
+			"manifestID": "somestream",
+			"profiles": [{"width": 1280,"height": 720,"bitrate": 70000,"fps": 30}],
+			"verificationFreq": 1
+		}`),
+		// missing width
+		[]byte(`{
+			"source_location": "http://localhost/input",
+			"callback_url": "http://localhost:8080/callback",
+			"manifestID": "somestream",
+			"profiles": [{"name": "t","height": 720,"bitrate": 70000,"fps": 30}],
+			"verificationFreq": 1
+		}`),
+		// missing height
+		[]byte(`{
+			"source_location": "http://localhost/input",
+			"callback_url": "http://localhost:8080/callback",
+			"manifestID": "somestream",
+			"profiles": [{"name": "t","width": 1280,"bitrate": 70000,"fps": 30}],
+			"verificationFreq": 1
+		}`),
+		// missing bitrate
+		[]byte(`{
+			"source_location": "http://localhost/input",
+			"callback_url": "http://localhost:8080/callback",
+			"manifestID": "somestream",
+			"profiles": [{"name": "t","width": 1280,"height": 720,"fps": 30}],
+			"verificationFreq": 1
+		}`),
+		// missing verificationFreq
+		[]byte(`{
+			"source_location": "http://localhost/input",
+			"callback_url": "http://localhost:8080/callback",
+			"manifestID": "somestream",
+			"profiles": [{"name": "t","width": 1280,"height": 720,"bitrate": 70000,"fps": 30}]
+		}`),
+	}
+
+	router := httprouter.New()
+
+	router.POST("/api/transcode/file", CatalystAPIHandlers.TranscodeSegment())
+	for _, payload := range badRequests {
+		req, _ := http.NewRequest("POST", "/api/transcode/file", bytes.NewBuffer(payload))
+		req.Header.Set("Content-Type", "application/json")
+
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		require.Equal(400, rr.Result().StatusCode, string(payload))
+	}
 }
 
 func TestSuccessfulVODUploadHandler(t *testing.T) {
