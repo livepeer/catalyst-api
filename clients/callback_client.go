@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/livepeer/catalyst-api/config"
 )
 
 const max_retries = 3
@@ -44,6 +46,7 @@ func (c CallbackClient) SendTranscodeStatus(url string, status TranscodeStatus, 
 	tsm := TranscodeStatusMessage{
 		CompletionRatio: completionRatio,
 		Status:          status.String(),
+		Timestamp:       config.Clock.GetTimestampUTC(),
 	}
 
 	j, err := json.Marshal(tsm)
@@ -61,8 +64,9 @@ func (c CallbackClient) SendTranscodeStatus(url string, status TranscodeStatus, 
 
 func (c CallbackClient) SendTranscodeStatusError(callbackURL, errorMsg string) error {
 	tsm := TranscodeStatusMessage{
-		Error:  errorMsg,
-		Status: TranscodeStatusError.String(),
+		Error:     errorMsg,
+		Status:    TranscodeStatusError.String(),
+		Timestamp: config.Clock.GetTimestampUTC(),
 	}
 
 	j, err := json.Marshal(tsm)
@@ -94,6 +98,7 @@ type TranscodeStatusMessage struct {
 	Error           string  `json:"error,omitempty"`
 	Retriable       bool    `json:"retriable,omitempty"`
 	Status          string  `json:"status,omitempty"`
+	Timestamp       int64   `json:"timestamp"`
 }
 
 func (ts TranscodeStatus) String() string {

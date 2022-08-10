@@ -6,10 +6,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/stretchr/testify/require"
 )
 
 func TestItRetriesOnFailedCallbacks(t *testing.T) {
+	config.Clock = config.FixedTimestampGenerator{Timestamp: 123456789}
+	defer func() { config.Clock = config.RealTimestampGenerator{} }()
+
 	// Counter for the number of retries we've done
 	var tries int
 
@@ -18,7 +22,7 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 		// Check that we got the callback we're expecting
 		body, err := ioutil.ReadAll(r.Body)
 		require.NoError(t, err)
-		require.JSONEq(t, `{"completion_ratio":1, "status":"completed"}`, string(body))
+		require.JSONEq(t, `{"completion_ratio":1, "status":"completed", "timestamp": 123456789}`, string(body))
 
 		// Return HTTP error codes the first two times
 		tries += 1
@@ -39,6 +43,9 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 }
 
 func TestItEventuallyStopsRetrying(t *testing.T) {
+	config.Clock = config.FixedTimestampGenerator{Timestamp: 123456789}
+	defer func() { config.Clock = config.RealTimestampGenerator{} }()
+
 	// Counter for the number of retries we've done
 	var tries int
 
@@ -47,7 +54,7 @@ func TestItEventuallyStopsRetrying(t *testing.T) {
 		// Check that we got the callback we're expecting
 		body, err := ioutil.ReadAll(r.Body)
 		require.NoError(t, err)
-		require.JSONEq(t, `{"completion_ratio":1, "status":"completed"}`, string(body))
+		require.JSONEq(t, `{"completion_ratio":1, "status":"completed", "timestamp": 123456789}`, string(body))
 
 		tries += 1
 
@@ -66,12 +73,15 @@ func TestItEventuallyStopsRetrying(t *testing.T) {
 }
 
 func TestTranscodeStatusErrorNotifcation(t *testing.T) {
+	config.Clock = config.FixedTimestampGenerator{Timestamp: 123456789}
+	defer func() { config.Clock = config.RealTimestampGenerator{} }()
+
 	// Set up a dummy server to receive the callbacks
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check that we got the callback we're expecting
 		body, err := ioutil.ReadAll(r.Body)
 		require.NoError(t, err)
-		require.JSONEq(t, `{"error": "something went wrong", "status":"error"}`, string(body))
+		require.JSONEq(t, `{"error": "something went wrong", "status":"error", "timestamp": 123456789}`, string(body))
 
 		w.WriteHeader(http.StatusOK)
 	}))
