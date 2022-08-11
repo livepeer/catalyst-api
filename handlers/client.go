@@ -227,6 +227,7 @@ func filterTriggersWithoutStream(triggers []ConfigTrigger, streamName string) []
 }
 
 func commandGetTriggers() MistConfig {
+	// send an empty config struct returns the current Mist configuration
 	return MistConfig{}
 }
 
