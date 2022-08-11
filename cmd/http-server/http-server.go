@@ -26,7 +26,7 @@ func main() {
 		return
 	}
 
-	listen := fmt.Sprintf("localhost:%d", *port)
+	listen := fmt.Sprintf("0.0.0.0:%d", *port)
 	router := StartCatalystAPIRouter()
 
 	stdlog.Println("Starting Catalyst API version", config.Version, "listening on", listen)
