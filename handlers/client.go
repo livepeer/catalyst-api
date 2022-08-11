@@ -97,7 +97,7 @@ func (mc *MistClient) sendCommand(command interface{}) (string, error) {
 		return "", err
 	}
 	payload := payloadFor(c)
-	resp, err := http.Post(mc.apiUrl, "application/json", bytes.NewBuffer([]byte(payload)))
+	resp, err := http.Post(mc.apiUrl, "application/x-www-form-urlencoded", bytes.NewBuffer([]byte(payload)))
 	if err != nil {
 		return "", err
 	}
