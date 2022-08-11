@@ -200,7 +200,7 @@ func commandUpdateTrigger(streamName, triggerName string, currentTriggers Trigge
 	triggersMap := currentTriggers
 
 	triggers := triggersMap[triggerName]
-	triggers = deleteAllTriggersFor(triggers, streamName)
+	triggers = filterTriggersWithoutStream(triggers, streamName)
 	if len(replaceTrigger.Streams) != 0 {
 		triggers = append(triggers, replaceTrigger)
 	}
@@ -209,7 +209,7 @@ func commandUpdateTrigger(streamName, triggerName string, currentTriggers Trigge
 	return MistConfig{Config{Triggers: triggersMap}}
 }
 
-func deleteAllTriggersFor(triggers []ConfigTrigger, streamName string) []ConfigTrigger {
+func filterTriggersWithoutStream(triggers []ConfigTrigger, streamName string) []ConfigTrigger {
 	var res []ConfigTrigger
 	for _, t := range triggers {
 		f := false
