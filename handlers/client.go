@@ -345,5 +345,5 @@ func wrapErr(err error, streamName string) error {
 
 // TODO: Delete auth, since DMS API will run on localhost, so it does not need authentation
 func auth(command string) string {
-	return fmt.Sprintf("{%s,%s}", `"authorize":{"username":"test","password":"45bef56e3d0ed618571f52e9a07a448a"}`, command)
+	return fmt.Sprintf("{%s,%s}", `"authorize":{"username":"test","password":"f9ff7ff5eafc90be25d5a4fba79f0fa0"}`, command)
 }

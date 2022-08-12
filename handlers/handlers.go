@@ -29,7 +29,6 @@ func (d *CatalystAPIHandlersCollection) Ok() httprouter.Handle {
 }
 
 func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
-	// TODO: Update schema with "outputs"
 	schemaLoader := gojsonschema.NewStringLoader(`{
 		"type": "object",
 		"properties": {
@@ -220,6 +219,7 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 			errors.WriteHTTPInternalServerError(w, "Cannot send transcode status", err)
 		}
 
+		// TODO: add timeout for the upload
 		// TODO: start transcoding
 	}
 }
