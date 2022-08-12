@@ -88,7 +88,6 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 		var uploadVODRequest UploadVODRequest
 
-		// TODO: Send Errors to Callback URL
 		if !HasContentType(req, "application/json") {
 			errors.WriteHTTPUnsupportedMediaType(w, "Requires application/json content type", nil)
 			return
@@ -219,7 +218,7 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 			errors.WriteHTTPInternalServerError(w, "Cannot send transcode status", err)
 		}
 
-		// TODO: add timeout for the upload
+		// TODO: add timeout for the stream upload
 		// TODO: start transcoding
 	}
 }
