@@ -32,7 +32,7 @@ func main() {
 		TriggerCallback: fmt.Sprintf("http://localhost:%d/api/mist/trigger", *port),
 	}
 
-	listen := fmt.Sprintf("localhost:%d", *port)
+	listen := fmt.Sprintf("0.0.0.0:%d", *port)
 	router := StartCatalystAPIRouter(mc)
 
 	stdlog.Println("Starting Catalyst API version", config.Version, "listening on", listen)
