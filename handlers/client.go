@@ -235,6 +235,7 @@ func deleteAllTriggersFor(triggers []ConfigTrigger, streamName string) []ConfigT
 }
 
 func commandGetTriggers() MistConfig {
+	// send an empty config struct returns the current Mist configuration
 	return MistConfig{}
 }
 
