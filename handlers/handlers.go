@@ -17,9 +17,13 @@ import (
 	"github.com/xeipuuv/gojsonschema"
 )
 
+type StreamInfo struct {
+	callbackUrl string
+}
+
 type CatalystAPIHandlersCollection struct {
 	MistClient  MistAPIClient
-	CallbackURL string
+	StreamCache map[string]StreamInfo
 }
 
 func (d *CatalystAPIHandlersCollection) Ok() httprouter.Handle {
@@ -118,13 +122,16 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			return
 		}
 
+		streamName := randomStreamName("catalyst_vod_")
+		d.StreamCache[streamName] = StreamInfo{callbackUrl: uploadVODRequest.CallbackUrl}
+
 		// process the request
-		if err := d.processUploadVOD(uploadVODRequest.Url, tURL); err != nil {
+		if err := d.processUploadVOD(streamName, uploadVODRequest.Url, tURL); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot process upload VOD request", err)
 		}
 
 		callbackClient := clients.NewCallbackClient()
-		if err := callbackClient.SendTranscodeStatus(d.CallbackURL, clients.TranscodeStatusPreparing, 0.0); err != nil {
+		if err := callbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, clients.TranscodeStatusPreparing, 0.0); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot send transcode status", err)
 		}
 
@@ -150,15 +157,14 @@ func HasContentType(r *http.Request, mimetype string) bool {
 	return false
 }
 
-func (d *CatalystAPIHandlersCollection) processUploadVOD(sourceUrl, targetUrl string) error {
-	streamName := randomStreamName("catalyst_vod_")
-	if err := d.MistClient.AddStream(streamName, sourceUrl); err != nil {
+func (d *CatalystAPIHandlersCollection) processUploadVOD(streamName, sourceURL, targetURL string) error {
+	if err := d.MistClient.AddStream(streamName, sourceURL); err != nil {
 		return err
 	}
 	if err := d.MistClient.AddTrigger(streamName, "PUSH_END"); err != nil {
 		return err
 	}
-	if err := d.MistClient.PushStart(streamName, targetUrl); err != nil {
+	if err := d.MistClient.PushStart(streamName, targetURL); err != nil {
 		return err
 	}
 
@@ -179,7 +185,7 @@ func randomStreamName(prefix string) string {
 
 type MistCallbackHandlersCollection struct {
 	MistClient  MistAPIClient
-	CallbackURL string
+	StreamCache map[string]StreamInfo
 }
 
 func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
@@ -214,9 +220,11 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 		}
 
 		callbackClient := clients.NewCallbackClient()
-		if err := callbackClient.SendTranscodeStatus(d.CallbackURL, clients.TranscodeStatusTranscoding, 0.0); err != nil {
+		if err := callbackClient.SendTranscodeStatus(d.StreamCache[s].callbackUrl, clients.TranscodeStatusTranscoding, 0.0); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot send transcode status", err)
 		}
+
+		delete(d.StreamCache, s)
 
 		// TODO: add timeout for the stream upload
 		// TODO: start transcoding

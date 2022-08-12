@@ -50,8 +50,9 @@ func StartCatalystAPIRouter(mc *handlers.MistClient) *httprouter.Router {
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	withLogging := middleware.LogRequest(logger)
 
-	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{MistClient: mc}
-	mistCallbackHandlers := &handlers.MistCallbackHandlersCollection{MistClient: mc}
+	sc := make(map[string]handlers.StreamInfo)
+	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{MistClient: mc, StreamCache: sc}
+	mistCallbackHandlers := &handlers.MistCallbackHandlersCollection{MistClient: mc, StreamCache: sc}
 
 	router.GET("/ok", withLogging(middleware.IsAuthorized(catalystApiHandlers.Ok())))
 	router.POST("/api/vod", withLogging(middleware.IsAuthorized(catalystApiHandlers.UploadVOD())))

@@ -154,5 +154,7 @@ func TestWorkflow(t *testing.T) {
 		ApiUrl:          "http://localhost:4242/api2",
 		TriggerCallback: "http://host.docker.internal:4949/api/mist/trigger"},
 	}
-	require.NoError(t, catalystHandlers.processUploadVOD("/home/Sample-Video-File-For-Testing.mp4", "/media/recording/out.m3u8"))
+	streamName := randomStreamName("catalyst_vod_")
+	catalystHandlers.StreamCache[streamName] = StreamInfo{callbackUrl: "http://some-handler.com"}
+	require.NoError(t, catalystHandlers.processUploadVOD(streamName, "/home/Sample-Video-File-For-Testing.mp4", "/media/recording/out.m3u8"))
 }

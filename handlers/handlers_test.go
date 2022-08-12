@@ -25,7 +25,7 @@ func TestOKHandler(t *testing.T) {
 func TestSuccessfulVODUploadHandler(t *testing.T) {
 	require := require.New(t)
 
-	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}}
+	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}, StreamCache: make(map[string]StreamInfo)}
 	var jsonData = []byte(`{
 		"url": "http://localhost/input",
 		"callback_url": "http://localhost/callback",
