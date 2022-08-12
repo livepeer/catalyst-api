@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"os"
 
-	log "github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/config"
@@ -18,6 +18,7 @@ import (
 
 func main() {
 	port := flag.Int("port", 4949, "Port to listen on")
+	mistPort := flag.Int("mist-port", 4242, "Port to listen on")
 	mistJson := flag.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
 	flag.Parse()
 
@@ -26,8 +27,13 @@ func main() {
 		return
 	}
 
-	listen := fmt.Sprintf("0.0.0.0:%d", *port)
-	router := StartCatalystAPIRouter()
+	mc := &handlers.MistClient{
+		ApiUrl:          fmt.Sprintf("http://localhost:%d/api2", *mistPort),
+		TriggerCallback: fmt.Sprintf("http://localhost:%d/api/mist/trigger", *port),
+	}
+
+	listen := fmt.Sprintf("localhost:%d", *port)
+	router := StartCatalystAPIRouter(mc)
 
 	stdlog.Println("Starting Catalyst API version", config.Version, "listening on", listen)
 	err := http.ListenAndServe(listen, router)
@@ -35,7 +41,7 @@ func main() {
 
 }
 
-func StartCatalystAPIRouter() *httprouter.Router {
+func StartCatalystAPIRouter(mc *handlers.MistClient) *httprouter.Router {
 	router := httprouter.New()
 
 	var logger log.Logger
@@ -43,9 +49,13 @@ func StartCatalystAPIRouter() *httprouter.Router {
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	withLogging := middleware.LogRequest(logger)
 
-	router.GET("/ok", withLogging(middleware.IsAuthorized(handlers.CatalystAPIHandlers.Ok())))
-	router.POST("/api/vod", withLogging(middleware.IsAuthorized(handlers.CatalystAPIHandlers.UploadVOD())))
-  router.POST("/api/mist/trigger", withLogging(handlers.MistCallbackHandlers.Trigger()))
+	sc := make(map[string]handlers.StreamInfo)
+	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{MistClient: mc, StreamCache: sc}
+	mistCallbackHandlers := &handlers.MistCallbackHandlersCollection{MistClient: mc, StreamCache: sc}
+
+	router.GET("/ok", withLogging(middleware.IsAuthorized(catalystApiHandlers.Ok())))
+	router.POST("/api/vod", withLogging(middleware.IsAuthorized(catalystApiHandlers.UploadVOD())))
+	router.POST("/api/mist/trigger", withLogging(mistCallbackHandlers.Trigger()))
 
 	return router
 }

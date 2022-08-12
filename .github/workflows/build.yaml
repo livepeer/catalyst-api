@@ -55,7 +55,7 @@ jobs:
       - name: Build
         run: |
           mkdir -p build/ releases/
-          make all GO_BUILD_DIR="build/"
+          make build GO_BUILD_DIR="build/"
 
       - name: Archive binaries for windows
         if: matrix.platform == 'windows'
@@ -126,7 +126,7 @@ jobs:
       - name: Build
         run: |
           mkdir -p build/ releases/
-          GOARCH="${{ matrix.arch }}" make -j4 all GO_BUILD_DIR="build/"
+          GOARCH="${{ matrix.arch }}" make -j4 build GO_BUILD_DIR="build/"
           cd build/
           for file in $(find . -type f -perm -a+x)
           do

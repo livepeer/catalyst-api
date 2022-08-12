@@ -11,9 +11,17 @@ import (
 	"sync"
 )
 
+type MistAPIClient interface {
+	AddStream(streamName, sourceUrl string) error
+	PushStart(streamName, targetURL string) error
+	DeleteStream(streamName string) error
+	AddTrigger(streamName, triggerName string) error
+	DeleteTrigger(streamName, triggerName string) error
+}
+
 type MistClient struct {
-	apiUrl          string
-	triggerCallback string
+	ApiUrl          string
+	TriggerCallback string
 	configMu        sync.Mutex
 }
 
@@ -47,7 +55,7 @@ func (mc *MistClient) AddTrigger(streamName, triggerName string) error {
 	if err != nil {
 		return err
 	}
-	c := commandAddTrigger(streamName, triggerName, mc.triggerCallback, triggers)
+	c := commandAddTrigger(streamName, triggerName, mc.TriggerCallback, triggers)
 	resp, err := mc.sendCommand(c)
 	return validateAddTrigger(streamName, triggerName, resp, err)
 }
@@ -97,7 +105,7 @@ func (mc *MistClient) sendCommand(command interface{}) (string, error) {
 		return "", err
 	}
 	payload := payloadFor(c)
-	resp, err := http.Post(mc.apiUrl, "application/x-www-form-urlencoded", bytes.NewBuffer([]byte(payload)))
+	resp, err := http.Post(mc.ApiUrl, "application/json", bytes.NewBuffer([]byte(payload)))
 	if err != nil {
 		return "", err
 	}
@@ -200,7 +208,7 @@ func commandUpdateTrigger(streamName, triggerName string, currentTriggers Trigge
 	triggersMap := currentTriggers
 
 	triggers := triggersMap[triggerName]
-	triggers = filterTriggersWithoutStream(triggers, streamName)
+	triggers = deleteAllTriggersFor(triggers, streamName)
 	if len(replaceTrigger.Streams) != 0 {
 		triggers = append(triggers, replaceTrigger)
 	}
@@ -209,7 +217,7 @@ func commandUpdateTrigger(streamName, triggerName string, currentTriggers Trigge
 	return MistConfig{Config{Triggers: triggersMap}}
 }
 
-func filterTriggersWithoutStream(triggers []ConfigTrigger, streamName string) []ConfigTrigger {
+func deleteAllTriggersFor(triggers []ConfigTrigger, streamName string) []ConfigTrigger {
 	var res []ConfigTrigger
 	for _, t := range triggers {
 		f := false
