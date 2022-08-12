@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	stdlog "log"
+	"net/http"
 	"os"
 
 	"github.com/go-kit/kit/log"
@@ -13,8 +14,6 @@ import (
 	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
-
-	"net/http"
 )
 
 func main() {
