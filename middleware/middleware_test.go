@@ -16,7 +16,8 @@ func TestNoAuthHeader(t *testing.T) {
 	router := httprouter.New()
 	req, _ := http.NewRequest("GET", "/ok", nil)
 	rr := httptest.NewRecorder()
-	router.GET("/ok", IsAuthorized(handlers.CatalystAPIHandlers.Ok()))
+	catalystApiHandlers := handlers.CatalystAPIHandlersCollection{}
+	router.GET("/ok", IsAuthorized(catalystApiHandlers.Ok()))
 	router.ServeHTTP(rr, req)
 
 	require.Equal(rr.Code, 401, "should return 401")
@@ -31,7 +32,8 @@ func TestWrongKey(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer gibberish")
 
 	rr := httptest.NewRecorder()
-	router.GET("/ok", IsAuthorized(handlers.CatalystAPIHandlers.Ok()))
+	catalystApiHandlers := handlers.CatalystAPIHandlersCollection{}
+	router.GET("/ok", IsAuthorized(catalystApiHandlers.Ok()))
 	router.ServeHTTP(rr, req)
 
 	require.Equal(rr.Code, 401, "should return 401")
