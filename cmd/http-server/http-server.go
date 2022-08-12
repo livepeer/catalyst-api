@@ -29,8 +29,7 @@ func main() {
 
 	mc := &handlers.MistClient{
 		ApiUrl:          fmt.Sprintf("http://localhost:%d/api2", *mistPort),
-		TriggerCallback: "http://host.docker.internal:4949/api/mist/trigger",
-		//TriggerCallback: fmt.Sprintf("http://localhost:%d/api/mist/trigger", *port),
+		TriggerCallback: fmt.Sprintf("http://localhost:%d/api/mist/trigger", *port),
 	}
 
 	listen := fmt.Sprintf("localhost:%d", *port)
