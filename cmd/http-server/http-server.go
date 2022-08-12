@@ -3,8 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
+	stdlog "log"
 	"net/http"
+	"os"
+
+	log "github.com/go-kit/kit/log"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/config"
@@ -23,21 +26,26 @@ func main() {
 		return
 	}
 
-	listen := fmt.Sprintf("localhost:%d", *port)
+	listen := fmt.Sprintf("0.0.0.0:%d", *port)
 	router := StartCatalystAPIRouter()
 
-	log.Println("Starting Catalyst API version", config.Version, "listening on", listen)
+	stdlog.Println("Starting Catalyst API version", config.Version, "listening on", listen)
 	err := http.ListenAndServe(listen, router)
-	log.Fatal(err)
+	stdlog.Fatal(err)
 
 }
 
 func StartCatalystAPIRouter() *httprouter.Router {
 	router := httprouter.New()
 
-	router.GET("/ok", middleware.IsAuthorized(handlers.CatalystAPIHandlers.Ok()))
-	router.POST("/api/vod", middleware.IsAuthorized(handlers.CatalystAPIHandlers.UploadVOD()))
-	router.POST("/api/mist/trigger", handlers.MistCallbackHandlers.Trigger())
+	var logger log.Logger
+	logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	withLogging := middleware.LogRequest(logger)
+
+	router.GET("/ok", withLogging(middleware.IsAuthorized(handlers.CatalystAPIHandlers.Ok())))
+	router.POST("/api/vod", withLogging(middleware.IsAuthorized(handlers.CatalystAPIHandlers.UploadVOD())))
+  router.POST("/api/mist/trigger", withLogging(handlers.MistCallbackHandlers.Trigger()))
 
 	return router
 }
