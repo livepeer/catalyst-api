@@ -25,6 +25,10 @@ func TestOKHandler(t *testing.T) {
 func TestSuccessfulVODUploadHandler(t *testing.T) {
 	require := require.New(t)
 
+	replaceProcessVod := processUpload
+	processUpload = func(url string) error { return nil }
+	defer func() { processUpload = replaceProcessVod }()
+
 	var jsonData = []byte(`{
 		"url": "http://localhost/input",
 		"callback_url": "http://localhost/callback",
