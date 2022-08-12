@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"bytes"
-	"github.com/julienschmidt/httprouter"
-	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/julienschmidt/httprouter"
+	"github.com/stretchr/testify/require"
 )
 
 func TestOKHandler(t *testing.T) {
@@ -25,10 +27,13 @@ func TestOKHandler(t *testing.T) {
 func TestSuccessfulVODUploadHandler(t *testing.T) {
 	require := require.New(t)
 
+	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer callbackServer.Close()
+
 	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}, StreamCache: make(map[string]StreamInfo)}
-	var jsonData = []byte(`{
+	var jsonData = `{
 		"url": "http://localhost/input",
-		"callback_url": "http://localhost/callback",
+		"callback_url": "CALLBACK_URL",
 		"output_locations": [
 			{
 				"type": "object_store",
@@ -45,19 +50,20 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 				}
 			}
 		]
-	}`)
+	}`
+	jsonData = strings.ReplaceAll(jsonData, "CALLBACK_URL", callbackServer.URL)
 
 	router := httprouter.New()
 
-	req, _ := http.NewRequest("POST", "/api/vod", bytes.NewBuffer(jsonData))
+	req, _ := http.NewRequest("POST", "/api/vod", bytes.NewBuffer([]byte(jsonData)))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
 	router.POST("/api/vod", catalystApiHandlers.UploadVOD())
 	router.ServeHTTP(rr, req)
 
-	require.Equal(rr.Result().StatusCode, 200)
-	require.Equal(rr.Body.String(), "2")
+	require.Equal(http.StatusOK, rr.Result().StatusCode)
+	require.Equal("2", rr.Body.String())
 }
 
 func TestInvalidPayloadVODUploadHandler(t *testing.T) {
