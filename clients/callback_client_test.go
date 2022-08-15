@@ -68,7 +68,7 @@ func TestItEventuallyStopsRetrying(t *testing.T) {
 	err := client.SendTranscodeStatus(svr.URL, TranscodeStatusCompleted, 1)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to send callback")
-	require.Contains(t, err.Error(), "Response Status Code: 500")
+	require.Contains(t, err.Error(), "giving up after 3 attempt(s)")
 	require.Equal(t, 3, tries, "Expected the client to retry on failed callbacks")
 }
 
