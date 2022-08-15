@@ -9,9 +9,6 @@
             "type": "string",
             "format": "uri"
         },
-        "mp4_output": {
-            "type": "boolean"
-        },
         "output_locations": {
             "type": "array",
             "items": {
@@ -26,6 +23,20 @@
                             "url": {
                                 "type": "string",
                                 "format": "uri"
+                            },
+                            "outputs": {
+                                "type": "object",
+                                "properites": {
+                                    "source_mp4": {
+                                        "type": "boolean"
+                                    },
+                                    "source_segments": {
+                                        "type": "boolean"
+                                    },
+                                    "transcoded_segments": {
+                                        "type": "boolean"
+                                    }
+                                }
                             }
                         },
                         "required": [
@@ -44,6 +55,20 @@
                             "pinata_access_key": {
                                 "type": "string",
                                 "minLength": 1
+                            },
+                            "outputs": {
+                                "type": "object",
+                                "properites": {
+                                    "source_mp4": {
+                                        "type": "boolean"
+                                    },
+                                    "source_segments": {
+                                        "type": "boolean"
+                                    },
+                                    "transcoded_segments": {
+                                        "type": "boolean"
+                                    }
+                                }
                             }
                         },
                         "required": [

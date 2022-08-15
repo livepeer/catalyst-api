@@ -26,7 +26,7 @@ func compileJsonSchemas() map[string]*gojsonschema.Schema {
 			panic(err)
 		}
 
-		schema, err := gojsonschema.NewSchema(gojsonschema.NewStringLoader(string(text)))
+		schema, err := gojsonschema.NewSchema(gojsonschema.NewBytesLoader(text))
 		if err != nil {
 			// rase panic on program start
 			panic(err) // fix schema text
