@@ -2,8 +2,9 @@ package handlers
 
 import (
 	"errors"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestRequestPayload(t *testing.T) {
@@ -26,8 +27,8 @@ func TestRequestPayload(t *testing.T) {
 			commandDeleteStream("somestream"),
 		},
 		{
-			"command=%7B%22config%22%3A%7B%22triggers%22%3A%7B%22PUSH_END%22%3A%5B%7B%22handler%22%3A%22http%3A%2F%2Flocalhost%2Fapi%22%2C%22streams%22%3A%5B%22somestream%22%5D%2C%22sync%22%3Afalse%7D%5D%7D%7D%7D",
-			commandAddTrigger("somestream", "PUSH_END", "http://localhost/api", Triggers{}),
+			"command=%7B%22config%22%3A%7B%22triggers%22%3A%7B%22PUSH_END%22%3A%5B%7B%22handler%22%3A%22http%3A%2F%2F0.0.0.0%2Fapi%22%2C%22streams%22%3A%5B%22somestream%22%5D%2C%22sync%22%3Afalse%7D%5D%7D%7D%7D",
+			commandAddTrigger("somestream", "PUSH_END", "http://0.0.0.0/api", Triggers{}),
 		},
 		{
 			"command=%7B%22config%22%3A%7B%22triggers%22%3A%7B%22PUSH_END%22%3Anull%7D%7D%7D",
@@ -47,7 +48,7 @@ func TestCommandAddTrigger(t *testing.T) {
 	require := require.New(t)
 
 	// given
-	h := "http://localhost:8080/mist/api"
+	h := "http://0.0.0.0:8080/mist/api"
 	s := "somestream"
 	tr := "PUSH_END"
 	currentTriggers := Triggers{}
@@ -66,7 +67,7 @@ func TestCommandAddTrigger_AlreadyExists(t *testing.T) {
 	require := require.New(t)
 
 	// given
-	h := "http://localhost:8080/mist/api"
+	h := "http://0.0.0.0:8080/mist/api"
 	s := "somestream"
 	tr := "PUSH_END"
 	currentTriggers := Triggers{

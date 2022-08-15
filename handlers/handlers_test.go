@@ -32,12 +32,12 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 
 	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}, StreamCache: make(map[string]StreamInfo)}
 	var jsonData = `{
-		"url": "http://localhost/input",
+		"url": "http://0.0.0.0/input",
 		"callback_url": "CALLBACK_URL",
 		"output_locations": [
 			{
 				"type": "object_store",
-				"url": "memory://localhost/output",
+				"url": "memory://0.0.0.0/output",
  				"outputs": {
 					"source_segments": true
 				}
@@ -73,47 +73,47 @@ func TestInvalidPayloadVODUploadHandler(t *testing.T) {
 	badRequests := [][]byte{
 		// missing url
 		[]byte(`{
-			"callback_url": "http://localhost/callback",
-			"output_locations": [ { "type": "object_store", "url": "memory://localhost/output" } ]
+			"callback_url": "http://0.0.0.0/callback",
+			"output_locations": [ { "type": "object_store", "url": "memory://0.0.0.0/output" } ]
 		}`),
 		// missing callback_url
 		[]byte(`{
-			"url": "http://localhost/input",
-			"output_locations": [ { "type": "object_store", "url": "memory://localhost/output" } ]
+			"url": "http://0.0.0.0/input",
+			"output_locations": [ { "type": "object_store", "url": "memory://0.0.0.0/output" } ]
 		}`),
 		// missing output_locations
 		[]byte(`{
-			"url": "http://localhost/input",
-			"callback_url": "http://localhost/callback"
+			"url": "http://0.0.0.0/input",
+			"callback_url": "http://0.0.0.0/callback"
 		}`),
 		// invalid url
 		[]byte(`{
-			"url": "x://}]:&7@localhost/",
-			"callback_url": "http://localhost/callback",
-			"output_locations": [ { "type": "object_store", "url": "memory://localhost/output" } ]
+			"url": "x://}]:&7@0.0.0.0/",
+			"callback_url": "http://0.0.0.0/callback",
+			"output_locations": [ { "type": "object_store", "url": "memory://0.0.0.0/output" } ]
 		}`),
 		// invalid callback_url
 		[]byte(`{
-			"url": "http://localhost/input",
-			"callback_url": "x://}]:&7@localhost/",
-			"output_locations": [ { "type": "object_store", "url": "memory://localhost/output" } ]
+			"url": "http://0.0.0.0/input",
+			"callback_url": "x://}]:&7@0.0.0.0/",
+			"output_locations": [ { "type": "object_store", "url": "memory://0.0.0.0/output" } ]
 		}`),
 		// invalid output_location's object_store url
 		[]byte(`{
-			"url": "http://localhost/input",
-			"callback_url": "http://localhost/callback",
-			"output_locations": [ { "type": "object_store", "url": "x://}]:&7@localhost/" } ]
+			"url": "http://0.0.0.0/input",
+			"callback_url": "http://0.0.0.0/callback",
+			"output_locations": [ { "type": "object_store", "url": "x://}]:&7@0.0.0.0/" } ]
 		}`),
 		// invalid output_location type
 		[]byte(`{
-			"url": "http://localhost/input",
-			"callback_url": "http://localhost/callback",
-			"output_locations": [ { "type": "foo", "url": "http://localhost/" } ]
+			"url": "http://0.0.0.0/input",
+			"callback_url": "http://0.0.0.0/callback",
+			"output_locations": [ { "type": "foo", "url": "http://0.0.0.0/" } ]
 		}`),
 		// invalid output_location's pinata params
 		[]byte(`{
-			"url": "http://localhost/input",
-			"callback_url": "http://localhost/callback",
+			"url": "http://0.0.0.0/input",
+			"callback_url": "http://0.0.0.0/callback",
 			"output_locations": [ { "type": "pinata", "pinata_access_key": "" } ]
 		}`),
 	}
@@ -136,12 +136,12 @@ func TestWrongContentTypeVODUploadHandler(t *testing.T) {
 
 	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}}
 	var jsonData = []byte(`{
-		"url": "http://localhost/input",
-		"callback_url": "http://localhost/callback",
+		"url": "http://0.0.0.0/input",
+		"callback_url": "http://0.0.0.0/callback",
 		"output_locations": [
 			{
 				"type": "object_store",
-				"url": "http://localhost/"
+				"url": "http://0.0.0.0/"
 			}
 		]
 	}`)
