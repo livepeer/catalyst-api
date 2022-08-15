@@ -1,13 +1,5 @@
 package handlers
 
-import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"time"
-)
-
 type EncodedProfile struct {
 	Name         string `json:"name"`
 	Width        int    `json:"width"`
@@ -133,29 +125,4 @@ type TranscodeSegmentResult struct {
 	Status          string  `json:"status"`
 	CompletionRatio float32 `json:"completion_ratio,omitempty"`
 	ErrorMessage    string  `json:"error_message,omitempty"`
-}
-
-func invokeTestCallback(transcodeRequest *TranscodeSegmentRequest) {
-	time.Sleep(30 * time.Millisecond) // takes some time to transcode
-	// invoke callback
-	resultEncoded, err := json.Marshal(&TranscodeSegmentResult{
-		SourceFile:      transcodeRequest.SourceFile,
-		Status:          "error",
-		CompletionRatio: 0.0,
-		ErrorMessage:    "NYI - not yet implemented",
-	})
-	if err != nil {
-		fmt.Printf("ERROR TranscodeSegmentResult to json SourceFile=%s\n", transcodeRequest.SourceFile)
-		return
-	}
-	req, err := http.NewRequest("POST", transcodeRequest.CallbackUrl, bytes.NewBuffer(resultEncoded))
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Printf("ERROR invoking callback %v\n", err)
-		return
-	}
-	resp.Body.Close()
-	// What to do with status of callback?
 }

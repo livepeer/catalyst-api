@@ -2,34 +2,37 @@ package handlers
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/stretchr/testify/require"
 )
 
 func TestOKHandler(t *testing.T) {
 	require := require.New(t)
 
+	catalystApiHandlers := CatalystAPIHandlersCollection{}
 	router := httprouter.New()
 	req, _ := http.NewRequest("GET", "/ok", nil)
 	rr := httptest.NewRecorder()
-	router.GET("/ok", CatalystAPIHandlers.Ok())
+	router.GET("/ok", catalystApiHandlers.Ok())
 	router.ServeHTTP(rr, req)
 
 	require.Equal(rr.Body.String(), "OK")
 }
 
 func TestSegmentCallback(t *testing.T) {
-	callbacks := NewWebhookReceiver(8080)
-	defer callbacks.Stop()
-
-	var jsonData = []byte(`{
+	var jsonData = `{
 		"source_location": "http://localhost/input",
-		"callback_url": "http://localhost:8080/callback",
+		"callback_url": "CALLBACK_URL",
 		"manifestID": "somestream",
 		"profiles": [
 			{
@@ -47,23 +50,47 @@ func TestSegmentCallback(t *testing.T) {
 			}
 		],
 		"verificationFreq": 1
-	}`)
+	}`
+
+	callbacks := make(chan string, 10)
+	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			fmt.Printf("WebhookReceiver error reading req body\n")
+			w.WriteHeader(451)
+			return
+		}
+		w.WriteHeader(200)
+		callbacks <- string(payload)
+	}))
+	defer callbackServer.Close()
+	jsonData = strings.ReplaceAll(jsonData, "CALLBACK_URL", callbackServer.URL)
+
+	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}}
 
 	router := httprouter.New()
 
-	req, _ := http.NewRequest("POST", "/api/transcode/file", bytes.NewBuffer(jsonData))
+	req, _ := http.NewRequest("POST", "/api/transcode/file", bytes.NewBuffer([]byte(jsonData)))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
-	router.POST("/api/transcode/file", CatalystAPIHandlers.TranscodeSegment())
+	router.POST("/api/transcode/file", catalystApiHandlers.TranscodeSegment())
 	router.ServeHTTP(rr, req)
 
 	require.Equal(t, 200, rr.Result().StatusCode)
 	require.Equal(t, "OK", rr.Body.String())
 
 	// Wait for callback
-	event := string(callbacks.WaitForCallback(t, 300*time.Millisecond))
-	require.Equal(t, `{"source_location":"http://localhost/input","status":"error","error_message":"NYI - not yet implemented"}`, event)
+	select {
+	case data := <-callbacks:
+		message := &clients.TranscodeStatusMessage{}
+		err := json.Unmarshal([]byte(data), message)
+		require.NoErrorf(t, err, "json unmarshal failed, src=%s", data)
+		require.Equal(t, "error", message.Status)
+		require.Equal(t, "NYI - not yet implemented", message.Error)
+	case <-time.After(300 * time.Millisecond):
+		require.FailNow(t, "Callback not fired by handler")
+	}
 }
 
 func TestSegmentBodyFormat(t *testing.T) {
@@ -139,9 +166,10 @@ func TestSegmentBodyFormat(t *testing.T) {
 		}`),
 	}
 
+	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}}
 	router := httprouter.New()
 
-	router.POST("/api/transcode/file", CatalystAPIHandlers.TranscodeSegment())
+	router.POST("/api/transcode/file", catalystApiHandlers.TranscodeSegment())
 	for _, payload := range badRequests {
 		req, _ := http.NewRequest("POST", "/api/transcode/file", bytes.NewBuffer(payload))
 		req.Header.Set("Content-Type", "application/json")
@@ -155,37 +183,49 @@ func TestSegmentBodyFormat(t *testing.T) {
 func TestSuccessfulVODUploadHandler(t *testing.T) {
 	require := require.New(t)
 
-	var jsonData = []byte(`{
+	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer callbackServer.Close()
+
+	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}, StreamCache: make(map[string]StreamInfo)}
+	var jsonData = `{
 		"url": "http://localhost/input",
-		"callback_url": "http://localhost/callback",
+		"callback_url": "CALLBACK_URL",
 		"output_locations": [
 			{
 				"type": "object_store",
-				"url": "memory://localhost/output"
+				"url": "memory://localhost/output",
+ 				"outputs": {
+					"source_segments": true
+				}
 			},
 			{
 				"type": "pinata",
-				"pinata_access_key": "abc"
+				"pinata_access_key": "abc",
+ 				"outputs": {
+					"transcoded_segments": true
+				}
 			}
 		]
-	}`)
+	}`
+	jsonData = strings.ReplaceAll(jsonData, "CALLBACK_URL", callbackServer.URL)
 
 	router := httprouter.New()
 
-	req, _ := http.NewRequest("POST", "/api/vod", bytes.NewBuffer(jsonData))
+	req, _ := http.NewRequest("POST", "/api/vod", bytes.NewBuffer([]byte(jsonData)))
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
-	router.POST("/api/vod", CatalystAPIHandlers.UploadVOD())
+	router.POST("/api/vod", catalystApiHandlers.UploadVOD())
 	router.ServeHTTP(rr, req)
 
-	require.Equal(rr.Result().StatusCode, 200)
-	require.Equal(rr.Body.String(), "2")
+	require.Equal(http.StatusOK, rr.Result().StatusCode)
+	require.Equal("2", rr.Body.String())
 }
 
 func TestInvalidPayloadVODUploadHandler(t *testing.T) {
 	require := require.New(t)
 
+	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}}
 	badRequests := [][]byte{
 		// missing url
 		[]byte(`{
@@ -197,7 +237,7 @@ func TestInvalidPayloadVODUploadHandler(t *testing.T) {
 			"url": "http://localhost/input",
 			"output_locations": [ { "type": "object_store", "url": "memory://localhost/output" } ]
 		}`),
-		// missing output_locatoins
+		// missing output_locations
 		[]byte(`{
 			"url": "http://localhost/input",
 			"callback_url": "http://localhost/callback"
@@ -236,7 +276,7 @@ func TestInvalidPayloadVODUploadHandler(t *testing.T) {
 
 	router := httprouter.New()
 
-	router.POST("/api/vod", CatalystAPIHandlers.UploadVOD())
+	router.POST("/api/vod", catalystApiHandlers.UploadVOD())
 	for _, payload := range badRequests {
 		req, _ := http.NewRequest("POST", "/api/vod", bytes.NewBuffer(payload))
 		req.Header.Set("Content-Type", "application/json")
@@ -250,6 +290,7 @@ func TestInvalidPayloadVODUploadHandler(t *testing.T) {
 func TestWrongContentTypeVODUploadHandler(t *testing.T) {
 	require := require.New(t)
 
+	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}}
 	var jsonData = []byte(`{
 		"url": "http://localhost/input",
 		"callback_url": "http://localhost/callback",
@@ -266,7 +307,7 @@ func TestWrongContentTypeVODUploadHandler(t *testing.T) {
 	req.Header.Set("Content-Type", "json")
 
 	rr := httptest.NewRecorder()
-	router.POST("/api/vod", CatalystAPIHandlers.UploadVOD())
+	router.POST("/api/vod", catalystApiHandlers.UploadVOD())
 	router.ServeHTTP(rr, req)
 
 	require.Equal(rr.Result().StatusCode, 415)

@@ -3,11 +3,15 @@ package handlers
 type UploadVODRequest struct {
 	Url             string `json:"url"`
 	CallbackUrl     string `json:"callback_url"`
-	Mp4Output       bool   `json:"mp4_output"`
 	OutputLocations []struct {
 		Type            string `json:"type"`
 		URL             string `json:"url"`
 		PinataAccessKey string `json:"pinata_access_key"`
+		Outputs         struct {
+			SourceMp4          bool `json:"source_mp4"`
+			SourceSegments     bool `json:"source_segments"`
+			TranscodedSegments bool `json:"transcoded_segments"`
+		} `json:"outputs,omitempty"`
 	} `json:"output_locations,omitempty"`
 }
 
@@ -16,7 +20,6 @@ var UploadVODRequestSchemaDefinition string = `{
 	"properties": {
 		"url": { "type": "string", "format": "uri" },
 			"callback_url": { "type": "string", "format": "uri" },
-			"mp4_output": { "type": "boolean" },
 			"output_locations": {
 			"type": "array",
 			"items": {
