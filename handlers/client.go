@@ -83,7 +83,7 @@ func (mc *MistClient) DeleteTrigger(streamName, triggerName string) error {
 func (mc *MistClient) getCurrentTriggers() (Triggers, error) {
 	c := commandGetTriggers()
 	resp, err := mc.sendCommand(c)
-	if err != validateAuth(resp, err) {
+	if err := validateAuth(resp, err); err != nil {
 		return nil, err
 	}
 
@@ -294,7 +294,7 @@ func validateAddTrigger(streamName, triggerName, resp string, err error) error {
 }
 
 func validateDeleteTrigger(streamName, triggerName, resp string, err error) error {
-	if err != validateAuth(resp, err) {
+	if err := validateAuth(resp, err); err != nil {
 		return err
 	}
 
@@ -324,7 +324,6 @@ func validateAuth(resp string, err error) error {
 	if err != nil {
 		return err
 	}
-
 	r := struct {
 		Authorize map[string]string `json:"authorize"`
 	}{}
