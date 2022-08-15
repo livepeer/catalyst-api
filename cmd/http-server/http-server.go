@@ -55,6 +55,7 @@ func StartCatalystAPIRouter(mc *handlers.MistClient) *httprouter.Router {
 
 	router.GET("/ok", withLogging(middleware.IsAuthorized(catalystApiHandlers.Ok())))
 	router.POST("/api/vod", withLogging(middleware.IsAuthorized(catalystApiHandlers.UploadVOD())))
+	router.POST("/api/transcode/file", withLogging(middleware.IsAuthorized(catalystApiHandlers.TranscodeSegment())))
 	router.POST("/api/mist/trigger", withLogging(mistCallbackHandlers.Trigger()))
 
 	return router

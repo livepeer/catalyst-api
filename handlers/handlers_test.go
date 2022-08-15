@@ -2,12 +2,17 @@ package handlers
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,6 +27,157 @@ func TestOKHandler(t *testing.T) {
 	router.ServeHTTP(rr, req)
 
 	require.Equal(rr.Body.String(), "OK")
+}
+
+func TestSegmentCallback(t *testing.T) {
+	var jsonData = `{
+		"source_location": "http://localhost/input",
+		"callback_url": "CALLBACK_URL",
+		"manifestID": "somestream",
+		"profiles": [
+			{
+				"name": "720p",
+				"width": 1280,
+				"height": 720,
+				"bitrate": 700000,
+				"fps": 30
+			}, {
+				"name": "360p",
+				"width": 640,
+				"height": 360,
+				"bitrate": 200000,
+				"fps": 30
+			}
+		],
+		"verificationFreq": 1
+	}`
+
+	callbacks := make(chan string, 10)
+	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			fmt.Printf("WebhookReceiver error reading req body\n")
+			w.WriteHeader(451)
+			return
+		}
+		w.WriteHeader(200)
+		callbacks <- string(payload)
+	}))
+	defer callbackServer.Close()
+	jsonData = strings.ReplaceAll(jsonData, "CALLBACK_URL", callbackServer.URL)
+
+	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}}
+
+	router := httprouter.New()
+
+	req, _ := http.NewRequest("POST", "/api/transcode/file", bytes.NewBuffer([]byte(jsonData)))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	router.POST("/api/transcode/file", catalystApiHandlers.TranscodeSegment())
+	router.ServeHTTP(rr, req)
+
+	require.Equal(t, 200, rr.Result().StatusCode)
+	require.Equal(t, "OK", rr.Body.String())
+
+	// Wait for callback
+	select {
+	case data := <-callbacks:
+		message := &clients.TranscodeStatusMessage{}
+		err := json.Unmarshal([]byte(data), message)
+		require.NoErrorf(t, err, "json unmarshal failed, src=%s", data)
+		require.Equal(t, "error", message.Status)
+		require.Equal(t, "NYI - not yet implemented", message.Error)
+	case <-time.After(300 * time.Millisecond):
+		require.FailNow(t, "Callback not fired by handler")
+	}
+}
+
+func TestSegmentBodyFormat(t *testing.T) {
+	require := require.New(t)
+
+	badRequests := [][]byte{
+		// missing source_location
+		[]byte(`{
+			"callback_url": "http://localhost:8080/callback",
+			"manifestID": "somestream",
+			"profiles": [{"name": "t","width": 1280,"height": 720,"bitrate": 70000,"fps": 30}],
+			"verificationFreq": 1
+		}`),
+		// missing callback_url
+		[]byte(`{
+			"source_location": "http://localhost/input",
+			"manifestID": "somestream",
+			"profiles": [{"name": "t","width": 1280,"height": 720,"bitrate": 70000,"fps": 30}],
+			"verificationFreq": 1
+		}`),
+		// missing manifestID
+		[]byte(`{
+			"source_location": "http://localhost/input",
+			"callback_url": "http://localhost:8080/callback",
+			"profiles": [{"name": "t","width": 1280,"height": 720,"bitrate": 70000,"fps": 30}],
+			"verificationFreq": 1
+		}`),
+		// missing profiles
+		[]byte(`{
+			"source_location": "http://localhost/input",
+			"callback_url": "http://localhost:8080/callback",
+			"manifestID": "somestream",
+			"verificationFreq": 1
+		}`),
+		// missing name
+		[]byte(`{
+			"source_location": "http://localhost/input",
+			"callback_url": "http://localhost:8080/callback",
+			"manifestID": "somestream",
+			"profiles": [{"width": 1280,"height": 720,"bitrate": 70000,"fps": 30}],
+			"verificationFreq": 1
+		}`),
+		// missing width
+		[]byte(`{
+			"source_location": "http://localhost/input",
+			"callback_url": "http://localhost:8080/callback",
+			"manifestID": "somestream",
+			"profiles": [{"name": "t","height": 720,"bitrate": 70000,"fps": 30}],
+			"verificationFreq": 1
+		}`),
+		// missing height
+		[]byte(`{
+			"source_location": "http://localhost/input",
+			"callback_url": "http://localhost:8080/callback",
+			"manifestID": "somestream",
+			"profiles": [{"name": "t","width": 1280,"bitrate": 70000,"fps": 30}],
+			"verificationFreq": 1
+		}`),
+		// missing bitrate
+		[]byte(`{
+			"source_location": "http://localhost/input",
+			"callback_url": "http://localhost:8080/callback",
+			"manifestID": "somestream",
+			"profiles": [{"name": "t","width": 1280,"height": 720,"fps": 30}],
+			"verificationFreq": 1
+		}`),
+		// missing verificationFreq
+		[]byte(`{
+			"source_location": "http://localhost/input",
+			"callback_url": "http://localhost:8080/callback",
+			"manifestID": "somestream",
+			"profiles": [{"name": "t","width": 1280,"height": 720,"bitrate": 70000,"fps": 30}]
+		}`),
+	}
+
+	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}}
+	router := httprouter.New()
+
+	router.POST("/api/transcode/file", catalystApiHandlers.TranscodeSegment())
+	for _, payload := range badRequests {
+		req, _ := http.NewRequest("POST", "/api/transcode/file", bytes.NewBuffer(payload))
+		req.Header.Set("Content-Type", "application/json")
+
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		require.Equal(400, rr.Result().StatusCode, string(payload))
+	}
 }
 
 func TestSuccessfulVODUploadHandler(t *testing.T) {

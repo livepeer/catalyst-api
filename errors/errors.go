@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
+
+	"github.com/xeipuuv/gojsonschema"
 )
 
 type apiError struct {
@@ -36,4 +39,16 @@ func WriteHTTPUnsupportedMediaType(w http.ResponseWriter, msg string, err error)
 
 func WriteHTTPInternalServerError(w http.ResponseWriter, msg string, err error) apiError {
 	return writeHttpError(w, msg, http.StatusInternalServerError, err)
+}
+
+func WriteHTTPBadBodySchema(where string, w http.ResponseWriter, errors []gojsonschema.ResultError) apiError {
+	sb := strings.Builder{}
+	sb.WriteString("Body validation error in ")
+	sb.WriteString(where)
+	sb.WriteString(" ")
+	for i := 0; i < len(errors); i++ {
+		sb.WriteString(errors[i].String())
+		sb.WriteString(" ")
+	}
+	return writeHttpError(w, sb.String(), http.StatusBadRequest, nil)
 }

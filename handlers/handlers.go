@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/livepeer/catalyst-api/clients"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -11,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/livepeer/catalyst-api/clients"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/errors"
@@ -32,62 +33,39 @@ func (d *CatalystAPIHandlersCollection) Ok() httprouter.Handle {
 	}
 }
 
+func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
+	schema := inputSchemasCompiled["TranscodeSegment"]
+	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+		var transcodeRequest TranscodeSegmentRequest
+		payload, err := ioutil.ReadAll(req.Body)
+		if err != nil {
+			errors.WriteHTTPInternalServerError(w, "Cannot read body", err)
+			return
+		}
+		result, err := schema.Validate(gojsonschema.NewBytesLoader(payload))
+		if err != nil {
+			errors.WriteHTTPInternalServerError(w, "body schema validation failed", err)
+			return
+		}
+		if !result.Valid() {
+			errors.WriteHTTPBadBodySchema("TranscodeSegment", w, result.Errors())
+			return
+		}
+		if err := json.Unmarshal(payload, &transcodeRequest); err != nil {
+			errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+			return
+		}
+
+		callbackClient := clients.NewCallbackClient()
+		if err := callbackClient.SendTranscodeStatusError(transcodeRequest.CallbackUrl, "NYI - not yet implemented"); err != nil {
+			errors.WriteHTTPInternalServerError(w, "error send transcode error", err)
+		}
+		io.WriteString(w, "OK") // TODO later
+	}
+}
+
 func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
-	schemaLoader := gojsonschema.NewStringLoader(`{
-		"type": "object",
-		"properties": {
-			"url": { "type": "string", "format": "uri" },
-		  	"callback_url": { "type": "string", "format": "uri" },
-		  	"output_locations": {
-				"type": "array",
-				"items": {
-					"oneOf": [
-						{
-							"type": "object",
-			  				"properties": {
-								"type": { "type": "string", "const": "object_store" },
-								"url": { "type": "string", "format": "uri" }
-				  			},
-							"required": [ "type", "url" ],
-							"additional_properties": false
-						},
-						{
-							"type": "object",
-			  				"properties": {
-								"type": { "type": "string", "const": "pinata" },
-								"pinata_access_key": { "type": "string", "minLength": 1 }
-				  			},
-							"required": [ "type", "pinata_access_key" ],
-							"additional_properties": false
-						}
-					]
-				},
-				"minItems": 1
-		  	}
-		},
-		"required": [ "url", "callback_url", "output_locations" ],
-		"additional_properties": false
-	}`)
-
-	schema, err := gojsonschema.NewSchema(schemaLoader)
-	if err != nil {
-		panic(err)
-	}
-
-	type UploadVODRequest struct {
-		Url             string `json:"url"`
-		CallbackUrl     string `json:"callback_url"`
-		OutputLocations []struct {
-			Type            string `json:"type"`
-			URL             string `json:"url"`
-			PinataAccessKey string `json:"pinata_access_key"`
-			Outputs         struct {
-				SourceMp4          bool `json:"source_mp4"`
-				SourceSegments     bool `json:"source_segments"`
-				TranscodedSegments bool `json:"transcoded_segments"`
-			} `json:"outputs,omitempty"`
-		} `json:"output_locations,omitempty"`
-	}
+	schema := inputSchemasCompiled["UploadVOD"]
 
 	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 		var uploadVODRequest UploadVODRequest
