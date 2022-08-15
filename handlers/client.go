@@ -325,12 +325,15 @@ func validateAuth(resp string, err error) error {
 		return err
 	}
 	r := struct {
-		Authorize map[string]string `json:"authorize"`
+		Authorize struct {
+			Status string `json:"status"`
+		} `json:"authorize"`
 	}{}
+
 	if err := json.Unmarshal([]byte(resp), &r); err != nil {
 		return err
 	}
-	if r.Authorize["status"] != "OK" {
+	if r.Authorize.Status != "OK" {
 		return errors.New("authorization to Mist API failed")
 	}
 	return nil
