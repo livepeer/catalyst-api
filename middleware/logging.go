@@ -40,7 +40,7 @@ func LogRequest(logger log.Logger) func(httprouter.Handle) httprouter.Handle {
 
 			defer func() {
 				if err := recover(); err != nil {
-					errors.WriteHTTPInternalServerError(wrapped, "Something went wrong", nil)
+					errors.WriteHTTPInternalServerError(wrapped, "Internal Server Error", nil)
 					logger.Log("err", err, "trace", debug.Stack())
 				}
 			}()
