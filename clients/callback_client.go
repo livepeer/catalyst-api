@@ -12,7 +12,7 @@ import (
 )
 
 type CallbackClient struct {
-	httpClient *retryablehttp.Client
+	httpClient *http.Client
 }
 
 func NewCallbackClient() CallbackClient {
@@ -25,11 +25,11 @@ func NewCallbackClient() CallbackClient {
 	}
 
 	return CallbackClient{
-		httpClient: client,
+		httpClient: client.StandardClient(),
 	}
 }
 
-func (c CallbackClient) DoWithRetries(r *retryablehttp.Request) error {
+func (c CallbackClient) DoWithRetries(r *http.Request) error {
 	resp, err := c.httpClient.Do(r)
 	if err != nil {
 		return fmt.Errorf("failed to send callback to %q. Error: %s", r.URL.String(), err)
@@ -55,7 +55,7 @@ func (c CallbackClient) SendTranscodeStatus(url string, status TranscodeStatus, 
 		return err
 	}
 
-	r, err := retryablehttp.NewRequest(http.MethodPost, url, bytes.NewReader(j))
+	r, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(j))
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func (c CallbackClient) SendTranscodeStatusError(callbackURL, errorMsg string) e
 		return err
 	}
 
-	r, err := retryablehttp.NewRequest(http.MethodPost, callbackURL, bytes.NewReader(j))
+	r, err := http.NewRequest(http.MethodPost, callbackURL, bytes.NewReader(j))
 	if err != nil {
 		return err
 	}
