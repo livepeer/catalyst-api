@@ -30,6 +30,9 @@ func NewCallbackClient() CallbackClient {
 }
 
 func (c CallbackClient) DoWithRetries(r *retryablehttp.Request) error {
+	// TODO: Replace with a proper shared Secret, probably coming from the initial request
+	r.Header.Set("Authorization", "Bearer IAmAuthorized")
+
 	resp, err := c.httpClient.Do(r)
 	if err != nil {
 		return fmt.Errorf("failed to send callback to %q. Error: %s", r.URL.String(), err)
