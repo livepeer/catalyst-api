@@ -7,41 +7,40 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/livepeer/catalyst-api/config"
 )
 
-const max_retries = 3
-const backoff_millis = 200
-
 type CallbackClient struct {
-	httpClient *http.Client
+	httpClient *retryablehttp.Client
 }
 
 func NewCallbackClient() CallbackClient {
+	client := retryablehttp.NewClient()
+	client.RetryMax = 2                          // Retry a maximum of this+1 times
+	client.RetryWaitMin = 200 * time.Millisecond // Wait at least this long between retries
+	client.RetryWaitMax = 1 * time.Second        // Wait at most this long between retries (exponential backoff)
+	client.HTTPClient = &http.Client{
+		Timeout: 5 * time.Second, // Give up on requests that take more than this long
+	}
+
 	return CallbackClient{
-		httpClient: &http.Client{
-			Timeout: 5 * time.Second,
-		},
+		httpClient: client,
 	}
 }
 
-func (c CallbackClient) DoWithRetries(r *http.Request) error {
-	var resp *http.Response
-	var err error
-	for x := 0; x < max_retries; x++ {
-		resp, err = c.httpClient.Do(r)
-		if err == nil && resp.StatusCode == http.StatusOK {
-			return nil
-		}
-
-		// Back off to give us more chance of succeeding during a network blip
-		time.Sleep(backoff_millis * time.Millisecond)
-	}
-
+func (c CallbackClient) DoWithRetries(r *retryablehttp.Request) error {
+	resp, err := c.httpClient.Do(r)
 	if err != nil {
-		return fmt.Errorf("failed to send callback to %q. Error: %q", r.URL.String(), err)
+		return fmt.Errorf("failed to send callback to %q. Error: %s", r.URL.String(), err)
 	}
-	return fmt.Errorf("failed to send callback to %q. Response Status Code: %d", r.URL.String(), resp.StatusCode)
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("failed to send callback to %q. HTTP Code: %d", r.URL.String(), resp.StatusCode)
+	}
+
+	return nil
 }
 
 func (c CallbackClient) SendTranscodeStatus(url string, status TranscodeStatus, completionRatio float32) error {
@@ -56,7 +55,7 @@ func (c CallbackClient) SendTranscodeStatus(url string, status TranscodeStatus, 
 		return err
 	}
 
-	r, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(j))
+	r, err := retryablehttp.NewRequest(http.MethodPost, url, bytes.NewReader(j))
 	if err != nil {
 		return err
 	}
@@ -76,7 +75,7 @@ func (c CallbackClient) SendTranscodeStatusError(callbackURL, errorMsg string) e
 		return err
 	}
 
-	r, err := http.NewRequest(http.MethodPost, callbackURL, bytes.NewReader(j))
+	r, err := retryablehttp.NewRequest(http.MethodPost, callbackURL, bytes.NewReader(j))
 	if err != nil {
 		return err
 	}
