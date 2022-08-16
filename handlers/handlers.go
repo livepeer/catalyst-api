@@ -80,7 +80,11 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			errors.WriteHTTPInternalServerError(w, "Cannot validate payload", err)
 			return
 		} else if !result.Valid() {
-			errors.WriteHTTPBadRequest(w, "Invalid request payload", nil)
+			var errString string
+			for i, desc := range result.Errors() {
+				errString += fmt.Sprintf("%d - %s, ", i, desc)
+			}
+			errors.WriteHTTPBadRequest(w, "Invalid request payload: "+strings.TrimSuffix(errString, ", "), nil)
 			return
 		} else if err := json.Unmarshal(payload, &uploadVODRequest); err != nil {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
