@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/xeipuuv/gojsonschema"
+	"sigs.k8s.io/yaml"
 )
 
 //go:embed schemas/*
@@ -20,13 +21,19 @@ func compileJsonSchemas() map[string]*gojsonschema.Schema {
 	}
 
 	for _, file := range inputSchemas {
-		text, err := schemasDir.ReadFile("schemas/" + file.Name())
+		yamlText, err := schemasDir.ReadFile("schemas/" + file.Name())
 
 		if err != nil {
 			panic(err)
 		}
 
-		schema, err := gojsonschema.NewSchema(gojsonschema.NewBytesLoader(text))
+		jsonText, err := yaml.YAMLToJSON(yamlText)
+
+		if err != nil {
+			panic(err)
+		}
+
+		schema, err := gojsonschema.NewSchema(gojsonschema.NewBytesLoader(jsonText))
 		if err != nil {
 			// rase panic on program start
 			panic(err) // fix schema text
