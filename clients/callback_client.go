@@ -34,6 +34,7 @@ func (c CallbackClient) DoWithRetries(r *retryablehttp.Request) error {
 	if err != nil {
 		return fmt.Errorf("failed to send callback to %q. Error: %s", r.URL.String(), err)
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("failed to send callback to %q. HTTP Code: %d", r.URL.String(), resp.StatusCode)
