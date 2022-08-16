@@ -12,7 +12,7 @@ import (
 )
 
 type CallbackClient struct {
-	httpClient *retryablehttp.Client
+	httpClient *http.Client
 }
 
 func NewCallbackClient() CallbackClient {
@@ -25,11 +25,11 @@ func NewCallbackClient() CallbackClient {
 	}
 
 	return CallbackClient{
-		httpClient: client,
+		httpClient: client.StandardClient(),
 	}
 }
 
-func (c CallbackClient) DoWithRetries(r *retryablehttp.Request) error {
+func (c CallbackClient) DoWithRetries(r *http.Request) error {
 	// TODO: Replace with a proper shared Secret, probably coming from the initial request
 	r.Header.Set("Authorization", "Bearer IAmAuthorized")
 
@@ -58,7 +58,7 @@ func (c CallbackClient) SendTranscodeStatus(url string, status TranscodeStatus, 
 		return err
 	}
 
-	r, err := retryablehttp.NewRequest(http.MethodPost, url, bytes.NewReader(j))
+	r, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(j))
 	if err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ func (c CallbackClient) SendTranscodeStatusError(callbackURL, errorMsg string) e
 		return err
 	}
 
-	r, err := retryablehttp.NewRequest(http.MethodPost, callbackURL, bytes.NewReader(j))
+	r, err := http.NewRequest(http.MethodPost, callbackURL, bytes.NewReader(j))
 	if err != nil {
 		return err
 	}
