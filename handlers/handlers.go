@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"mime"
 	"net/http"
@@ -35,9 +34,10 @@ func (d *CatalystAPIHandlersCollection) Ok() httprouter.Handle {
 
 func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 	schema := inputSchemasCompiled["TranscodeSegment"]
+
 	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 		var transcodeRequest TranscodeSegmentRequest
-		payload, err := ioutil.ReadAll(req.Body)
+		payload, err := io.ReadAll(req.Body)
 		if err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot read body", err)
 			return
@@ -73,14 +73,14 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		if !HasContentType(req, "application/json") {
 			errors.WriteHTTPUnsupportedMediaType(w, "Requires application/json content type", nil)
 			return
-		} else if payload, err := ioutil.ReadAll(req.Body); err != nil {
+		} else if payload, err := io.ReadAll(req.Body); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot read payload", err)
 			return
 		} else if result, err := schema.Validate(gojsonschema.NewBytesLoader(payload)); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot validate payload", err)
 			return
 		} else if !result.Valid() {
-			errors.WriteHTTPBadRequest(w, "Invalid request payload", nil)
+			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("%s", result.Errors()))
 			return
 		} else if err := json.Unmarshal(payload, &uploadVODRequest); err != nil {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
@@ -132,6 +132,7 @@ func HasContentType(r *http.Request, mimetype string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -172,7 +173,7 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 			errors.WriteHTTPBadRequest(w, "Unsupported X-Trigger", fmt.Errorf("unknown trigger '%s'", t))
 			return
 		}
-		payload, err := ioutil.ReadAll(req.Body)
+		payload, err := io.ReadAll(req.Body)
 		if err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot read payload", err)
 			return
