@@ -13,6 +13,10 @@ build:
 fmt:
 	go fmt ./...
 
+.PHONY: run
+run:
+	go run cmd/http-server/http-server.go
+
 .PHONY: test
 test:
 	go test ./...
