@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -15,6 +16,78 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/stretchr/testify/require"
 )
+
+const mistProcPath = "../../mistserver/build/MistProcLivepeer"
+
+func TestSegmentTranscode(t *testing.T) {
+	port := 4949
+	mistPort := 4242
+	bPort := 8935
+	mc := &MistClient{
+		ApiUrl:          fmt.Sprintf("http://localhost:%d/api2", mistPort),
+		TriggerCallback: fmt.Sprintf("http://localhost:%d/api/mist/trigger", port),
+	}
+	err := mc.RemoveAllStreams()
+	require.NoError(t, err)
+	err = mc.DeleteAllTriggers()
+	require.NoError(t, err)
+
+	router := httprouter.New()
+	sc := make(map[string]StreamInfo)
+	catalystApiHandlers := &CatalystAPIHandlersCollection{MistClient: mc, StreamCache: sc}
+	mistCallbackHandlers := &MistCallbackHandlersCollection{MistClient: mc, StreamCache: sc}
+	router.POST("/api/transcode/file", catalystApiHandlers.TranscodeSegment(bPort, mistProcPath))
+	router.POST("/api/mist/trigger", mistCallbackHandlers.Trigger())
+
+	callbacks := make(chan string, 10)
+	callbackServer := newStudioMock(callbacks)
+	defer callbackServer.Close()
+	jsonData := strings.ReplaceAll(transcodeJsonData, "CALLBACK_URL", callbackServer.URL)
+
+	stopApi := serveAPI(port, router)
+	defer stopApi()
+
+	rr := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/transcode/file", bytes.NewBuffer([]byte(jsonData)))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rr, req)
+
+	require.Equal(t, 200, rr.Result().StatusCode)
+	require.Equal(t, "OK", rr.Body.String())
+
+	// Wait for callback
+	// select {
+	// case data := <-callbacks:
+	// 	message := &clients.TranscodeStatusMessage{}
+	// 	err := json.Unmarshal([]byte(data), message)
+	// 	require.NoErrorf(t, err, "json unmarshal failed, src=%s", data)
+	// 	// require.Equal(t, "error", message.Status)
+	// case <-time.After(3300 * time.Millisecond):
+	// 	require.FailNow(t, "Callback not fired by handler")
+	// }
+}
+
+var transcodeJsonData = `{
+	"source_location": "s3+https://redacted:redacted@storage.googleapis.com/alexk-dms-upload-test/avsample.mp4",
+		"callback_url": "CALLBACK_URL",
+		"manifestID": "somestream",
+		"profiles": [
+			{
+					"name": "720p",
+						"width": 1280,
+						"height": 720,
+						"bitrate": 700000,
+						"fps": 24
+					}, {
+					"name": "360p",
+						"width": 640,
+						"height": 360,
+						"bitrate": 200000,
+						"fps": 24
+					}
+			],
+		"verificationFreq": 1
+	}`
 
 func TestOKHandler(t *testing.T) {
 	require := require.New(t)
@@ -51,7 +124,7 @@ func TestSegmentCallback(t *testing.T) {
 		],
 		"verificationFreq": 1
 	}`
-
+	bPort := 8935
 	callbacks := make(chan string, 10)
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		payload, err := ioutil.ReadAll(r.Body)
@@ -74,7 +147,7 @@ func TestSegmentCallback(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 
 	rr := httptest.NewRecorder()
-	router.POST("/api/transcode/file", catalystApiHandlers.TranscodeSegment())
+	router.POST("/api/transcode/file", catalystApiHandlers.TranscodeSegment(bPort, mistProcPath))
 	router.ServeHTTP(rr, req)
 
 	require.Equal(t, 200, rr.Result().StatusCode)
@@ -165,11 +238,11 @@ func TestSegmentBodyFormat(t *testing.T) {
 			"profiles": [{"name": "t","width": 1280,"height": 720,"bitrate": 70000,"fps": 30}]
 		}`),
 	}
-
+	bPort := 8935
 	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}}
 	router := httprouter.New()
 
-	router.POST("/api/transcode/file", catalystApiHandlers.TranscodeSegment())
+	router.POST("/api/transcode/file", catalystApiHandlers.TranscodeSegment(bPort, mistProcPath))
 	for _, payload := range badRequests {
 		req, _ := http.NewRequest("POST", "/api/transcode/file", bytes.NewBuffer(payload))
 		req.Header.Set("Content-Type", "application/json")
@@ -312,4 +385,37 @@ func TestWrongContentTypeVODUploadHandler(t *testing.T) {
 
 	require.Equal(rr.Result().StatusCode, 415)
 	require.JSONEq(rr.Body.String(), `{"error": "Requires application/json content type"}`)
+}
+
+func newStudioMock(callbacks chan string) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			fmt.Printf("newStudioMock error reading req body\n")
+			w.WriteHeader(451)
+			return
+		}
+		w.WriteHeader(200)
+		body := string(payload)
+		fmt.Printf("[studio callback] %s\n", body)
+		callbacks <- body
+	}))
+}
+
+func serveAPI(port int, router *httprouter.Router) func() {
+	server := &http.Server{Addr: fmt.Sprintf("0.0.0.0:%d", port), Handler: router}
+	go func() {
+		// start API server
+		if err := server.ListenAndServe(); err != nil {
+			fmt.Printf("server.ListenAndServe %v\n", err)
+		}
+	}()
+	return func() {
+		// stop API server
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			fmt.Printf("server.Shutdown %v\n", err)
+		}
+	}
 }

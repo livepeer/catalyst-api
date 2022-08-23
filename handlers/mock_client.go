@@ -21,3 +21,7 @@ func (s StubMistClient) AddTrigger(streamName, triggerName string) error {
 func (s StubMistClient) DeleteTrigger(streamName, triggerName string) error {
 	return nil
 }
+
+func (s StubMistClient) PushAutoAdd(streamName, targetURL string, scheduleStart, scheduleEnd *int64) error {
+	return nil
+}

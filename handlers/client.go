@@ -14,6 +14,7 @@ import (
 type MistAPIClient interface {
 	AddStream(streamName, sourceUrl string) error
 	PushStart(streamName, targetURL string) error
+	PushAutoAdd(streamName, targetURL string, scheduleStart, scheduleEnd *int64) error
 	DeleteStream(streamName string) error
 	AddTrigger(streamName, triggerName string) error
 	DeleteTrigger(streamName, triggerName string) error
@@ -25,9 +26,36 @@ type MistClient struct {
 	configMu        sync.Mutex
 }
 
+func (mc *MistClient) RemoveAllStreams() error {
+	c := RemoveAllStreamsCommand{Streams: map[string]Stream{}}
+	response, err := mc.sendCommand(c)
+	fmt.Printf("RemoveAllStreams %s\n", response)
+	return err
+}
+
+func (mc *MistClient) DeleteAllTriggers() error {
+	mc.configMu.Lock()
+	defer mc.configMu.Unlock()
+
+	resp, err := http.Post(mc.ApiUrl, "application/json", bytes.NewBuffer([]byte(`{"config":{"triggers":{}}}`)))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	// body, err := io.ReadAll(resp.Body)
+	// fmt.Printf("DeleteAllTriggers %s\n", string(body))
+
+	return err
+}
+
 func (mc *MistClient) AddStream(streamName, sourceUrl string) error {
 	c := commandAddStream(streamName, sourceUrl)
 	return wrapErr(validateAddStream(mc.sendCommand(c)), streamName)
+}
+
+func (mc *MistClient) PushAutoAdd(streamName, targetURL string, scheduleStart, scheduleEnd *int64) error {
+	c := PushAutoAddCommand{PushAutoAdd{streamName, targetURL, scheduleStart, scheduleEnd}}
+	return wrapErr(validatePushAutoAdd(mc.sendCommand(c)), streamName)
 }
 
 func (mc *MistClient) PushStart(streamName, targetURL string) error {
@@ -129,6 +157,10 @@ func payloadFor(command string) string {
 	return fmt.Sprintf("command=%s", url.QueryEscape(command))
 }
 
+type RemoveAllStreamsCommand struct {
+	Streams map[string]Stream `json:"streams"`
+}
+
 type addStreamCommand struct {
 	Addstream map[string]Stream `json:"addstream"`
 }
@@ -155,6 +187,17 @@ func commandDeleteStream(name string) deleteStreamCommand {
 	return deleteStreamCommand{
 		Deletestream: map[string]interface{}{name: nil},
 	}
+}
+
+type PushAutoAddCommand struct {
+	PushAutoAdd PushAutoAdd `json:"push_auto_add"`
+}
+
+type PushAutoAdd struct {
+	Stream        string `json:"stream"`
+	Target        string `json:"target"`
+	ScheduleStart *int64 `json:"scheduletime,omitempty"`
+	ScheduleEnd   *int64 `json:"completetime,omitempty"`
 }
 
 type pushStartCommand struct {
@@ -254,6 +297,11 @@ func validateAddStream(resp string, err error) error {
 		return errors.New("adding stream failed")
 	}
 	return nil
+}
+
+func validatePushAutoAdd(resp string, err error) error {
+	// nothing other than auth to validate, Mist always returns the same response
+	return validateAuth(resp, err)
 }
 
 func validatePushStart(resp string, err error) error {
