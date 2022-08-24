@@ -12,7 +12,7 @@ import (
 )
 
 type CallbackClient struct {
-	httpClient *retryablehttp.Client
+	httpClient *http.Client
 }
 
 func NewCallbackClient() CallbackClient {
@@ -25,20 +25,21 @@ func NewCallbackClient() CallbackClient {
 	}
 
 	return CallbackClient{
-		httpClient: client,
+		httpClient: client.StandardClient(),
 	}
 }
 
-func (c CallbackClient) DoWithRetries(r *retryablehttp.Request) error {
+func (c CallbackClient) DoWithRetries(r *http.Request) error {
+	// TODO: Replace with a proper shared Secret, probably coming from the initial request
+	r.Header.Set("Authorization", "Bearer IAmAuthorized")
+
 	resp, err := c.httpClient.Do(r)
 	if err != nil {
-		fmt.Printf(">> failed to send callback to %q. Error: %s", r.URL.String(), err)
 		return fmt.Errorf("failed to send callback to %q. Error: %s", r.URL.String(), err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		fmt.Printf(">> failed to send callback to %q. HTTP Code: %d", r.URL.String(), resp.StatusCode)
 		return fmt.Errorf("failed to send callback to %q. HTTP Code: %d", r.URL.String(), resp.StatusCode)
 	}
 
@@ -109,7 +110,7 @@ func (c CallbackClient) sendTSM(callbackURL string, tsm TranscodeStatusMessage) 
 		return err
 	}
 
-	r, err := retryablehttp.NewRequest(http.MethodPost, callbackURL, bytes.NewReader(j))
+	r, err := http.NewRequest(http.MethodPost, callbackURL, bytes.NewReader(j))
 	if err != nil {
 		return err
 	}

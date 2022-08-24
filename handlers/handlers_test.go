@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -56,7 +56,7 @@ func TestSegmentCallback(t *testing.T) {
 	bPort := 8935
 	callbacks := make(chan string, 10)
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		payload, err := ioutil.ReadAll(r.Body)
+		payload, err := io.ReadAll(r.Body)
 		if err != nil {
 			fmt.Printf("WebhookReceiver error reading req body\n")
 			w.WriteHeader(451)

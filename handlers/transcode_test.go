@@ -18,7 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -106,7 +106,7 @@ func readItems(t *testing.T, queue chan string, count int, deadline time.Duratio
 // Helper func to capture callbacks for later inspection
 func newStudioMock(callbacks chan string) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		payload, err := ioutil.ReadAll(r.Body)
+		payload, err := io.ReadAll(r.Body)
 		if err != nil {
 			fmt.Printf("newStudioMock error reading req body\n")
 			w.WriteHeader(451)

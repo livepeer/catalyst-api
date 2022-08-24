@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os/exec"
@@ -37,10 +36,11 @@ func (d *CatalystAPIHandlersCollection) Ok() httprouter.Handle {
 // Because RENDITION_PREFIX stream contains multiple video tracks we start multiple push-es each selecting one video and one audio track to push to S3.
 func (d *CatalystAPIHandlersCollection) TranscodeSegment(broadcasterPort int, mistProcPath string) httprouter.Handle {
 	schema := inputSchemasCompiled["TranscodeSegment"]
+
 	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 		// Input validation:
 		var transcodeRequest TranscodeSegmentRequest
-		payload, err := ioutil.ReadAll(req.Body)
+		payload, err := io.ReadAll(req.Body)
 		if err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot read body", err)
 			return
@@ -142,14 +142,14 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		if !HasContentType(req, "application/json") {
 			errors.WriteHTTPUnsupportedMediaType(w, "Requires application/json content type", nil)
 			return
-		} else if payload, err := ioutil.ReadAll(req.Body); err != nil {
+		} else if payload, err := io.ReadAll(req.Body); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot read payload", err)
 			return
 		} else if result, err := schema.Validate(gojsonschema.NewBytesLoader(payload)); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot validate payload", err)
 			return
 		} else if !result.Valid() {
-			errors.WriteHTTPBadRequest(w, "Invalid request payload", nil)
+			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("%s", result.Errors()))
 			return
 		} else if err := json.Unmarshal(payload, &uploadVODRequest); err != nil {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
@@ -231,7 +231,7 @@ func (d *MistCallbackHandlersCollection) Trigger_LIVE_TRACK_LIST(w http.Response
 		errors.WriteHTTPInternalServerError(w, txt, err)
 		fmt.Printf("<ERROR LIVE_TRACK_LIST> %s %v\n", txt, err)
 	}
-	payload, err := ioutil.ReadAll(req.Body)
+	payload, err := io.ReadAll(req.Body)
 	if err != nil {
 		errorOutInternal("Cannot read payload", err)
 		return
@@ -294,7 +294,7 @@ func (d *MistCallbackHandlersCollection) Trigger_PUSH_END(w http.ResponseWriter,
 		fmt.Printf("<ERROR LIVE_TRACK_LIST> %s %v\n", txt, err)
 	}
 
-	payload, err := ioutil.ReadAll(req.Body)
+	payload, err := io.ReadAll(req.Body)
 	if err != nil {
 		errorOutInternal("Cannot read payload", err)
 		return
@@ -386,7 +386,7 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 		case "LIVE_TRACK_LIST":
 			d.Trigger_LIVE_TRACK_LIST(w, req, params)
 		default:
-			if payload, err := ioutil.ReadAll(req.Body); err == nil {
+			if payload, err := io.ReadAll(req.Body); err == nil {
 				// print info for testing purposes
 				fmt.Printf("TRIGGER %s\n%s\n", whichOne, string(payload))
 			}

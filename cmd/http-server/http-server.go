@@ -37,7 +37,7 @@ func main() {
 	}
 
 	listen := fmt.Sprintf("0.0.0.0:%d", *port)
-	router := StartCatalystAPIRouter(mc, *bPort, *mistProcPath)
+	router := NewCatalystAPIRouter(mc, *bPort, *mistProcPath)
 
 	stdlog.Println("Starting Catalyst API version", config.Version, "listening on", listen)
 	err := http.ListenAndServe(listen, router)
@@ -45,7 +45,7 @@ func main() {
 
 }
 
-func StartCatalystAPIRouter(mc *handlers.MistClient, bPort int, mistProcPath string) *httprouter.Router {
+func NewCatalystAPIRouter(mc *handlers.MistClient, bPort int, mistProcPath string) *httprouter.Router {
 	router := httprouter.New()
 
 	var logger log.Logger
@@ -57,7 +57,7 @@ func StartCatalystAPIRouter(mc *handlers.MistClient, bPort int, mistProcPath str
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{MistClient: mc, StreamCache: sc}
 	mistCallbackHandlers := &handlers.MistCallbackHandlersCollection{MistClient: mc, StreamCache: sc}
 
-	router.GET("/ok", withLogging(middleware.IsAuthorized(catalystApiHandlers.Ok())))
+	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 	router.POST("/api/vod", withLogging(middleware.IsAuthorized(catalystApiHandlers.UploadVOD())))
 	router.POST("/api/transcode/file", withLogging(middleware.IsAuthorized(catalystApiHandlers.TranscodeSegment(bPort, mistProcPath))))
 	router.POST("/api/mist/trigger", withLogging(mistCallbackHandlers.Trigger()))
