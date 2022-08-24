@@ -27,8 +27,9 @@ type TranscodingCache struct {
 
 type SegmentInfo struct {
 	CallbackUrl   string
-	Source        string
-	Destionations []string
+	Source        string   // S3 input we are transcoding
+	UploadDir     string   // S3 destination url for multiple renditions
+	Destionations []string // Rendition URLS go here on push start and removed on push end
 }
 
 func (c *TranscodingCache) Init() {

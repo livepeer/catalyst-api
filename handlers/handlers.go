@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os/exec"
+	"path"
 	"strings"
 	"time"
 
@@ -120,6 +121,7 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment(broadcasterPort int, mi
 		d.StreamCache.Transcoding.Store(renditionsStream, SegmentInfo{
 			CallbackUrl: transcodeRequest.CallbackUrl,
 			Source:      transcodeRequest.SourceFile,
+			UploadDir:   path.Dir(transcodeRequest.SourceFile),
 		})
 
 		err = transcodeCommand.Wait()
@@ -261,12 +263,17 @@ func (d *MistCallbackHandlersCollection) Trigger_LIVE_TRACK_LIST(w http.Response
 		return
 	}
 	// Start push per each video track
+	info, err := d.StreamCache.Transcoding.Get(streamName)
+	if err != nil {
+		errorOutInternal("LIVE_TRACK_LIST unknown push source", err)
+		return
+	}
 	for i := range tracks { // i is generated name, not important, all info is contained in element
 		if tracks[i].Type != "video" {
 			// Only produce an rendition per each video track, selecting best audio track
 			continue
 		}
-		destination := fmt.Sprintf("/home/alex/livepeer/vod/mistserver/%s__%dx%d.ts?video=%d&audio=maxbps", streamName, tracks[i].Width, tracks[i].Height, tracks[i].Index) //.Id)
+		destination := fmt.Sprintf("%s/%s__%dx%d.ts?video=%d&audio=maxbps", info.UploadDir, streamName, tracks[i].Width, tracks[i].Height, tracks[i].Index) //.Id)
 		fmt.Printf("> Starting push to %s\n", destination)
 		if err := d.MistClient.PushStart(streamName, destination); err != nil {
 			fmt.Printf("> ERROR push to %s %v\n", destination, err)
