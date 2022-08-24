@@ -17,11 +17,13 @@ import (
 )
 
 func main() {
-	port := flag.Int("port", 4949, "Port to listen on")
 	mistPort := flag.Int("mist-port", 4242, "Port to listen on")
-	bPort := flag.Int("b-port", 8935, "Port of local B node")
-	mistProcPath := flag.String("mistlp", "/home/alex/livepeer/vod/mistserver/build/MistProcLivepeer", "path to MistProcLivepeer")
+	port := flag.Int("port", 4949, "Port to listen on")
 	mistJson := flag.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
+	// Transcode endpoint starts MistProcLivepeer as subprocess so we need path to the binary(mistlp) and port of local Broadcaster(b-port)
+	bPort := flag.Int("b-port", 8935, "Port of local B node")
+	mistProcPath := flag.String("mistlp", "../mistserver/build/MistProcLivepeer", "path to MistProcLivepeer")
+
 	flag.Parse()
 
 	if *mistJson {
@@ -51,7 +53,7 @@ func StartCatalystAPIRouter(mc *handlers.MistClient, bPort int, mistProcPath str
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	withLogging := middleware.LogRequest(logger)
 
-	sc := make(map[string]handlers.StreamInfo)
+	sc := handlers.NewStreamCache()
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{MistClient: mc, StreamCache: sc}
 	mistCallbackHandlers := &handlers.MistCallbackHandlersCollection{MistClient: mc, StreamCache: sc}
 

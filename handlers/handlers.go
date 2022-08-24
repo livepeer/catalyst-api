@@ -6,7 +6,6 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
-	"mime"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -19,24 +18,20 @@ import (
 	"github.com/xeipuuv/gojsonschema"
 )
 
-type StreamInfo struct {
-	callbackUrl string
-}
-
 type CatalystAPIHandlersCollection struct {
 	MistClient  MistAPIClient
-	StreamCache map[string]StreamInfo
+	StreamCache *StreamCache
 }
 
 func (d *CatalystAPIHandlersCollection) Ok() httprouter.Handle {
-	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	return func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 		io.WriteString(w, "OK")
 	}
 }
 
 // Takes mpegts segment as input, ingests in Mist under SOURCE_PREFIX streamName, transcodes into RENDITION_PREFIX stream then pushes renditions to specified destination.
 // Manually starts MistLivepeerProc binary. For this we require port of B-node that listens on 127.0.0.1 .
-// When `MistProcLivepeer` starts, SOURCE_PREFIX stream is taken as input and will automatically start SOURCE_PREFIX stream.
+// When `MistProcLivepeer` starts, SOURCE_PREFIX stream is taken as input and (will automatically - WIP) start SOURCE_PREFIX stream.
 // No trigger is registered on SOURCE_PREFIX so configured sourceUrl is used.
 // Also `MistProcLivepeer` outputs to RENDITION_PREFIX stream where we listen for triggers to start new push to rendition destination.
 // Because RENDITION_PREFIX stream contains multiple video tracks we start multiple push-es each selecting one video and one audio track to push to S3.
@@ -65,8 +60,9 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment(broadcasterPort int, mi
 		}
 		callbackClient := clients.NewCallbackClient()
 		errorOutInternal := func(where string, err error) {
+			// Mist does not respond or handle returned error codes. We do this for correctness.
 			errors.WriteHTTPInternalServerError(w, where, err)
-			if err := callbackClient.SendTranscodeStatusError(transcodeRequest.CallbackUrl, where); err != nil {
+			if err := callbackClient.SendSegmentTranscodeError(transcodeRequest.CallbackUrl, where, err.Error(), transcodeRequest.SourceFile); err != nil {
 				fmt.Printf("error send transcode error %v\n", err)
 				return
 			}
@@ -77,29 +73,8 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment(broadcasterPort int, mi
 			errorOutInternal("error AddStream(inputStream)", err)
 			return
 		}
-		// defer d.MistClient.DeleteStream(inputStream)
 
-		if err = d.MistClient.AddStream(renditionsStream, "push://"); err != nil {
-			errorOutInternal("error AddStream(renditionsStream)", err)
-			return
-		}
-		// defer d.MistClient.DeleteStream(renditionsStream)
-
-		// DEBUG: Experiment with all available triggers on renditionsStream.
-		//        We are searching for event carrying info on new track-id.
-		//        When having track-id we can start new push action selecting that track id + audio track-id
-		// triggers := []string{"PUSH_OUT_START", "STREAM_READY", "LIVE_TRACK_LIST", "STREAM_END", "PUSH_REWRITE", "PUSH_OUT_START", "PUSH_END", "RECORDING_END", "STREAM_UNLOAD", "STREAM_LOAD", "STREAM_SOURCE", "OUTPUT_STOP", "OUTPUT_START"}
-		triggers := []string{"LIVE_TRACK_LIST", "PUSH_END"}
-		for _, value := range triggers {
-			if err = d.MistClient.AddTrigger(renditionsStream, value); err != nil {
-				errorOutInternal(fmt.Sprintf("error AddTrigger(renditionsStream, %s)", value), err)
-			}
-		}
-		// mc := d.MistClient.(*MistClient)
-		// trigs, err := mc.getCurrentTriggers()
-		// fmt.Printf("triggers: %v", trigs)
-
-		// start MistProcLivepeer
+		// Start MistProcLivepeer
 		configPayload, err := json.Marshal(configForSubprocess(&transcodeRequest, broadcasterPort, inputStream, renditionsStream))
 		if err != nil {
 			errorOutInternal("error ProcLivepeerConfig json encode", err)
@@ -122,7 +97,6 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment(broadcasterPort int, mi
 			errorOutInternal("error short write on stdinPipe.Write()", err)
 			return
 		}
-		// Do we need to send trailing \n ??
 		err = stdinPipe.Close()
 		if err != nil {
 			errorOutInternal("error stdinPipe.Close()", err)
@@ -134,11 +108,19 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment(broadcasterPort int, mi
 			return
 		}
 
+		// TODO: remove when Mist code is updated <
 		// Starting SOURCE_PREFIX stream. Why we need to start it manually? MistProcLivepeer should start it??
 		if err := d.MistClient.PushStart(inputStream, "/opt/null.ts"); err != nil {
 			errorOutInternal("error PushStart(inputStream)", err)
 			return
 		}
+
+		// Create entry in our pushes books, storing callback url and source url.
+		// Later triggers will use this info and add destination urls.
+		d.StreamCache.Transcoding.Store(renditionsStream, SegmentInfo{
+			CallbackUrl: transcodeRequest.CallbackUrl,
+			Source:      transcodeRequest.SourceFile,
+		})
 
 		err = transcodeCommand.Wait()
 		if exit, ok := err.(*exec.ExitError); ok {
@@ -147,51 +129,8 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment(broadcasterPort int, mi
 			errorOutInternal("error exec transcodeCommand", err)
 			return
 		}
-
-		// Push from B with track selector to s3
-		// push is always from a stream to target
-		// tracks selector is placed in s3 target url of push ("URL parameters" in the manual)
-		// From mist manual: Any positive integer: Select this specific track ID. Does not apply if the given track ID does   not exist or is of the wrong type.
-		// How to find track-id from B stream?
-		// We can do that using trigger:
-		// - LIVE_TRACK_LIST . Test this to see if that gets triggered !
-		// - STREAM_READY
-
-		// callbackClient := clients.NewCallbackClient()
-		// if err := callbackClient.SendTranscodeStatusError(transcodeRequest.CallbackUrl, "NYI - not yet implemented"); err != nil {
-		// 	errors.WriteHTTPInternalServerError(w, "error send transcode error", err)
-		// 	return
-		// }
-		time.Sleep(2 * time.Second)
-		io.WriteString(w, "OK") // TODO later
+		io.WriteString(w, "Transcode done; Upload in progress")
 	}
-}
-
-func pipeToLog(pipe io.ReadCloser, name string) {
-	data := make([]byte, 4096)
-	for {
-		count, err := pipe.Read(data)
-		if err != nil {
-			fmt.Printf("ERROR cmd=%s %v\n", name, err)
-			return
-		}
-		fmt.Printf("out [%s] %s\n", name, string(data[0:count]))
-	}
-}
-
-func commandOutputToLog(cmd *exec.Cmd, name string) {
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		fmt.Printf("ERROR: cmd.StdoutPipe() %v\n", err)
-		return
-	}
-	go pipeToLog(stdoutPipe, name)
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		fmt.Printf("ERROR: cmd.StderrPipe() %v\n", err)
-		return
-	}
-	go pipeToLog(stderrPipe, name)
 }
 
 func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
@@ -231,7 +170,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		}
 
 		streamName := randomStreamName("catalyst_vod_")
-		d.StreamCache[streamName] = StreamInfo{callbackUrl: uploadVODRequest.CallbackUrl}
+		d.StreamCache.Segmenting.Store(streamName, uploadVODRequest.CallbackUrl)
 
 		// process the request
 		if err := d.processUploadVOD(streamName, uploadVODRequest.Url, tURL); err != nil {
@@ -245,24 +184,6 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 
 		io.WriteString(w, fmt.Sprint(len(uploadVODRequest.OutputLocations)))
 	}
-}
-
-func HasContentType(r *http.Request, mimetype string) bool {
-	contentType := r.Header.Get("Content-Type")
-	if contentType == "" {
-		return mimetype == "application/octet-stream"
-	}
-
-	for _, v := range strings.Split(contentType, ",") {
-		t, _, err := mime.ParseMediaType(v)
-		if err != nil {
-			break
-		}
-		if t == mimetype {
-			return true
-		}
-	}
-	return false
 }
 
 func (d *CatalystAPIHandlersCollection) processUploadVOD(streamName, sourceURL, targetURL string) error {
@@ -295,7 +216,7 @@ func randomStreamName(prefix string) string {
 
 type MistCallbackHandlersCollection struct {
 	MistClient  MistAPIClient
-	StreamCache map[string]StreamInfo
+	StreamCache *StreamCache
 }
 
 // This trigger is stream-specific and must be blocking.
@@ -306,6 +227,7 @@ func (d *MistCallbackHandlersCollection) Trigger_LIVE_TRACK_LIST(w http.Response
 	streamName := "unknown"
 	errorOutInternal := func(where string, err error) {
 		txt := fmt.Sprintf("%s name=%s", where, streamName)
+		// Mist does not respond or handle returned error codes. We do this for correctness.
 		errors.WriteHTTPInternalServerError(w, txt, err)
 		fmt.Printf("<ERROR LIVE_TRACK_LIST> %s %v\n", txt, err)
 	}
@@ -318,9 +240,10 @@ func (d *MistCallbackHandlersCollection) Trigger_LIVE_TRACK_LIST(w http.Response
 	streamName = lines[0]
 	encodedTracks := lines[1]
 
-	suffix, err := extractSuffix(streamName)
-	if err != nil {
-		errorOutInternal("unknown streamName format", err)
+	yes, suffix := isTranscodeStream(streamName)
+	if !yes {
+		errorOutInternal("unknown streamName format", nil)
+		return
 	}
 
 	if streamEnded := encodedTracks == "null"; streamEnded {
@@ -329,7 +252,7 @@ func (d *MistCallbackHandlersCollection) Trigger_LIVE_TRACK_LIST(w http.Response
 		if err = d.MistClient.DeleteStream(inputStream); err != nil {
 			fmt.Printf("<ERROR LIVE_TRACK_LIST> DeleteStream(%s) %v\n", inputStream, err)
 		}
-		// Multiple pushes from RENDITION_PREFIX are in progress. Lets close RENDITION_PREFIX stream at the end of all pushes.
+		// Multiple pushes from RENDITION_PREFIX are in progress.
 		return
 	}
 	tracks := make(LiveTrackListTriggerJson)
@@ -347,17 +270,33 @@ func (d *MistCallbackHandlersCollection) Trigger_LIVE_TRACK_LIST(w http.Response
 		fmt.Printf("> Starting push to %s\n", destination)
 		if err := d.MistClient.PushStart(streamName, destination); err != nil {
 			fmt.Printf("> ERROR push to %s %v\n", destination, err)
+		} else {
+			d.StreamCache.Transcoding.AddDestination(streamName, destination)
 		}
 	}
 	fmt.Printf("> Trigger_LIVE_TRACK_LIST %v\n", lines)
 }
 
+// This trigger is run whenever an outgoing push stops, for any reason.
+// This trigger is stream-specific and non-blocking. containing data as such:
+//   push ID (integer)
+//   stream name (string)
+//   target URI, before variables/triggers affected it (string)
+//   target URI, afterwards, as actually used (string)
+//   last 10 log messages (JSON array string)
+//   most recent push status (JSON object string)
 func (d *MistCallbackHandlersCollection) Trigger_PUSH_END(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	streamName := "unknown"
+	errorOutInternal := func(where string, err error) {
+		txt := fmt.Sprintf("%s name=%s", where, streamName)
+		// Mist does not respond or handle returned error codes. We do this for correctness.
+		errors.WriteHTTPInternalServerError(w, txt, err)
+		fmt.Printf("<ERROR LIVE_TRACK_LIST> %s %v\n", txt, err)
+	}
 
-	// Following code is responding to segmenting handler:
 	payload, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		errors.WriteHTTPInternalServerError(w, "Cannot read payload", err)
+		errorOutInternal("Cannot read payload", err)
 		return
 	}
 	lines := strings.Split(strings.TrimSuffix(string(payload), "\n"), "\n")
@@ -365,27 +304,71 @@ func (d *MistCallbackHandlersCollection) Trigger_PUSH_END(w http.ResponseWriter,
 		errors.WriteHTTPBadRequest(w, "Bad request payload", fmt.Errorf("unknown payload '%s'", string(payload)))
 		return
 	}
-
 	// stream name is the second line in the Mist Trigger payload
-	s := lines[1]
+	streamName = lines[1]
+	destination := lines[2]
+	actualDestination := lines[3]
+	pushStatus := lines[5]
+	if yes, _ := isTranscodeStream(streamName); yes {
+		// Following code is responding to transcoding handler: TODO: encapsulate
+		info, err := d.StreamCache.Transcoding.Get(streamName)
+		if err != nil {
+			errorOutInternal("unknown push source", err)
+			return
+		}
+		inOurBooks := false
+		for i := 0; i < len(info.Destionations); i++ {
+			if info.Destionations[i] == destination {
+				inOurBooks = true
+				break
+			}
+		}
+		if !inOurBooks {
+			errorOutInternal("missing from our books", nil)
+			return
+		}
+		callbackClient := clients.NewCallbackClient()
+		if uploadSuccess := pushStatus == "null"; uploadSuccess {
+			if err := callbackClient.SendRenditionUpload(info.CallbackUrl, info.Source, actualDestination); err != nil {
+				errorOutInternal("Cannot send rendition transcode status", err)
+			}
+		} else {
+			// We forward pushStatus json to callback
+			if err := callbackClient.SendRenditionUploadError(info.CallbackUrl, info.Source, actualDestination, pushStatus); err != nil {
+				errorOutInternal("Cannot send rendition transcode error", err)
+			}
+		}
+		// We do not delete triggers as source stream is wildcard stream: RENDITION_PREFIX
+		if empty := d.StreamCache.Transcoding.RemovePushDestination(streamName, destination); empty {
+			if err := callbackClient.SendSegmentTranscodeStatus(info.CallbackUrl, info.Source); err != nil {
+				errorOutInternal("Cannot send segment transcode status", err)
+			}
+		}
+		return
+	}
+
+	// Following code is responding to segmenting handler: TODO: encapsulate
 	// when uploading is done, remove trigger and stream from Mist
-	errT := d.MistClient.DeleteTrigger(s, "PUSH_END")
-	errS := d.MistClient.DeleteStream(s)
+	errT := d.MistClient.DeleteTrigger(streamName, "PUSH_END")
+	errS := d.MistClient.DeleteStream(streamName)
 	if errT != nil {
-		errors.WriteHTTPInternalServerError(w, fmt.Sprintf("Cannot remove PUSH_END trigger for stream '%s'", s), errT)
+		errorOutInternal(fmt.Sprintf("Cannot remove PUSH_END trigger for stream '%s'", streamName), errT)
 		return
 	}
 	if errS != nil {
-		errors.WriteHTTPInternalServerError(w, fmt.Sprintf("Cannot remove stream '%s'", s), errS)
+		errorOutInternal(fmt.Sprintf("Cannot remove stream '%s'", streamName), errS)
 		return
 	}
 
 	callbackClient := clients.NewCallbackClient()
-	if err := callbackClient.SendTranscodeStatus(d.StreamCache[s].callbackUrl, clients.TranscodeStatusTranscoding, 0.0); err != nil {
-		errors.WriteHTTPInternalServerError(w, "Cannot send transcode status", err)
+	callbackUrl, err := d.StreamCache.Segmenting.GetCallbackUrl(streamName)
+	if err != nil {
+		errorOutInternal("PUSH_END trigger invoked for unknown stream", err)
 	}
-
-	delete(d.StreamCache, s)
+	if err := callbackClient.SendTranscodeStatus(callbackUrl, clients.TranscodeStatusTranscoding, 0.0); err != nil {
+		errorOutInternal("Cannot send transcode status", err)
+	}
+	d.StreamCache.Segmenting.Remove(streamName)
 
 	// TODO: add timeout for the stream upload
 	// TODO: start transcoding

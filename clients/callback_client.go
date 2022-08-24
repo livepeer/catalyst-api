@@ -32,11 +32,13 @@ func NewCallbackClient() CallbackClient {
 func (c CallbackClient) DoWithRetries(r *retryablehttp.Request) error {
 	resp, err := c.httpClient.Do(r)
 	if err != nil {
+		fmt.Printf(">> failed to send callback to %q. Error: %s", r.URL.String(), err)
 		return fmt.Errorf("failed to send callback to %q. Error: %s", r.URL.String(), err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
+		fmt.Printf(">> failed to send callback to %q. HTTP Code: %d", r.URL.String(), resp.StatusCode)
 		return fmt.Errorf("failed to send callback to %q. HTTP Code: %d", r.URL.String(), resp.StatusCode)
 	}
 
@@ -44,32 +46,64 @@ func (c CallbackClient) DoWithRetries(r *retryablehttp.Request) error {
 }
 
 func (c CallbackClient) SendTranscodeStatus(url string, status TranscodeStatus, completionRatio float32) error {
-	tsm := TranscodeStatusMessage{
+	return c.sendTSM(url, TranscodeStatusMessage{
 		CompletionRatio: completionRatio,
 		Status:          status.String(),
 		Timestamp:       config.Clock.GetTimestampUTC(),
-	}
-
-	j, err := json.Marshal(tsm)
-	if err != nil {
-		return err
-	}
-
-	r, err := retryablehttp.NewRequest(http.MethodPost, url, bytes.NewReader(j))
-	if err != nil {
-		return err
-	}
-
-	return c.DoWithRetries(r)
+	})
 }
 
 func (c CallbackClient) SendTranscodeStatusError(callbackURL, errorMsg string) error {
-	tsm := TranscodeStatusMessage{
+	return c.sendTSM(callbackURL, TranscodeStatusMessage{
 		Error:     errorMsg,
 		Status:    TranscodeStatusError.String(),
 		Timestamp: config.Clock.GetTimestampUTC(),
-	}
+	})
+}
 
+// CatalystAPIHandlersCollection::TranscodeSegment invokes this on failed upload
+func (c CallbackClient) SendRenditionUploadError(callbackURL, sourceLocation, destination, err string) error {
+	return c.sendTSM(callbackURL, TranscodeStatusMessage{
+		Error:                err,
+		Status:               TranscodeStatusRenditionUpload.String(),
+		Timestamp:            config.Clock.GetTimestampUTC(),
+		SourceLocations:      []string{sourceLocation},
+		DestinationLocations: []string{destination},
+	})
+}
+
+// CatalystAPIHandlersCollection::TranscodeSegment invokes this on successful upload
+func (c CallbackClient) SendRenditionUpload(callbackURL, sourceLocation, destination string) error {
+	return c.sendTSM(callbackURL, TranscodeStatusMessage{
+		Status:               TranscodeStatusRenditionUpload.String(),
+		Timestamp:            config.Clock.GetTimestampUTC(),
+		SourceLocations:      []string{sourceLocation},
+		DestinationLocations: []string{destination},
+		CompletionRatio:      100,
+	})
+}
+
+// CatalystAPIHandlersCollection::TranscodeSegment invokes this on success
+func (c CallbackClient) SendSegmentTranscodeStatus(callbackURL, sourceLocation string) error {
+	return c.sendTSM(callbackURL, TranscodeStatusMessage{
+		Status:          TranscodeStatusSegmentTranscoding.String(),
+		Timestamp:       config.Clock.GetTimestampUTC(),
+		SourceLocations: []string{sourceLocation},
+		CompletionRatio: 100,
+	})
+}
+
+// CatalystAPIHandlersCollection::TranscodeSegment invokes this on error
+func (c CallbackClient) SendSegmentTranscodeError(callbackURL, where, errorMsg, sourceLocation string) error {
+	return c.sendTSM(callbackURL, TranscodeStatusMessage{
+		Error:           fmt.Sprintf("%s; %s", where, errorMsg),
+		Status:          TranscodeStatusSegmentTranscoding.String(),
+		Timestamp:       config.Clock.GetTimestampUTC(),
+		SourceLocations: []string{sourceLocation},
+	})
+}
+
+func (c CallbackClient) sendTSM(callbackURL string, tsm TranscodeStatusMessage) error {
 	j, err := json.Marshal(tsm)
 	if err != nil {
 		return err
@@ -80,7 +114,10 @@ func (c CallbackClient) SendTranscodeStatusError(callbackURL, errorMsg string) e
 		return err
 	}
 
-	return c.DoWithRetries(r)
+	// Caller may be blocking trigger. Run in background, otherwise we introduce latency in current operation.
+	go c.DoWithRetries(r)
+
+	return nil
 }
 
 // An enum of potential statuses a Transcode job can have
@@ -92,14 +129,18 @@ const (
 	TranscodeStatusTranscoding
 	TranscodeStatusCompleted
 	TranscodeStatusError
+	TranscodeStatusSegmentTranscoding
+	TranscodeStatusRenditionUpload
 )
 
 type TranscodeStatusMessage struct {
-	CompletionRatio float32 `json:"completion_ratio,omitempty"`
-	Error           string  `json:"error,omitempty"`
-	Retriable       bool    `json:"retriable,omitempty"`
-	Status          string  `json:"status,omitempty"`
-	Timestamp       int64   `json:"timestamp"`
+	CompletionRatio      float32  `json:"completion_ratio,omitempty"`
+	Error                string   `json:"error,omitempty"`
+	Retriable            bool     `json:"retriable,omitempty"`
+	Status               string   `json:"status,omitempty"`
+	Timestamp            int64    `json:"timestamp"`
+	SourceLocations      []string `json:"source_locations,omitempty"`
+	DestinationLocations []string `json:"destination_locations,omitempty"`
 }
 
 func (ts TranscodeStatus) String() string {
@@ -112,6 +153,10 @@ func (ts TranscodeStatus) String() string {
 		return "completed"
 	case TranscodeStatusError:
 		return "error"
+	case TranscodeStatusSegmentTranscoding:
+		return "segment-transcode"
+	case TranscodeStatusRenditionUpload:
+		return "segment-rendition-upload"
 	}
 	return "unknown"
 }

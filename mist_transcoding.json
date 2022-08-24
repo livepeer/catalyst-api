@@ -1,0 +1,22 @@
+{
+  "config":{
+    "triggers":{
+      "LIVE_TRACK_LIST":[{
+        "handler":"http://127.0.0.1:4949/api/mist/trigger",
+        "streams":["tr_rend_"],
+        "sync":false
+      }],
+      "PUSH_END":[{
+        "handler":"http://127.0.0.1:4949/api/mist/trigger",
+        "streams":["tr_rend_"],
+        "sync":false
+      }]
+    }
+  },
+  "streams":{
+    "tr_rend_":{
+      "name":"tr_rend_",
+      "source":"push://"
+    }
+  }
+}

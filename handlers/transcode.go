@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"fmt"
+	"io"
+	"os/exec"
 	"strings"
 )
 
 const SOURCE_PREFIX = "tr_src_"
-const RENDITION_PREFIX = "tr_rend_"
+const RENDITION_PREFIX = "tr_rend_+"
 
 func generateStreamNames() (string, string) {
 	suffix := randomTrailer()
@@ -15,14 +17,14 @@ func generateStreamNames() (string, string) {
 	return inputStream, renditionsStream
 }
 
-func extractSuffix(streamName string) (string, error) {
+func isTranscodeStream(streamName string) (bool, string) {
 	if strings.HasPrefix(streamName, RENDITION_PREFIX) {
-		return streamName[len(RENDITION_PREFIX):], nil
+		return true, streamName[len(RENDITION_PREFIX):]
 	}
-	if strings.HasPrefix(streamName, SOURCE_PREFIX) {
-		return streamName[len(SOURCE_PREFIX):], nil
-	}
-	return "", fmt.Errorf("unknown streamName prefix for %s", streamName)
+	// if strings.HasPrefix(streamName, SOURCE_PREFIX) {
+	// 	return streamName[len(SOURCE_PREFIX):], nil
+	// }
+	return false, ""
 }
 
 type EncodedProfile struct {
@@ -80,6 +82,10 @@ type ProcLivepeerConfig struct {
 	Profiles              []ProcLivepeerConfigProfile `json:"target_profiles"`
 }
 
+// Transforms request information to MistProcLivepeer config json
+// We use .HardcodedBroadcasters assuming we have local B-node.
+// The AudioSelect is configured to use single audio track from input.
+// Same applies on transcoder side, expect Livepeer to use single best video track as input.
 func configForSubprocess(req *TranscodeSegmentRequest, bPort int, inputStreamName, outputStreamName string) *ProcLivepeerConfig {
 	conf := &ProcLivepeerConfig{
 		InputStreamName:       inputStreamName,
@@ -121,11 +127,31 @@ type MistTrack struct {
 
 type LiveTrackListTriggerJson = map[string]MistTrack
 
-type TranscodeSegmentResult struct {
-	SourceFile      string  `json:"source_location"`
-	Status          string  `json:"status"`
-	CompletionRatio float32 `json:"completion_ratio,omitempty"`
-	ErrorMessage    string  `json:"error_message,omitempty"`
+func pipeToLog(pipe io.ReadCloser, name string) {
+	data := make([]byte, 4096)
+	for {
+		count, err := pipe.Read(data)
+		if err != nil {
+			fmt.Printf("ERROR cmd=%s %v\n", name, err)
+			return
+		}
+		fmt.Printf("out [%s] %s\n", name, string(data[0:count]))
+	}
+}
+
+func commandOutputToLog(cmd *exec.Cmd, name string) {
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		fmt.Printf("ERROR: cmd.StdoutPipe() %v\n", err)
+		return
+	}
+	go pipeToLog(stdoutPipe, name)
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		fmt.Printf("ERROR: cmd.StderrPipe() %v\n", err)
+		return
+	}
+	go pipeToLog(stderrPipe, name)
 }
 
 var TranscodeSegmentRequestSchemaDefinition string = `{
