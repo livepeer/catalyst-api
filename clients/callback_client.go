@@ -13,6 +13,7 @@ import (
 
 type CallbackClient struct {
 	httpClient *http.Client
+	Errors     chan error
 }
 
 func NewCallbackClient() CallbackClient {
@@ -26,23 +27,40 @@ func NewCallbackClient() CallbackClient {
 
 	return CallbackClient{
 		httpClient: client.StandardClient(),
+		Errors:     make(chan error, client.RetryMax+2),
+	}
+}
+
+func (c CallbackClient) clearErrors() {
+	for {
+		select {
+		case <-c.Errors:
+		default:
+			return
+		}
 	}
 }
 
 func (c CallbackClient) DoWithRetries(r *http.Request) error {
+	c.clearErrors()
 	// TODO: Replace with a proper shared Secret, probably coming from the initial request
 	r.Header.Set("Authorization", "Bearer IAmAuthorized")
 
 	resp, err := c.httpClient.Do(r)
 	if err != nil {
-		return fmt.Errorf("failed to send callback to %q. Error: %s", r.URL.String(), err)
+		err = fmt.Errorf("failed to send callback to %q. Error: %s", r.URL.String(), err)
+		c.Errors <- err
+		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("failed to send callback to %q. HTTP Code: %d", r.URL.String(), resp.StatusCode)
+		err = fmt.Errorf("failed to send callback to %q. HTTP Code: %d", r.URL.String(), resp.StatusCode)
+		c.Errors <- err
+		return err
 	}
 
+	c.Errors <- nil
 	return nil
 }
 
@@ -117,7 +135,6 @@ func (c CallbackClient) sendTSM(callbackURL string, tsm TranscodeStatusMessage) 
 
 	// Caller may be blocking trigger. Run in background, otherwise we introduce latency in current operation.
 	go c.DoWithRetries(r)
-
 	return nil
 }
 

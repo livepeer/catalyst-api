@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/stretchr/testify/require"
@@ -39,7 +40,13 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 	// Send the callback and confirm the number of times we retried
 	client := NewCallbackClient()
 	require.NoError(t, client.SendTranscodeStatus(svr.URL, TranscodeStatusCompleted, 1))
-	require.Equal(t, 3, tries, "Expected the client to retry on failed callbacks")
+	select {
+	case err := <-client.Errors:
+		require.NoError(t, err)
+		require.Equal(t, 3, tries, "Expected the client to retry on failed callbacks")
+	case <-time.After(3 * time.Second):
+		require.FailNow(t, "Expected async result within this timeout")
+	}
 }
 
 func TestItEventuallyStopsRetrying(t *testing.T) {
@@ -66,10 +73,16 @@ func TestItEventuallyStopsRetrying(t *testing.T) {
 	// Send the callback and confirm the number of times we retried
 	client := NewCallbackClient()
 	err := client.SendTranscodeStatus(svr.URL, TranscodeStatusCompleted, 1)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to send callback")
-	require.Contains(t, err.Error(), "giving up after 3 attempt(s)")
-	require.Equal(t, 3, tries, "Expected the client to retry on failed callbacks")
+	require.NoError(t, err)
+	select {
+	case err = <-client.Errors:
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to send callback")
+		require.Contains(t, err.Error(), "giving up after 3 attempt(s)")
+		require.Equal(t, 3, tries, "Expected the client to retry on failed callbacks")
+	case <-time.After(time.Second * 3):
+		require.FailNow(t, "Expected async result within this timeout")
+	}
 }
 
 func TestTranscodeStatusErrorNotifcation(t *testing.T) {
@@ -90,4 +103,10 @@ func TestTranscodeStatusErrorNotifcation(t *testing.T) {
 	// Send the callback and confirm the number of times we retried
 	client := NewCallbackClient()
 	require.NoError(t, client.SendTranscodeStatusError(svr.URL, "something went wrong"))
+	select {
+	case err := <-client.Errors:
+		require.NoError(t, err, "something went wrong")
+	case <-time.After(time.Second * 3):
+		require.FailNow(t, "Expected async result within this timeout")
+	}
 }
