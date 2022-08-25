@@ -142,7 +142,8 @@ func (t *Transcoding) ValidateRequest() error {
 		return err
 	}
 	if !result.Valid() {
-		errors.WriteHTTPBadRequest(t.httpResp, "Invalid request payload", fmt.Errorf("%s", result.Errors()))
+		err = fmt.Errorf("%s", result.Errors())
+		errors.WriteHTTPBadRequest(t.httpResp, "Invalid request payload", err)
 		return err
 	}
 	if err := json.Unmarshal(payload, &t.request); err != nil {
