@@ -67,11 +67,11 @@ func (c *TranscodingCache) Get(streamName string) (SegmentInfo, error) {
 
 func (c *TranscodingCache) AddDestination(streamName, destination string) {
 	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	info, ok := c.pushes[streamName]
 	if ok {
 		info.Destionations = append(info.Destionations, destination)
 	}
-	c.mutex.Unlock()
 }
 
 func (c *TranscodingCache) Store(streamName string, info SegmentInfo) {

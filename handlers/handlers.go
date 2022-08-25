@@ -4,10 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net/http"
-	"os/exec"
-	"path"
 	"strings"
 	"time"
 
@@ -29,108 +28,26 @@ func (d *CatalystAPIHandlersCollection) Ok() httprouter.Handle {
 	}
 }
 
-// Takes mpegts segment as input, ingests in Mist under SOURCE_PREFIX streamName, transcodes into RENDITION_PREFIX stream then pushes renditions to specified destination.
+// TranscodeSegment takes mpegts segment as input, ingests in Mist under SOURCE_PREFIX streamName, transcodes into RENDITION_PREFIX stream then pushes renditions to specified destination.
 // Manually starts MistLivepeerProc binary. For this we require port of B-node that listens on 127.0.0.1 .
 // When `MistProcLivepeer` starts, SOURCE_PREFIX stream is taken as input and (will automatically - WIP) start SOURCE_PREFIX stream.
 // No trigger is registered on SOURCE_PREFIX so configured sourceUrl is used.
 // Also `MistProcLivepeer` outputs to RENDITION_PREFIX stream where we listen for triggers to start new push to rendition destination.
 // Because RENDITION_PREFIX stream contains multiple video tracks we start multiple push-es each selecting one video and one audio track to push to S3.
 func (d *CatalystAPIHandlersCollection) TranscodeSegment(broadcasterPort int, mistProcPath string) httprouter.Handle {
-	schema := inputSchemasCompiled["TranscodeSegment"]
-
 	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-		// Input validation:
-		var transcodeRequest TranscodeSegmentRequest
-		payload, err := io.ReadAll(req.Body)
-		if err != nil {
-			errors.WriteHTTPInternalServerError(w, "Cannot read body", err)
+		t := Transcoding{httpResp: w, httpReq: req, broadcasterPort: broadcasterPort, mistProcPath: mistProcPath}
+		if err := t.ValidateRequest(); err != nil {
+			log.Printf("TranscodeSegment request validation failed %v", err)
 			return
 		}
-		result, err := schema.Validate(gojsonschema.NewBytesLoader(payload))
-		if err != nil {
-			errors.WriteHTTPInternalServerError(w, "body schema validation failed", err)
+		if err := t.PrepareStreams(d.MistClient); err != nil {
+			log.Printf("TranscodeSegment input stream create failed %v", err)
 			return
 		}
-		if !result.Valid() {
-			errors.WriteHTTPBadBodySchema("TranscodeSegment", w, result.Errors())
-			return
-		}
-		if err := json.Unmarshal(payload, &transcodeRequest); err != nil {
-			errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
-			return
-		}
-		callbackClient := clients.NewCallbackClient()
-		errorOutInternal := func(where string, err error) {
-			// Mist does not respond or handle returned error codes. We do this for correctness.
-			errors.WriteHTTPInternalServerError(w, where, err)
-			if err := callbackClient.SendSegmentTranscodeError(transcodeRequest.CallbackUrl, where, err.Error(), transcodeRequest.SourceFile); err != nil {
-				fmt.Printf("error send transcode error %v\n", err)
-				return
-			}
-		}
+		// run in background
+		go t.RunTranscodeProcess(d.MistClient, d.StreamCache)
 
-		inputStream, renditionsStream := generateStreamNames()
-		if err = d.MistClient.AddStream(inputStream, transcodeRequest.SourceFile); err != nil {
-			errorOutInternal("error AddStream(inputStream)", err)
-			return
-		}
-
-		// Start MistProcLivepeer
-		configPayload, err := json.Marshal(configForSubprocess(&transcodeRequest, broadcasterPort, inputStream, renditionsStream))
-		if err != nil {
-			errorOutInternal("error ProcLivepeerConfig json encode", err)
-			return
-		}
-		fmt.Printf("configPayload %s\n", configPayload)
-		transcodeCommand := exec.Command(mistProcPath, "-")
-		stdinPipe, err := transcodeCommand.StdinPipe()
-		if err != nil {
-			errorOutInternal("error transcodeCommand.StdinPipe()", err)
-			return
-		}
-		commandOutputToLog(transcodeCommand, "coding")
-		sent, err := stdinPipe.Write(configPayload)
-		if err != nil {
-			errorOutInternal("error stdinPipe.Write()", err)
-			return
-		}
-		if sent != len(configPayload) {
-			errorOutInternal("error short write on stdinPipe.Write()", err)
-			return
-		}
-		err = stdinPipe.Close()
-		if err != nil {
-			errorOutInternal("error stdinPipe.Close()", err)
-			return
-		}
-		err = transcodeCommand.Start()
-		if err != nil {
-			errorOutInternal("error start transcodeCommand", err)
-			return
-		}
-
-		// TODO: remove when Mist code is updated <
-		// Starting SOURCE_PREFIX stream. Why we need to start it manually? MistProcLivepeer should start it??
-		if err := d.MistClient.PushStart(inputStream, "/opt/null.ts"); err != nil {
-			errorOutInternal("error PushStart(inputStream)", err)
-			return
-		}
-
-		// Create entry in our pushes books, storing callback url and source url.
-		// Later triggers will use this info and add destination urls.
-		d.StreamCache.Transcoding.Store(renditionsStream, SegmentInfo{
-			CallbackUrl: transcodeRequest.CallbackUrl,
-			Source:      transcodeRequest.SourceFile,
-			UploadDir:   path.Dir(transcodeRequest.SourceFile),
-		})
-
-		err = transcodeCommand.Wait()
-		if exit, ok := err.(*exec.ExitError); ok {
-			fmt.Printf("MistProcLivepeer returned %d\n", exit.ExitCode())
-		} else if err != nil {
-			errorOutInternal("error exec transcodeCommand", err)
-			return
-		}
 		io.WriteString(w, "Transcode done; Upload in progress")
 	}
 }
@@ -231,7 +148,7 @@ func (d *MistCallbackHandlersCollection) Trigger_LIVE_TRACK_LIST(w http.Response
 		txt := fmt.Sprintf("%s name=%s", where, streamName)
 		// Mist does not respond or handle returned error codes. We do this for correctness.
 		errors.WriteHTTPInternalServerError(w, txt, err)
-		fmt.Printf("<ERROR LIVE_TRACK_LIST> %s %v\n", txt, err)
+		log.Printf("ERROR LIVE_TRACK_LIST %s %v", txt, err)
 	}
 	payload, err := io.ReadAll(req.Body)
 	if err != nil {
@@ -252,7 +169,7 @@ func (d *MistCallbackHandlersCollection) Trigger_LIVE_TRACK_LIST(w http.Response
 		// SOURCE_PREFIX stream is no longer needed
 		inputStream := fmt.Sprintf("%s%s", SOURCE_PREFIX, suffix)
 		if err = d.MistClient.DeleteStream(inputStream); err != nil {
-			fmt.Printf("<ERROR LIVE_TRACK_LIST> DeleteStream(%s) %v\n", inputStream, err)
+			log.Printf("ERROR LIVE_TRACK_LIST DeleteStream(%s) %v", inputStream, err)
 		}
 		// Multiple pushes from RENDITION_PREFIX are in progress.
 		return
@@ -274,14 +191,12 @@ func (d *MistCallbackHandlersCollection) Trigger_LIVE_TRACK_LIST(w http.Response
 			continue
 		}
 		destination := fmt.Sprintf("%s/%s__%dx%d.ts?video=%d&audio=maxbps", info.UploadDir, streamName, tracks[i].Width, tracks[i].Height, tracks[i].Index) //.Id)
-		fmt.Printf("> Starting push to %s\n", destination)
 		if err := d.MistClient.PushStart(streamName, destination); err != nil {
-			fmt.Printf("> ERROR push to %s %v\n", destination, err)
+			log.Printf("> ERROR push to %s %v", destination, err)
 		} else {
 			d.StreamCache.Transcoding.AddDestination(streamName, destination)
 		}
 	}
-	fmt.Printf("> Trigger_LIVE_TRACK_LIST %v\n", lines)
 }
 
 // This trigger is run whenever an outgoing push stops, for any reason.
@@ -298,7 +213,7 @@ func (d *MistCallbackHandlersCollection) Trigger_PUSH_END(w http.ResponseWriter,
 		txt := fmt.Sprintf("%s name=%s", where, streamName)
 		// Mist does not respond or handle returned error codes. We do this for correctness.
 		errors.WriteHTTPInternalServerError(w, txt, err)
-		fmt.Printf("<ERROR LIVE_TRACK_LIST> %s %v\n", txt, err)
+		log.Printf("<ERROR LIVE_TRACK_LIST> %s %v", txt, err)
 	}
 
 	payload, err := io.ReadAll(req.Body)
@@ -307,7 +222,7 @@ func (d *MistCallbackHandlersCollection) Trigger_PUSH_END(w http.ResponseWriter,
 		return
 	}
 	lines := strings.Split(strings.TrimSuffix(string(payload), "\n"), "\n")
-	if len(lines) < 2 {
+	if len(lines) != 6 {
 		errors.WriteHTTPBadRequest(w, "Bad request payload", fmt.Errorf("unknown payload '%s'", string(payload)))
 		return
 	}
@@ -393,10 +308,6 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 		case "LIVE_TRACK_LIST":
 			d.Trigger_LIVE_TRACK_LIST(w, req, params)
 		default:
-			if payload, err := io.ReadAll(req.Body); err == nil {
-				// print info for testing purposes
-				fmt.Printf("TRIGGER %s\n%s\n", whichOne, string(payload))
-			}
 			errors.WriteHTTPBadRequest(w, "Unsupported X-Trigger", fmt.Errorf("unknown trigger '%s'", whichOne))
 			return
 		}

@@ -1,10 +1,18 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"log"
+	"net/http"
 	"os/exec"
+	"path"
 	"strings"
+
+	"github.com/livepeer/catalyst-api/clients"
+	"github.com/livepeer/catalyst-api/errors"
+	"github.com/xeipuuv/gojsonschema"
 )
 
 const SOURCE_PREFIX = "tr_src_"
@@ -21,9 +29,6 @@ func isTranscodeStream(streamName string) (bool, string) {
 	if strings.HasPrefix(streamName, RENDITION_PREFIX) {
 		return true, streamName[len(RENDITION_PREFIX):]
 	}
-	// if strings.HasPrefix(streamName, SOURCE_PREFIX) {
-	// 	return streamName[len(SOURCE_PREFIX):], nil
-	// }
 	return false, ""
 }
 
@@ -82,7 +87,7 @@ type ProcLivepeerConfig struct {
 	Profiles              []ProcLivepeerConfigProfile `json:"target_profiles"`
 }
 
-// Transforms request information to MistProcLivepeer config json
+// configForSubprocess transforms request information to MistProcLivepeer config json
 // We use .HardcodedBroadcasters assuming we have local B-node.
 // The AudioSelect is configured to use single audio track from input.
 // Same applies on transcoder side, expect Livepeer to use single best video track as input.
@@ -112,6 +117,120 @@ func configForSubprocess(req *TranscodeSegmentRequest, bPort int, inputStreamNam
 	return conf
 }
 
+type Transcoding struct {
+	httpResp        http.ResponseWriter
+	httpReq         *http.Request
+	broadcasterPort int
+	mistProcPath    string
+
+	request          TranscodeSegmentRequest
+	callback         clients.CallbackClient
+	inputStream      string
+	renditionsStream string
+}
+
+func (t *Transcoding) ValidateRequest() error {
+	payload, err := io.ReadAll(t.httpReq.Body)
+	if err != nil {
+		errors.WriteHTTPInternalServerError(t.httpResp, "Cannot read body", err)
+		return err
+	}
+	schema := inputSchemasCompiled["TranscodeSegment"]
+	result, err := schema.Validate(gojsonschema.NewBytesLoader(payload))
+	if err != nil {
+		errors.WriteHTTPInternalServerError(t.httpResp, "body schema validation failed", err)
+		return err
+	}
+	if !result.Valid() {
+		errors.WriteHTTPBadRequest(t.httpResp, "Invalid request payload", fmt.Errorf("%s", result.Errors()))
+		return err
+	}
+	if err := json.Unmarshal(payload, &t.request); err != nil {
+		errors.WriteHTTPBadRequest(t.httpResp, "Invalid request payload", err)
+		return err
+	}
+	t.callback = clients.NewCallbackClient()
+	return nil
+}
+
+func (t *Transcoding) PrepareStreams(mist MistAPIClient) error {
+	t.inputStream, t.renditionsStream = generateStreamNames()
+	if err := mist.AddStream(t.inputStream, t.request.SourceFile); err != nil {
+		where := fmt.Sprintf("error AddStream(%s)", t.inputStream)
+		t.errorOut(where, err)
+		errors.WriteHTTPInternalServerError(t.httpResp, where, err)
+		return err
+	}
+	return nil
+}
+
+// We run `MistLivepeeerProc` binary directly. Usually MistController starts Mist binaries.
+// Currently the best way is for go code to start Mist binary directly.
+// `MistLivepeeerProc` takes input from `t.inputStream` and place renditions into `t.renditionsStream`
+// The transcoding happens via local Broadcaster node, that is why we need t.broadcasterPort.
+func (t *Transcoding) RunTranscodeProcess(mist MistAPIClient, cache *StreamCache) {
+	configPayload, err := json.Marshal(configForSubprocess(&t.request, t.broadcasterPort, t.inputStream, t.renditionsStream))
+	if err != nil {
+		t.errorOut("error ProcLivepeerConfig json encode", err)
+		return
+	}
+	transcodeCommand := exec.Command(t.mistProcPath, "-")
+	stdinPipe, err := transcodeCommand.StdinPipe()
+	if err != nil {
+		t.errorOut("error transcodeCommand.StdinPipe()", err)
+		return
+	}
+	commandOutputToLog(transcodeCommand, "coding")
+	sent, err := stdinPipe.Write(configPayload)
+	if err != nil {
+		t.errorOut("error stdinPipe.Write()", err)
+		return
+	}
+	if sent != len(configPayload) {
+		t.errorOut("error short write on stdinPipe.Write()", err)
+		return
+	}
+	err = stdinPipe.Close()
+	if err != nil {
+		t.errorOut("error stdinPipe.Close()", err)
+		return
+	}
+	err = transcodeCommand.Start()
+	if err != nil {
+		t.errorOut("error start transcodeCommand", err)
+		return
+	}
+
+	// TODO: remove when Mist code is updated <
+	// Starting SOURCE_PREFIX stream. Why we need to start it manually? MistProcLivepeer should start it??
+	if err := mist.PushStart(t.inputStream, "/opt/null.ts"); err != nil {
+		t.errorOut("error PushStart(inputStream)", err)
+		return
+	}
+
+	// Cache the stream data, later used in the trigger handlers called by Mist
+	cache.Transcoding.Store(t.renditionsStream, SegmentInfo{
+		CallbackUrl: t.request.CallbackUrl,
+		Source:      t.request.SourceFile,
+		UploadDir:   path.Dir(t.request.SourceFile),
+	})
+
+	err = transcodeCommand.Wait()
+	if exit, ok := err.(*exec.ExitError); ok {
+		log.Printf("MistProcLivepeer returned %d", exit.ExitCode())
+	} else if err != nil {
+		t.errorOut("error exec transcodeCommand", err)
+		return
+	}
+}
+
+func (t *Transcoding) errorOut(where string, err error) {
+	if err := t.callback.SendSegmentTranscodeError(t.request.CallbackUrl, where, err.Error(), t.request.SourceFile); err != nil {
+		log.Printf("error send transcode error %v", err)
+		return
+	}
+}
+
 // Contents of LIVE_TRACK_LIST trigger
 type MistTrack struct {
 	Id          int32  `json:"trackid"`
@@ -132,23 +251,23 @@ func pipeToLog(pipe io.ReadCloser, name string) {
 	for {
 		count, err := pipe.Read(data)
 		if err != nil {
-			fmt.Printf("ERROR cmd=%s %v\n", name, err)
+			log.Printf("ERROR cmd=%s %v", name, err)
 			return
 		}
-		fmt.Printf("out [%s] %s\n", name, string(data[0:count]))
+		log.Printf("out [%s] %s", name, string(data[0:count]))
 	}
 }
 
 func commandOutputToLog(cmd *exec.Cmd, name string) {
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
-		fmt.Printf("ERROR: cmd.StdoutPipe() %v\n", err)
+		log.Printf("ERROR: cmd.StdoutPipe() %v", err)
 		return
 	}
 	go pipeToLog(stdoutPipe, name)
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
-		fmt.Printf("ERROR: cmd.StderrPipe() %v\n", err)
+		log.Printf("ERROR: cmd.StderrPipe() %v", err)
 		return
 	}
 	go pipeToLog(stderrPipe, name)

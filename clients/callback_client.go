@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -13,7 +14,6 @@ import (
 
 type CallbackClient struct {
 	httpClient *http.Client
-	Errors     chan error
 }
 
 func NewCallbackClient() CallbackClient {
@@ -27,45 +27,30 @@ func NewCallbackClient() CallbackClient {
 
 	return CallbackClient{
 		httpClient: client.StandardClient(),
-		Errors:     make(chan error, client.RetryMax+2),
-	}
-}
-
-func (c CallbackClient) clearErrors() {
-	for {
-		select {
-		case <-c.Errors:
-		default:
-			return
-		}
 	}
 }
 
 func (c CallbackClient) DoWithRetries(r *http.Request) error {
-	c.clearErrors()
 	// TODO: Replace with a proper shared Secret, probably coming from the initial request
 	r.Header.Set("Authorization", "Bearer IAmAuthorized")
 
 	resp, err := c.httpClient.Do(r)
 	if err != nil {
 		err = fmt.Errorf("failed to send callback to %q. Error: %s", r.URL.String(), err)
-		c.Errors <- err
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		err = fmt.Errorf("failed to send callback to %q. HTTP Code: %d", r.URL.String(), resp.StatusCode)
-		c.Errors <- err
 		return err
 	}
 
-	c.Errors <- nil
 	return nil
 }
 
 func (c CallbackClient) SendTranscodeStatus(url string, status TranscodeStatus, completionRatio float32) error {
-	return c.sendTSM(url, TranscodeStatusMessage{
+	return c.sendAsync(url, TranscodeStatusMessage{
 		CompletionRatio: completionRatio,
 		Status:          status.String(),
 		Timestamp:       config.Clock.GetTimestampUTC(),
@@ -73,16 +58,15 @@ func (c CallbackClient) SendTranscodeStatus(url string, status TranscodeStatus, 
 }
 
 func (c CallbackClient) SendTranscodeStatusError(callbackURL, errorMsg string) error {
-	return c.sendTSM(callbackURL, TranscodeStatusMessage{
+	return c.sendAsync(callbackURL, TranscodeStatusMessage{
 		Error:     errorMsg,
 		Status:    TranscodeStatusError.String(),
 		Timestamp: config.Clock.GetTimestampUTC(),
 	})
 }
 
-// CatalystAPIHandlersCollection::TranscodeSegment invokes this on failed upload
 func (c CallbackClient) SendRenditionUploadError(callbackURL, sourceLocation, destination, err string) error {
-	return c.sendTSM(callbackURL, TranscodeStatusMessage{
+	return c.sendAsync(callbackURL, TranscodeStatusMessage{
 		Error:                err,
 		Status:               TranscodeStatusRenditionUpload.String(),
 		Timestamp:            config.Clock.GetTimestampUTC(),
@@ -91,9 +75,8 @@ func (c CallbackClient) SendRenditionUploadError(callbackURL, sourceLocation, de
 	})
 }
 
-// CatalystAPIHandlersCollection::TranscodeSegment invokes this on successful upload
 func (c CallbackClient) SendRenditionUpload(callbackURL, sourceLocation, destination string) error {
-	return c.sendTSM(callbackURL, TranscodeStatusMessage{
+	return c.sendAsync(callbackURL, TranscodeStatusMessage{
 		Status:               TranscodeStatusRenditionUpload.String(),
 		Timestamp:            config.Clock.GetTimestampUTC(),
 		SourceLocations:      []string{sourceLocation},
@@ -102,9 +85,8 @@ func (c CallbackClient) SendRenditionUpload(callbackURL, sourceLocation, destina
 	})
 }
 
-// CatalystAPIHandlersCollection::TranscodeSegment invokes this on success
 func (c CallbackClient) SendSegmentTranscodeStatus(callbackURL, sourceLocation string) error {
-	return c.sendTSM(callbackURL, TranscodeStatusMessage{
+	return c.sendAsync(callbackURL, TranscodeStatusMessage{
 		Status:          TranscodeStatusSegmentTranscoding.String(),
 		Timestamp:       config.Clock.GetTimestampUTC(),
 		SourceLocations: []string{sourceLocation},
@@ -112,9 +94,8 @@ func (c CallbackClient) SendSegmentTranscodeStatus(callbackURL, sourceLocation s
 	})
 }
 
-// CatalystAPIHandlersCollection::TranscodeSegment invokes this on error
 func (c CallbackClient) SendSegmentTranscodeError(callbackURL, where, errorMsg, sourceLocation string) error {
-	return c.sendTSM(callbackURL, TranscodeStatusMessage{
+	return c.sendAsync(callbackURL, TranscodeStatusMessage{
 		Error:           fmt.Sprintf("%s; %s", where, errorMsg),
 		Status:          TranscodeStatusSegmentTranscoding.String(),
 		Timestamp:       config.Clock.GetTimestampUTC(),
@@ -122,7 +103,7 @@ func (c CallbackClient) SendSegmentTranscodeError(callbackURL, where, errorMsg, 
 	})
 }
 
-func (c CallbackClient) sendTSM(callbackURL string, tsm TranscodeStatusMessage) error {
+func (c CallbackClient) sendAsync(callbackURL string, tsm TranscodeStatusMessage) error {
 	j, err := json.Marshal(tsm)
 	if err != nil {
 		return err
@@ -134,7 +115,11 @@ func (c CallbackClient) sendTSM(callbackURL string, tsm TranscodeStatusMessage) 
 	}
 
 	// Caller may be blocking trigger. Run in background, otherwise we introduce latency in current operation.
-	go c.DoWithRetries(r)
+	go func() {
+		if err := c.DoWithRetries(r); err != nil {
+			log.Printf("error CallbackClient %v", err)
+		}
+	}()
 	return nil
 }
 

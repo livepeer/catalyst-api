@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -40,9 +41,6 @@ func TestSegmentTranscode(t *testing.T) {
 		ApiUrl:          fmt.Sprintf("http://localhost:%d/api2", mistPort),
 		TriggerCallback: fmt.Sprintf("http://localhost:%d/api/mist/trigger", port),
 	}
-	// This was usefull when we used unique stream names. Dont need it anymore in case of wildcard stream names.
-	// err := mc.RemoveAllStreams()
-	// err = mc.DeleteAllTriggers()
 
 	// Setup our HTTP endpoints:
 	router := httprouter.New()
@@ -108,13 +106,13 @@ func newStudioMock(callbacks chan string) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		payload, err := io.ReadAll(r.Body)
 		if err != nil {
-			fmt.Printf("newStudioMock error reading req body\n")
+			log.Printf("newStudioMock error reading req body")
 			w.WriteHeader(451)
 			return
 		}
 		w.WriteHeader(200)
 		body := string(payload)
-		fmt.Printf("[studio callback] %s\n", body)
+		log.Printf("[studio callback] %s", body)
 		callbacks <- body
 	}))
 }
@@ -125,7 +123,7 @@ func serveAPI(port int, router *httprouter.Router) func() {
 	go func() {
 		// start API server
 		if err := server.ListenAndServe(); err != nil {
-			fmt.Printf("server.ListenAndServe %v\n", err)
+			log.Printf("server.ListenAndServe %v", err)
 		}
 	}()
 	return func() {
@@ -133,14 +131,14 @@ func serveAPI(port int, router *httprouter.Router) func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
 		if err := server.Shutdown(ctx); err != nil {
-			fmt.Printf("server.Shutdown %v\n", err)
+			log.Printf("server.Shutdown %v", err)
 		}
 	}
 }
 
 // HTTP request template we want to test
 var transcodeJsonData = `{
-	"source_location": "s3+https://GCP_SECRETS@storage.googleapis.com/alexk-dms-upload-test/avsample.mp4",
+	"source_location": "/home/alex/livepeer/vod/avsample.mp4",
 		"callback_url": "CALLBACK_URL/",
 		"manifestID": "somestream",
 		"profiles": [

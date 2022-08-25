@@ -26,28 +26,6 @@ type MistClient struct {
 	configMu        sync.Mutex
 }
 
-func (mc *MistClient) RemoveAllStreams() error {
-	c := RemoveAllStreamsCommand{Streams: map[string]Stream{}}
-	response, err := mc.sendCommand(c)
-	fmt.Printf("RemoveAllStreams %s\n", response)
-	return err
-}
-
-func (mc *MistClient) DeleteAllTriggers() error {
-	mc.configMu.Lock()
-	defer mc.configMu.Unlock()
-
-	resp, err := http.Post(mc.ApiUrl, "application/json", bytes.NewBuffer([]byte(`{"config":{"triggers":{}}}`)))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	// body, err := io.ReadAll(resp.Body)
-	// fmt.Printf("DeleteAllTriggers %s\n", string(body))
-
-	return err
-}
-
 func (mc *MistClient) AddStream(streamName, sourceUrl string) error {
 	c := commandAddStream(streamName, sourceUrl)
 	return wrapErr(validateAddStream(mc.sendCommand(c)), streamName)
@@ -155,10 +133,6 @@ func commandToString(command interface{}) (string, error) {
 
 func payloadFor(command string) string {
 	return fmt.Sprintf("command=%s", url.QueryEscape(command))
-}
-
-type RemoveAllStreamsCommand struct {
-	Streams map[string]Stream `json:"streams"`
 }
 
 type addStreamCommand struct {

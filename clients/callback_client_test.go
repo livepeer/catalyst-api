@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,15 +12,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func waitForCallbacks(t *testing.T, c chan struct{}, count int, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	happened := 0
+	for happened < count {
+		select {
+		case <-c:
+			happened += 1
+		case <-ctx.Done():
+			require.FailNow(t, "Expected async result within this timeout")
+		}
+	}
+}
+
 func TestItRetriesOnFailedCallbacks(t *testing.T) {
 	config.Clock = config.FixedTimestampGenerator{Timestamp: 123456789}
 	defer func() { config.Clock = config.RealTimestampGenerator{} }()
 
 	// Counter for the number of retries we've done
 	var tries int
+	callbacks := make(chan struct{}, 3)
 
 	// Set up a dummy server to receive the callbacks
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() { callbacks <- struct{}{} }()
 		// Check that we got the callback we're expecting
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
@@ -40,13 +57,8 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 	// Send the callback and confirm the number of times we retried
 	client := NewCallbackClient()
 	require.NoError(t, client.SendTranscodeStatus(svr.URL, TranscodeStatusCompleted, 1))
-	select {
-	case err := <-client.Errors:
-		require.NoError(t, err)
-		require.Equal(t, 3, tries, "Expected the client to retry on failed callbacks")
-	case <-time.After(3 * time.Second):
-		require.FailNow(t, "Expected async result within this timeout")
-	}
+	waitForCallbacks(t, callbacks, 3, 1*time.Second)
+	require.Equal(t, 3, tries, "Expected the client to retry on failed callbacks")
 }
 
 func TestItEventuallyStopsRetrying(t *testing.T) {
@@ -55,9 +67,11 @@ func TestItEventuallyStopsRetrying(t *testing.T) {
 
 	// Counter for the number of retries we've done
 	var tries int
+	callbacks := make(chan struct{}, 3)
 
 	// Set up a dummy server to receive the callbacks
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() { callbacks <- struct{}{} }()
 		// Check that we got the callback we're expecting
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
@@ -72,25 +86,20 @@ func TestItEventuallyStopsRetrying(t *testing.T) {
 
 	// Send the callback and confirm the number of times we retried
 	client := NewCallbackClient()
-	err := client.SendTranscodeStatus(svr.URL, TranscodeStatusCompleted, 1)
-	require.NoError(t, err)
-	select {
-	case err = <-client.Errors:
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "failed to send callback")
-		require.Contains(t, err.Error(), "giving up after 3 attempt(s)")
-		require.Equal(t, 3, tries, "Expected the client to retry on failed callbacks")
-	case <-time.After(time.Second * 3):
-		require.FailNow(t, "Expected async result within this timeout")
-	}
+	require.NoError(t, client.SendTranscodeStatus(svr.URL, TranscodeStatusCompleted, 1))
+	waitForCallbacks(t, callbacks, 3, 1*time.Second)
+	require.Equal(t, 3, tries, "Expected the client to retry on failed callbacks")
+	// The case for more than 3 retries is not tested
 }
 
 func TestTranscodeStatusErrorNotifcation(t *testing.T) {
 	config.Clock = config.FixedTimestampGenerator{Timestamp: 123456789}
 	defer func() { config.Clock = config.RealTimestampGenerator{} }()
 
+	callbacks := make(chan struct{}, 3)
 	// Set up a dummy server to receive the callbacks
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() { callbacks <- struct{}{} }()
 		// Check that we got the callback we're expecting
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
@@ -103,10 +112,5 @@ func TestTranscodeStatusErrorNotifcation(t *testing.T) {
 	// Send the callback and confirm the number of times we retried
 	client := NewCallbackClient()
 	require.NoError(t, client.SendTranscodeStatusError(svr.URL, "something went wrong"))
-	select {
-	case err := <-client.Errors:
-		require.NoError(t, err, "something went wrong")
-	case <-time.After(time.Second * 3):
-		require.FailNow(t, "Expected async result within this timeout")
-	}
+	waitForCallbacks(t, callbacks, 1, 1*time.Second)
 }
