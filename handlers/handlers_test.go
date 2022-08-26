@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const mistProcPath = "../../mistserver/build/MistProcLivepeer"
+const mistProcPath = "./MistProcLivepeer"
 
 func TestOKHandler(t *testing.T) {
 	require := require.New(t)

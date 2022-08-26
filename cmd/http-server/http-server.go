@@ -22,7 +22,7 @@ func main() {
 	mistJson := flag.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
 	// Transcode endpoint starts MistProcLivepeer as subprocess so we need path to the binary(mistlp) and port of local Broadcaster(b-port)
 	bPort := flag.Int("b-port", 8935, "Port of local B node")
-	mistProcPath := flag.String("mistlp", "../mistserver/build/MistProcLivepeer", "path to MistProcLivepeer")
+	mistProcPath := flag.String("mistlp", "./MistProcLivepeer", "path to MistProcLivepeer")
 
 	flag.Parse()
 
