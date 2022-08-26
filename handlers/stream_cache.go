@@ -38,6 +38,15 @@ func (c *TranscodingCache) Init() {
 
 type Empty = bool
 
+func (c *TranscodingCache) AddDestination(streamName, destination string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	info, ok := c.pushes[streamName]
+	if ok {
+		info.Destionations = append(info.Destionations, destination)
+	}
+}
+
 func (c *TranscodingCache) RemovePushDestination(streamName, destination string) Empty {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -55,6 +64,12 @@ func (c *TranscodingCache) RemovePushDestination(streamName, destination string)
 	return false
 }
 
+func (c *TranscodingCache) Remove(streamName string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	delete(c.pushes, streamName)
+}
+
 func (c *TranscodingCache) Get(streamName string) (SegmentInfo, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -63,15 +78,6 @@ func (c *TranscodingCache) Get(streamName string) (SegmentInfo, error) {
 		return *info, nil
 	}
 	return SegmentInfo{}, fmt.Errorf("cache mismatch for %s", streamName)
-}
-
-func (c *TranscodingCache) AddDestination(streamName, destination string) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	info, ok := c.pushes[streamName]
-	if ok {
-		info.Destionations = append(info.Destionations, destination)
-	}
 }
 
 func (c *TranscodingCache) Store(streamName string, info SegmentInfo) {

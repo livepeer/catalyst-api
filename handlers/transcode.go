@@ -202,8 +202,8 @@ func (t *Transcoding) RunTranscodeProcess(mist MistAPIClient, cache *StreamCache
 		return
 	}
 
-	// TODO: remove when Mist code is updated <
-	// Starting SOURCE_PREFIX stream. Why we need to start it manually? MistProcLivepeer should start it??
+	// TODO: remove when Mist code is updated https://github.com/DDVTECH/mistserver/issues/81
+	// Starting SOURCE_PREFIX stream because MistProcLivepeer is unable to start it automatically
 	if err := mist.PushStart(t.inputStream, "/opt/null.ts"); err != nil {
 		t.errorOut("error PushStart(inputStream)", err)
 		return
