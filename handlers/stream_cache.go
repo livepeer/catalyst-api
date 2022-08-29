@@ -26,40 +26,40 @@ type TranscodingCache struct {
 }
 
 type SegmentInfo struct {
-	CallbackUrl   string
-	Source        string   // S3 input we are transcoding
-	UploadDir     string   // S3 destination url for multiple renditions
-	Destionations []string // Rendition URLS go here on push start and removed on push end
+	CallbackUrl  string
+	Source       string   // S3 input we are transcoding
+	UploadDir    string   // S3 destination url for multiple renditions
+	Destinations []string // Rendition URLS go here on push start and removed on push end
 }
 
 func (c *TranscodingCache) Init() {
 	c.pushes = make(map[string]*SegmentInfo)
 }
 
-type Empty = bool
+type IsEmpty = bool
 
 func (c *TranscodingCache) AddDestination(streamName, destination string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	info, ok := c.pushes[streamName]
 	if ok {
-		info.Destionations = append(info.Destionations, destination)
+		info.Destinations = append(info.Destinations, destination)
 	}
 }
 
-func (c *TranscodingCache) RemovePushDestination(streamName, destination string) Empty {
+func (c *TranscodingCache) RemovePushDestination(streamName, destination string) IsEmpty {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	info, ok := c.pushes[streamName]
 	if ok {
-		for i := 0; i < len(info.Destionations); i++ {
-			if info.Destionations[i] == destination {
-				info.Destionations[i] = info.Destionations[len(info.Destionations)-1]
-				info.Destionations = info.Destionations[:len(info.Destionations)-1]
+		for i := 0; i < len(info.Destinations); i++ {
+			if info.Destinations[i] == destination {
+				info.Destinations[i] = info.Destinations[len(info.Destinations)-1]
+				info.Destinations = info.Destinations[:len(info.Destinations)-1]
 				break
 			}
 		}
-		return len(info.Destionations) == 0
+		return len(info.Destinations) == 0
 	}
 	return false
 }
@@ -100,10 +100,14 @@ func (c *SegmentingCache) Init() {
 }
 
 func (c *SegmentingCache) Remove(streamName string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	delete(c.cache, streamName)
 }
 
 func (c *SegmentingCache) GetCallbackUrl(streamName string) (string, error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	info, ok := c.cache[streamName]
 	if ok {
 		return info.callbackUrl, nil

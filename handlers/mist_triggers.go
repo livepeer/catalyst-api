@@ -24,7 +24,13 @@ type MistCallbackHandlersCollection struct {
 // If handler logic grows more complicated we may consider adding dispatch mechanism here.
 func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
+		var err error
 		t := &Trigger{w: w, req: req}
+		t.payload, err = io.ReadAll(t.req.Body)
+		if err != nil {
+			t.Err("Cannot read payload", err)
+			return
+		}
 		whichOne := req.Header.Get("X-Trigger")
 		switch whichOne {
 		case "PUSH_END":
@@ -45,12 +51,7 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 //   push target URI
 // TriggerLiveTrackList is used only by transcoding.
 func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(t *Trigger) {
-	payload, err := io.ReadAll(t.req.Body)
-	if err != nil {
-		t.Err("Cannot read payload", err)
-		return
-	}
-	lines := strings.Split(strings.TrimSuffix(string(payload), "\n"), "\n")
+	lines := strings.Split(strings.TrimSuffix(string(t.payload), "\n"), "\n")
 	t.streamName = lines[0]
 	encodedTracks := lines[1]
 
@@ -63,14 +64,14 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(t *Trigger) {
 	if streamEnded := encodedTracks == "null"; streamEnded {
 		// SOURCE_PREFIX stream is no longer needed
 		inputStream := fmt.Sprintf("%s%s", SOURCE_PREFIX, suffix)
-		if err = d.MistClient.DeleteStream(inputStream); err != nil {
+		if err := d.MistClient.DeleteStream(inputStream); err != nil {
 			log.Printf("ERROR LIVE_TRACK_LIST DeleteStream(%s) %v", inputStream, err)
 		}
 		// Multiple pushes from RENDITION_PREFIX are in progress.
 		return
 	}
 	tracks := make(LiveTrackListTriggerJson)
-	if err = json.Unmarshal([]byte(encodedTracks), &tracks); err != nil {
+	if err := json.Unmarshal([]byte(encodedTracks), &tracks); err != nil {
 		t.Err("LiveTrackListTriggerJson json decode error", err)
 		return
 	}
@@ -105,14 +106,9 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(t *Trigger) {
 //   last 10 log messages (JSON array string)
 //   most recent push status (JSON object string)
 func (d *MistCallbackHandlersCollection) TriggerPushEnd(t *Trigger) {
-	payload, err := io.ReadAll(t.req.Body)
-	if err != nil {
-		t.Err("Cannot read payload", err)
-		return
-	}
-	lines := strings.Split(strings.TrimSuffix(string(payload), "\n"), "\n")
+	lines := strings.Split(strings.TrimSuffix(string(t.payload), "\n"), "\n")
 	if len(lines) != 6 {
-		errors.WriteHTTPBadRequest(t.w, "Bad request payload", fmt.Errorf("unknown payload '%s'", string(payload)))
+		errors.WriteHTTPBadRequest(t.w, "Bad request payload", fmt.Errorf("unknown payload '%s'", string(t.payload)))
 		return
 	}
 	// stream name is the second line in the Mist Trigger payload
@@ -133,14 +129,14 @@ func (d *MistCallbackHandlersCollection) TranscodingPushEnd(t *Trigger, destinat
 		t.Err("unknown push source", err)
 		return
 	}
-	inOurBooks := false
-	for i := 0; i < len(info.Destionations); i++ {
-		if info.Destionations[i] == destination {
-			inOurBooks = true
+	isBeingProcessed := false
+	for i := 0; i < len(info.Destinations); i++ {
+		if info.Destinations[i] == destination {
+			isBeingProcessed = true
 			break
 		}
 	}
-	if !inOurBooks {
+	if !isBeingProcessed {
 		t.Err("missing from our books", nil)
 		return
 	}
@@ -167,6 +163,15 @@ func (d *MistCallbackHandlersCollection) TranscodingPushEnd(t *Trigger, destinat
 
 func (d *MistCallbackHandlersCollection) SegmentingPushEnd(t *Trigger) {
 	// when uploading is done, remove trigger and stream from Mist
+	defer d.StreamCache.Segmenting.Remove(t.streamName)
+	callbackClient := clients.NewCallbackClient()
+	callbackUrl, errC := d.StreamCache.Segmenting.GetCallbackUrl(t.streamName)
+	if errC != nil {
+		t.Err("PUSH_END trigger invoked for unknown stream", errC)
+	}
+	if errC == nil {
+		errC = callbackClient.SendTranscodeStatus(callbackUrl, clients.TranscodeStatusTranscoding, 0.0)
+	}
 	errT := d.MistClient.DeleteTrigger(t.streamName, "PUSH_END")
 	errS := d.MistClient.DeleteStream(t.streamName)
 	if errT != nil {
@@ -177,24 +182,18 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(t *Trigger) {
 		t.Err(fmt.Sprintf("Cannot remove stream '%s'", t.streamName), errS)
 		return
 	}
-
-	callbackClient := clients.NewCallbackClient()
-	callbackUrl, err := d.StreamCache.Segmenting.GetCallbackUrl(t.streamName)
-	if err != nil {
-		t.Err("PUSH_END trigger invoked for unknown stream", err)
+	if errC != nil {
+		t.Err("Cannot send transcode status", errC)
 	}
-	if err := callbackClient.SendTranscodeStatus(callbackUrl, clients.TranscodeStatusTranscoding, 0.0); err != nil {
-		t.Err("Cannot send transcode status", err)
-	}
-	d.StreamCache.Segmenting.Remove(t.streamName)
 
 	// TODO: add timeout for the stream upload
 	// TODO: start transcoding
 }
 
 type Trigger struct {
-	w   http.ResponseWriter
-	req *http.Request
+	w       http.ResponseWriter
+	req     *http.Request
+	payload []byte
 
 	streamName string
 }
