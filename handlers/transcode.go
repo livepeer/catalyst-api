@@ -100,18 +100,18 @@ func configForSubprocess(req *TranscodeSegmentRequest, bPort int, inputStreamNam
 		HardcodedBroadcasters: fmt.Sprintf(`[{"address":"http://127.0.0.1:%d"}]`, bPort),
 	}
 	// Setup requested rendition profiles
-	for i := 0; i < len(req.Profiles); i++ {
-		Width := req.Profiles[i].Width
-		Height := req.Profiles[i].Height
-		Fps := int32(req.Profiles[i].FPS)
+	for _, profile := range req.Profiles {
+		Width := profile.Width
+		Height := profile.Height
+		Fps := int32(profile.FPS)
 		conf.Profiles = append(conf.Profiles, ProcLivepeerConfigProfile{
-			Name:       req.Profiles[i].Name,
-			Bitrate:    req.Profiles[i].Bitrate,
+			Name:       profile.Name,
+			Bitrate:    profile.Bitrate,
 			Width:      &Width,
 			Height:     &Height,
 			Fps:        &Fps,
-			GOP:        req.Profiles[i].GOP,
-			AvcProfile: req.Profiles[i].Profile,
+			GOP:        profile.GOP,
+			AvcProfile: profile.Profile,
 		})
 	}
 	return conf

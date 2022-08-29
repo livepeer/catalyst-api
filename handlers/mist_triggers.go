@@ -128,8 +128,8 @@ func (d *MistCallbackHandlersCollection) TranscodingPushEnd(w http.ResponseWrite
 		return
 	}
 	isBeingProcessed := false
-	for i := 0; i < len(info.Destinations); i++ {
-		if info.Destinations[i] == destination {
+	for _, existing := range info.Destinations {
+		if existing == destination {
 			isBeingProcessed = true
 			break
 		}

@@ -72,9 +72,9 @@ func TestSegmentTranscode(t *testing.T) {
 	// Wait for callbacks. 200 response code indicates transcoding is complete, we are still waiting for renditions to be stored into s3 destination.
 	jsonMessages := readItems(t, callbacks, 3, 5*time.Second)
 	// Must find 2x segment-rendition-upload and 1x segment-transcode
-	for i := 0; i < len(jsonMessages); i++ {
-		require.Equal(t, "", jsonMessages[i].Error, "%s", jsonMessages[i])
-		require.Truef(t, "segment-transcode" == jsonMessages[i].Status || "segment-rendition-upload" == jsonMessages[i].Status, "%s", jsonMessages[i])
+	for _, message := range jsonMessages {
+		require.Equal(t, "", message.Error, "%s", message)
+		require.Truef(t, "segment-transcode" == message.Status || "segment-rendition-upload" == message.Status, "%s", message)
 	}
 }
 
@@ -92,9 +92,9 @@ func readItems(t *testing.T, queue chan string, count int, deadline time.Duratio
 		}
 	}
 	messages := make([]*clients.TranscodeStatusMessage, 0, len(items))
-	for i := 0; i < len(items); i++ {
+	for _, item := range items {
 		msg := clients.TranscodeStatusMessage{}
-		err := json.Unmarshal([]byte(items[i]), &msg)
+		err := json.Unmarshal([]byte(item), &msg)
 		require.NoError(t, err)
 		messages = append(messages, &msg)
 	}
