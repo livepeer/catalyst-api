@@ -3,7 +3,7 @@
 
 # Future optimizations
 
-- Duplicating `source` stream into `/dev/null` just to start `source` stream download from S3.
+- Start `source` stream from `MistProcLivepeer` instead duplicating `source` stream into `/dev/null`.
 - Do not send audio track to Broadcaster if no audio processing takes place. This saves on network bandwidth moving audio to B-node and back.
 - Instead several consecutive steps we can have single exposed API call to Mist server. Moving entire logic into Mist server.
 - Calculate correctly completion percentage sent to Studio
