@@ -21,7 +21,6 @@ func main() {
 	port := flag.Int("port", 4949, "Port to listen on")
 	mistJson := flag.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
 	// Transcode endpoint starts MistProcLivepeer as subprocess so we need path to the binary(mistlp) and port of local Broadcaster(b-port)
-	bPort := flag.Int("b-port", 8935, "Port of local B node")
 	mistProcPath := flag.String("mistlp", "./MistProcLivepeer", "path to MistProcLivepeer")
 
 	flag.Parse()
@@ -37,7 +36,7 @@ func main() {
 	}
 
 	listen := fmt.Sprintf("0.0.0.0:%d", *port)
-	router := NewCatalystAPIRouter(mc, *bPort, *mistProcPath)
+	router := NewCatalystAPIRouter(mc, *mistProcPath)
 
 	stdlog.Println("Starting Catalyst API version", config.Version, "listening on", listen)
 	err := http.ListenAndServe(listen, router)
@@ -45,7 +44,7 @@ func main() {
 
 }
 
-func NewCatalystAPIRouter(mc *handlers.MistClient, bPort int, mistProcPath string) *httprouter.Router {
+func NewCatalystAPIRouter(mc *handlers.MistClient, mistProcPath string) *httprouter.Router {
 	router := httprouter.New()
 
 	var logger log.Logger
@@ -59,7 +58,7 @@ func NewCatalystAPIRouter(mc *handlers.MistClient, bPort int, mistProcPath strin
 
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 	router.POST("/api/vod", withLogging(middleware.IsAuthorized(catalystApiHandlers.UploadVOD())))
-	router.POST("/api/transcode/file", withLogging(middleware.IsAuthorized(catalystApiHandlers.TranscodeSegment(bPort, mistProcPath))))
+	router.POST("/api/transcode/file", withLogging(middleware.IsAuthorized(catalystApiHandlers.TranscodeSegment(mistProcPath))))
 	router.POST("/api/mist/trigger", withLogging(mistCallbackHandlers.Trigger()))
 
 	return router

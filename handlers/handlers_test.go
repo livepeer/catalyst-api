@@ -98,11 +98,10 @@ func TestSegmentBodyFormat(t *testing.T) {
 			"profiles": [{"name": "t","width": 1280,"height": 720,"bitrate": 70000,"fps": 30}]
 		}`),
 	}
-	bPort := 8935
 	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}}
 	router := httprouter.New()
 
-	router.POST("/api/transcode/file", catalystApiHandlers.TranscodeSegment(bPort, mistProcPath))
+	router.POST("/api/transcode/file", catalystApiHandlers.TranscodeSegment(mistProcPath))
 	for _, payload := range badRequests {
 		req, _ := http.NewRequest("POST", "/api/transcode/file", bytes.NewBuffer(payload))
 		req.Header.Set("Content-Type", "application/json")

@@ -34,7 +34,8 @@ import (
 
 const port int = 4949
 const mistPort int = 4242
-const bPort int = 8935
+
+// const bPort int = 8935
 
 func TestSegmentTranscode(t *testing.T) {
 	mc := &MistClient{
@@ -47,7 +48,7 @@ func TestSegmentTranscode(t *testing.T) {
 	sc := NewStreamCache()
 	catalystApiHandlers := &CatalystAPIHandlersCollection{MistClient: mc, StreamCache: sc}
 	mistCallbackHandlers := &MistCallbackHandlersCollection{MistClient: mc, StreamCache: sc}
-	router.POST("/api/transcode/file", catalystApiHandlers.TranscodeSegment(bPort, mistProcPath))
+	router.POST("/api/transcode/file", catalystApiHandlers.TranscodeSegment(mistProcPath))
 	router.POST("/api/mist/trigger", mistCallbackHandlers.Trigger())
 	// Setup callback capture server
 	callbacks := make(chan string, 10)
@@ -70,7 +71,7 @@ func TestSegmentTranscode(t *testing.T) {
 	require.Equal(t, 200, rr.Result().StatusCode)
 	require.Equal(t, "Transcode done; Upload in progress", rr.Body.String())
 	// Wait for callbacks. 200 response code indicates transcoding is complete, we are still waiting for renditions to be stored into s3 destination.
-	jsonMessages := readItems(t, callbacks, 3, 5*time.Second)
+	jsonMessages := readItems(t, callbacks, 3, 7*time.Second)
 	// Must find 2x segment-rendition-upload and 1x segment-transcode
 	for _, message := range jsonMessages {
 		require.Equal(t, "", message.Error, "%s", message)

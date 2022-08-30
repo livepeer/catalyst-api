@@ -5,7 +5,8 @@ import (
 	"sync"
 )
 
-// Shared server state. Each pipeline (usually endpoint) having separate books.
+// StreamCache is per server shared state.
+// Each pipeline (usually endpoint) having separate structure for keeping state between HTTP calls.
 // State is protected by mutex allowing concurent usage.
 // All state manipulation is contained in this file with goal to be brief and release mutex asap.
 type StreamCache struct {

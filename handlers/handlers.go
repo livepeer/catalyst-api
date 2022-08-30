@@ -46,9 +46,9 @@ func (d *CatalystAPIHandlersCollection) Ok() httprouter.Handle {
 //    - Determine is it error or successful upload
 //    - Invoke callback to studio
 // 7. When all started pushes are complete invoke callback to studio; remove stream from StreamCache
-func (d *CatalystAPIHandlersCollection) TranscodeSegment(broadcasterPort int, mistProcPath string) httprouter.Handle {
+func (d *CatalystAPIHandlersCollection) TranscodeSegment(mistProcPath string) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-		t := Transcoding{httpResp: w, httpReq: req, broadcasterPort: broadcasterPort, mistProcPath: mistProcPath}
+		t := Transcoding{httpResp: w, httpReq: req, broadcasterPort: 8935, mistProcPath: mistProcPath}
 		if err := t.ValidateRequest(); err != nil {
 			log.Printf("TranscodeSegment request validation failed %v", err)
 			return
