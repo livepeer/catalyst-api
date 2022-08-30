@@ -14,7 +14,7 @@ type StreamCache struct {
 	Transcoding TranscodingCache
 }
 
-// Returns pointer so each handler would refer to same object (kind of singleton)
+// NewStreamCache returns pointer so each handler would refer to same object (kind of singleton)
 func NewStreamCache() *StreamCache {
 	c := &StreamCache{}
 	c.Init()
