@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -90,4 +91,22 @@ func TestTranscodeStatusErrorNotifcation(t *testing.T) {
 	// Send the callback and confirm the number of times we retried
 	client := NewCallbackClient()
 	require.NoError(t, client.SendTranscodeStatusError(svr.URL, "something went wrong"))
+}
+
+func TestItCalculatesTheOverallCompletionRatioCorrectly(t *testing.T) {
+	testCases := []struct {
+		status                         TranscodeStatus
+		completionRatio                float64
+		expectedOverallCompletionRatio float64
+	}{
+		{TranscodeStatusPreparing, 0.5, 0.2},           // Half complete in the Preparing stage (i.e half way between 0 and 0.4)
+		{TranscodeStatusPreparingCompleted, 1234, 0.4}, // Preparing Completed should always == 0.4 for now, regardless of what's reported as the stage ratio
+		{TranscodeStatusTranscoding, 0.5, 0.7},         // Half complete in the Transcoding stage (i.e half way between 0.4 and 1)
+		{TranscodeStatusCompleted, 5678, 1},            // Completed should always == 1, regardless of what's reported as the stage ratio
+	}
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%f in %s", tc.completionRatio, tc.status), func(t *testing.T) {
+			require.Equal(t, tc.expectedOverallCompletionRatio, overallCompletionRatio(tc.status, tc.completionRatio))
+		})
+	}
 }
