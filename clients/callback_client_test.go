@@ -23,7 +23,7 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 		// Check that we got the callback we're expecting
 		body, err := ioutil.ReadAll(r.Body)
 		require.NoError(t, err)
-		require.JSONEq(t, `{"completion_ratio":1, "status":"transcoding-completed", "timestamp": 123456789}`, string(body))
+		require.JSONEq(t, `{"completion_ratio":1, "status":"success", "timestamp": 123456789}`, string(body))
 
 		// Return HTTP error codes the first two times
 		tries += 1
@@ -55,7 +55,7 @@ func TestItEventuallyStopsRetrying(t *testing.T) {
 		// Check that we got the callback we're expecting
 		body, err := ioutil.ReadAll(r.Body)
 		require.NoError(t, err)
-		require.JSONEq(t, `{"completion_ratio":1, "status":"transcoding-completed", "timestamp": 123456789}`, string(body))
+		require.JSONEq(t, `{"completion_ratio":1, "status":"success", "timestamp": 123456789}`, string(body))
 
 		tries += 1
 

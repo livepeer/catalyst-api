@@ -151,7 +151,7 @@ func (ts TranscodeStatus) String() string {
 	case TranscodeStatusTranscoding:
 		return "transcoding"
 	case TranscodeStatusCompleted:
-		return "transcoding-completed"
+		return "success"
 	case TranscodeStatusError:
 		return "error"
 	}
