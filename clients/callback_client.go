@@ -102,24 +102,24 @@ func overallCompletionRatio(status TranscodeStatus, currentStageCompletionRatio 
 		currentStageCompletionRatio = 1
 	}
 
-	// Define the "base" numbers - e.g the overall ratio we start each stage at
-	var TranscodeStatusPreparingBase float64 = 0.0
-	var TranscodeStatusPreparingTranscodingBase float64 = 0.4
-	var TranscodeStatusCompletedBase float64 = 1
+	// These are at the end of stages, so should always be 100% complete
+	if status == TranscodeStatusPreparingCompleted || status == TranscodeStatusCompleted {
+		currentStageCompletionRatio = 1
+	}
 
 	switch status {
-	case TranscodeStatusPreparing:
-		return TranscodeStatusPreparingBase + (currentStageCompletionRatio * (TranscodeStatusPreparingTranscodingBase - TranscodeStatusPreparingBase))
-	case TranscodeStatusPreparingCompleted:
-		return TranscodeStatusPreparingTranscodingBase
-	case TranscodeStatusTranscoding:
-		return TranscodeStatusPreparingTranscodingBase + (currentStageCompletionRatio * (TranscodeStatusCompletedBase - TranscodeStatusPreparingTranscodingBase))
-	case TranscodeStatusCompleted:
-		return TranscodeStatusCompletedBase
-	default:
-		// Either unhandled or an error
-		return -1
+	case TranscodeStatusPreparing, TranscodeStatusPreparingCompleted:
+		return scaleProgress(currentStageCompletionRatio, 0, 0.4)
+	case TranscodeStatusTranscoding, TranscodeStatusCompleted:
+		return scaleProgress(currentStageCompletionRatio, 0.4, 1)
 	}
+
+	// Either unhandled or an error
+	return -1
+}
+
+func scaleProgress(progress, start, end float64) float64 {
+	return start + progress*(end-start)
 }
 
 // An enum of potential statuses a Transcode job can have
