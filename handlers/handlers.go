@@ -31,12 +31,12 @@ func (d *CatalystAPIHandlersCollection) Ok() httprouter.Handle {
 //
 // The process looks as follows:
 // 1. Add SOURCE stream to Mist using MistClient
-// 2. Execute the `MistProceLivepeer` process to perform the following operations:
+// 2. Execute the `MistProcLivepeer` process to perform the following operations:
 //    - Take SOURCE stream and segment it
 //    - Push each segment to Broadcaster
 //    - Receive transcoded segment from Broadcaster, ingest into RENDITION stream
 // 3. Start SOURCE stream by creating, unused, push to /dev/null.ts
-// 4. `MistProceLivepeer` process is unblocked, starts to work
+// 4. `MistProcLivepeer` process is unblocked, starts to work
 // 5. Return 200 OK response
 // 5. Respond to LIVE_TRACK_LIST trigger:
 //    - Extract track information

@@ -36,14 +36,12 @@ func (c CallbackClient) DoWithRetries(r *http.Request) error {
 
 	resp, err := c.httpClient.Do(r)
 	if err != nil {
-		err = fmt.Errorf("failed to send callback to %q. Error: %s", r.URL.String(), err)
-		return err
+		return fmt.Errorf("failed to send callback to %q. Error: %s", r.URL.String(), err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		err = fmt.Errorf("failed to send callback to %q. HTTP Code: %d", r.URL.String(), resp.StatusCode)
-		return err
+		return fmt.Errorf("failed to send callback to %q. HTTP Code: %d", r.URL.String(), resp.StatusCode)
 	}
 
 	return nil
@@ -157,9 +155,9 @@ func (ts TranscodeStatus) String() string {
 	case TranscodeStatusError:
 		return "error"
 	case TranscodeStatusSegmentTranscoding:
-		return "segment-transcode"
+		return "segment_transcode"
 	case TranscodeStatusRenditionUpload:
-		return "segment-rendition-upload"
+		return "segment_rendition_upload"
 	}
 	return "unknown"
 }

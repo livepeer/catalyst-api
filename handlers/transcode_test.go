@@ -72,10 +72,10 @@ func TestSegmentTranscode(t *testing.T) {
 	require.Equal(t, "Transcode done; Upload in progress", rr.Body.String())
 	// Wait for callbacks. 200 response code indicates transcoding is complete, we are still waiting for renditions to be stored into s3 destination.
 	jsonMessages := readItems(t, callbacks, 3, 7*time.Second)
-	// Must find 2x segment-rendition-upload and 1x segment-transcode
+	// Must find 2x segment_rendition_upload and 1x segment_transcode
 	for _, message := range jsonMessages {
 		require.Equal(t, "", message.Error, "%s", message)
-		require.Truef(t, "segment-transcode" == message.Status || "segment-rendition-upload" == message.Status, "%s", message)
+		require.Truef(t, "segment_transcode" == message.Status || "segment_rendition_upload" == message.Status, "%s", message)
 	}
 }
 
@@ -129,7 +129,7 @@ func serveAPI(port int, router *httprouter.Router) func() {
 	}()
 	return func() {
 		// stop API server
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := server.Shutdown(ctx); err != nil {
 			log.Printf("server.Shutdown %v", err)

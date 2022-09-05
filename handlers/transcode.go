@@ -124,7 +124,6 @@ type Transcoding struct {
 	mistProcPath    string
 
 	request          TranscodeSegmentRequest
-	callback         clients.CallbackClient
 	inputStream      string
 	renditionsStream string
 }
@@ -150,14 +149,13 @@ func (t *Transcoding) ValidateRequest() error {
 		errors.WriteHTTPBadRequest(t.httpResp, "Invalid request payload", err)
 		return err
 	}
-	t.callback = clients.NewCallbackClient()
 	return nil
 }
 
 func (t *Transcoding) PrepareStreams(mist MistAPIClient) error {
 	t.inputStream, t.renditionsStream = generateStreamNames()
 	if err := mist.AddStream(t.inputStream, t.request.SourceFile); err != nil {
-		where := fmt.Sprintf("error AddStream(%s)", t.inputStream)
+		where := fmt.Sprintf("AddStream(%s)", t.inputStream)
 		t.errorOut(where, err)
 		errors.WriteHTTPInternalServerError(t.httpResp, where, err)
 		return err
@@ -165,47 +163,45 @@ func (t *Transcoding) PrepareStreams(mist MistAPIClient) error {
 	return nil
 }
 
-// We run `MistLivepeeerProc` binary directly. Usually MistController starts Mist binaries.
-// Currently the best way is for go code to start Mist binary directly.
-// `MistLivepeeerProc` takes input from `t.inputStream` and place renditions into `t.renditionsStream`
-// The transcoding happens via local Broadcaster node, that is why we need t.broadcasterPort.
+// RunTranscodeProcess starts `MistLivepeeerProc` as a subprocess to transcode inputStream into renditionsStream.
+// The transcoding happens via local Broadcaster node, that is why we need broadcasterPort.
 func (t *Transcoding) RunTranscodeProcess(mist MistAPIClient, cache *StreamCache) {
 	configPayload, err := json.Marshal(configForSubprocess(&t.request, t.broadcasterPort, t.inputStream, t.renditionsStream))
 	if err != nil {
-		t.errorOut("error ProcLivepeerConfig json encode", err)
+		t.errorOut("ProcLivepeerConfig json encode", err)
 		return
 	}
 	transcodeCommand := exec.Command(t.mistProcPath, "-")
 	stdinPipe, err := transcodeCommand.StdinPipe()
 	if err != nil {
-		t.errorOut("error transcodeCommand.StdinPipe()", err)
+		t.errorOut("transcodeCommand.StdinPipe()", err)
 		return
 	}
 	commandOutputToLog(transcodeCommand, "coding")
 	sent, err := stdinPipe.Write(configPayload)
 	if err != nil {
-		t.errorOut("error stdinPipe.Write()", err)
+		t.errorOut("stdinPipe.Write()", err)
 		return
 	}
 	if sent != len(configPayload) {
-		t.errorOut("error short write on stdinPipe.Write()", err)
+		t.errorOut("short write on stdinPipe.Write()", err)
 		return
 	}
 	err = stdinPipe.Close()
 	if err != nil {
-		t.errorOut("error stdinPipe.Close()", err)
+		t.errorOut("stdinPipe.Close()", err)
 		return
 	}
 	err = transcodeCommand.Start()
 	if err != nil {
-		t.errorOut("error start transcodeCommand", err)
+		t.errorOut("start transcodeCommand", err)
 		return
 	}
 
 	// TODO: remove when Mist code is updated https://github.com/DDVTECH/mistserver/issues/81
 	// Starting SOURCE_PREFIX stream because MistProcLivepeer is unable to start it automatically
 	if err := mist.PushStart(t.inputStream, "/opt/null.ts"); err != nil {
-		t.errorOut("error PushStart(inputStream)", err)
+		t.errorOut("PushStart(inputStream)", err)
 		return
 	}
 
@@ -220,14 +216,15 @@ func (t *Transcoding) RunTranscodeProcess(mist MistAPIClient, cache *StreamCache
 	if exit, ok := err.(*exec.ExitError); ok {
 		log.Printf("MistProcLivepeer returned %d", exit.ExitCode())
 	} else if err != nil {
-		t.errorOut("error exec transcodeCommand", err)
+		t.errorOut("exec transcodeCommand", err)
 		return
 	}
 }
 
 func (t *Transcoding) errorOut(where string, err error) {
-	if err := t.callback.SendSegmentTranscodeError(t.request.CallbackUrl, where, err.Error(), t.request.SourceFile); err != nil {
-		log.Printf("error send transcode error %v", err)
+	callback := clients.NewCallbackClient()
+	if err := callback.SendSegmentTranscodeError(t.request.CallbackUrl, where, err.Error(), t.request.SourceFile); err != nil {
+		log.Printf("send transcode error %v", err)
 		return
 	}
 }

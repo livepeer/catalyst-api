@@ -12,20 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func waitForCallbacks(t *testing.T, c chan struct{}, count int, timeout time.Duration) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	happened := 0
-	for happened < count {
-		select {
-		case <-c:
-			happened += 1
-		case <-ctx.Done():
-			require.FailNow(t, "Expected async result within this timeout")
-		}
-	}
-}
-
 func TestItRetriesOnFailedCallbacks(t *testing.T) {
 	config.Clock = config.FixedTimestampGenerator{Timestamp: 123456789}
 	defer func() { config.Clock = config.RealTimestampGenerator{} }()
@@ -57,7 +43,7 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 	// Send the callback and confirm the number of times we retried
 	client := NewCallbackClient()
 	require.NoError(t, client.SendTranscodeStatus(svr.URL, TranscodeStatusCompleted, 1))
-	waitForCallbacks(t, callbacks, 3, 1*time.Second)
+	waitForCallbacks(t, callbacks, 3, 5*time.Second)
 	require.Equal(t, 3, tries, "Expected the client to retry on failed callbacks")
 }
 
@@ -87,7 +73,7 @@ func TestItEventuallyStopsRetrying(t *testing.T) {
 	// Send the callback and confirm the number of times we retried
 	client := NewCallbackClient()
 	require.NoError(t, client.SendTranscodeStatus(svr.URL, TranscodeStatusCompleted, 1))
-	waitForCallbacks(t, callbacks, 3, 1*time.Second)
+	waitForCallbacks(t, callbacks, 3, 5*time.Second)
 	require.Equal(t, 3, tries, "Expected the client to retry on failed callbacks")
 	// The case for more than 3 retries is not tested
 }
@@ -112,5 +98,19 @@ func TestTranscodeStatusErrorNotifcation(t *testing.T) {
 	// Send the callback and confirm the number of times we retried
 	client := NewCallbackClient()
 	require.NoError(t, client.SendTranscodeStatusError(svr.URL, "something went wrong"))
-	waitForCallbacks(t, callbacks, 1, 1*time.Second)
+	waitForCallbacks(t, callbacks, 1, 5*time.Second)
+}
+
+func waitForCallbacks(t *testing.T, c chan struct{}, count int, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	happened := 0
+	for happened < count {
+		select {
+		case <-c:
+			happened += 1
+		case <-ctx.Done():
+			require.FailNow(t, "Expected async result within this timeout")
+		}
+	}
 }

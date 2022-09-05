@@ -1,5 +1,42 @@
 
-[![](https://mermaid.ink/img/pako:eNqlVMFu2zAM_RXC13WX9WYMAZI2w4K5nREnuyyFoUm0I8yWPEkO2hX991G2lThxgGFYDoFNvyc-PpJ6jbgWGMWRxV8tKo73kpWG1TsF9GuYcZLLhikH2e00Nk9X0-CDtO5KNE2A2e5jajTHRB6wQTQwhS48cGE0E5xZh6ZHUK73sxn9x7AxTFmv--MPM7NY1qiGjIw7eWAOT8oeNb1VWDjQBVxhO0qMYpzCS4xhLgRYZ5DVHuZMbg3Pn19-j07VB5Lfo3sknGCexCl2eXaaxJD5nITtZUhVevB3g0pIJ7WywLUqZPnUEwVOi6q0buCTNkDf9nDmAFCjjkWsVInWgVROn1cxCA4Ujw7qHtpnqBssnQ0He2phdA3Z1-36bnnJTROiLmJIW7sHrTpbpWpadylsEVKs0ZlW0WcykFUefyw-cGwgjZz21Husj_o88SAFau8l_2nPFZ05EMxGMWB7kc5Tc588f3fpCgX7h8GcbnaS1bdlvlnP777kySrb9KbKsgxDelJ7PmpD2j5rocEgR1oAca2dI60bTwpljaezG1toyPGLFma3MWybinYHLE1WhcBaIbvuM3WMda714k_G_WPB8GG6NGusqfj_3RuBFbqr3gySr9ozVp1us8_58vF-0p9Jh06D13auhbRHM_5yf3BdN4Pa6Caq0dRMCrpOXz17F7k91riLYnoUWLC2crtop94I2jaCVnpJybWJ4oJVFm8i1jqdvSgexbQgGEDDlTyg3v4A72LpfQ)](https://mermaid.live/edit#pako:eNqlVMFu2zAM_RXC13WX9WYMAZI2w4K5nREnuyyFoUm0I8yWPEkO2hX991G2lThxgGFYDoFNvyc-PpJ6jbgWGMWRxV8tKo73kpWG1TsF9GuYcZLLhikH2e00Nk9X0-CDtO5KNE2A2e5jajTHRB6wQTQwhS48cGE0E5xZh6ZHUK73sxn9x7AxTFmv--MPM7NY1qiGjIw7eWAOT8oeNb1VWDjQBVxhO0qMYpzCS4xhLgRYZ5DVHuZMbg3Pn19-j07VB5Lfo3sknGCexCl2eXaaxJD5nITtZUhVevB3g0pIJ7WywLUqZPnUEwVOi6q0buCTNkDf9nDmAFCjjkWsVInWgVROn1cxCA4Ujw7qHtpnqBssnQ0He2phdA3Z1-36bnnJTROiLmJIW7sHrTpbpWpadylsEVKs0ZlW0WcykFUefyw-cGwgjZz21Husj_o88SAFau8l_2nPFZ05EMxGMWB7kc5Tc588f3fpCgX7h8GcbnaS1bdlvlnP777kySrb9KbKsgxDelJ7PmpD2j5rocEgR1oAca2dI60bTwpljaezG1toyPGLFma3MWybinYHLE1WhcBaIbvuM3WMda714k_G_WPB8GG6NGusqfj_3RuBFbqr3gySr9ozVp1us8_58vF-0p9Jh06D13auhbRHM_5yf3BdN4Pa6Caq0dRMCrpOXz17F7k91riLYnoUWLC2crtop94I2jaCVnpJybWJ4oJVFm8i1jqdvSgexbQgGEDDlTyg3v4A72LpfQ)
+
+```mermaid
+sequenceDiagram
+    participant S3
+    participant API
+    participant Mist
+    participant MPL as MistProcLivepeer
+    participant B as Broadcaster
+    API->>API: Transcode<br>segment
+    activate API
+    Note left of API: Transcode<br>started
+    API->>Mist: Add stream<br>tr_src_xyz
+    Note over Mist: stream tr_src_xyz<br>created
+    API->>MPL: Start transcoding<br>[renditions config]
+    deactivate API
+    loop For each segment
+      S3->>Mist: Ingest into<br>tr_src_xyz stream
+      Mist->>MPL: Mux mpegts segment<br>from SOURCE stream
+      MPL->>B: Push one<br>input segment
+      B->>MPL: Retrun several<br>rendition segments
+      Note over MPL: Demux mpegts<br>video tracks
+      MPL->>Mist: Ingest transcoded tracks<br>into tr_rend_+xyz stream
+    end
+    Mist->>API: LIVE_TRACK_LIST<br>trigger
+    Note over API: Transcoded track<br>info received
+    loop For each transcoded Track
+      API->>Mist: start push
+      Mist->>S3: Upload single audio<br>and single video<br>tracks
+    end
+    Mist->>API: LIVE_TRACK_LIST<br>trigger 2
+    API->>Mist: Remove stream<br>tr_src_xyz
+    Note over Mist: stream tr_src_xyz<br>deleted
+    loop For each<br>transcoded Track
+      Mist->>API: PUSH_END<br>trigger
+      Note over API: rendition uploaded
+    end
+    Note left of API: Transcode<br>completed
+```
 
 # Future optimizations
 
