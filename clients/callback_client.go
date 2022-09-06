@@ -205,7 +205,7 @@ type InputVideo struct {
 	Format    string            `json:"format"`
 	Tracks    []InputVideoTrack `json:"tracks"`
 	Duration  float64           `json:"duration"`
-	SizeBytes float64           `json:"size"`
+	SizeBytes int               `json:"size"`
 }
 
 type OutputVideoFile struct {
