@@ -200,7 +200,7 @@ func (t *Transcoding) RunTranscodeProcess(mist MistAPIClient, cache *StreamCache
 
 	// TODO: remove when Mist code is updated https://github.com/DDVTECH/mistserver/issues/81
 	// Starting SOURCE_PREFIX stream because MistProcLivepeer is unable to start it automatically
-	if err := mist.PushStart(t.inputStream, "/opt/null.ts"); err != nil {
+	if err := mist.PushStart(t.inputStream, "/tmp/mist/alex.ts"); err != nil {
 		t.errorOut("PushStart(inputStream)", err)
 		return
 	}
