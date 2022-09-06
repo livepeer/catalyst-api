@@ -79,7 +79,7 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 		Err(streamName, "LIVE_TRACK_LIST unknown push source", err, w)
 		return
 	}
-	for i := range tracks { // i is generated name, not important, all info is contained in element
+	for i := range tracks {
 		if tracks[i].Type != "video" {
 			// Only produce an rendition per each video track, selecting best audio track
 			continue
