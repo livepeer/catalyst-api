@@ -228,24 +228,28 @@ func stubTranscodingCallbacksForStudio(callbackURL string, callbackClient client
 		clients.InputVideo{
 			Format:   "mp4",
 			Duration: 1234.5678,
-			Tracks: []clients.InputVideoTrack{
+			Tracks: []clients.InputTrack{
 				{
-					Fps:         30,
 					Type:        "video",
 					Codec:       "h264",
-					Width:       1920,
-					Height:      1080,
+					DurationSec: 1.6,
 					Bitrate:     358315,
-					Duration:    1.6,
-					PixelFormat: "yuv420p",
+					VideoTrack: clients.VideoTrack{
+						FPS:         30,
+						Width:       1920,
+						Height:      1080,
+						PixelFormat: "yuv420p",
+					},
 				},
 				{
-					Type:       "audio",
-					Codec:      "aac",
-					Bitrate:    141341,
-					Channels:   2,
-					Duration:   1.599979,
-					SampleRate: 48000,
+					Type:        "audio",
+					Codec:       "aac",
+					Bitrate:     141341,
+					DurationSec: 1.599979,
+					AudioTrack: clients.AudioTrack{
+						Channels:   2,
+						SampleRate: 48000,
+					},
 				},
 			},
 		},

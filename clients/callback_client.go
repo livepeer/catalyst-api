@@ -183,29 +183,41 @@ type TranscodeStatusMessage struct {
 	CompletionRatio float64 `json:"completion_ratio"` // No omitempty or we lose this for 0% completion case
 	Error           string  `json:"error,omitempty"`
 	Unretriable     bool    `json:"unretriable,omitempty"`
-	Status          string  `json:"status,omitempty"`
+	Status          string  `json:"status"`
 	Timestamp       int64   `json:"timestamp"`
 }
 
-type InputVideoTrack struct {
-	Fps         int     `json:"fps,omitempty"`
-	Type        string  `json:"type,omitempty"`
-	Codec       string  `json:"codec,omitempty"`
-	Width       int     `json:"width,omitempty"`
-	Height      int     `json:"height,omitempty"`
-	Bitrate     int     `json:"bitrate,omitempty"`
-	Duration    float64 `json:"duration,omitempty"`
-	PixelFormat string  `json:"pixel_format,omitempty"`
-	Channels    int     `json:"channels,omitempty"`
-	SampleRate  int     `json:"sample_rate,omitempty"`
-	SizeBytes   int     `json:"size,omitempty"`
+type VideoTrack struct {
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+	PixelFormat string `json:"pixel_format"`
+	FPS         int    `json:"fps"`
+}
+
+type AudioTrack struct {
+	Channels   int `json:"channels"`
+	SampleRate int `json:"sample_rate"`
+}
+
+type InputTrack struct {
+	Type        string  `json:"type"`
+	Codec       string  `json:"codec"`
+	Bitrate     int     `json:"bitrate"`
+	DurationSec float64 `json:"duration"`
+	SizeBytes   int     `json:"size"`
+
+	// Fields only used if this is a Video Track
+	VideoTrack
+
+	// Fields only used if this is an Audio Track
+	AudioTrack
 }
 
 type InputVideo struct {
-	Format    string            `json:"format"`
-	Tracks    []InputVideoTrack `json:"tracks"`
-	Duration  float64           `json:"duration"`
-	SizeBytes int               `json:"size"`
+	Format    string       `json:"format"`
+	Tracks    []InputTrack `json:"tracks"`
+	Duration  float64      `json:"duration"`
+	SizeBytes int          `json:"size"`
 }
 
 type OutputVideoFile struct {
