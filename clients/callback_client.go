@@ -90,6 +90,33 @@ func (c CallbackClient) SendTranscodeStatusError(callbackURL, errorMsg string) e
 	return c.DoWithRetries(r)
 }
 
+// Separate method as this requires a much richer message than the other status callbacks
+func (c CallbackClient) SendTranscodeStatusCompleted(url string, iv InputVideo, ov []OutputVideo) error {
+	tsm := TranscodeStatusCompletedMessage{
+		TranscodeStatusMessage: TranscodeStatusMessage{
+			CompletionRatio: overallCompletionRatio(TranscodeStatusCompleted, 1),
+			Status:          TranscodeStatusCompleted.String(),
+			Timestamp:       config.Clock.GetTimestampUTC(),
+		},
+		Type:       "video", // Assume everything is a video for now
+		InputVideo: iv,
+		Outputs:    ov,
+	}
+
+	j, err := json.Marshal(tsm)
+	if err != nil {
+		return err
+	}
+
+	r, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(j))
+	if err != nil {
+		return err
+	}
+
+	return c.DoWithRetries(r)
+
+}
+
 // Calculate the overall completion ratio based on the completion ratio of the current stage.
 // The weighting will need to be tweaked as we understand better the relative time spent in the
 // segmenting vs. transcoding stages.
@@ -134,14 +161,6 @@ const (
 	TranscodeStatusError
 )
 
-type TranscodeStatusMessage struct {
-	CompletionRatio float64 `json:"completion_ratio"` // No omitempty or we lose this for 0% completion case
-	Error           string  `json:"error,omitempty"`
-	Retriable       *bool   `json:"retriable,omitempty"` // Has to be a pointer or we can't differentiate omission from 'false'
-	Status          string  `json:"status,omitempty"`
-	Timestamp       int64   `json:"timestamp"`
-}
-
 func (ts TranscodeStatus) String() string {
 	switch ts {
 	case TranscodeStatusPreparing:
@@ -156,4 +175,53 @@ func (ts TranscodeStatus) String() string {
 		return "error"
 	}
 	return "unknown"
+}
+
+// The various status messages we can send
+
+type TranscodeStatusMessage struct {
+	CompletionRatio float64 `json:"completion_ratio"` // No omitempty or we lose this for 0% completion case
+	Error           string  `json:"error,omitempty"`
+	Retriable       *bool   `json:"retriable,omitempty"` // Has to be a pointer or we can't differentiate omission from 'false'
+	Status          string  `json:"status,omitempty"`
+	Timestamp       int64   `json:"timestamp"`
+}
+
+type InputVideoTrack struct {
+	Fps         int     `json:"fps,omitempty"`
+	Type        string  `json:"type,omitempty"`
+	Codec       string  `json:"codec,omitempty"`
+	Width       int     `json:"width,omitempty"`
+	Height      int     `json:"height,omitempty"`
+	Bitrate     int     `json:"bitrate,omitempty"`
+	Duration    float64 `json:"duration,omitempty"`
+	PixelFormat string  `json:"pixel_format,omitempty"`
+	Channels    int     `json:"channels,omitempty"`
+	SampleRate  int     `json:"sampleRate,omitempty"`
+	SizeBytes   int     `json:"size,omitempty"`
+}
+
+type InputVideo struct {
+	Format   string            `json:"format"`
+	Tracks   []InputVideoTrack `json:"tracks"`
+	Duration float64           `json:"duration"`
+}
+
+type OutputVideoFile struct {
+	Type      string `json:"type"`
+	SizeBytes int    `json:"size"`
+	Location  string `json:"location"`
+}
+
+type OutputVideo struct {
+	Type     string            `json:"type"`
+	Manifest string            `json:"manifest"`
+	Videos   []OutputVideoFile `json:"videos"`
+}
+
+type TranscodeStatusCompletedMessage struct {
+	TranscodeStatusMessage
+	Type       string        `json:"type"`
+	InputVideo InputVideo    `json:"video_spec"`
+	Outputs    []OutputVideo `json:"outputs"`
 }
