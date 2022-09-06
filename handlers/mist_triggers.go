@@ -46,7 +46,7 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 // It is stream-specific and must be blocking. The payload for this trigger is multiple lines,
 // each separated by a single newline character (without an ending newline), containing data:
 //   stream name
-//   push target URI
+//   track list (JSON)
 // TriggerLiveTrackList is used only by transcoding.
 func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWriter, req *http.Request, payload []byte) {
 	lines := strings.Split(strings.TrimSuffix(string(payload), "\n"), "\n")
