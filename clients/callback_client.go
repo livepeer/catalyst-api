@@ -182,7 +182,7 @@ func (ts TranscodeStatus) String() string {
 type TranscodeStatusMessage struct {
 	CompletionRatio float64 `json:"completion_ratio"` // No omitempty or we lose this for 0% completion case
 	Error           string  `json:"error,omitempty"`
-	Retriable       *bool   `json:"retriable,omitempty"` // Has to be a pointer or we can't differentiate omission from 'false'
+	Unretriable     bool    `json:"unretriable,omitempty"`
 	Status          string  `json:"status,omitempty"`
 	Timestamp       int64   `json:"timestamp"`
 }
