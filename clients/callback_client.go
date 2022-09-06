@@ -197,7 +197,7 @@ type InputVideoTrack struct {
 	Duration    float64 `json:"duration,omitempty"`
 	PixelFormat string  `json:"pixel_format,omitempty"`
 	Channels    int     `json:"channels,omitempty"`
-	SampleRate  int     `json:"sampleRate,omitempty"`
+	SampleRate  int     `json:"sample_rate,omitempty"`
 	SizeBytes   int     `json:"size,omitempty"`
 }
 
