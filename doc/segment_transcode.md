@@ -1,4 +1,4 @@
-
+# Transcoding endpoint workflow
 
 ```mermaid
 sequenceDiagram
