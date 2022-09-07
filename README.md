@@ -2,6 +2,10 @@
 
 An HTTP API to allow services (e.g Livepeer Studio) to interact with Catalyst.
 
+## Prerequisites
+
+The default Makefile goal and the CI process for this repo uses `golangci-lint` for linting. To install, follow the instructions at https://golangci-lint.run/usage/install/#local-installation
+
 ## Development
 
 To test the [Catalyst](http://github.com/livepeer/catalyst) integration, follow the instructions in that repo to run a local Catalyst instance and then:
