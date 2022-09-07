@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"strings"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/clients"
@@ -25,6 +27,25 @@ type UploadVODRequest struct {
 			TranscodedSegments bool `json:"transcoded_segments"`
 		} `json:"outputs,omitempty"`
 	} `json:"output_locations,omitempty"`
+}
+
+func HasContentType(r *http.Request, mimetype string) bool {
+	contentType := r.Header.Get("Content-Type")
+	if contentType == "" {
+		return mimetype == "application/octet-stream"
+	}
+
+	for _, v := range strings.Split(contentType, ",") {
+		t, _, err := mime.ParseMediaType(v)
+		if err != nil {
+			break
+		}
+		if t == mimetype {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
