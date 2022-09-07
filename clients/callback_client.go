@@ -188,15 +188,15 @@ type TranscodeStatusMessage struct {
 }
 
 type VideoTrack struct {
-	Width       int    `json:"width"`
-	Height      int    `json:"height"`
-	PixelFormat string `json:"pixel_format"`
-	FPS         int    `json:"fps"`
+	Width       int    `json:"width,omitempty"`
+	Height      int    `json:"height,omitempty"`
+	PixelFormat string `json:"pixel_format,omitempty"`
+	FPS         int    `json:"fps,omitempty"`
 }
 
 type AudioTrack struct {
-	Channels   int `json:"channels"`
-	SampleRate int `json:"sample_rate"`
+	Channels   int `json:"channels,omitempty"`
+	SampleRate int `json:"sample_rate,omitempty"`
 }
 
 type InputTrack struct {
