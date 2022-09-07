@@ -18,7 +18,7 @@ type StreamInfo struct {
 }
 
 type CatalystAPIHandlersCollection struct {
-	MistClient  MistAPIClient
+	MistClient  clients.MistAPIClient
 	StreamCache map[string]StreamInfo
 }
 
@@ -54,7 +54,7 @@ func randomStreamName(prefix string) string {
 }
 
 type MistCallbackHandlersCollection struct {
-	MistClient  MistAPIClient
+	MistClient  clients.MistAPIClient
 	StreamCache map[string]StreamInfo
 }
 
