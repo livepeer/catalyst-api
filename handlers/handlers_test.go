@@ -66,7 +66,7 @@ func TestSegmentCallback(t *testing.T) {
 	defer callbackServer.Close()
 	jsonData = strings.ReplaceAll(jsonData, "CALLBACK_URL", callbackServer.URL)
 
-	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}}
+	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: clients.StubMistClient{}}
 
 	router := httprouter.New()
 
@@ -166,7 +166,7 @@ func TestSegmentBodyFormat(t *testing.T) {
 		}`),
 	}
 
-	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}}
+	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: clients.StubMistClient{}}
 	router := httprouter.New()
 
 	router.POST("/api/transcode/file", catalystApiHandlers.TranscodeSegment())
@@ -186,7 +186,7 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer callbackServer.Close()
 
-	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}, StreamCache: make(map[string]StreamInfo)}
+	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: clients.StubMistClient{}, StreamCache: make(map[string]StreamInfo)}
 	var jsonData = `{
 		"url": "http://localhost/input",
 		"callback_url": "CALLBACK_URL",
@@ -225,7 +225,7 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 func TestInvalidPayloadVODUploadHandler(t *testing.T) {
 	require := require.New(t)
 
-	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}}
+	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: clients.StubMistClient{}}
 	badRequests := [][]byte{
 		// missing url
 		[]byte(`{
@@ -290,7 +290,7 @@ func TestInvalidPayloadVODUploadHandler(t *testing.T) {
 func TestWrongContentTypeVODUploadHandler(t *testing.T) {
 	require := require.New(t)
 
-	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: StubMistClient{}}
+	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: clients.StubMistClient{}}
 	var jsonData = []byte(`{
 		"url": "http://localhost/input",
 		"callback_url": "http://localhost/callback",
