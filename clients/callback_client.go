@@ -200,11 +200,12 @@ type AudioTrack struct {
 }
 
 type InputTrack struct {
-	Type        string  `json:"type"`
-	Codec       string  `json:"codec"`
-	Bitrate     int     `json:"bitrate"`
-	DurationSec float64 `json:"duration"`
-	SizeBytes   int     `json:"size"`
+	Type         string  `json:"type"`
+	Codec        string  `json:"codec"`
+	Bitrate      int     `json:"bitrate"`
+	DurationSec  float64 `json:"duration"`
+	SizeBytes    int     `json:"size"`
+	StartTimeSec float64 `json:"start_time"`
 
 	// Fields only used if this is a Video Track
 	VideoTrack
