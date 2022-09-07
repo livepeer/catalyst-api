@@ -5,13 +5,14 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/middleware"
 )
 
 func ListenAndServe(apiPort, mistPort int) error {
-	mc := &handlers.MistClient{
+	mc := &clients.MistClient{
 		ApiUrl:          fmt.Sprintf("http://localhost:%d/api2", mistPort),
 		TriggerCallback: fmt.Sprintf("http://localhost:%d/api/mist/trigger", apiPort),
 	}
@@ -27,7 +28,7 @@ func ListenAndServe(apiPort, mistPort int) error {
 	return http.ListenAndServe(listen, router)
 }
 
-func NewCatalystAPIRouter(mc *handlers.MistClient) *httprouter.Router {
+func NewCatalystAPIRouter(mc *clients.MistClient) *httprouter.Router {
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
 	withAuth := middleware.IsAuthorized
