@@ -207,5 +207,64 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 
 		// TODO: add timeout for the stream upload
 		// TODO: start transcoding
+		stubTranscodingCallbacksForStudio(d.StreamCache[s].callbackUrl, callbackClient)
 	}
+}
+
+// This method is for Studio to have something to integrate with and to make sure we have all the callbacks
+// in place that we'll need
+func stubTranscodingCallbacksForStudio(callbackURL string, callbackClient clients.CallbackClient) {
+	time.Sleep(5 * time.Second)
+	callbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, 0.3)
+	time.Sleep(5 * time.Second)
+	callbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, 0.6)
+	time.Sleep(5 * time.Second)
+	callbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, 0.9)
+	time.Sleep(5 * time.Second)
+	callbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, 1)
+	time.Sleep(5 * time.Second)
+	callbackClient.SendTranscodeStatusCompleted(
+		callbackURL,
+		clients.InputVideo{
+			Format:   "mp4",
+			Duration: 1234.5678,
+			Tracks: []clients.InputTrack{
+				{
+					Type:        "video",
+					Codec:       "h264",
+					DurationSec: 1.6,
+					Bitrate:     358315,
+					VideoTrack: clients.VideoTrack{
+						FPS:         30,
+						Width:       1920,
+						Height:      1080,
+						PixelFormat: "yuv420p",
+					},
+				},
+				{
+					Type:        "audio",
+					Codec:       "aac",
+					Bitrate:     141341,
+					DurationSec: 1.599979,
+					AudioTrack: clients.AudioTrack{
+						Channels:   2,
+						SampleRate: 48000,
+					},
+				},
+			},
+		},
+		[]clients.OutputVideo{
+			{
+				Type:     "google-s3",
+				Manifest: "s3://livepeer-studio-uploads/videos/<video-id>/master.m3u8",
+				Videos: []clients.OutputVideoFile{
+					{
+						Type:      "mp4",
+						SizeBytes: 12345,
+						Location:  "s3://livepeer-studio-uploads/videos/<video-id>/video-480p.mp4",
+					},
+				},
+			},
+		},
+	)
 }
