@@ -2,7 +2,7 @@ package clients
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -21,7 +21,7 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 	// Set up a dummy server to receive the callbacks
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check that we got the callback we're expecting
-		body, err := ioutil.ReadAll(r.Body)
+		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		require.JSONEq(t, `{"completion_ratio":1, "status":"success", "timestamp": 123456789}`, string(body))
 
@@ -53,7 +53,7 @@ func TestItEventuallyStopsRetrying(t *testing.T) {
 	// Set up a dummy server to receive the callbacks
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check that we got the callback we're expecting
-		body, err := ioutil.ReadAll(r.Body)
+		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		require.JSONEq(t, `{"completion_ratio":1, "status":"success", "timestamp": 123456789}`, string(body))
 
@@ -80,7 +80,7 @@ func TestTranscodeStatusErrorNotifcation(t *testing.T) {
 	// Set up a dummy server to receive the callbacks
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check that we got the callback we're expecting
-		body, err := ioutil.ReadAll(r.Body)
+		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		require.JSONEq(t, `{"completion_ratio": 0, "error": "something went wrong", "status":"error", "timestamp": 123456789}`, string(body))
 

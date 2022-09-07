@@ -20,7 +20,7 @@ func ListenAndServe(apiPort, mistPort int) error {
 	listen := fmt.Sprintf("0.0.0.0:%d", apiPort)
 	router := NewCatalystAPIRouter(mc)
 
-	config.Logger.Log(
+	_ = config.Logger.Log(
 		"msg", "Starting Catalyst API",
 		"version", config.Version,
 		"host", listen,
