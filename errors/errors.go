@@ -2,10 +2,10 @@ package errors
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"strings"
 
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -17,9 +17,9 @@ type apiError struct {
 
 func writeHttpError(w http.ResponseWriter, msg string, status int, err error) apiError {
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": msg})
-	if err != nil {
-		log.Println(msg, err)
+
+	if err := json.NewEncoder(w).Encode(map[string]string{"error": msg}); err != nil {
+		_ = config.Logger.Log("msg", "error writing HTTP error", "http_error_msg", msg, "error", err)
 	}
 	return apiError{msg, status, err}
 }

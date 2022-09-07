@@ -97,7 +97,9 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			errors.WriteHTTPInternalServerError(w, "Cannot send transcode status", err)
 		}
 
-		io.WriteString(w, fmt.Sprint(len(uploadVODRequest.OutputLocations)))
+		if _, err := io.WriteString(w, fmt.Sprint(len(uploadVODRequest.OutputLocations))); err != nil {
+			errors.WriteHTTPInternalServerError(w, "Cannot write output locations", err)
+		}
 	}
 }
 

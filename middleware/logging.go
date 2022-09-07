@@ -39,12 +39,12 @@ func LogRequest() func(httprouter.Handle) httprouter.Handle {
 			defer func() {
 				if err := recover(); err != nil {
 					errors.WriteHTTPInternalServerError(wrapped, "Internal Server Error", nil)
-					config.Logger.Log("err", err, "trace", debug.Stack())
+					_ = config.Logger.Log("err", err, "trace", debug.Stack())
 				}
 			}()
 
 			next(wrapped, r, ps)
-			config.Logger.Log(
+			_ = config.Logger.Log(
 				"remote", r.RemoteAddr,
 				"proto", r.Proto,
 				"method", r.Method,

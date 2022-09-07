@@ -9,6 +9,7 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/clients"
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 )
 
@@ -60,15 +61,31 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 // in place that we'll need
 func stubTranscodingCallbacksForStudio(callbackURL string, callbackClient clients.CallbackClient) {
 	time.Sleep(5 * time.Second)
-	callbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, 0.3)
+	if err := callbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, 0.3); err != nil {
+		_ = config.Logger.Log("msg", "Error in stubTranscodingCallbacksForStudio", "err", err)
+		return
+	}
+
 	time.Sleep(5 * time.Second)
-	callbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, 0.6)
+	if err := callbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, 0.6); err != nil {
+		_ = config.Logger.Log("msg", "Error in stubTranscodingCallbacksForStudio", "err", err)
+		return
+	}
+
 	time.Sleep(5 * time.Second)
-	callbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, 0.9)
+	if err := callbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, 0.9); err != nil {
+		_ = config.Logger.Log("msg", "Error in stubTranscodingCallbacksForStudio", "err", err)
+		return
+	}
+
 	time.Sleep(5 * time.Second)
-	callbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, 1)
+	if err := callbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, 1); err != nil {
+		_ = config.Logger.Log("msg", "Error in stubTranscodingCallbacksForStudio", "err", err)
+		return
+	}
+
 	time.Sleep(5 * time.Second)
-	callbackClient.SendTranscodeStatusCompleted(
+	err := callbackClient.SendTranscodeStatusCompleted(
 		callbackURL,
 		clients.InputVideo{
 			Format:   "mp4",
@@ -112,4 +129,8 @@ func stubTranscodingCallbacksForStudio(callbackURL string, callbackClient client
 			},
 		},
 	)
+	if err != nil {
+		_ = config.Logger.Log("msg", "Error sending Transcode Completed in stubTranscodingCallbacksForStudio", "err", err)
+		return
+	}
 }

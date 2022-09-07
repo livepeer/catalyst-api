@@ -74,6 +74,6 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 		if err := CallbackClient.SendTranscodeStatusError(transcodeRequest.CallbackUrl, "NYI - not yet implemented"); err != nil {
 			errors.WriteHTTPInternalServerError(w, "error send transcode error", err)
 		}
-		io.WriteString(w, "OK") // TODO later
+		_, _ = io.WriteString(w, "OK") // TODO later
 	}
 }
