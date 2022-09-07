@@ -186,7 +186,7 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer callbackServer.Close()
 
-	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: clients.StubMistClient{}, StreamCache: make(map[string]StreamInfo)}
+	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: clients.StubMistClient{}}
 	var jsonData = `{
 		"url": "http://localhost/input",
 		"callback_url": "CALLBACK_URL",

@@ -15,6 +15,8 @@ type CallbackClient struct {
 	httpClient *http.Client
 }
 
+var DefaultCallbackClient = NewCallbackClient()
+
 func NewCallbackClient() CallbackClient {
 	client := retryablehttp.NewClient()
 	client.RetryMax = 2                          // Retry a maximum of this+1 times

@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"mime"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/xeipuuv/gojsonschema"
@@ -85,15 +88,14 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		}
 
 		streamName := randomStreamName("catalyst_vod_")
-		d.StreamCache[streamName] = StreamInfo{callbackUrl: uploadVODRequest.CallbackUrl}
+		cache.DefaultStreamCache.Segmenting.Store(streamName, uploadVODRequest.CallbackUrl)
 
 		// process the request
 		if err := d.processUploadVOD(streamName, uploadVODRequest.Url, tURL); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot process upload VOD request", err)
 		}
 
-		callbackClient := clients.NewCallbackClient()
-		if err := callbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, clients.TranscodeStatusPreparing, 0.0); err != nil {
+		if err := clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, clients.TranscodeStatusPreparing, 0.0); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot send transcode status", err)
 		}
 
@@ -115,4 +117,16 @@ func (d *CatalystAPIHandlersCollection) processUploadVOD(streamName, sourceURL, 
 	}
 
 	return nil
+}
+
+func randomStreamName(prefix string) string {
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	const length = 8
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	res := make([]byte, length)
+	for i := 0; i < length; i++ {
+		res[i] = charset[r.Intn(length)]
+	}
+	return fmt.Sprintf("%s%s", prefix, string(res))
 }

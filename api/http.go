@@ -8,6 +8,7 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers"
+	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/middleware"
 )
 
@@ -33,9 +34,8 @@ func NewCatalystAPIRouter(mc *clients.MistClient) *httprouter.Router {
 	withLogging := middleware.LogRequest()
 	withAuth := middleware.IsAuthorized
 
-	sc := make(map[string]handlers.StreamInfo)
-	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{MistClient: mc, StreamCache: sc}
-	mistCallbackHandlers := &handlers.MistCallbackHandlersCollection{MistClient: mc, StreamCache: sc}
+	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{MistClient: mc}
+	mistCallbackHandlers := &misttriggers.MistCallbackHandlersCollection{MistClient: mc}
 
 	// Simple endpoint for healthchecks
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
