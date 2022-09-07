@@ -7,7 +7,7 @@ all: build fmt test
 
 .PHONY: build
 build:
-	go build -ldflags="$(ldflags)" -o "$(GO_BUILD_DIR)catalyst-api" cmd/http-server/http-server.go
+	go build -ldflags="$(ldflags)" -o "$(GO_BUILD_DIR)catalyst-api" cmd/http-server.go
 
 .PHONY: fmt
 fmt:
@@ -15,7 +15,7 @@ fmt:
 
 .PHONY: run
 run:
-	go run cmd/http-server/http-server.go
+	go run cmd/http-server.go
 
 .PHONY: test
 test:
