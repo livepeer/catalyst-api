@@ -182,7 +182,7 @@ func (t *Transcoding) RunTranscodeProcess(mist MistAPIClient, cache *StreamCache
 		t.errorOut("transcodeCommand.StdinPipe()", err)
 		return
 	}
-	commandOutputToLog(transcodeCommand, "coding")
+	commandOutputToLog(transcodeCommand, "coding", invokeTriggerWorkaround(t))
 	sent, err := stdinPipe.Write(configPayload)
 	if err != nil {
 		t.errorOut("stdinPipe.Write()", err)
@@ -251,7 +251,7 @@ type MistTrack struct {
 
 type LiveTrackListTriggerJson = map[string]MistTrack
 
-func pipeToLog(pipe io.ReadCloser, name string) {
+func pipeToLog(pipe io.ReadCloser, name string, trigerProblem func()) {
 	data := make([]byte, 4096)
 	for {
 		count, err := pipe.Read(data)
@@ -259,21 +259,25 @@ func pipeToLog(pipe io.ReadCloser, name string) {
 			log.Printf("ERROR cmd=%s %v", name, err)
 			return
 		}
-		log.Printf("out [%s] %s", name, string(data[0:count]))
+		txt := string(data[0:count])
+		if strings.Contains(txt, "Could not get stream 'tr_rend_' config!") {
+			go trigerProblem()
+		}
+		log.Printf("out [%s] %s", name, txt)
 	}
 }
 
-func commandOutputToLog(cmd *exec.Cmd, name string) {
+func commandOutputToLog(cmd *exec.Cmd, name string, trigerProblem func()) {
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		log.Printf("ERROR: cmd.StdoutPipe() %v", err)
 		return
 	}
-	go pipeToLog(stdoutPipe, name)
+	go pipeToLog(stdoutPipe, name, trigerProblem)
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
 		log.Printf("ERROR: cmd.StderrPipe() %v", err)
 		return
 	}
-	go pipeToLog(stderrPipe, name)
+	go pipeToLog(stderrPipe, name, trigerProblem)
 }
