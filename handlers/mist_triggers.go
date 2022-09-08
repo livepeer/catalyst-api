@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/julienschmidt/httprouter"
@@ -79,18 +80,34 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 		Err(streamName, "LIVE_TRACK_LIST unknown push source", err, w)
 		return
 	}
+	multivariantPlaylist := "#EXTM3U\r\n"
 	for i := range tracks {
 		if tracks[i].Type != "video" {
 			// Only produce an rendition per each video track, selecting best audio track
 			continue
 		}
-		destination := fmt.Sprintf("%s/%s__%dx%d.ts?video=%d&audio=maxbps", info.UploadDir, streamName, tracks[i].Width, tracks[i].Height, tracks[i].Index) //.Id)
-		if err := d.MistClient.PushStart(streamName, destination); err != nil {
-			log.Printf("> ERROR push to %s %v", destination, err)
-		} else {
-			d.StreamCache.Transcoding.AddDestination(streamName, destination)
+		relativePath := fmt.Sprintf("r_%s_%dx%d/stream.m3u8", suffix, tracks[i].Width, tracks[i].Height)
+		playlistUrl, err := url.Parse(fmt.Sprintf("%s?video=%d&audio=maxbps", relativePath, tracks[i].Index))
+		if err != nil {
+			log.Printf("ERROR push playlist url parsing %v from %s", err, relativePath)
+			continue
 		}
+		destination := info.UploadDir.ResolveReference(playlistUrl).String()
+		if err := d.MistClient.PushStart(streamName, destination); err != nil {
+			log.Printf("ERROR push to %s %v", destination, err)
+			continue
+		}
+		d.StreamCache.Transcoding.AddDestination(streamName, destination)
+		profile, ok := info.GetMatchingProfile(tracks[i])
+		if !ok {
+			log.Printf("ERROR push doesn't match to any given profile %s", destination)
+			continue
+		}
+		log.Printf("> push started relativePath=%s destination=%s", relativePath, destination)
+		multivariantPlaylist += fmt.Sprintf("#EXT-X-STREAM-INF:BANDWIDTH=%d,RESOLUTION=%dx%d\r\n%s\r\n", profile.Bitrate, tracks[i].Width, tracks[i].Height, relativePath)
 	}
+	multivariantPlaylistDestination := fmt.Sprintf("%s%s.m3u8", info.UploadDir, suffix)
+	go storePlaylist(multivariantPlaylistDestination, multivariantPlaylist)
 }
 
 // TriggerPushEnd responds to PUSH_END trigger

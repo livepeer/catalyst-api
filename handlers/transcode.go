@@ -6,8 +6,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os/exec"
-	"path"
 	"strings"
 
 	"github.com/livepeer/catalyst-api/clients"
@@ -124,6 +124,7 @@ type Transcoding struct {
 	mistProcPath    string
 
 	request          TranscodeSegmentRequest
+	inputUrl         *url.URL
 	inputStream      string
 	renditionsStream string
 }
@@ -147,6 +148,10 @@ func (t *Transcoding) ValidateRequest() error {
 	}
 	if err := json.Unmarshal(payload, &t.request); err != nil {
 		errors.WriteHTTPBadRequest(t.httpResp, "Invalid request payload", err)
+		return err
+	}
+	if t.inputUrl, err = url.Parse(t.request.SourceFile); err != nil {
+		errors.WriteHTTPBadRequest(t.httpResp, "Invalid request source_location", err)
 		return err
 	}
 	return nil
@@ -204,12 +209,14 @@ func (t *Transcoding) RunTranscodeProcess(mist MistAPIClient, cache *StreamCache
 		t.errorOut("PushStart(inputStream)", err)
 		return
 	}
-
+	currentDir, _ := url.Parse(".")
+	uploadDir := t.inputUrl.ResolveReference(currentDir)
 	// Cache the stream data, later used in the trigger handlers called by Mist
 	cache.Transcoding.Store(t.renditionsStream, SegmentInfo{
 		CallbackUrl: t.request.CallbackUrl,
 		Source:      t.request.SourceFile,
-		UploadDir:   path.Dir(t.request.SourceFile),
+		Profiles:    t.request.Profiles[:],
+		UploadDir:   uploadDir,
 	})
 
 	err = transcodeCommand.Wait()

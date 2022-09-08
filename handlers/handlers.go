@@ -35,7 +35,7 @@ func (d *CatalystAPIHandlersCollection) Ok() httprouter.Handle {
 //    - Take SOURCE stream and segment it
 //    - Push each segment to Broadcaster
 //    - Receive transcoded segment from Broadcaster, ingest into RENDITION stream
-// 3. Start SOURCE stream by creating, unused, push to /dev/null.ts
+// 3. Start SOURCE stream by creating, unused, push to /tmp/mist/<stream-name>.mkv
 // 4. `MistProcLivepeer` process is unblocked, starts to work
 // 5. Return 200 OK response
 // 5. Respond to LIVE_TRACK_LIST trigger:
