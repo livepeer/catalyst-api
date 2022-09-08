@@ -9,10 +9,55 @@ import (
 	"time"
 )
 
+type PushListCommand struct {
+	PushList bool `json:"push_list"`
+}
+
+type PushStopCommand struct {
+	Id int `json:"push_stop"`
+}
+
+type PushListResponse struct {
+	LTS       int `json:"LTS"`
+	Authorize struct {
+		Local  bool   `json:"local"`
+		Status string `json:"status"`
+	} `json:"authorize"`
+	PushList [][]interface{} `json:"push_list"`
+}
+
+func stopSourcePush(t *Transcoding, mistApi MistAPIClient) {
+	time.Sleep(time.Second)
+	mist := mistApi.(*MistClient)
+	encodedResult, err := mist.sendCommand(PushListCommand{})
+	if err != nil {
+		fmt.Printf("error mist.sendCommand PushListCommand %v \n", err)
+		return
+	}
+	fmt.Printf("Push list: %s\n", encodedResult)
+	response := PushListResponse{}
+	err = json.Unmarshal([]byte(encodedResult), &response)
+	if err != nil {
+		fmt.Printf("error json.Unmarshal PushListResponse %v \n", err)
+		return
+	}
+	for _, push := range response.PushList {
+		id, streamName, destination, actualDestination := push[0].(float64), push[1].(string), push[2].(string), push[3].(string)
+		if streamName == t.inputStream {
+			fmt.Printf("stopping push %v %s %s %s\n", id, streamName, destination, actualDestination)
+			if _, err = mist.sendCommand(PushStopCommand{Id: int(id)}); err != nil {
+				fmt.Printf("error mist.sendCommand PushStopCommand %v \n", err)
+			}
+			return
+		}
+	}
+}
+
 // invokeTriggerWorkaround fires LIVE_TRACK_LIST trigger as if Mist did
 func invokeTriggerWorkaround(t *Transcoding) func() {
 	return func() {
-		for i := 0; i < 20; i++ {
+		startTs := time.Now()
+		for {
 			fmt.Printf("trigger not firing for produced stream %s\n", t.renditionsStream)
 			req, err := http.NewRequest("POST", fmt.Sprintf("http://127.0.0.1:8080/json_%s.js", t.renditionsStream), nil)
 			if err != nil {
@@ -40,7 +85,7 @@ func invokeTriggerWorkaround(t *Transcoding) func() {
 			meta := MetadataResponse{}
 			err = json.Unmarshal(payload, &meta)
 			if haveTracks := meta.Meta != nil; !haveTracks {
-				fmt.Printf("> wait for stream info\n")
+				fmt.Printf("> wait %v for stream info\n", time.Now().Sub(startTs))
 				time.Sleep(250 * time.Millisecond)
 				continue
 			}

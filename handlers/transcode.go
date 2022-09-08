@@ -209,6 +209,8 @@ func (t *Transcoding) RunTranscodeProcess(mist MistAPIClient, cache *StreamCache
 		t.errorOut("PushStart(inputStream)", err)
 		return
 	}
+	go stopSourcePush(t, mist)
+
 	currentDir, _ := url.Parse(".")
 	uploadDir := t.inputUrl.ResolveReference(currentDir)
 	// Cache the stream data, later used in the trigger handlers called by Mist
