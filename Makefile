@@ -7,7 +7,7 @@ all: build fmt test lint
 
 .PHONY: build
 build:
-	go build -ldflags="$(ldflags)" -o "$(GO_BUILD_DIR)catalyst-api" cmd/http-server.go
+	go build -ldflags="$(ldflags)" -o "$(GO_BUILD_DIR)catalyst-api" main.go
 
 .PHONY: fmt
 fmt:
@@ -19,7 +19,7 @@ lint:
 
 .PHONY: run
 run:
-	go run cmd/http-server.go
+	go run main.go
 
 .PHONY: test
 test:
