@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 
 	"github.com/julienschmidt/httprouter"
@@ -17,32 +18,18 @@ import (
 	"github.com/xeipuuv/gojsonschema"
 )
 
-type EncodedProfile struct {
-	Name         string `json:"name"`
-	Width        int32  `json:"width"`
-	Height       int32  `json:"height"`
-	Bitrate      int32  `json:"bitrate"`
-	FPS          uint   `json:"fps"`
-	FPSDen       uint   `json:"fpsDen"`
-	Profile      string `json:"profile"`
-	GOP          string `json:"gop"`
-	Encoder      string `json:"encoder"`
-	ColorDepth   int32  `json:"colorDepth"`
-	ChromaFormat int32  `json:"chromaFormat"`
-}
-
 type TranscodeSegmentRequest struct {
-	SourceFile           string           `json:"source_location"`
-	CallbackUrl          string           `json:"callback_url"`
-	ManifestID           string           `json:"manifestID"`
-	StreamID             string           `json:"streamID"`
-	SessionID            string           `json:"sessionID"`
-	StreamKey            string           `json:"streamKey"`
-	Presets              []string         `json:"presets"`
-	ObjectStore          string           `json:"objectStore"`
-	RecordObjectStore    string           `json:"recordObjectStore"`
-	RecordObjectStoreURL string           `json:"recordObjectStoreUrl"`
-	Profiles             []EncodedProfile `json:"profiles"`
+	SourceFile           string                 `json:"source_location"`
+	CallbackUrl          string                 `json:"callback_url"`
+	ManifestID           string                 `json:"manifestID"`
+	StreamID             string                 `json:"streamID"`
+	SessionID            string                 `json:"sessionID"`
+	StreamKey            string                 `json:"streamKey"`
+	Presets              []string               `json:"presets"`
+	ObjectStore          string                 `json:"objectStore"`
+	RecordObjectStore    string                 `json:"recordObjectStore"`
+	RecordObjectStoreURL string                 `json:"recordObjectStoreUrl"`
+	Profiles             []cache.EncodedProfile `json:"profiles"`
 	Detection            struct {
 		Freq                uint `json:"freq"`
 		SampleRate          uint `json:"sampleRate"`
@@ -77,96 +64,95 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 			return
 		}
 
-		if err := PrepareStreams(d.MistClient); err != nil {
-			log.Printf("TranscodeSegment input stream create failed %v", err)
-			return
+		if err := RunTranscodeProcess(d.MistClient, transcodeRequest); err != nil {
+			errors.WriteHTTPInternalServerError(w, "Error running Transcode process", err)
 		}
-		RunTranscodeProcess(d.MistClient)
 	}
-}
-
-func PrepareStreams(mist clients.MistAPIClient) error {
-	inputStream, renditionsStream = config.GenerateStreamNames()
-	if err := mist.AddStream(inputStream, request.SourceFile); err != nil {
-		where := fmt.Sprintf("AddStream(%s)", t.inputStream)
-		t.errorOut(where, err)
-		errors.WriteHTTPInternalServerError(t.httpResp, where, err)
-		return err
-	}
-	return nil
 }
 
 // RunTranscodeProcess starts `MistLivepeeerProc` as a subprocess to transcode inputStream into renditionsStream.
-// The transcoding happens via local Broadcaster node, that is why we need broadcasterPort.
-func RunTranscodeProcess(mist clients.MistAPIClient) {
-	configPayload, err := json.Marshal(configForSubprocess(&t.request, t.broadcasterPort, t.inputStream, t.renditionsStream))
-	if err != nil {
-		t.errorOut("ProcLivepeerConfig json encode", err)
-		return
+func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegmentRequest) error {
+	inputStream, renditionsStream := config.GenerateStreamNames()
+	if err := mistClient.AddStream(inputStream, request.SourceFile); err != nil {
+		return fmt.Errorf("error adding stream to Mist: %s", err)
 	}
-	transcodeCommand := exec.Command(t.mistProcPath, "-")
+
+	configPayload, err := json.Marshal(configForSubprocess(request, inputStream, renditionsStream))
+	if err != nil {
+		return fmt.Errorf("ProcLivepeerConfig json encode: %s", err)
+	}
+
+	transcodeCommand := exec.Command(config.PathMistProcLivepeer, "-")
 	stdinPipe, err := transcodeCommand.StdinPipe()
 	if err != nil {
-		t.errorOut("transcodeCommand.StdinPipe()", err)
-		return
+		return fmt.Errorf("transcodeCommand.StdinPipe: %s", err)
 	}
 	commandOutputToLog(transcodeCommand, "coding")
+
 	sent, err := stdinPipe.Write(configPayload)
 	if err != nil {
-		t.errorOut("stdinPipe.Write()", err)
-		return
+		return fmt.Errorf("stdinPipe.Write: %s", err)
 	}
 	if sent != len(configPayload) {
-		t.errorOut("short write on stdinPipe.Write()", err)
-		return
+		return fmt.Errorf("short write on stdinPipe.Write: %s", err)
 	}
-	err = stdinPipe.Close()
-	if err != nil {
-		t.errorOut("stdinPipe.Close()", err)
-		return
+
+	if err := stdinPipe.Close(); err != nil {
+		return fmt.Errorf("stdinPipe.Close: %s", err)
 	}
-	err = transcodeCommand.Start()
-	if err != nil {
-		t.errorOut("start transcodeCommand", err)
-		return
+
+	// Start the Transcode Command asynchronously - we call Wait() later in this method
+	if err := transcodeCommand.Start(); err != nil {
+		return fmt.Errorf("start transcodeCommand: %s", err)
 	}
 
 	// TODO: remove when Mist code is updated https://github.com/DDVTECH/mistserver/issues/81
 	// Starting SOURCE_PREFIX stream because MistProcLivepeer is unable to start it automatically
-	if err := mist.PushStart(t.inputStream, "/tmp/mist/alex.ts"); err != nil {
-		t.errorOut("PushStart(inputStream)", err)
-		return
+	file, err := os.CreateTemp("", "tmp-*.ts")
+	if err != nil {
+		return fmt.Errorf("error creating temporary file for SOURCE_PREFIX stream: %s", err)
 	}
-	currentDir, _ := url.Parse(".")
-	uploadDir := t.inputUrl.ResolveReference(currentDir)
+
+	if err := mistClient.PushStart(inputStream, file.Name()); err != nil {
+		return fmt.Errorf("PushStart(inputStream): %s", err)
+	}
+
+	inputUrl, err := url.Parse(request.SourceFile)
+	if err != nil {
+		return fmt.Errorf("invalid request source_location: %s", err)
+	}
+
+	dir, _ := url.Parse(".")
+	uploadDir := inputUrl.ResolveReference(dir)
 	// Cache the stream data, later used in the trigger handlers called by Mist
-	cache.DefaultStreamCache.Transcoding.Store(t.renditionsStream, SegmentInfo{
-		CallbackUrl: t.request.CallbackUrl,
-		Source:      t.request.SourceFile,
-		Profiles:    t.request.Profiles[:],
-		UploadDir:   uploadDir,
+	cache.DefaultStreamCache.Transcoding.Store(renditionsStream, cache.SegmentInfo{
+		CallbackUrl: request.CallbackUrl,
+		Source:      request.SourceFile,
+		Profiles:    request.Profiles[:],
+		UploadDir:   uploadDir.String(),
 	})
 
-	err = transcodeCommand.Wait()
-	if exit, ok := err.(*exec.ExitError); ok {
-		log.Printf("MistProcLivepeer returned %d", exit.ExitCode())
-	} else if err != nil {
-		t.errorOut("exec transcodeCommand", err)
-		return
+	if err := transcodeCommand.Wait(); err != nil {
+		if exit, ok := err.(*exec.ExitError); ok {
+			log.Printf("MistProcLivepeer returned %d", exit.ExitCode())
+		}
+		return fmt.Errorf("exec transcodeCommand: %s", err)
 	}
+
+	return nil
 }
 
 // configForSubprocess transforms request information to MistProcLivepeer config json
 // We use .HardcodedBroadcasters assuming we have local B-node.
 // The AudioSelect is configured to use single audio track from input.
 // Same applies on transcoder side, expect Livepeer to use single best video track as input.
-func configForSubprocess(req *TranscodeSegmentRequest, bPort int, inputStreamName, outputStreamName string) *ProcLivepeerConfig {
-	conf := &ProcLivepeerConfig{
+func configForSubprocess(req TranscodeSegmentRequest, inputStreamName, outputStreamName string) ProcLivepeerConfig {
+	conf := ProcLivepeerConfig{
 		InputStreamName:       inputStreamName,
 		OutputStreamName:      outputStreamName,
 		Leastlive:             true,
 		AudioSelect:           "maxbps",
-		HardcodedBroadcasters: fmt.Sprintf(`[{"address":"http://127.0.0.1:%d"}]`, bPort),
+		HardcodedBroadcasters: fmt.Sprintf(`[{"address":"http://127.0.0.1:%d"}]`, config.BroadcasterPort),
 	}
 	// Setup requested rendition profiles
 	for _, profile := range req.Profiles {
