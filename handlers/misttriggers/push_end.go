@@ -30,22 +30,53 @@ func (d *MistCallbackHandlersCollection) TriggerPushEnd(w http.ResponseWriter, r
 	}
 	// stream name is the second line in the Mist Trigger payload
 	streamName := lines[1]
-	// TODO: Left commented as these will all be used by the next piece we'll pull out of https://github.com/livepeer/catalyst-api/pull/30
-	// destination := lines[2]
-	// actualDestination := lines[3]
-	// pushStatus := lines[5]
+	destination := lines[2]
+	actualDestination := lines[3]
+	pushStatus := lines[5]
 
 	// Determine if the PUSH that has finished was happening during the segmenting or transcoding phase
-	if isTranscodeStream(streamName) {
-		// TODO: Left commented for illustration of the alternate code path here as this is the next piece we'll pull out of https://github.com/livepeer/catalyst-api/pull/30
-		// d.TranscodingPushEnd(w, req, streamName, destination, actualDestination, pushStatus)
+	if config.IsTranscodeStream(streamName) {
+		d.TranscodingPushEnd(w, req, streamName, destination, actualDestination, pushStatus)
 	} else {
 		d.SegmentingPushEnd(w, req, streamName)
 	}
 }
 
-func isTranscodeStream(streamName string) bool {
-	return strings.HasPrefix(streamName, config.RENDITION_PREFIX)
+func (d *MistCallbackHandlersCollection) TranscodingPushEnd(w http.ResponseWriter, req *http.Request, streamName, destination, actualDestination, pushStatus string) {
+	info := cache.DefaultStreamCache.Transcoding.Get(streamName)
+	if info == nil {
+		errors.WriteHTTPBadRequest(w, "PUSH_END unknown push source: "+streamName, nil)
+		return
+	}
+
+	// Check if we have a record of this destination
+	if !info.ContainsDestination(destination) {
+		errors.WriteHTTPBadRequest(w, fmt.Sprintf("PUSH_END can't find desination %q for stream %q", destination, streamName), nil)
+		return
+	}
+
+	uploadSuccess := pushStatus == "null"
+	if uploadSuccess {
+		// TODO: Do some maths so that we don't always send 0.5
+		if err := clients.DefaultCallbackClient.SendTranscodeStatus(info.CallbackUrl, clients.TranscodeStatusTranscoding, 0.5); err != nil {
+			_ = config.Logger.Log("msg", "Error sending transcode status in TranscodingPushEnd", "err", err)
+		}
+	} else {
+		// We forward pushStatus json to callback
+		if err := clients.DefaultCallbackClient.SendTranscodeStatusError(info.CallbackUrl, fmt.Sprintf("Error while pushing to %s: %s", actualDestination, pushStatus)); err != nil {
+			_ = config.Logger.Log("msg", "Error sending transcode error status in TranscodingPushEnd", "err", err)
+		}
+	}
+
+	// We do not delete triggers as source stream is wildcard stream: RENDITION_PREFIX
+	cache.DefaultStreamCache.Transcoding.RemovePushDestination(streamName, destination)
+	if cache.DefaultStreamCache.Transcoding.AreDestinationsEmpty(streamName) {
+		// TODO: Fill this in properly
+		if err := clients.DefaultCallbackClient.SendTranscodeStatusCompleted(info.CallbackUrl, clients.InputVideo{}, []clients.OutputVideo{}); err != nil {
+			_ = config.Logger.Log("msg", "Error sending transcode completed status in TranscodingPushEnd", "err", err)
+		}
+		cache.DefaultStreamCache.Transcoding.Remove(streamName)
+	}
 }
 
 func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter, req *http.Request, streamName string) {
@@ -55,6 +86,7 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 	callbackUrl := cache.DefaultStreamCache.Segmenting.GetCallbackUrl(streamName)
 	if callbackUrl == "" {
 		errors.WriteHTTPBadRequest(w, "PUSH_END trigger invoked for unknown stream: "+streamName, nil)
+		return
 	}
 
 	// Try to clean up the trigger and stream from Mist. If these fail then we only log, since we still want to do any
