@@ -14,6 +14,9 @@ var Clock TimestampGenerator = RealTimestampGenerator{}
 // Path to Mist's "Livepeer" process that we shell out to for the transcoding
 const PathMistProcLivepeer = "./MistProcLivepeer"
 
+// Port that the local Broadcaster runs on
+const BroadcasterPort = 8935
+
 // Global variable, but easier than passing a logger around throughout the system
 var Logger log.Logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 
@@ -23,7 +26,7 @@ func init() {
 
 // Prefixes used in Mist stream names to let us determine whether a given "stream" in Mist is being used
 // for the segmenting or transcoding phase
-const SEGMENTING_PREFIX = "catalyst_vod_"
-const SOURCE_PREFIX = "tr_src_"
-const RENDITION_PREFIX = "tr_rend_+"
-const RECORDING_PREFIX = "video"
+//const SEGMENTING_PREFIX = "catalyst_vod_"
+//const SOURCE_PREFIX = "tr_src_"
+//const RENDITION_PREFIX = "tr_rend_+"
+//const RECORDING_PREFIX = "video"
