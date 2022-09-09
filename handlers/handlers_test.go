@@ -2,14 +2,10 @@ package handlers
 
 import (
 	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/clients"
@@ -27,70 +23,6 @@ func TestOKHandler(t *testing.T) {
 	router.ServeHTTP(rr, req)
 
 	require.Equal(rr.Body.String(), "OK")
-}
-
-func TestSegmentCallback(t *testing.T) {
-	var jsonData = `{
-		"source_location": "http://localhost/input",
-		"callback_url": "CALLBACK_URL",
-		"manifestID": "somestream",
-		"profiles": [
-			{
-				"name": "720p",
-				"width": 1280,
-				"height": 720,
-				"bitrate": 700000,
-				"fps": 30
-			}, {
-				"name": "360p",
-				"width": 640,
-				"height": 360,
-				"bitrate": 200000,
-				"fps": 30
-			}
-		],
-		"verificationFreq": 1
-	}`
-
-	callbacks := make(chan string, 10)
-	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		payload, err := io.ReadAll(r.Body)
-		if err != nil {
-			fmt.Printf("WebhookReceiver error reading req body\n")
-			w.WriteHeader(451)
-			return
-		}
-		w.WriteHeader(200)
-		callbacks <- string(payload)
-	}))
-	defer callbackServer.Close()
-	jsonData = strings.ReplaceAll(jsonData, "CALLBACK_URL", callbackServer.URL)
-
-	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: clients.StubMistClient{}}
-
-	router := httprouter.New()
-
-	req, _ := http.NewRequest("POST", "/api/transcode/file", bytes.NewBuffer([]byte(jsonData)))
-	req.Header.Set("Content-Type", "application/json")
-
-	rr := httptest.NewRecorder()
-	router.POST("/api/transcode/file", catalystApiHandlers.TranscodeSegment())
-	router.ServeHTTP(rr, req)
-
-	require.Equal(t, 200, rr.Result().StatusCode)
-	require.Equal(t, "OK", rr.Body.String())
-
-	// Wait for callback
-	select {
-	case data := <-callbacks:
-		message := &clients.TranscodeStatusMessage{}
-		err := json.Unmarshal([]byte(data), message)
-		require.NoErrorf(t, err, "json unmarshal failed, src=%s", data)
-		require.Equal(t, "error", message.Status)
-		require.Equal(t, "NYI - not yet implemented", message.Error)
-	case <-time.After(300 * time.Millisecond):
-		require.FailNow(t, "Callback not fired by handler")
-	}
 }
 
 func TestSegmentBodyFormat(t *testing.T) {
