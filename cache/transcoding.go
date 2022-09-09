@@ -16,7 +16,14 @@ type SegmentInfo struct {
 	Destinations []string // Rendition URLS go here on push start and removed on push end
 }
 
-type IsEmpty = bool
+func (si SegmentInfo) ContainsDestination(destination string) bool {
+	for _, existing := range si.Destinations {
+		if existing == destination {
+			return true
+		}
+	}
+	return false
+}
 
 func (c *TranscodingCache) AddDestination(streamName, destination string) {
 	c.mutex.Lock()
@@ -27,7 +34,17 @@ func (c *TranscodingCache) AddDestination(streamName, destination string) {
 	}
 }
 
-func (c *TranscodingCache) RemovePushDestination(streamName, destination string) IsEmpty {
+func (c *TranscodingCache) AreDestinationsEmpty(streamName string) bool {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	info, ok := c.pushes[streamName]
+	if ok {
+		return len(info.Destinations) == 0
+	}
+	return true
+}
+
+func (c *TranscodingCache) RemovePushDestination(streamName, destination string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	info, ok := c.pushes[streamName]
@@ -39,9 +56,7 @@ func (c *TranscodingCache) RemovePushDestination(streamName, destination string)
 				break
 			}
 		}
-		return len(info.Destinations) == 0
 	}
-	return false
 }
 
 func (c *TranscodingCache) Remove(streamName string) {
