@@ -3,7 +3,6 @@ module github.com/livepeer/catalyst-api
 go 1.18
 
 require (
-	github.com/go-kit/kit v0.12.0
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/livepeer/livepeer-data v0.4.19
 	github.com/stretchr/testify v1.8.0
@@ -11,11 +10,17 @@ require (
 	sigs.k8s.io/yaml v1.3.0
 )
 
-require github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
+require (
+	github.com/fatih/color v1.12.0 // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
+	github.com/hashicorp/go-hclog v0.16.2 // indirect
+	github.com/mattn/go-colorable v0.1.8 // indirect
+	github.com/mattn/go-isatty v0.0.14 // indirect
+)
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/go-kit/log v0.2.0 // indirect
+	github.com/go-kit/log v0.2.0
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.1
 	github.com/pmezard/go-difflib v1.0.0 // indirect
