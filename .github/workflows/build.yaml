@@ -38,11 +38,10 @@ jobs:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
-          architecture: ${{ matrix.arch }}
 
       - name: Export OS and platform env
         run: |
-          echo "GOOS=${{ matrix.platform }}" >> $GITHUB_ENV
+          echo "GOOS=${{ matrix.platform.name }}" >> $GITHUB_ENV
           echo "GOARCH=${{ matrix.arch }}" >> $GITHUB_ENV
 
       - name: Download dependencies
