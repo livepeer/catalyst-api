@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"bytes"
+	"bufio"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/cache"
@@ -70,6 +72,33 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 	}
 }
 
+
+// streamOutput from a source to a destination buffer while also printing
+func streamOutput(src io.Reader, dst *bytes.Buffer, out io.Writer) error {
+	mw := io.MultiWriter(dst, out)
+	s := bufio.NewReader(src)
+	for {
+		var line []byte
+		line, err := s.ReadSlice('\n')
+		if err == io.EOF && len(line) == 0 {
+			break // done
+		}
+		if err == io.EOF {
+			return fmt.Errorf("Improper termination: %v", line)
+		}
+		if err != nil {
+			return err
+		}
+
+		// append to the buffer and out at once
+		mw.Write(line)
+	}
+
+	return nil
+}
+
+
+
 // RunTranscodeProcess starts `MistLivepeeerProc` as a subprocess to transcode inputStream into renditionsStream.
 func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegmentRequest) error {
 	inputStream, renditionsStream := config.GenerateStreamNames()
@@ -81,14 +110,16 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 	if err != nil {
 		return fmt.Errorf("ProcLivepeerConfig json encode: %s", err)
 	}
+	args := string(configPayload)
+	fmt.Println(args)
 
-	transcodeCommand := exec.Command(config.PathMistProcLivepeer, "-")
-	stdinPipe, err := transcodeCommand.StdinPipe()
+	transcodeCommand := exec.Command(config.PathMistProcLivepeer, args, "--debug", "8") 
+	/*stdinPipe, err := transcodeCommand.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("transcodeCommand.StdinPipe: %s", err)
-	}
-	commandOutputToLog(transcodeCommand, "coding")
-
+	}*/
+//	commandOutputToLog(transcodeCommand, "coding")
+/*
 	sent, err := stdinPipe.Write(configPayload)
 	if err != nil {
 		return fmt.Errorf("stdinPipe.Write: %s", err)
@@ -96,15 +127,30 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 	if sent != len(configPayload) {
 		return fmt.Errorf("short write on stdinPipe.Write: %s", err)
 	}
-
+fmt.Println("NOT HERE")
 	if err := stdinPipe.Close(); err != nil {
 		return fmt.Errorf("stdinPipe.Close: %s", err)
 	}
+*/
+
+	var stdout, stderr bytes.Buffer
+	stderrPipe, err := transcodeCommand.StderrPipe()
+	stdoutPipe, err := transcodeCommand.StdoutPipe()
 
 	// Start the Transcode Command asynchronously - we call Wait() later in this method
-	if err := transcodeCommand.Start(); err != nil {
-		return fmt.Errorf("start transcodeCommand: %s", err)
+	fmt.Printf("Starting transcode: %s", transcodeCommand.String())
+	err = transcodeCommand.Start()
+	if err != nil {
+		fmt.Printf("start transcodeCommand: %s\n", err)
 	}
+
+	go func() {
+		streamOutput(stdoutPipe, &stdout, os.Stdout)
+	}()
+	go func() {
+		streamOutput(stderrPipe, &stderr, os.Stderr)
+	}()
+
 
 	// TODO: remove when Mist code is updated https://github.com/DDVTECH/mistserver/issues/81
 	// Starting SOURCE_PREFIX stream because MistProcLivepeer is unable to start it automatically
@@ -133,12 +179,14 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 	})
 
 	if err := transcodeCommand.Wait(); err != nil {
+		fmt.Println("TRANSCODE ERROR!!!")
 		if exit, ok := err.(*exec.ExitError); ok {
 			log.Printf("MistProcLivepeer returned %d", exit.ExitCode())
 		}
 		return fmt.Errorf("exec transcodeCommand: %s", err)
 	}
 
+	fmt.Println("DONE....")
 	return nil
 }
 
@@ -148,12 +196,16 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 // Same applies on transcoder side, expect Livepeer to use single best video track as input.
 func configForSubprocess(req TranscodeSegmentRequest, inputStreamName, outputStreamName string) ProcLivepeerConfig {
 	conf := ProcLivepeerConfig{
+		AccessToken:           "e040aebb-f759-49f9-bf1d-5ba521b07a7b",
+		CustomUrl:             "https://origin.livepeer.com/api/",
 		InputStreamName:       inputStreamName,
 		OutputStreamName:      outputStreamName,
 		Leastlive:             true,
 		AudioSelect:           "maxbps",
-		HardcodedBroadcasters: fmt.Sprintf(`[{"address":"http://127.0.0.1:%d"}]`, config.BroadcasterPort),
+		HardcodedBroadcasters: "",
 	}
+//./MistProcLivepeer '{"access_token":"e040aebb-f759-49f9-bf1d-5ba521b07a7b","codec":"H264","custom_url":"https://origin.livepeer.com/api/","debug":5,"exit_unmask":0,"process":"Livepeer","source":"stream+foo","sources":null,"target_profiles":[{"bitrate":400000,"fps":30,"height":144,"name":"P144p30fps16x9","width":256}],"x-LSP-kind":"video"}' --debug 5
+
 	// Setup requested rendition profiles
 	for _, profile := range req.Profiles {
 		Width := profile.Width
@@ -209,10 +261,12 @@ type ProcLivepeerConfigProfile struct {
 	AvcProfile string `json:"profile,omitempty"` // H264High; High; H264Baseline; Baseline; H264Main; Main; H264ConstrainedHigh; High, without b-frames
 }
 type ProcLivepeerConfig struct {
+	AccessToken           string                      `json:"access_token"`
+	CustomUrl             string                      `json:"custom_url"`
 	InputStreamName       string                      `json:"source"`
 	OutputStreamName      string                      `json:"sink"`
 	Leastlive             bool                        `json:"leastlive"`
-	HardcodedBroadcasters string                      `json:"hardcoded_broadcasters"`
+	HardcodedBroadcasters string                      `json:"hardcoded_broadcasters,omitempty"`
 	AudioSelect           string                      `json:"audio_select"`
 	Profiles              []ProcLivepeerConfigProfile `json:"target_profiles"`
 }

@@ -39,6 +39,10 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 	streamName := lines[0]
 	encodedTracks := lines[1]
 
+	fmt.Println("XXX: LIVE HERE....................")
+	fmt.Printf("XXX: %s\n", lines)
+	fmt.Printf("XXX: %s\n", string(payload))
+
 	// Check that the name looks right for a stream we've completed as part of the Transcode workflow
 	if !config.IsTranscodeStream(streamName) {
 		errors.WriteHTTPBadRequest(w, "PUSH_END trigger invoked for something that isn't a transcode stream: "+streamName, nil)
@@ -77,9 +81,11 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 			continue
 		}
 		destination := fmt.Sprintf("%s/%s__%dx%d.ts?video=%d&audio=maxbps", info.UploadDir, streamName, tracks[i].Width, tracks[i].Height, tracks[i].Index) //.Id)
+fmt.Printf("XXX: destination %s\n", destination)
 		if err := d.MistClient.PushStart(streamName, destination); err != nil {
 			log.Printf("> ERROR push to %s %v", destination, err)
 		} else {
+fmt.Println("XXX: PUSHING")
 			cache.DefaultStreamCache.Transcoding.AddDestination(streamName, destination)
 		}
 	}
