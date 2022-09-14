@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/julienschmidt/httprouter v1.3.0
-	github.com/livepeer/livepeer-data v0.4.19
+	github.com/livepeer/livepeer-data v0.4.20
 	github.com/stretchr/testify v1.8.0
 	github.com/xeipuuv/gojsonschema v1.2.0
 	sigs.k8s.io/yaml v1.3.0
