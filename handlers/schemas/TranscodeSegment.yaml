@@ -4,6 +4,10 @@ properties:
     type: "string"
   callback_url:
     type: "string"
+  accessToken:
+    type: "string"
+  transcodeAPIUrl:
+    type: "string"
   manifestID:
     type: "string"
   streamID:
