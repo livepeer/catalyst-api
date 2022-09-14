@@ -12,10 +12,12 @@ var Version string
 var Clock TimestampGenerator = RealTimestampGenerator{}
 
 // Path to Mist's "Livepeer" process that we shell out to for the transcoding
-const PathMistProcLivepeer = "./MistProcLivepeer"
+const PathMistProcLivepeer = "/media/psf/AllFiles/Users/emran/catalyst/bin/MistProcLivepeer"
 
 // Port that the local Broadcaster runs on
-const BroadcasterPort = 8935
+const DefaultBroadcasterPort = 8935
+
+const DefaultCustomAPIUrl = "https://origin.livepeer.com/api/"
 
 // Global variable, but easier than passing a logger around throughout the system
 var Logger log.Logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
