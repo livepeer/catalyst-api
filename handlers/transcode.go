@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,8 +11,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"bytes"
-	"bufio"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/cache"
@@ -27,6 +27,8 @@ type TranscodeSegmentRequest struct {
 	StreamID             string                 `json:"streamID"`
 	SessionID            string                 `json:"sessionID"`
 	StreamKey            string                 `json:"streamKey"`
+	AccessToken          string                 `json:"accessToken"`
+	TranscodeAPIUrl      string                 `json:"transcodeAPIUrl"`
 	Presets              []string               `json:"presets"`
 	ObjectStore          string                 `json:"objectStore"`
 	RecordObjectStore    string                 `json:"recordObjectStore"`
@@ -72,7 +74,6 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 	}
 }
 
-
 // streamOutput from a source to a destination buffer while also printing
 func streamOutput(src io.Reader, dst *bytes.Buffer, out io.Writer) error {
 	mw := io.MultiWriter(dst, out)
@@ -97,8 +98,6 @@ func streamOutput(src io.Reader, dst *bytes.Buffer, out io.Writer) error {
 	return nil
 }
 
-
-
 // RunTranscodeProcess starts `MistLivepeeerProc` as a subprocess to transcode inputStream into renditionsStream.
 func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegmentRequest) error {
 	inputStream, renditionsStream := config.GenerateStreamNames()
@@ -113,32 +112,32 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 	args := string(configPayload)
 	fmt.Println(args)
 
-	transcodeCommand := exec.Command(config.PathMistProcLivepeer, args, "--debug", "8") 
+	transcodeCommand := exec.Command(config.PathMistProcLivepeer, args, "--debug", "8")
 	/*stdinPipe, err := transcodeCommand.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("transcodeCommand.StdinPipe: %s", err)
 	}*/
-//	commandOutputToLog(transcodeCommand, "coding")
-/*
-	sent, err := stdinPipe.Write(configPayload)
-	if err != nil {
-		return fmt.Errorf("stdinPipe.Write: %s", err)
-	}
-	if sent != len(configPayload) {
-		return fmt.Errorf("short write on stdinPipe.Write: %s", err)
-	}
-fmt.Println("NOT HERE")
-	if err := stdinPipe.Close(); err != nil {
-		return fmt.Errorf("stdinPipe.Close: %s", err)
-	}
-*/
+	//	commandOutputToLog(transcodeCommand, "coding")
+	/*
+	   	sent, err := stdinPipe.Write(configPayload)
+	   	if err != nil {
+	   		return fmt.Errorf("stdinPipe.Write: %s", err)
+	   	}
+	   	if sent != len(configPayload) {
+	   		return fmt.Errorf("short write on stdinPipe.Write: %s", err)
+	   	}
+	   fmt.Println("NOT HERE")
+	   	if err := stdinPipe.Close(); err != nil {
+	   		return fmt.Errorf("stdinPipe.Close: %s", err)
+	   	}
+	*/
 
 	var stdout, stderr bytes.Buffer
 	stderrPipe, err := transcodeCommand.StderrPipe()
 	stdoutPipe, err := transcodeCommand.StdoutPipe()
 
 	// Start the Transcode Command asynchronously - we call Wait() later in this method
-	fmt.Printf("Starting transcode: %s", transcodeCommand.String())
+	fmt.Printf("Starting transcode via: %s\n", transcodeCommand.String())
 	err = transcodeCommand.Start()
 	if err != nil {
 		fmt.Printf("start transcodeCommand: %s\n", err)
@@ -150,7 +149,6 @@ fmt.Println("NOT HERE")
 	go func() {
 		streamOutput(stderrPipe, &stderr, os.Stderr)
 	}()
-
 
 	// TODO: remove when Mist code is updated https://github.com/DDVTECH/mistserver/issues/81
 	// Starting SOURCE_PREFIX stream because MistProcLivepeer is unable to start it automatically
@@ -195,16 +193,31 @@ fmt.Println("NOT HERE")
 // The AudioSelect is configured to use single audio track from input.
 // Same applies on transcoder side, expect Livepeer to use single best video track as input.
 func configForSubprocess(req TranscodeSegmentRequest, inputStreamName, outputStreamName string) ProcLivepeerConfig {
+
+	// If access-token is provided, use the API url for transcoding.
+	// Otherwise, use hardcoded-broadcaster for transcoding.
+	var apiUrl, hardcodedBroadcasters string
+	if req.AccessToken != "" {
+		if req.TranscodeAPIUrl != "" {
+			apiUrl = req.TranscodeAPIUrl
+		} else {
+			apiUrl = config.DefaultCustomAPIUrl
+		}
+	} else {
+		hardcodedBroadcasters = fmt.Sprintf(`[{"address":"http://127.0.0.1:%d"}]`, config.DefaultBroadcasterPort)
+	}
+	fmt.Printf("HARD:%s", hardcodedBroadcasters)
+
 	conf := ProcLivepeerConfig{
-		AccessToken:           "e040aebb-f759-49f9-bf1d-5ba521b07a7b",
-		CustomUrl:             "https://origin.livepeer.com/api/",
+		AccessToken:           req.AccessToken,
+		CustomAPIUrl:          apiUrl,
 		InputStreamName:       inputStreamName,
 		OutputStreamName:      outputStreamName,
 		Leastlive:             true,
 		AudioSelect:           "maxbps",
-		HardcodedBroadcasters: "",
+		HardcodedBroadcasters: hardcodedBroadcasters,
 	}
-//./MistProcLivepeer '{"access_token":"e040aebb-f759-49f9-bf1d-5ba521b07a7b","codec":"H264","custom_url":"https://origin.livepeer.com/api/","debug":5,"exit_unmask":0,"process":"Livepeer","source":"stream+foo","sources":null,"target_profiles":[{"bitrate":400000,"fps":30,"height":144,"name":"P144p30fps16x9","width":256}],"x-LSP-kind":"video"}' --debug 5
+	//./MistProcLivepeer '{"access_token":"e040aebb-f759-49f9-bf1d-5ba521b07a7b","codec":"H264","custom_url":"https://origin.livepeer.com/api/","debug":5,"exit_unmask":0,"process":"Livepeer","source":"stream+foo","sources":null,"target_profiles":[{"bitrate":400000,"fps":30,"height":144,"name":"P144p30fps16x9","width":256}],"x-LSP-kind":"video"}' --debug 5
 
 	// Setup requested rendition profiles
 	for _, profile := range req.Profiles {
@@ -260,9 +273,10 @@ type ProcLivepeerConfigProfile struct {
 	GOP        string `json:"gop,omitempty"`
 	AvcProfile string `json:"profile,omitempty"` // H264High; High; H264Baseline; Baseline; H264Main; Main; H264ConstrainedHigh; High, without b-frames
 }
+
 type ProcLivepeerConfig struct {
-	AccessToken           string                      `json:"access_token"`
-	CustomUrl             string                      `json:"custom_url"`
+	AccessToken           string                      `json:"access_token,omitempty"`
+	CustomAPIUrl          string                      `json:"custom_api_url,omitempty"`
 	InputStreamName       string                      `json:"source"`
 	OutputStreamName      string                      `json:"sink"`
 	Leastlive             bool                        `json:"leastlive"`

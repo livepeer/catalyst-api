@@ -81,11 +81,11 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 			continue
 		}
 		destination := fmt.Sprintf("%s/%s__%dx%d.ts?video=%d&audio=maxbps", info.UploadDir, streamName, tracks[i].Width, tracks[i].Height, tracks[i].Index) //.Id)
-fmt.Printf("XXX: destination %s\n", destination)
+		fmt.Printf("XXX: destination %s\n", destination)
 		if err := d.MistClient.PushStart(streamName, destination); err != nil {
 			log.Printf("> ERROR push to %s %v", destination, err)
 		} else {
-fmt.Println("XXX: PUSHING")
+			fmt.Println("XXX: PUSHING")
 			cache.DefaultStreamCache.Transcoding.AddDestination(streamName, destination)
 		}
 	}
