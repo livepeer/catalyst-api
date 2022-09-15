@@ -74,7 +74,7 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 	}
 }
 
-// streamOutput from a source to a destination buffer while also printing
+// stream from a source to a destination buffer while also printing
 func streamOutput(src io.Reader, dst *bytes.Buffer, out io.Writer) error {
 	mw := io.MultiWriter(dst, out)
 	s := bufio.NewReader(src)
@@ -82,7 +82,7 @@ func streamOutput(src io.Reader, dst *bytes.Buffer, out io.Writer) error {
 		var line []byte
 		line, err := s.ReadSlice('\n')
 		if err == io.EOF && len(line) == 0 {
-			break // done
+			break
 		}
 		if err == io.EOF {
 			return fmt.Errorf("Improper termination: %v", line)
@@ -91,7 +91,6 @@ func streamOutput(src io.Reader, dst *bytes.Buffer, out io.Writer) error {
 			return err
 		}
 
-		// append to the buffer and out at once
 		mw.Write(line)
 	}
 
@@ -110,27 +109,8 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 		return fmt.Errorf("ProcLivepeerConfig json encode: %s", err)
 	}
 	args := string(configPayload)
-	fmt.Println(args)
 
 	transcodeCommand := exec.Command(config.PathMistProcLivepeer, args, "--debug", "8")
-	/*stdinPipe, err := transcodeCommand.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("transcodeCommand.StdinPipe: %s", err)
-	}*/
-	//	commandOutputToLog(transcodeCommand, "coding")
-	/*
-	   	sent, err := stdinPipe.Write(configPayload)
-	   	if err != nil {
-	   		return fmt.Errorf("stdinPipe.Write: %s", err)
-	   	}
-	   	if sent != len(configPayload) {
-	   		return fmt.Errorf("short write on stdinPipe.Write: %s", err)
-	   	}
-	   fmt.Println("NOT HERE")
-	   	if err := stdinPipe.Close(); err != nil {
-	   		return fmt.Errorf("stdinPipe.Close: %s", err)
-	   	}
-	*/
 
 	var stdout, stderr bytes.Buffer
 	stderrPipe, err := transcodeCommand.StderrPipe()
@@ -177,14 +157,12 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 	})
 
 	if err := transcodeCommand.Wait(); err != nil {
-		fmt.Println("TRANSCODE ERROR!!!")
 		if exit, ok := err.(*exec.ExitError); ok {
 			log.Printf("MistProcLivepeer returned %d", exit.ExitCode())
 		}
 		return fmt.Errorf("exec transcodeCommand: %s", err)
 	}
 
-	fmt.Println("DONE....")
 	return nil
 }
 
@@ -217,7 +195,6 @@ func configForSubprocess(req TranscodeSegmentRequest, inputStreamName, outputStr
 		AudioSelect:           "maxbps",
 		HardcodedBroadcasters: hardcodedBroadcasters,
 	}
-	//./MistProcLivepeer '{"access_token":"e040aebb-f759-49f9-bf1d-5ba521b07a7b","codec":"H264","custom_url":"https://origin.livepeer.com/api/","debug":5,"exit_unmask":0,"process":"Livepeer","source":"stream+foo","sources":null,"target_profiles":[{"bitrate":400000,"fps":30,"height":144,"name":"P144p30fps16x9","width":256}],"x-LSP-kind":"video"}' --debug 5
 
 	// Setup requested rendition profiles
 	for _, profile := range req.Profiles {
