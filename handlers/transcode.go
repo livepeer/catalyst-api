@@ -184,7 +184,6 @@ func configForSubprocess(req TranscodeSegmentRequest, inputStreamName, outputStr
 	} else {
 		hardcodedBroadcasters = fmt.Sprintf(`[{"address":"http://127.0.0.1:%d"}]`, config.DefaultBroadcasterPort)
 	}
-	fmt.Printf("HARD:%s", hardcodedBroadcasters)
 
 	conf := ProcLivepeerConfig{
 		AccessToken:           req.AccessToken,
