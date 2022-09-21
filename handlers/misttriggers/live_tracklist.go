@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"strconv"
+	"net/url"
 
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/config"
@@ -39,6 +41,11 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 	streamName := lines[0]
 	encodedTracks := lines[1]
 
+fmt.Println("XXX: INSIDE LIVE_TRACK_LIST handler yo")
+fmt.Printf("XXX: payload: %s\n", payload)
+fmt.Printf("XXX: streamName: %s\n", streamName)
+fmt.Printf("XXX: encodedTracks: %s\n", encodedTracks) 
+
 	// Check that the name looks right for a stream we've completed as part of the Transcode workflow
 	if !config.IsTranscodeStream(streamName) {
 		errors.WriteHTTPBadRequest(w, "PUSH_END trigger invoked for something that isn't a transcode stream: "+streamName, nil)
@@ -70,17 +77,45 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 		return
 	}
 
-	// Start push per each video track
+	// upload each track (transcoded rendition) returned by Mist to S3
 	for i := range tracks {
+		// Only produce a rendition for each video track, selecting best audio track
 		if tracks[i].Type != "video" {
-			// Only produce an rendition per each video track, selecting best audio track
 			continue
 		}
-		destination := fmt.Sprintf("%s/%s__%dx%d.ts?video=%d&audio=maxbps", info.UploadDir, streamName, tracks[i].Width, tracks[i].Height, tracks[i].Index) //.Id)
-		if err := d.MistClient.PushStart(streamName, destination); err != nil {
-			log.Printf("> ERROR push to %s %v", destination, err)
-		} else {
-			cache.DefaultStreamCache.Transcoding.AddDestination(streamName, destination)
+
+		// Build the full URL path that will be sent to Mist as the target upload location
+		/*rootPathUrl, err := url.Parse(info.UploadDir)
+		if err != nil {
+			log.Fatal(err)
+		}*/
+		dirPathUrl, err := url.JoinPath(info.UploadDir, fmt.Sprintf("%s_%dx%d/stream.m3u8", 
+					streamName, tracks[i].Width, tracks[i].Height))
+		if err != nil {
+			log.Fatal(err)
 		}
+		fullPathUrl, err := url.Parse(dirPathUrl)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Add URL query parameters (e.g. ?video=0&audio=maxbps) used by Mist to select 
+		// the correct trancoded rendtion track(s)
+		urlParams := fullPathUrl.Query()
+		urlParams.Add("video", strconv.FormatInt(int64(tracks[i].Index), 10))
+		urlParams.Add("audio", "maxbps")
+		fullPathUrl.RawQuery = urlParams.Encode()
+
+		destination := fullPathUrl.String()
+		fmt.Printf("XXX: final fullPathUrl: %s\n", destination)
+
+                if err := d.MistClient.PushStart(streamName, destination); err != nil {
+                        log.Printf("> ERROR push to %s %v", destination, err)
+                } else {
+fmt.Println("XXX: STARTING PUSH AFTER LIVE_TRACK_LIST")
+                        cache.DefaultStreamCache.Transcoding.AddDestination(streamName, destination)
+                }
 	}
+
+
 }
