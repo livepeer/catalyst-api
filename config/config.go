@@ -12,7 +12,7 @@ var Version string
 var Clock TimestampGenerator = RealTimestampGenerator{}
 
 // Path to Mist's "Livepeer" process that we shell out to for the transcoding
-const PathMistProcLivepeer = "/media/psf/AllFiles/Users/emran/catalyst/bin/MistProcLivepeer"
+const PathMistProcLivepeer = "/usr/bin/MistProcLivepeer"
 
 // Port that the local Broadcaster runs on
 const DefaultBroadcasterPort = 8935

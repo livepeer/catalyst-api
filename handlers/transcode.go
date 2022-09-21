@@ -90,15 +90,22 @@ func streamOutput(src io.Reader, dst *bytes.Buffer, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-
-		mw.Write(line)
+		_, err = mw.Write(line)
+		if err != nil {
+			return err
+		}
 	}
-
 	return nil
 }
 
 // RunTranscodeProcess starts `MistLivepeeerProc` as a subprocess to transcode inputStream into renditionsStream.
 func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegmentRequest) error {
+
+	inputUrl, err := url.Parse(request.SourceFile)
+	if err != nil {
+		return fmt.Errorf("invalid request source location: %s, error: %s", request.SourceFile, err)
+	}
+
 	inputStream, renditionsStream := config.GenerateStreamNames()
 	if err := mistClient.AddStream(inputStream, request.SourceFile); err != nil {
 		return fmt.Errorf("error adding stream to Mist: %s", err)
@@ -110,41 +117,35 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 	}
 	args := string(configPayload)
 
-	transcodeCommand := exec.Command(config.PathMistProcLivepeer, args, "--debug", "8")
+	transcodeCommand := exec.Command(config.PathMistProcLivepeer, args, "--debug", "8", "--kickoff")
 
 	var stdout, stderr bytes.Buffer
 	stderrPipe, err := transcodeCommand.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("Failed to open stderr pipe: %s", err)
+	}
 	stdoutPipe, err := transcodeCommand.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("Failed to open stdout pipe: %s", err)
+	}
 
 	// Start the Transcode Command asynchronously - we call Wait() later in this method
 	fmt.Printf("Starting transcode via: %s\n", transcodeCommand.String())
 	err = transcodeCommand.Start()
 	if err != nil {
-		fmt.Printf("start transcodeCommand: %s\n", err)
+		return fmt.Errorf("Failed to start MistProcLivepeer: %s", err)
 	}
 
 	go func() {
-		streamOutput(stdoutPipe, &stdout, os.Stdout)
+		if streamOutput(stdoutPipe, &stdout, os.Stdout) != nil {
+			fmt.Errorf("Failed to stream output from stdout")
+		}
 	}()
 	go func() {
-		streamOutput(stderrPipe, &stderr, os.Stderr)
+		if streamOutput(stderrPipe, &stderr, os.Stderr) != nil {
+			fmt.Errorf("Failed to stream output from stderr")
+		}
 	}()
-
-	// TODO: remove when Mist code is updated https://github.com/DDVTECH/mistserver/issues/81
-	// Starting SOURCE_PREFIX stream because MistProcLivepeer is unable to start it automatically
-	file, err := os.CreateTemp("", "tmp-*.ts")
-	if err != nil {
-		return fmt.Errorf("error creating temporary file for SOURCE_PREFIX stream: %s", err)
-	}
-
-	if err := mistClient.PushStart(inputStream, file.Name()); err != nil {
-		return fmt.Errorf("PushStart(inputStream): %s", err)
-	}
-
-	inputUrl, err := url.Parse(request.SourceFile)
-	if err != nil {
-		return fmt.Errorf("invalid request source_location: %s", err)
-	}
 
 	dir, _ := url.Parse(".")
 	uploadDir := inputUrl.ResolveReference(dir)
@@ -166,12 +167,13 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 	return nil
 }
 
-// configForSubprocess transforms request information to MistProcLivepeer config json
-// We use .HardcodedBroadcasters assuming we have local B-node.
-// The AudioSelect is configured to use single audio track from input.
-// Same applies on transcoder side, expect Livepeer to use single best video track as input.
+// configForSubprocess transforms request information to cmd line args to MistProcLivepeer (as json string)
+// For transcoding, there are two options:
+//  1. use HardcodedBroadcasters if a local Broadcaster node is available
+//  2. use livepeer.studio nodes via an API key
+//
+// The AudioSelect is configured to use a single audio track from input.
 func configForSubprocess(req TranscodeSegmentRequest, inputStreamName, outputStreamName string) ProcLivepeerConfig {
-
 	// If access-token is provided, use the API url for transcoding.
 	// Otherwise, use hardcoded-broadcaster for transcoding.
 	var apiUrl, hardcodedBroadcasters string
@@ -211,33 +213,6 @@ func configForSubprocess(req TranscodeSegmentRequest, inputStreamName, outputStr
 		})
 	}
 	return conf
-}
-
-func commandOutputToLog(cmd *exec.Cmd, name string) {
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		log.Printf("ERROR: cmd.StdoutPipe() %v", err)
-		return
-	}
-	go pipeToLog(stdoutPipe, name)
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		log.Printf("ERROR: cmd.StderrPipe() %v", err)
-		return
-	}
-	go pipeToLog(stderrPipe, name)
-}
-
-func pipeToLog(pipe io.ReadCloser, name string) {
-	data := make([]byte, 4096)
-	for {
-		count, err := pipe.Read(data)
-		if err != nil {
-			log.Printf("ERROR cmd=%s %v", name, err)
-			return
-		}
-		log.Printf("out [%s] %s", name, string(data[0:count]))
-	}
 }
 
 type ProcLivepeerConfigProfile struct {

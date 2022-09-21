@@ -54,7 +54,7 @@ func (d *MistCallbackHandlersCollection) TranscodingPushEnd(w http.ResponseWrite
 
 	// Check if we have a record of this destination
 	if !info.ContainsDestination(destination) {
-		errors.WriteHTTPBadRequest(w, fmt.Sprintf("PUSH_END can't find desination %q for stream %q", destination, streamName), nil)
+		errors.WriteHTTPBadRequest(w, fmt.Sprintf("PUSH_END can't find destination %q for stream %q", destination, streamName), nil)
 		return
 	}
 
@@ -67,7 +67,7 @@ func (d *MistCallbackHandlersCollection) TranscodingPushEnd(w http.ResponseWrite
 	} else {
 		// We forward pushStatus json to callback
 		if err := clients.DefaultCallbackClient.SendTranscodeStatusError(info.CallbackUrl, fmt.Sprintf("Error while pushing to %s: %s", actualDestination, pushStatus)); err != nil {
-			_ = config.Logger.Log("msg", "Error sending transcode error status in TranscodingPushEnd", "err", err)
+			config.Logger.Log("msg", "Error sending transcode error status in TranscodingPushEnd", "err", err)
 		}
 	}
 
