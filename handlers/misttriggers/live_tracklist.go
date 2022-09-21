@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/livepeer/catalyst-api/cache"
@@ -52,6 +54,7 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 		return
 	}
 
+	// Check if LIVE_TRACK_LIST trigger is being fired *after* the push-from-Mist-to-S3 is complete
 	var streamEnded = (encodedTracks == "null")
 	if streamEnded {
 		// SOURCE_PREFIX stream is no longer needed
@@ -70,13 +73,33 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 		return
 	}
 
-	// Start push per each video track
+	// Upload each track (transcoded rendition) returned by Mist to S3
 	for i := range tracks {
+		// Only produce a rendition for each video track, selecting best audio track
 		if tracks[i].Type != "video" {
-			// Only produce an rendition per each video track, selecting best audio track
 			continue
 		}
-		destination := fmt.Sprintf("%s/%s__%dx%d.ts?video=%d&audio=maxbps", info.UploadDir, streamName, tracks[i].Width, tracks[i].Height, tracks[i].Index) //.Id)
+
+		// Build the full URL path that will be sent to Mist as the target upload location
+		dirPathUrl, err := url.JoinPath(info.UploadDir, fmt.Sprintf("%s_%dx%d/stream.m3u8",
+			streamName, tracks[i].Width, tracks[i].Height))
+		if err != nil {
+			log.Fatal(err)
+		}
+		fullPathUrl, err := url.Parse(dirPathUrl)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Add URL query parameters (e.g. ?video=0&audio=maxbps) used by Mist to select
+		// the correct trancoded rendtion track(s)
+		urlParams := fullPathUrl.Query()
+		urlParams.Add("video", strconv.FormatInt(int64(tracks[i].Index), 10))
+		urlParams.Add("audio", "maxbps")
+		fullPathUrl.RawQuery = urlParams.Encode()
+
+		destination := fullPathUrl.String()
+
 		if err := d.MistClient.PushStart(streamName, destination); err != nil {
 			log.Printf("> ERROR push to %s %v", destination, err)
 		} else {
