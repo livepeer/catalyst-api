@@ -72,6 +72,9 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 		errors.WriteHTTPInternalServerError(w, "LiveTrackListTriggerJson json decode error: "+streamName, err)
 		return
 	}
+fmt.Printf("XXX: TRACKS: %v\n", tracks)
+
+	multivariantPlaylist := "#EXTM3U\r\n"
 
 	// Upload each track (transcoded rendition) returned by Mist to S3
 	for i := range tracks {
@@ -100,10 +103,22 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 
 		destination := fullPathUrl.String()
 
-		if err := d.MistClient.PushStart(streamName, destination); err != nil {
-			log.Printf("> ERROR push to %s %v", destination, err)
-		} else {
-			cache.DefaultStreamCache.Transcoding.AddDestination(streamName, destination)
-		}
+                if err := d.MistClient.PushStart(streamName, destination); err != nil {
+                        log.Printf("> ERROR push to %s %v", destination, err)
+                } else {
+fmt.Println("XXX: STARTING PUSH AFTER LIVE_TRACK_LIST")
+                        cache.DefaultStreamCache.Transcoding.AddDestination(streamName, destination)
+
+
+			profile, ok := info.GetMatchingProfile(tracks[i].Width, tracks[i].Height)
+			if !ok {
+				log.Printf("ERROR push doesn't match to any given profile %s", destination)
+			} else {
+				multivariantPlaylist += fmt.Sprintf("#EXT-X-STREAM-INF:BANDWIDTH=%d,RESOLUTION=%dx%d\r\n%s\r\n", profile.Bitrate, tracks[i].Width, tracks[i].Height, destination)
+				log.Printf("YYY: multivariantPlaylist %s", multivariantPlaylist)
+
+			}
+
+                }
 	}
 }
