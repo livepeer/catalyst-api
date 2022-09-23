@@ -52,7 +52,9 @@ func (c *SegmentInfo) GetMatchingProfile(width int32, height int32) (p EncodedPr
                 return
         }
         p = c.Profiles[0]
+log.Printf("YYY: %v", p)
         for _, profile := range c.Profiles[1:] {
+		log.Printf("YYY: %v", c.Profiles[1:])
                 if profile.Width == width && profile.Height == height {
                         log.Printf("YYY: FOUND GetMatchingProfile %dx%d", width, height)
                         return profile, true

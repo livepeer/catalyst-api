@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"net/url"
 	"strconv"
 	"strings"
@@ -13,9 +14,12 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 )
+//{"video_H264_640x360_24fps_0":{"bframes":1,"bps":11205,"codec":"H264","firstms":541,"fpks":24000,"height":360,"idx":0,"init":"\u0001d\u0000\u001E\u00FF\u00E1\u0000 gd\u0000\u001E\u00AC,\u00A5\u0002\u0080\u00BF\u00E5\u00C0D\u0000\u0000\u000F\u00A0\u0000\u0002\u00EE\u0003\u0080\u0000\f5\u0000\u0006\u001A\u008B\u00BC\u00B8(\u0001\u0000\u0004h\u00EB\u008F,","jitter":200,"lastms":4958,"maxbps":11205,"trackid":256,"type":"video","width":640}}
 
 type MistTrack struct {
+// added by mist
 	Id          int32  `json:"trackid"`
+	ByteRate    int32  `json:"bps"`
 	Kfps        int32  `json:"fpks"`
 	Height      int32  `json:"height"`
 	Width       int32  `json:"width"`
@@ -24,9 +28,59 @@ type MistTrack struct {
 	Codec       string `json:"codec"`
 	StartTimeMs int32  `json:"firstms"`
 	EndTimeMs   int32  `json:"lastms"`
+// added by us
+	manifestDestPath     string
 }
 
 type LiveTrackListTriggerJson = map[string]MistTrack
+
+// create ByBitrate type which is a MistTrack slice
+type ByBitrate []MistTrack
+
+func (a ByBitrate) Len() int {
+	return len(a)
+}
+
+func (a ByBitrate) Less(i, j int) bool {
+	if a[i].ByteRate == a[j].ByteRate {
+		// if two tracks have the same byterate, then sort by resolution
+		return a[i].Width*a[i].Height < a[j].Width*a[j].Height
+	} else {
+		return a[i].ByteRate < a[j].ByteRate
+	}
+}
+
+func (a ByBitrate) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
+}
+
+func createPlaylist(multivariantPlaylist string, tracks []MistTrack) string {
+	
+	for i, _ := range tracks {
+		multivariantPlaylist += fmt.Sprintf("#EXT-X-STREAM-INF:BANDWIDTH=%d,RESOLUTION=%dx%d\r\n%s\r\n", tracks[i].ByteRate*8, tracks[i].Width, tracks[i].Height, tracks[i].manifestDestPath)
+
+	}	
+	return multivariantPlaylist
+
+}
+
+
+/*func uploadPlaylist(destination string, renditionTrackList MistTrack) {
+
+	log.Printf("YYY: storePlaylist %s %s", destination, data)
+	storageDriver, err := drivers.ParseOSURL(destination, true)
+	if err != nil {
+		log.Printf("error drivers.ParseOSURL %v %s", err, destination)
+	}
+	session := storageDriver.NewSession("")
+	ctx := context.Background()
+	_, err = session.SaveData(ctx, "", bytes.NewBuffer([]byte(data)), nil, 3*time.Second)
+	if err != nil {
+		log.Printf("error session.SaveData %v %s", err, destination)
+	}
+
+}
+*/
 
 // TriggerLiveTrackList responds to LIVE_TRACK_LIST trigger.
 // It is stream-specific and must be blocking. The payload for this trigger is multiple lines,
@@ -76,7 +130,9 @@ fmt.Printf("XXX: TRACKS: %v\n", tracks)
 
 	multivariantPlaylist := "#EXTM3U\r\n"
 
-	// Upload each track (transcoded rendition) returned by Mist to S3
+	trackList := []MistTrack{} 
+
+	// upload each track (transcoded rendition) returned by Mist to S3
 	for i := range tracks {
 		// Only produce a rendition for each video track, selecting best audio track
 		if tracks[i].Type != "video" {
@@ -89,6 +145,7 @@ fmt.Printf("XXX: TRACKS: %v\n", tracks)
 		if err != nil {
 			log.Fatal(err)
 		}
+	
 		fullPathUrl, err := url.Parse(dirPathUrl)
 		if err != nil {
 			log.Fatal(err)
@@ -109,16 +166,28 @@ fmt.Printf("XXX: TRACKS: %v\n", tracks)
 fmt.Println("XXX: STARTING PUSH AFTER LIVE_TRACK_LIST")
                         cache.DefaultStreamCache.Transcoding.AddDestination(streamName, destination)
 
+			trackList = append(trackList, tracks[i])
+			trackList[len(trackList)-1].manifestDestPath = dirPathUrl
+			fmt.Println("YYYA: trackList:", trackList)
 
-			profile, ok := info.GetMatchingProfile(tracks[i].Width, tracks[i].Height)
-			if !ok {
-				log.Printf("ERROR push doesn't match to any given profile %s", destination)
-			} else {
-				multivariantPlaylist += fmt.Sprintf("#EXT-X-STREAM-INF:BANDWIDTH=%d,RESOLUTION=%dx%d\r\n%s\r\n", profile.Bitrate, tracks[i].Width, tracks[i].Height, destination)
-				log.Printf("YYY: multivariantPlaylist %s", multivariantPlaylist)
+//			profile, ok := info.GetMatchingProfile(tracks[i].Width, tracks[i].Height)
+//			if !ok {
+//				log.Printf("ERROR push doesn't match to any given profile %s", destination)
+//			} else {
+		//		multivariantPlaylist += fmt.Sprintf("#EXT-X-STREAM-INF:BANDWIDTH=%d,RESOLUTION=%dx%d\r\n%s\r\n", tracks[i].ByteRate*8, tracks[i].Width, tracks[i].Height, destination)
+		//		log.Printf("YYY: multivariantPlaylist %s", multivariantPlaylist)
 
-			}
+//			}
 
                 }
 	}
+
+	// generate a sorted list:
+	sort.Sort(sort.Reverse(ByBitrate(trackList)))
+	fmt.Println("YYY: trackList:", trackList)
+	manifest := createPlaylist(multivariantPlaylist, trackList)
+	fmt.Println("YYY: manifest:", manifest)
+	//uploadPlayList(destination, manifest)
+	
+
 }
