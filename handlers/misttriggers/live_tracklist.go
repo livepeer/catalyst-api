@@ -10,6 +10,12 @@ import (
 	"sort"
 	"net/url"
 
+	"bytes"
+	"context"
+	"time"
+
+	"github.com/livepeer/go-tools/drivers"
+
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
@@ -65,22 +71,22 @@ func createPlaylist(multivariantPlaylist string, tracks []MistTrack) string {
 }
 
 
-/*func uploadPlaylist(destination string, renditionTrackList MistTrack) {
+func uploadPlaylist(uploadPath, manifest string) {
 
-	log.Printf("YYY: storePlaylist %s %s", destination, data)
-	storageDriver, err := drivers.ParseOSURL(destination, true)
+	log.Printf("YYY: storePlaylist %s %s", uploadPath, manifest)
+	storageDriver, err := drivers.ParseOSURL(uploadPath, true)
 	if err != nil {
-		log.Printf("error drivers.ParseOSURL %v %s", err, destination)
+		log.Printf("YYY: error drivers.ParseOSURL %v %s", err, uploadPath)
 	}
 	session := storageDriver.NewSession("")
 	ctx := context.Background()
-	_, err = session.SaveData(ctx, "", bytes.NewBuffer([]byte(data)), nil, 3*time.Second)
+	_, err = session.SaveData(ctx, "", bytes.NewBuffer([]byte(manifest)), nil, 3*time.Second)
 	if err != nil {
-		log.Printf("error session.SaveData %v %s", err, destination)
+		log.Printf("YYY: error session.SaveData %v %s", err, uploadPath)
 	}
 
 }
-*/
+
 
 // TriggerLiveTrackList responds to LIVE_TRACK_LIST trigger.
 // It is stream-specific and must be blocking. The payload for this trigger is multiple lines,
@@ -136,6 +142,12 @@ fmt.Printf("XXX: TRACKS: %v\n", tracks)
 
 	trackList := []MistTrack{} 
 
+	// Build the full URL path that will be sent to Mist as the target upload location
+	rootPathUrl, err := url.Parse(info.UploadDir)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// upload each track (transcoded rendition) returned by Mist to S3
 	for i := range tracks {
 		// Only produce a rendition for each video track, selecting best audio track
@@ -143,11 +155,6 @@ fmt.Printf("XXX: TRACKS: %v\n", tracks)
 			continue
 		}
 
-		// Build the full URL path that will be sent to Mist as the target upload location
-		/*rootPathUrl, err := url.Parse(info.UploadDir)
-		if err != nil {
-			log.Fatal(err)
-		}*/
 		dirPath := fmt.Sprintf("%s_%dx%d/stream.m3u8", streamName, tracks[i].Width, tracks[i].Height)
 		dirPathUrl, err := url.JoinPath(info.UploadDir, dirPath)
 		if err != nil {
@@ -196,7 +203,7 @@ fmt.Println("XXX: STARTING PUSH AFTER LIVE_TRACK_LIST")
 	fmt.Println("YYY: trackList:", trackList)
 	manifest := createPlaylist(multivariantPlaylist, trackList)
 	fmt.Println("YYY: manifest:", manifest)
-	//uploadPlayList(destination, manifest)
+	uploadPlaylist(fmt.Sprintf("%s/%s-master.m3u8", rootPathUrl.String(), streamName), manifest)
 	
 
 }
