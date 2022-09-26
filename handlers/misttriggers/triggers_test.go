@@ -28,19 +28,20 @@ func TestPipelineId(t *testing.T) {
 }
 
 func TestRecordingStart(t *testing.T) {
-	testStartTime := time.Now().Unix()
+	testStartTime := time.Now().UnixMilli()
 	mistCallbackHandlers := &MistCallbackHandlersCollection{MistClient: clients.StubMistClient{}}
 	callbackHappened := make(chan bool, 10)
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		payload, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		w.WriteHeader(200)
-		message := clients.RecordingStartMessage{}
+		message := clients.RecordingEvent{}
 		err = json.Unmarshal(payload, &message)
 		require.NoError(t, err)
 		require.Equal(t, "videoSomeStreamName", message.StreamId)
-		require.GreaterOrEqual(t, message.StartedAt, testStartTime)
-		require.Less(t, message.StartedAt, testStartTime+2)
+		require.Equal(t, "start", message.When)
+		require.GreaterOrEqual(t, message.Timestamp, testStartTime)
+		require.Less(t, message.Timestamp, testStartTime+2)
 		require.NotEmpty(t, message.RecordingId)
 		callbackHappened <- true
 	}))
@@ -68,21 +69,23 @@ func TestRecordingStart(t *testing.T) {
 }
 
 func TestRecordingCompleted(t *testing.T) {
-	testStartTime := time.Now().Unix()
+	testStartTime := time.Now().UnixMilli()
 	mistCallbackHandlers := &MistCallbackHandlersCollection{MistClient: clients.StubMistClient{}}
 	callbackHappened := make(chan bool, 10)
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		payload, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		w.WriteHeader(200)
-		message := clients.RecordingCompleteMessage{}
+		message := clients.RecordingEvent{}
 		err = json.Unmarshal(payload, &message)
 		require.NoError(t, err)
 		require.Equal(t, "videoSomeStreamName", message.StreamId)
 		require.Equal(t, "0b152108-0bee-4333-8cb7-e859b800c57f", message.RecordingId)
-		require.True(t, message.Success)
-		require.GreaterOrEqual(t, message.CompletedAt, testStartTime)
-		require.Less(t, message.CompletedAt, testStartTime+2)
+		require.Equal(t, "end", message.When)
+		require.NotNil(t, message.Success)
+		require.True(t, *message.Success)
+		require.GreaterOrEqual(t, message.Timestamp, testStartTime)
+		require.Less(t, message.Timestamp, testStartTime+2)
 		callbackHappened <- true
 	}))
 	defer callbackServer.Close()

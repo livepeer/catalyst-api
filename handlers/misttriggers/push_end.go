@@ -53,17 +53,19 @@ func (d *MistCallbackHandlersCollection) TriggerPushEnd(w http.ResponseWriter, r
 
 func (d *MistCallbackHandlersCollection) RecordingPushEnd(w http.ResponseWriter, req *http.Request, streamName, actualDestination, pushStatus string) {
 	var err error
-	event := &clients.RecordingCompleteMessage{
-		CompletedAt: time.Now().Unix(),
-		StreamId:    streamName,
-		Hostname:    req.Host,
-		Success:     pushStatus == "null",
+	pushSuccess := pushStatus == "null"
+	event := &clients.RecordingEvent{
+		When:      "end",
+		Timestamp: time.Now().UnixMilli(),
+		StreamId:  streamName,
+		Hostname:  req.Host,
+		Success:   &pushSuccess,
 	}
 	if event.RecordingId, err = uuidFromPushUrl(actualDestination); err != nil {
 		log.Printf("RecordingPushEnd extract uuid failed %v", err)
 		return
 	}
-	go clients.DefaultCallbackClient.SendRecordingCompleted(event)
+	go clients.DefaultCallbackClient.SendRecordingEvent(event)
 }
 
 func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter, req *http.Request, streamName string) {
