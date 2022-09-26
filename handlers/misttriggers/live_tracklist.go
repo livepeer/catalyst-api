@@ -178,7 +178,7 @@ fmt.Println("XXX: STARTING PUSH AFTER LIVE_TRACK_LIST")
                         cache.DefaultStreamCache.Transcoding.AddDestination(streamName, destination)
 
 			trackList = append(trackList, tracks[i])
-			trackList[len(trackList)-1].manifestDestPath = dirPathUrl
+			trackList[len(trackList)-1].manifestDestPath = dirPath
 			fmt.Println("YYYA: trackList:", trackList)
 
 //			profile, ok := info.GetMatchingProfile(tracks[i].Width, tracks[i].Height)
