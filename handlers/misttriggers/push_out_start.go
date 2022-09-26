@@ -34,7 +34,9 @@ func (d *MistCallbackHandlersCollection) TriggerPushOutStart(w http.ResponseWrit
 	default:
 		destinationToReturn = destination
 	}
-	w.Write([]byte(destinationToReturn))
+	if _, err := w.Write([]byte(destinationToReturn)); err != nil {
+		log.Printf("TriggerPushOutStart failed to send rewritten url: %v", err)
+	}
 }
 
 func (d *MistCallbackHandlersCollection) RecordingPushOutStart(w http.ResponseWriter, req *http.Request, streamName, destination string) string {
