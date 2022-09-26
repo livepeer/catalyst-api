@@ -110,7 +110,7 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 	}
 	args := string(configPayload)
 
-	transcodeCommand := exec.Command(config.PathMistProcLivepeer, args, "--debug", "8")
+	transcodeCommand := exec.Command(config.PathMistProcLivepeer, args, "--debug", "8", "--kickoff")
 
 	var stdout, stderr bytes.Buffer
 	stderrPipe, err := transcodeCommand.StderrPipe()
