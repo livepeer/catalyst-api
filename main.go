@@ -12,6 +12,7 @@ import (
 func main() {
 	port := flag.Int("port", 4949, "Port to listen on")
 	mistPort := flag.Int("mist-port", 4242, "Port to listen on")
+	recording := flag.String("recording", "http://recording.livepeer.com/recording/status", "Callback URL for recording start&stop events")
 	mistJson := flag.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
 	flag.Parse()
 
@@ -19,6 +20,8 @@ func main() {
 		mistconnector.PrintMistConfigJson("catalyst-api", "HTTP API server for translating Catalyst API requests into Mist calls", "Catalyst API", config.Version, flag.CommandLine)
 		return
 	}
+
+	config.RecordingCallback = *recording
 
 	if err := api.ListenAndServe(*port, *mistPort); err != nil {
 		log.Fatal(err)
