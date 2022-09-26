@@ -21,6 +21,8 @@ func init() {
 	Logger = log.With(Logger, "ts", log.DefaultTimestampUTC)
 }
 
+var RecordingCallback string = "http://127.0.0.1:8008/recording/status"
+
 // Prefixes used in Mist stream names to let us determine whether a given "stream" in Mist is being used
 // for the segmenting or transcoding phase
 const SEGMENTING_PREFIX = "catalyst_vod_"
