@@ -2,8 +2,11 @@ package misttriggers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
+	"net/url"
 	"strings"
+	"time"
 
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
@@ -32,8 +35,8 @@ func (d *MistCallbackHandlersCollection) TriggerPushEnd(w http.ResponseWriter, r
 	streamName := lines[1]
 	// TODO: Left commented as these will all be used by the next piece we'll pull out of https://github.com/livepeer/catalyst-api/pull/30
 	// destination := lines[2]
-	// actualDestination := lines[3]
-	// pushStatus := lines[5]
+	actualDestination := lines[3]
+	pushStatus := lines[5]
 
 	switch streamNameToPipeline(streamName) {
 	case Transcoding:
@@ -41,9 +44,26 @@ func (d *MistCallbackHandlersCollection) TriggerPushEnd(w http.ResponseWriter, r
 		// d.TranscodingPushEnd(w, req, streamName, destination, actualDestination, pushStatus)
 	case Segmenting:
 		d.SegmentingPushEnd(w, req, streamName)
+	case Recording:
+		d.RecordingPushEnd(w, req, streamName, actualDestination, pushStatus)
 	default:
 		// Not related to API logic
 	}
+}
+
+func (d *MistCallbackHandlersCollection) RecordingPushEnd(w http.ResponseWriter, req *http.Request, streamName, actualDestination, pushStatus string) {
+	var err error
+	event := &clients.RecordingCompleteMessage{
+		CompletedAt: time.Now().Unix(),
+		StreamId:    streamName,
+		Hostname:    req.Host,
+		Success:     pushStatus == "null",
+	}
+	if event.RecordingId, err = uuidFromPushUrl(actualDestination); err != nil {
+		log.Printf("RecordingPushEnd extract uuid failed %v", err)
+		return
+	}
+	go clients.DefaultCallbackClient.SendRecordingCompleted(event)
 }
 
 func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter, req *http.Request, streamName string) {
@@ -71,4 +91,16 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 
 	// TODO: Start Transcoding (stubbed for now with below method)
 	stubTranscodingCallbacksForStudio(callbackUrl)
+}
+
+func uuidFromPushUrl(uri string) (string, error) {
+	pushUrl, err := url.Parse(uri)
+	if err != nil {
+		return "", err
+	}
+	path := strings.Split(pushUrl.EscapedPath(), "/")
+	if len(path) < 4 {
+		return "", fmt.Errorf("push url path malformed: element count %d %s", len(path), pushUrl.EscapedPath())
+	}
+	return path[len(path)-2], nil
 }

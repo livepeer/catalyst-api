@@ -49,20 +49,12 @@ func (c CallbackClient) DoWithRetries(r *http.Request) error {
 	return nil
 }
 
+func (c CallbackClient) SendRecordingCompleted(event *RecordingCompleteMessage) {
+	c.sendGeneric(event, "SendRecordingCompleted")
+}
+
 func (c CallbackClient) SendRecordingStarted(event *RecordingStartMessage) {
-	eventJson, err := json.Marshal(event)
-	if err != nil {
-		log.Printf("SendRecordingStarted json marshal %v", err)
-		return
-	}
-	req, err := http.NewRequest(http.MethodPost, config.RecordingCallback, bytes.NewReader(eventJson))
-	if err != nil {
-		log.Printf("SendRecordingStarted http.NewRequest %v", err)
-		return
-	}
-	if err := c.DoWithRetries(req); err != nil {
-		log.Printf("SendRecordingStarted callback %v", err)
-	}
+	c.sendGeneric(event, "SendRecordingStarted")
 }
 
 // Sends a Transcode Status message to the Client (initially just Studio)
@@ -136,6 +128,22 @@ func (c CallbackClient) SendTranscodeStatusCompleted(url string, iv InputVideo, 
 
 }
 
+func (c CallbackClient) sendGeneric(message interface{}, where string) {
+	eventJson, err := json.Marshal(message)
+	if err != nil {
+		log.Printf("%s json marshal %v", where, err)
+		return
+	}
+	req, err := http.NewRequest(http.MethodPost, config.RecordingCallback, bytes.NewReader(eventJson))
+	if err != nil {
+		log.Printf("%s http.NewRequest %v", where, err)
+		return
+	}
+	if err := c.DoWithRetries(req); err != nil {
+		log.Printf("%s callback %v", where, err)
+	}
+}
+
 // Calculate the overall completion ratio based on the completion ratio of the current stage.
 // The weighting will need to be tweaked as we understand better the relative time spent in the
 // segmenting vs. transcoding stages.
@@ -203,6 +211,14 @@ type RecordingStartMessage struct {
 	RecordingId string `json:"recordingId"`
 	Hostname    string `json:"hostName"`
 	StartedAt   int64  `json:"startedAt"`
+}
+
+type RecordingCompleteMessage struct {
+	StreamId    string `json:"streamId"`
+	RecordingId string `json:"recordingId"`
+	Hostname    string `json:"hostName"`
+	CompletedAt int64  `json:"completedAt"`
+	Success     bool   `json:"success"`
 }
 
 type TranscodeStatusMessage struct {
