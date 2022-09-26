@@ -28,19 +28,20 @@ func TestPipelineId(t *testing.T) {
 }
 
 func TestRecordingStart(t *testing.T) {
-	testStartTime := time.Now().Unix()
+	testStartTime := time.Now().UnixMilli()
 	mistCallbackHandlers := &MistCallbackHandlersCollection{MistClient: clients.StubMistClient{}}
 	callbackHappened := make(chan bool, 10)
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		payload, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		w.WriteHeader(200)
-		message := clients.RecordingStartMessage{}
+		message := clients.RecordingEvent{}
 		err = json.Unmarshal(payload, &message)
 		require.NoError(t, err)
 		require.Equal(t, "videoSomeStreamName", message.StreamId)
-		require.GreaterOrEqual(t, message.StartedAt, testStartTime)
-		require.Less(t, message.StartedAt, testStartTime+2)
+		require.Equal(t, "start", message.When)
+		require.GreaterOrEqual(t, message.Timestamp, testStartTime)
+		require.Less(t, message.Timestamp, testStartTime+2)
 		require.NotEmpty(t, message.RecordingId)
 		callbackHappened <- true
 	}))

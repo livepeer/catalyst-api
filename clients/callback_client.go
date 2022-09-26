@@ -49,7 +49,7 @@ func (c CallbackClient) DoWithRetries(r *http.Request) error {
 	return nil
 }
 
-func (c CallbackClient) SendRecordingStarted(event *RecordingStartMessage) {
+func (c CallbackClient) SendRecordingEvent(event *RecordingEvent) {
 	eventJson, err := json.Marshal(event)
 	if err != nil {
 		log.Printf("SendRecordingStarted json marshal %v", err)
@@ -198,11 +198,13 @@ func (ts TranscodeStatus) String() string {
 
 // The various status messages we can send
 
-type RecordingStartMessage struct {
+type RecordingEvent struct {
+	When        string `json:"when"`
 	StreamId    string `json:"streamId"`
 	RecordingId string `json:"recordingId"`
 	Hostname    string `json:"hostName"`
-	StartedAt   int64  `json:"startedAt"`
+	Timestamp   int64  `json:"timestamp"`
+	Success     *bool  `json:"success,omitempty"`
 }
 
 type TranscodeStatusMessage struct {

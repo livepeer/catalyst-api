@@ -40,8 +40,9 @@ func (d *MistCallbackHandlersCollection) TriggerPushOutStart(w http.ResponseWrit
 }
 
 func (d *MistCallbackHandlersCollection) RecordingPushOutStart(w http.ResponseWriter, req *http.Request, streamName, destination string) string {
-	event := &clients.RecordingStartMessage{
-		StartedAt:   time.Now().Unix(),
+	event := &clients.RecordingEvent{
+		When:        "start",
+		Timestamp:   time.Now().UnixMilli(),
 		StreamId:    streamName,
 		RecordingId: uuid.New().String(),
 		Hostname:    req.Host,
@@ -55,7 +56,7 @@ func (d *MistCallbackHandlersCollection) RecordingPushOutStart(w http.ResponseWr
 		log.Printf("RecordingPushOutStart addUuidToUrl() %v", err)
 		return destination
 	}
-	go clients.DefaultCallbackClient.SendRecordingStarted(event)
+	go clients.DefaultCallbackClient.SendRecordingEvent(event)
 	return pushUrl.String()
 }
 
