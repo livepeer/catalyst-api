@@ -20,10 +20,9 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 )
-//{"video_H264_640x360_24fps_0":{"bframes":1,"bps":11205,"codec":"H264","firstms":541,"fpks":24000,"height":360,"idx":0,"init":"\u0001d\u0000\u001E\u00FF\u00E1\u0000 gd\u0000\u001E\u00AC,\u00A5\u0002\u0080\u00BF\u00E5\u00C0D\u0000\u0000\u000F\u00A0\u0000\u0002\u00EE\u0003\u0080\u0000\f5\u0000\u0006\u001A\u008B\u00BC\u00B8(\u0001\u0000\u0004h\u00EB\u008F,","jitter":200,"lastms":4958,"maxbps":11205,"trackid":256,"type":"video","width":640}}
 
 type MistTrack struct {
-// added by mist
+	// populated by mist when trigger is received
 	Id          int32  `json:"trackid"`
 	ByteRate    int32  `json:"bps"`
 	Kfps        int32  `json:"fpks"`
@@ -34,7 +33,7 @@ type MistTrack struct {
 	Codec       string `json:"codec"`
 	StartTimeMs int32  `json:"firstms"`
 	EndTimeMs   int32  `json:"lastms"`
-// added by us
+	// populated by us when processing trigger 
 	manifestDestPath     string
 }
 
@@ -73,16 +72,15 @@ func createPlaylist(multivariantPlaylist string, tracks []MistTrack) string {
 
 func uploadPlaylist(uploadPath, manifest string) {
 
-	log.Printf("YYY: storePlaylist %s %s", uploadPath, manifest)
 	storageDriver, err := drivers.ParseOSURL(uploadPath, true)
 	if err != nil {
-		log.Printf("YYY: error drivers.ParseOSURL %v %s", err, uploadPath)
+		log.Printf("error drivers.ParseOSURL %v %s", err, uploadPath)
 	}
 	session := storageDriver.NewSession("")
 	ctx := context.Background()
 	_, err = session.SaveData(ctx, "", bytes.NewBuffer([]byte(manifest)), nil, 3*time.Second)
 	if err != nil {
-		log.Printf("YYY: error session.SaveData %v %s", err, uploadPath)
+		log.Printf("error session.SaveData %v %s", err, uploadPath)
 	}
 
 }
@@ -132,7 +130,6 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 		errors.WriteHTTPInternalServerError(w, "LiveTrackListTriggerJson json decode error: "+streamName, err)
 		return
 	}
-fmt.Printf("XXX: TRACKS: %v\n", tracks)
 
 	multivariantPlaylist := "#EXTM3U\r\n"
 
@@ -174,31 +171,14 @@ fmt.Printf("XXX: TRACKS: %v\n", tracks)
                 if err := d.MistClient.PushStart(streamName, destination); err != nil {
                         log.Printf("> ERROR push to %s %v", destination, err)
                 } else {
-fmt.Println("XXX: STARTING PUSH AFTER LIVE_TRACK_LIST")
                         cache.DefaultStreamCache.Transcoding.AddDestination(streamName, destination)
-
 			trackList = append(trackList, tracks[i])
 			trackList[len(trackList)-1].manifestDestPath = dirPath
-			fmt.Println("YYYA: trackList:", trackList)
-
-//			profile, ok := info.GetMatchingProfile(tracks[i].Width, tracks[i].Height)
-//			if !ok {
-//				log.Printf("ERROR push doesn't match to any given profile %s", destination)
-//			} else {
-		//		multivariantPlaylist += fmt.Sprintf("#EXT-X-STREAM-INF:BANDWIDTH=%d,RESOLUTION=%dx%d\r\n%s\r\n", tracks[i].ByteRate*8, tracks[i].Width, tracks[i].Height, destination)
-		//		log.Printf("YYY: multivariantPlaylist %s", multivariantPlaylist)
-
-//			}
-
                 }
 	}
 
-	// generate a sorted list:
+	// Generate a sorted list for multivariant playlist (reverse order of bitrate then resolution):
 	sort.Sort(sort.Reverse(ByBitrate(trackList)))
-	fmt.Println("YYY: trackList:", trackList)
 	manifest := createPlaylist(multivariantPlaylist, trackList)
-	fmt.Println("YYY: manifest:", manifest)
 	uploadPlaylist(fmt.Sprintf("%s/%s-master.m3u8", rootPathUrl.String(), streamName), manifest)
-	
-
 }
