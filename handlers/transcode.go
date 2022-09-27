@@ -224,33 +224,6 @@ func configForSubprocess(req TranscodeSegmentRequest, inputStreamName, outputStr
 	return conf
 }
 
-func commandOutputToLog(cmd *exec.Cmd, name string) {
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		log.Printf("ERROR: cmd.StdoutPipe() %v", err)
-		return
-	}
-	go pipeToLog(stdoutPipe, name)
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		log.Printf("ERROR: cmd.StderrPipe() %v", err)
-		return
-	}
-	go pipeToLog(stderrPipe, name)
-}
-
-func pipeToLog(pipe io.ReadCloser, name string) {
-	data := make([]byte, 4096)
-	for {
-		count, err := pipe.Read(data)
-		if err != nil {
-			log.Printf("ERROR cmd=%s %v", name, err)
-			return
-		}
-		log.Printf("out [%s] %s", name, string(data[0:count]))
-	}
-}
-
 type ProcLivepeerConfigProfile struct {
 	Name       string `json:"name"`
 	Bitrate    int32  `json:"bitrate"`

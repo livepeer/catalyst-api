@@ -4,8 +4,6 @@ import (
 	"sync"
 	"log"
 	"math"
-
-//	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 )
 
 type TranscodingCache struct {
@@ -43,34 +41,6 @@ func (si SegmentInfo) ContainsDestination(destination string) bool {
 		}
 	}
 	return false
-}
-
-func (c *SegmentInfo) GetMatchingProfile(width int32, height int32) (p EncodedProfile, found bool) {
-        trackPixels := float64(width * height)
-        size := len(c.Profiles)
-        if size == 0 {
-                return
-        }
-        p = c.Profiles[0]
-log.Printf("YYY: %v", p)
-        for _, profile := range c.Profiles[1:] {
-		log.Printf("YYY: %v", c.Profiles[1:])
-                if profile.Width == width && profile.Height == height {
-                        log.Printf("YYY: FOUND GetMatchingProfile %dx%d", width, height)
-                        return profile, true
-                }
-                distance := math.Abs(float64(profile.Width*profile.Height) - trackPixels)
-                choice := math.Abs(float64(p.Width*p.Height) - trackPixels)
-                if distance < choice {
-                        p = profile
-                        log.Printf("YYY: _select_ GetMatchingProfile next:%dx%d", profile.Width, profile.Height)
-                } else {
-                        log.Printf("YYY: _X_ GetMatchingProfile next:%dx%d > choice:%dx%d", profile.Width, profile.Height, p.Width, p.Height)
-                }
-        }
-        found = p.Bitrate != 0
-        log.Printf("YYY: returning GetMatchingProfile %dx%d", p.Width, p.Height)
-        return
 }
 
 func (c *TranscodingCache) AddDestination(streamName, destination string) {
