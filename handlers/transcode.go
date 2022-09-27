@@ -90,10 +90,11 @@ func streamOutput(src io.Reader, dst *bytes.Buffer, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-
-		mw.Write(line)
+		_, err = mw.Write(line)
+		if err != nil {
+			return err
+		}
 	}
-
 	return nil
 }
 
@@ -114,7 +115,13 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 
 	var stdout, stderr bytes.Buffer
 	stderrPipe, err := transcodeCommand.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("Failed to open stderr pipe: %s", err)
+	}
 	stdoutPipe, err := transcodeCommand.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("Failed to open stdout pipe: %s", err)
+	}
 
 	// Start the Transcode Command asynchronously - we call Wait() later in this method
 	fmt.Printf("Starting transcode via: %s\n", transcodeCommand.String())
@@ -124,10 +131,14 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 	}
 
 	go func() {
-		streamOutput(stdoutPipe, &stdout, os.Stdout)
+		if streamOutput(stdoutPipe, &stdout, os.Stdout) != nil {
+			fmt.Errorf("Failed to stream output from stdout")
+		}
 	}()
 	go func() {
-		streamOutput(stderrPipe, &stderr, os.Stderr)
+		if streamOutput(stderrPipe, &stderr, os.Stderr) != nil {
+			fmt.Errorf("Failed to stream output from stderr")
+		}
 	}()
 
 	// TODO: remove when Mist code is updated https://github.com/DDVTECH/mistserver/issues/81
