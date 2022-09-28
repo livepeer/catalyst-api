@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
@@ -121,3 +122,25 @@ func stubTranscodingCallbacksForStudio(callbackURL string) {
 		return
 	}
 }
+
+// streamNameToPipeline returns pipeline that given stream belongs to. We use different stream name prefixes for each pipeline.
+func streamNameToPipeline(name string) PipelineId {
+	if strings.HasPrefix(name, config.RENDITION_PREFIX) {
+		// config.SOURCE_PREFIX also belongs to Transcoding. So far no triggers installed for source streams.
+		return Transcoding
+	} else if strings.HasPrefix(name, config.SEGMENTING_PREFIX) {
+		return Segmenting
+	} else if strings.HasPrefix(name, config.RECORDING_PREFIX) {
+		return Recording
+	}
+	return Unrelated
+}
+
+type PipelineId = int
+
+const (
+	Unrelated PipelineId = iota
+	Segmenting
+	Transcoding
+	Recording
+)

@@ -13,6 +13,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/xeipuuv/gojsonschema"
 )
@@ -87,7 +88,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			return
 		}
 
-		streamName := randomStreamName("catalyst_vod_")
+		streamName := randomStreamName(config.SEGMENTING_PREFIX)
 		cache.DefaultStreamCache.Segmenting.Store(streamName, uploadVODRequest.CallbackUrl)
 
 		// process the request
