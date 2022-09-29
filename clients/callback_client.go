@@ -199,10 +199,10 @@ func (ts TranscodeStatus) String() string {
 // The various status messages we can send
 
 type RecordingEvent struct {
-	When        string `json:"when"`
-	StreamId    string `json:"streamId"`
-	RecordingId string `json:"recordingId"`
-	Hostname    string `json:"hostName"`
+	Event       string `json:"event"`
+	StreamName  string `json:"stream_name"`
+	RecordingId string `json:"recording_id"`
+	Hostname    string `json:"host_name"`
 	Timestamp   int64  `json:"timestamp"`
 	Success     *bool  `json:"success,omitempty"`
 }
