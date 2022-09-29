@@ -18,7 +18,12 @@ type apiError struct {
 func writeHttpError(w http.ResponseWriter, msg string, status int, err error) apiError {
 	w.WriteHeader(status)
 
-	if err := json.NewEncoder(w).Encode(map[string]string{"error": msg}); err != nil {
+	var errorDetail string
+	if err != nil {
+		errorDetail = err.Error()
+	}
+
+	if err := json.NewEncoder(w).Encode(map[string]string{"error": msg, "error_detail": errorDetail}); err != nil {
 		_ = config.Logger.Log("msg", "error writing HTTP error", "http_error_msg", msg, "error", err)
 	}
 	return apiError{msg, status, err}

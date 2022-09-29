@@ -4,11 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
 	"mime"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/cache"
@@ -88,7 +86,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			return
 		}
 
-		streamName := randomStreamName(config.SEGMENTING_PREFIX)
+		streamName := config.RandomStreamName(config.SEGMENTING_PREFIX)
 		cache.DefaultStreamCache.Segmenting.Store(streamName, uploadVODRequest.CallbackUrl)
 
 		// process the request
@@ -118,16 +116,4 @@ func (d *CatalystAPIHandlersCollection) processUploadVOD(streamName, sourceURL, 
 	}
 
 	return nil
-}
-
-func randomStreamName(prefix string) string {
-	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
-	const length = 8
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	res := make([]byte, length)
-	for i := 0; i < length; i++ {
-		res[i] = charset[r.Intn(length)]
-	}
-	return fmt.Sprintf("%s%s", prefix, string(res))
 }

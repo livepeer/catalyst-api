@@ -37,7 +37,7 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 		case TRIGGER_PUSH_END:
 			d.TriggerPushEnd(w, req, payload)
 		case TRIGGER_LIVE_TRACK_LIST:
-			// d.TriggerLiveTrackList(w, req, payload)
+			d.TriggerLiveTrackList(w, req, payload)
 		default:
 			errors.WriteHTTPBadRequest(w, "Unsupported X-Trigger", fmt.Errorf("unknown trigger '%s'", triggerName))
 			return
