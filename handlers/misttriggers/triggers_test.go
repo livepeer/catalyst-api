@@ -79,9 +79,9 @@ func TestRecordingCompleted(t *testing.T) {
 		message := clients.RecordingEvent{}
 		err = json.Unmarshal(payload, &message)
 		require.NoError(t, err)
-		require.Equal(t, "videoSomeStreamName", message.StreamId)
+		require.Equal(t, "videoSomeStreamName", message.StreamName)
 		require.Equal(t, "0b152108-0bee-4333-8cb7-e859b800c57f", message.RecordingId)
-		require.Equal(t, "end", message.When)
+		require.Equal(t, "end", message.Event)
 		require.NotNil(t, message.Success)
 		require.True(t, *message.Success)
 		require.GreaterOrEqual(t, message.Timestamp, testStartTime)

@@ -55,11 +55,11 @@ func (d *MistCallbackHandlersCollection) RecordingPushEnd(w http.ResponseWriter,
 	var err error
 	pushSuccess := pushStatus == "null"
 	event := &clients.RecordingEvent{
-		When:      "end",
-		Timestamp: time.Now().UnixMilli(),
-		StreamId:  streamName,
-		Hostname:  req.Host,
-		Success:   &pushSuccess,
+		Event:      "end",
+		Timestamp:  time.Now().UnixMilli(),
+		StreamName: streamName,
+		Hostname:   req.Host,
+		Success:    &pushSuccess,
 	}
 	if event.RecordingId, err = uuidFromPushUrl(actualDestination); err != nil {
 		log.Printf("RecordingPushEnd extract uuid failed %v", err)
