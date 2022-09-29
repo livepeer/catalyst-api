@@ -38,8 +38,8 @@ func TestRecordingStart(t *testing.T) {
 		message := clients.RecordingEvent{}
 		err = json.Unmarshal(payload, &message)
 		require.NoError(t, err)
-		require.Equal(t, "videoSomeStreamName", message.StreamId)
-		require.Equal(t, "start", message.When)
+		require.Equal(t, "videoSomeStreamName", message.StreamName)
+		require.Equal(t, "start", message.Event)
 		require.GreaterOrEqual(t, message.Timestamp, testStartTime)
 		require.Less(t, message.Timestamp, testStartTime+2)
 		require.NotEmpty(t, message.RecordingId)

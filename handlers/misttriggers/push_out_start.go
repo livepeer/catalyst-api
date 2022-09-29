@@ -41,9 +41,9 @@ func (d *MistCallbackHandlersCollection) TriggerPushOutStart(w http.ResponseWrit
 
 func (d *MistCallbackHandlersCollection) RecordingPushOutStart(w http.ResponseWriter, req *http.Request, streamName, destination string) string {
 	event := &clients.RecordingEvent{
-		When:        "start",
+		Event:       "start",
 		Timestamp:   time.Now().UnixMilli(),
-		StreamId:    streamName,
+		StreamName:  streamName,
 		RecordingId: uuid.New().String(),
 		Hostname:    req.Host,
 	}
@@ -52,31 +52,8 @@ func (d *MistCallbackHandlersCollection) RecordingPushOutStart(w http.ResponseWr
 		log.Printf("RecordingPushOutStart url.Parse %v", err)
 		return destination
 	}
-	if err = addUuidToUrl(pushUrl, event.RecordingId); err != nil {
-		log.Printf("RecordingPushOutStart addUuidToUrl() %v", err)
-		return destination
-	}
+	// Add uuid after stream name
+	pushUrl.Path = strings.Replace(pushUrl.Path, "$stream", "$stream/"+event.RecordingId, 1)
 	go clients.DefaultCallbackClient.SendRecordingEvent(event)
 	return pushUrl.String()
-}
-
-// addUuidToUrl modifies pushUrl path from:
-//
-//	s3://livepeer-recordings-bucket/$stream/index.m3u8
-//
-// to:
-//
-//	s3://livepeer-recordings-bucket/$stream/<UUID>/index.m3u8
-func addUuidToUrl(pushUrl *url.URL, recordingUUID string) error {
-	path := strings.Split(pushUrl.EscapedPath(), "/")
-	path = append(path, "")
-	last := len(path) - 1
-	path[last] = path[last-1]
-	path[last-1] = recordingUUID
-	if path[last-2] != "$stream" {
-		// Additional check to ensure we rewrite proper streams
-		return fmt.Errorf("stream-id variable not found in proper place")
-	}
-	pushUrl.Path = strings.Join(path, "/")
-	return nil
 }
