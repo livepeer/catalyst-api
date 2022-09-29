@@ -11,6 +11,8 @@ import (
 // for the segmenting or transcoding phase
 const SOURCE_PREFIX = "tr_src_"
 const RENDITION_PREFIX = "tr_rend_+"
+const SEGMENTING_PREFIX = "catalyst_vod_"
+const RECORDING_PREFIX = "video"
 
 func IsTranscodeStream(streamName string) bool {
 	return strings.HasPrefix(streamName, RENDITION_PREFIX)

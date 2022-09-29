@@ -34,11 +34,14 @@ func (d *MistCallbackHandlersCollection) TriggerPushEnd(w http.ResponseWriter, r
 	actualDestination := lines[3]
 	pushStatus := lines[5]
 
-	// Determine if the PUSH that has finished was happening during the segmenting or transcoding phase
-	if config.IsTranscodeStream(streamName) {
+	switch streamNameToPipeline(streamName) {
+	case Transcoding:
+		// TODO: Left commented for illustration of the alternate code path here as this is the next piece we'll pull out of https://github.com/livepeer/catalyst-api/pull/30
 		d.TranscodingPushEnd(w, req, streamName, destination, actualDestination, pushStatus)
-	} else {
+	case Segmenting:
 		d.SegmentingPushEnd(w, req, streamName)
+	default:
+		// Not related to API logic
 	}
 }
 

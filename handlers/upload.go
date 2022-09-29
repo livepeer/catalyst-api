@@ -86,7 +86,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			return
 		}
 
-		streamName := config.RandomStreamName("catalyst_vod_")
+		streamName := config.RandomStreamName(config.SEGMENTING_PREFIX)
 		cache.DefaultStreamCache.Segmenting.Store(streamName, uploadVODRequest.CallbackUrl)
 
 		// process the request
