@@ -21,7 +21,7 @@ func TestNoAuthHeader(t *testing.T) {
 	router.ServeHTTP(rr, req)
 
 	require.Equal(rr.Code, 401, "should return 401")
-	require.JSONEq(rr.Body.String(), `{"error":"No authorization header"}`)
+	require.JSONEq(rr.Body.String(), `{"error":"No authorization header", "error_detail":""}`)
 }
 
 func TestWrongKey(t *testing.T) {
@@ -37,5 +37,5 @@ func TestWrongKey(t *testing.T) {
 	router.ServeHTTP(rr, req)
 
 	require.Equal(rr.Code, 401, "should return 401")
-	require.JSONEq(rr.Body.String(), `{"error":"Invalid Token"}`)
+	require.JSONEq(rr.Body.String(), `{"error":"Invalid Token", "error_detail":""}`)
 }

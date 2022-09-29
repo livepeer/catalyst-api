@@ -243,5 +243,5 @@ func TestWrongContentTypeVODUploadHandler(t *testing.T) {
 	router.ServeHTTP(rr, req)
 
 	require.Equal(rr.Result().StatusCode, 415)
-	require.JSONEq(rr.Body.String(), `{"error": "Requires application/json content type"}`)
+	require.JSONEq(rr.Body.String(), `{"error": "Requires application/json content type", "error_detail":""}`)
 }
