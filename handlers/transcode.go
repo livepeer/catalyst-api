@@ -138,12 +138,12 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 
 	go func() {
 		if streamOutput(stdoutPipe, &stdout, os.Stdout) != nil {
-			fmt.Errorf("Failed to stream output from stdout")
+			_ = fmt.Errorf("Failed to stream output from stdout")
 		}
 	}()
 	go func() {
 		if streamOutput(stderrPipe, &stderr, os.Stderr) != nil {
-			fmt.Errorf("Failed to stream output from stderr")
+			_ = fmt.Errorf("Failed to stream output from stderr")
 		}
 	}()
 

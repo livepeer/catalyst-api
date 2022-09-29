@@ -67,7 +67,7 @@ func (d *MistCallbackHandlersCollection) TranscodingPushEnd(w http.ResponseWrite
 	} else {
 		// We forward pushStatus json to callback
 		if err := clients.DefaultCallbackClient.SendTranscodeStatusError(info.CallbackUrl, fmt.Sprintf("Error while pushing to %s: %s", actualDestination, pushStatus)); err != nil {
-			config.Logger.Log("msg", "Error sending transcode error status in TranscodingPushEnd", "err", err)
+			_ = config.Logger.Log("msg", "Error sending transcode error status in TranscodingPushEnd", "err", err)
 		}
 	}
 
