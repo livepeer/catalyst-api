@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/livepeer/go-tools v0.0.0-20220926110222-2ebcbb5685b4
-	github.com/livepeer/livepeer-data v0.4.20
+	github.com/livepeer/livepeer-data v0.4.21
 	github.com/stretchr/testify v1.8.0
 	github.com/xeipuuv/gojsonschema v1.2.0
 	sigs.k8s.io/yaml v1.3.0
