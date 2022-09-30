@@ -25,3 +25,5 @@ var Logger log.Logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 func init() {
 	Logger = log.With(Logger, "ts", log.DefaultTimestampUTC)
 }
+
+var RecordingCallback string = "http://127.0.0.1:8008/recording/status"

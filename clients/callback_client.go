@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -46,6 +47,22 @@ func (c CallbackClient) DoWithRetries(r *http.Request) error {
 	}
 
 	return nil
+}
+
+func (c CallbackClient) SendRecordingEvent(event *RecordingEvent) {
+	eventJson, err := json.Marshal(event)
+	if err != nil {
+		log.Printf("SendRecordingStarted json marshal %v", err)
+		return
+	}
+	req, err := http.NewRequest(http.MethodPost, config.RecordingCallback, bytes.NewReader(eventJson))
+	if err != nil {
+		log.Printf("SendRecordingStarted http.NewRequest %v", err)
+		return
+	}
+	if err := c.DoWithRetries(req); err != nil {
+		log.Printf("SendRecordingStarted callback %v", err)
+	}
 }
 
 // Sends a Transcode Status message to the Client (initially just Studio)
@@ -180,6 +197,15 @@ func (ts TranscodeStatus) String() string {
 }
 
 // The various status messages we can send
+
+type RecordingEvent struct {
+	Event       string `json:"event"`
+	StreamName  string `json:"stream_name"`
+	RecordingId string `json:"recording_id"`
+	Hostname    string `json:"host_name"`
+	Timestamp   int64  `json:"timestamp"`
+	Success     *bool  `json:"success,omitempty"`
+}
 
 type TranscodeStatusMessage struct {
 	CompletionRatio float64 `json:"completion_ratio"` // No omitempty or we lose this for 0% completion case

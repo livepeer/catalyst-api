@@ -12,6 +12,7 @@ import (
 func main() {
 	port := flag.Int("port", 4949, "Port to listen on")
 	mistPort := flag.Int("mist-port", 4242, "Port to listen on")
+	flag.StringVar(&config.RecordingCallback, "recording", "http://recording.livepeer.com/recording/status", "Callback URL for recording start&stop events")
 	mistJson := flag.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
 	flag.Parse()
 

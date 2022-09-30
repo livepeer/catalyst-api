@@ -3,6 +3,7 @@ module github.com/livepeer/catalyst-api
 go 1.19
 
 require (
+	github.com/google/uuid v1.3.0
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/livepeer/go-tools v0.0.0-20220926110222-2ebcbb5685b4
 	github.com/livepeer/livepeer-data v0.4.20
@@ -21,7 +22,6 @@ require (
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-cmp v0.5.8 // indirect
-	github.com/google/uuid v1.3.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.1.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.4.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
