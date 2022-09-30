@@ -2,8 +2,11 @@ package misttriggers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
+	"net/url"
 	"strings"
+	"time"
 
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
@@ -40,6 +43,8 @@ func (d *MistCallbackHandlersCollection) TriggerPushEnd(w http.ResponseWriter, r
 		d.TranscodingPushEnd(w, req, streamName, destination, actualDestination, pushStatus)
 	case Segmenting:
 		d.SegmentingPushEnd(w, req, streamName)
+	case Recording:
+		d.RecordingPushEnd(w, req, streamName, actualDestination, pushStatus)
 	default:
 		// Not related to API logic
 	}
@@ -82,6 +87,23 @@ func (d *MistCallbackHandlersCollection) TranscodingPushEnd(w http.ResponseWrite
 	}
 }
 
+func (d *MistCallbackHandlersCollection) RecordingPushEnd(w http.ResponseWriter, req *http.Request, streamName, actualDestination, pushStatus string) {
+	var err error
+	pushSuccess := pushStatus == "null"
+	event := &clients.RecordingEvent{
+		Event:      "end",
+		Timestamp:  time.Now().UnixMilli(),
+		StreamName: streamName,
+		Hostname:   req.Host,
+		Success:    &pushSuccess,
+	}
+	if event.RecordingId, err = uuidFromPushUrl(actualDestination); err != nil {
+		log.Printf("RecordingPushEnd extract uuid failed %v", err)
+		return
+	}
+	go clients.DefaultCallbackClient.SendRecordingEvent(event)
+}
+
 func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter, req *http.Request, streamName string) {
 	// when uploading is done, remove trigger and stream from Mist
 	defer cache.DefaultStreamCache.Segmenting.Remove(streamName)
@@ -108,4 +130,16 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 
 	// TODO: Start Transcoding (stubbed for now with below method)
 	stubTranscodingCallbacksForStudio(callbackUrl)
+}
+
+func uuidFromPushUrl(uri string) (string, error) {
+	pushUrl, err := url.Parse(uri)
+	if err != nil {
+		return "", err
+	}
+	path := strings.Split(pushUrl.EscapedPath(), "/")
+	if len(path) < 4 {
+		return "", fmt.Errorf("push url path malformed: element count %d %s", len(path), pushUrl.EscapedPath())
+	}
+	return path[len(path)-2], nil
 }
