@@ -131,11 +131,13 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 
 	// TODO: Start Transcoding (stubbed for now with below method)
 	stubTranscodingCallbacksForStudio(callbackUrl)
-	
 	si := cache.DefaultStreamCache.Segmenting.Get(streamName)
-	transcodeRequest := handlers.TranscodeSegmentRequest {
-		SourceFile:    si.SourceFile,
-		CallbackUrl:   si.CallbackUrl,
+	transcodeRequest := handlers.TranscodeSegmentRequest{
+		SourceFile:            si.SourceFile,
+		CallbackUrl:           si.CallbackUrl,
+		AccessToken:           si.AccessToken,
+		TranscodeAPIUrl:       si.TranscodeAPIUrl,
+		HardcodedBroadcasters: si.HardcodedBroadcasters,
 	}
 	go handlers.RunTranscodeProcess(d.MistClient, transcodeRequest)
 }

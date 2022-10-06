@@ -21,20 +21,21 @@ import (
 )
 
 type TranscodeSegmentRequest struct {
-	SourceFile           string                 `json:"source_location"`
-	CallbackUrl          string                 `json:"callback_url"`
-	ManifestID           string                 `json:"manifestID"`
-	StreamID             string                 `json:"streamID"`
-	SessionID            string                 `json:"sessionID"`
-	StreamKey            string                 `json:"streamKey"`
-	AccessToken          string                 `json:"accessToken"`
-	TranscodeAPIUrl      string                 `json:"transcodeAPIUrl"`
-	Presets              []string               `json:"presets"`
-	ObjectStore          string                 `json:"objectStore"`
-	RecordObjectStore    string                 `json:"recordObjectStore"`
-	RecordObjectStoreURL string                 `json:"recordObjectStoreUrl"`
-	Profiles             []cache.EncodedProfile `json:"profiles"`
-	Detection            struct {
+	SourceFile            string                 `json:"source_location"`
+	CallbackUrl           string                 `json:"callback_url"`
+	ManifestID            string                 `json:"manifestID"`
+	StreamID              string                 `json:"streamID"`
+	SessionID             string                 `json:"sessionID"`
+	StreamKey             string                 `json:"streamKey"`
+	AccessToken           string                 `json:"accessToken"`
+	TranscodeAPIUrl       string                 `json:"transcodeAPIUrl"`
+	HardcodedBroadcasters string                 `json:"hardcodedBroadcasters"`
+	Presets               []string               `json:"presets"`
+	ObjectStore           string                 `json:"objectStore"`
+	RecordObjectStore     string                 `json:"recordObjectStore"`
+	RecordObjectStoreURL  string                 `json:"recordObjectStoreUrl"`
+	Profiles              []cache.EncodedProfile `json:"profiles"`
+	Detection             struct {
 		Freq                uint `json:"freq"`
 		SampleRate          uint `json:"sampleRate"`
 		SceneClassification []struct {
@@ -183,10 +184,11 @@ func configForSubprocess(req TranscodeSegmentRequest, inputStreamName, outputStr
 		} else {
 			apiUrl = config.DefaultCustomAPIUrl
 		}
+	} else if req.HardcodedBroadcasters != "" {
+		hardcodedBroadcasters = req.HardcodedBroadcasters
 	} else {
-		hardcodedBroadcasters = fmt.Sprintf(`[{"address":"http://127.0.0.1:%d"}]`, config.DefaultBroadcasterPort)
+		hardcodedBroadcasters = ""
 	}
-
 	conf := ProcLivepeerConfig{
 		AccessToken:           req.AccessToken,
 		CustomAPIUrl:          apiUrl,
