@@ -197,6 +197,31 @@ func configForSubprocess(req TranscodeSegmentRequest, inputStreamName, outputStr
 		HardcodedBroadcasters: hardcodedBroadcasters,
 	}
 
+	// If Profiles are not available (e.g. from /api/vod), then
+	// use hardcoded list of profiles for transcoding. Otherwise
+	// use the profiles in the request itself (e.g. from /api/transcode/file)
+	if len(req.Profiles) == 0 {
+		defaultProfiles := []cache.EncodedProfile{
+			{
+				Name:    "360p",
+				Width:   640,
+				Height:  360,
+				Bitrate: 800000,
+				FPS:     24,
+			},
+			{
+				Name:    "720p",
+				Width:   1280,
+				Height:  720,
+				Bitrate: 3000000,
+				FPS:     24,
+			},
+		}
+		for _, profile := range defaultProfiles {
+			req.Profiles = append(req.Profiles, profile)
+		}
+	}
+
 	// Setup requested rendition profiles
 	for _, profile := range req.Profiles {
 		Width := profile.Width
