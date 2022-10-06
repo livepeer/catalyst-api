@@ -12,6 +12,7 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
+	"github.com/livepeer/catalyst-api/handlers"
 )
 
 // TriggerPushEnd responds to PUSH_END trigger
@@ -130,6 +131,13 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 
 	// TODO: Start Transcoding (stubbed for now with below method)
 	stubTranscodingCallbacksForStudio(callbackUrl)
+	
+	si := cache.DefaultStreamCache.Segmenting.Get(streamName)
+	transcodeRequest := handlers.TranscodeSegmentRequest {
+		SourceFile:    si.SourceFile,
+		CallbackUrl:   si.CallbackUrl,
+	}
+	go handlers.RunTranscodeProcess(d.MistClient, transcodeRequest)
 }
 
 func uuidFromPushUrl(uri string) (string, error) {

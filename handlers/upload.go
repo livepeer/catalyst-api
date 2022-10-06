@@ -87,7 +87,11 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		}
 
 		streamName := config.RandomStreamName(config.SEGMENTING_PREFIX)
-		cache.DefaultStreamCache.Segmenting.Store(streamName, uploadVODRequest.CallbackUrl)
+		cache.DefaultStreamCache.Segmenting.Store(streamName, cache.StreamInfo{
+			SourceFile:  uploadVODRequest.Url,
+			CallbackUrl: uploadVODRequest.CallbackUrl,
+			UploadDir:   uploadVODRequest.OutputLocations[0].URL,
+		})
 
 		// process the request
 		if err := d.processUploadVOD(streamName, uploadVODRequest.Url, tURL); err != nil {
