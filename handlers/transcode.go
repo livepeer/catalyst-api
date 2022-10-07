@@ -219,9 +219,7 @@ func configForSubprocess(req TranscodeSegmentRequest, inputStreamName, outputStr
 				FPS:     24,
 			},
 		}
-		for _, profile := range defaultProfiles {
-			req.Profiles = append(req.Profiles, profile)
-		}
+		req.Profiles = append(req.Profiles, defaultProfiles...)
 	}
 
 	// Setup requested rendition profiles

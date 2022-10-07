@@ -139,7 +139,12 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 		TranscodeAPIUrl:       si.TranscodeAPIUrl,
 		HardcodedBroadcasters: si.HardcodedBroadcasters,
 	}
-	go handlers.RunTranscodeProcess(d.MistClient, transcodeRequest)
+	go func() {
+		err := handlers.RunTranscodeProcess(d.MistClient, transcodeRequest)
+		if err != nil {
+			_ = config.Logger.Log("msg", "RunTranscodeProcess returned an error", "err", err.Error(), "stream_name", streamName)
+		}
+	}()
 }
 
 func uuidFromPushUrl(uri string) (string, error) {
