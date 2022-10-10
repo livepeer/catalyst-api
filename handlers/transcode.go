@@ -1,22 +1,21 @@
 package handlers
 
 import (
-	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"os/exec"
+	"path"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
+	"github.com/livepeer/catalyst-api/subprocess"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -74,30 +73,6 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 	}
 }
 
-// stream from a source to a destination buffer while also printing
-func streamOutput(src io.Reader, dst *bytes.Buffer, out io.Writer) error {
-	mw := io.MultiWriter(dst, out)
-	s := bufio.NewReader(src)
-	for {
-		var line []byte
-		line, err := s.ReadSlice('\n')
-		if err == io.EOF && len(line) == 0 {
-			break
-		}
-		if err == io.EOF {
-			return fmt.Errorf("Improper termination: %v", line)
-		}
-		if err != nil {
-			return err
-		}
-		_, err = mw.Write(line)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // RunTranscodeProcess starts `MistLivepeeerProc` as a subprocess to transcode inputStream into renditionsStream.
 func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegmentRequest) error {
 
@@ -117,35 +92,17 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 	}
 	args := string(configPayload)
 
-	transcodeCommand := exec.Command(config.PathMistProcLivepeer, args, "--debug", "8", "--kickoff")
-
-	var stdout, stderr bytes.Buffer
-	stderrPipe, err := transcodeCommand.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("Failed to open stderr pipe: %s", err)
-	}
-	stdoutPipe, err := transcodeCommand.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("Failed to open stdout pipe: %s", err)
+	transcodeCommand := exec.Command(path.Join(config.PathMistDir, "MistProcLivepeer"), args, "--debug", "8", "--kickoff")
+	if err = subprocess.LogOutputs(transcodeCommand); err != nil {
+		return err
 	}
 
 	// Start the Transcode Command asynchronously - we call Wait() later in this method
 	fmt.Printf("Starting transcode via: %s\n", transcodeCommand.String())
 	err = transcodeCommand.Start()
 	if err != nil {
-		return fmt.Errorf("Failed to start MistProcLivepeer: %s", err)
+		return fmt.Errorf("failed to start MistProcLivepeer: %s", err)
 	}
-
-	go func() {
-		if streamOutput(stdoutPipe, &stdout, os.Stdout) != nil {
-			_ = fmt.Errorf("Failed to stream output from stdout")
-		}
-	}()
-	go func() {
-		if streamOutput(stderrPipe, &stderr, os.Stderr) != nil {
-			_ = fmt.Errorf("Failed to stream output from stderr")
-		}
-	}()
 
 	dir, _ := url.Parse(".")
 	uploadDir := inputUrl.ResolveReference(dir)
