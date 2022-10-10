@@ -1,6 +1,8 @@
 package misttriggers
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,16 +11,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"bytes"
-	"context"
 	"time"
 
-	"github.com/livepeer/go-tools/drivers"
-
 	"github.com/livepeer/catalyst-api/cache"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
+	"github.com/livepeer/go-tools/drivers"
 )
 
 type MistTrack struct {
@@ -60,13 +59,10 @@ func (a ByBitrate) Swap(i, j int) {
 }
 
 func createPlaylist(multivariantPlaylist string, tracks []MistTrack) string {
-
 	for _, track := range tracks {
 		multivariantPlaylist += fmt.Sprintf("#EXT-X-STREAM-INF:BANDWIDTH=%d,RESOLUTION=%dx%d\r\n%s\r\n", track.ByteRate*8, track.Width, track.Height, track.manifestDestPath)
-
 	}
 	return multivariantPlaylist
-
 }
 
 func uploadPlaylist(uploadPath, manifest string) error {
@@ -181,9 +177,16 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 	// Generate a sorted list for multivariant playlist (reverse order of bitrate then resolution):
 	sort.Sort(sort.Reverse(ByBitrate(trackList)))
 	manifest := createPlaylist(multivariantPlaylist, trackList)
-	err = uploadPlaylist(fmt.Sprintf("%s/%s-master.m3u8", rootPathUrl.String(), uniqueName), manifest)
+	path := fmt.Sprintf("%s/%s-master.m3u8", rootPathUrl.String(), uniqueName)
+	err = uploadPlaylist(path, manifest)
 	if err != nil {
 		errors.WriteHTTPInternalServerError(w, "Failed to upload multivariant master playlist: "+streamName, err)
 		return
 	}
+
+	// Store the path back into our cached object to allow us to populate the final "Transcode Success" metadata callback
+	info.Outputs = append(info.Outputs, clients.OutputVideo{
+		Manifest: path,
+	})
+	cache.DefaultStreamCache.Transcoding.Store(streamName, *info)
 }
