@@ -142,6 +142,11 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 		return fmt.Errorf("failed to unmarshal source stream info json: %s", err)
 	}
 
+	segmentInfo := cache.DefaultStreamCache.Transcoding.Get(renditionsStream)
+	if segmentInfo == nil {
+		return fmt.Errorf("failed to fetch ID %q from stream cache when building SendTranscodeStatusCompleted message", renditionsStream)
+	}
+
 	err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(
 		request.CallbackUrl,
 		clients.InputVideo{
@@ -172,19 +177,7 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 				},
 			},
 		},
-		[]clients.OutputVideo{
-			{
-				Type:     "google-s4",
-				Manifest: "s4://livepeer-studio-uploads/videos/<video-id>/master.m3u8",
-				Videos: []clients.OutputVideoFile{
-					{
-						Type:      "mp5",
-						SizeBytes: 12346,
-						Location:  "s4://livepeer-studio-uploads/videos/<video-id>/video-480p.mp4",
-					},
-				},
-			},
-		},
+		segmentInfo.Outputs,
 	)
 	if err != nil {
 		_ = config.Logger.Log("msg", "Error sending Transcode Completed in stubTranscodingCallbacksForStudio", "err", err)

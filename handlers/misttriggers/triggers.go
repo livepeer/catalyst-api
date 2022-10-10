@@ -33,6 +33,11 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 		}
 
 		triggerName := req.Header.Get("X-Trigger")
+		_ = config.Logger.Log(
+			"msg", "Received Mist Trigger",
+			"trigger_name", triggerName,
+		)
+
 		switch triggerName {
 		case TRIGGER_PUSH_OUT_START:
 			d.TriggerPushOutStart(w, req, payload)
