@@ -121,7 +121,7 @@ func TestMistInHLSStart(t *testing.T) {
 	require.IsType(t, &fs.PathError{}, err)
 
 	script := path.Join(dir, "MistInHLS")
-	os.WriteFile(script, []byte("#!/bin/sh\necho livepeer\n"), 0744)
+	_ = os.WriteFile(script, []byte("#!/bin/sh\necho livepeer\n"), 0744)
 
 	err = createDtsh(destination)
 	require.NoError(t, err)
