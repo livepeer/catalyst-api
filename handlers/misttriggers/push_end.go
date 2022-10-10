@@ -136,9 +136,6 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 		_ = config.Logger.Log("msg", "Failed to send transcode status callback", "err", err.Error(), "stream_name", streamName)
 	}
 
-	// TODO: Start Transcoding (stubbed for now with below method)
-	//stubTranscodingCallbacksForStudio(callbackUrl)
-
 	// Get the source stream's detailed track info before kicking off transcode
 	infoJson, err := d.MistClient.GetStreamInfo(streamName)
 	if err != nil {

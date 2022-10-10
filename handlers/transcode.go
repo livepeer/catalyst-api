@@ -126,7 +126,7 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 
 	// If we're here, then transcode completed successfully
 	if err := clients.DefaultCallbackClient.SendTranscodeStatus(request.CallbackUrl, clients.TranscodeStatusTranscoding, 1); err != nil {
-		_ = config.Logger.Log("msg", "Error in stubTranscodingCallbacksForStudio", "err", err)
+		_ = config.Logger.Log("msg", "Error in SendTranscodeStatus", "err", err)
 	}
 
 	v := MistSourceVideo{}
@@ -134,12 +134,12 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 
 	err = njson.Unmarshal([]byte(request.SourceStreamInfo), &v)
 	if err != nil {
-		return fmt.Errorf("Failed to unmarshal source stream info json: %s", err)
+		return fmt.Errorf("failed to unmarshal source stream info json: %s", err)
 	}
 
 	err = njson.Unmarshal([]byte(request.SourceStreamInfo), &a)
 	if err != nil {
-		return fmt.Errorf("Failed to unmarshal source stream info json: %s", err)
+		return fmt.Errorf("failed to unmarshal source stream info json: %s", err)
 	}
 
 	err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(
