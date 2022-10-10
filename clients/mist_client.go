@@ -17,10 +17,12 @@ type MistAPIClient interface {
 	DeleteStream(streamName string) error
 	AddTrigger(streamName, triggerName string) error
 	DeleteTrigger(streamName, triggerName string) error
+	GetStreamInfo(streamName string) (string, error)
 }
 
 type MistClient struct {
 	ApiUrl          string
+	HttpReqUrl      string
 	TriggerCallback string
 	configMu        sync.Mutex
 }
@@ -127,6 +129,31 @@ func commandToString(command interface{}) (string, error) {
 
 func payloadFor(command string) string {
 	return fmt.Sprintf("command=%s", url.QueryEscape(command))
+}
+
+func (mc *MistClient) sendHttpRequest(streamName string) (string, error) {
+
+	jsonStreamInfoUrl := mc.HttpReqUrl + "/json_" + streamName + ".js"
+
+	resp, err := http.Get(jsonStreamInfoUrl)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(body), err
+}
+
+func (mc *MistClient) GetStreamInfo(streamName string) (string, error) {
+
+	resp, err := mc.sendHttpRequest(streamName)
+	if err != nil {
+		return "", err
+	}
+	return string(resp), err
 }
 
 type addStreamCommand struct {

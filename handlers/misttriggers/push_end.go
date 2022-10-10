@@ -14,6 +14,7 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
+	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/subprocess"
 )
 
@@ -135,8 +136,27 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 		_ = config.Logger.Log("msg", "Failed to send transcode status callback", "err", err.Error(), "stream_name", streamName)
 	}
 
-	// TODO: Start Transcoding (stubbed for now with below method)
-	stubTranscodingCallbacksForStudio(callbackUrl)
+	// Get the source stream's detailed track info before kicking off transcode
+	infoJson, err := d.MistClient.GetStreamInfo(streamName)
+	if err != nil {
+		_ = config.Logger.Log("msg", "Failed to get stream info", "err", err.Error(), "stream_name", streamName)
+	}
+
+	si := cache.DefaultStreamCache.Segmenting.Get(streamName)
+	transcodeRequest := handlers.TranscodeSegmentRequest{
+		SourceFile:            si.SourceFile,
+		CallbackUrl:           si.CallbackUrl,
+		AccessToken:           si.AccessToken,
+		TranscodeAPIUrl:       si.TranscodeAPIUrl,
+		HardcodedBroadcasters: si.HardcodedBroadcasters,
+		SourceStreamInfo:      infoJson,
+	}
+	go func() {
+		err := handlers.RunTranscodeProcess(d.MistClient, transcodeRequest)
+		if err != nil {
+			_ = config.Logger.Log("msg", "RunTranscodeProcess returned an error", "err", err.Error(), "stream_name", streamName)
+		}
+	}()
 }
 
 func uuidFromPushUrl(uri string) (string, error) {

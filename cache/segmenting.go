@@ -10,7 +10,12 @@ type SegmentingCache struct {
 }
 
 type StreamInfo struct {
-	callbackUrl string
+	SourceFile            string
+	CallbackUrl           string
+	UploadDir             string
+	AccessToken           string
+	TranscodeAPIUrl       string
+	HardcodedBroadcasters string
 }
 
 func (c *SegmentingCache) Remove(streamName string) {
@@ -24,13 +29,30 @@ func (c *SegmentingCache) GetCallbackUrl(streamName string) string {
 	defer c.mutex.Unlock()
 	info, ok := c.cache[streamName]
 	if ok {
-		return info.callbackUrl
+		return info.CallbackUrl
 	}
 	return ""
 }
 
-func (c *SegmentingCache) Store(streamName, callbackUrl string) {
+func (c *SegmentingCache) Get(streamName string) StreamInfo {
 	c.mutex.Lock()
-	c.cache[streamName] = StreamInfo{callbackUrl: callbackUrl}
+	defer c.mutex.Unlock()
+	info, ok := c.cache[streamName]
+	if ok {
+		return info
+	}
+	return StreamInfo{}
+}
+
+func (c *SegmentingCache) Store(streamName string, streamInfo StreamInfo) {
+	c.mutex.Lock()
+	c.cache[streamName] = StreamInfo{
+		SourceFile:            streamInfo.SourceFile,
+		CallbackUrl:           streamInfo.CallbackUrl,
+		UploadDir:             streamInfo.UploadDir,
+		AccessToken:           streamInfo.AccessToken,
+		TranscodeAPIUrl:       streamInfo.TranscodeAPIUrl,
+		HardcodedBroadcasters: streamInfo.HardcodedBroadcasters,
+	}
 	c.mutex.Unlock()
 }

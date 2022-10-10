@@ -29,6 +29,9 @@ type UploadVODRequest struct {
 			TranscodedSegments bool `json:"transcoded_segments"`
 		} `json:"outputs,omitempty"`
 	} `json:"output_locations,omitempty"`
+	AccessToken           string `json:"accessToken"`
+	TranscodeAPIUrl       string `json:"transcodeAPIUrl"`
+	HardcodedBroadcasters string `json:"hardcodedBroadcasters"`
 }
 
 func HasContentType(r *http.Request, mimetype string) bool {
@@ -85,9 +88,15 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("no source segment URL in request"))
 			return
 		}
-
 		streamName := config.RandomStreamName(config.SEGMENTING_PREFIX)
-		cache.DefaultStreamCache.Segmenting.Store(streamName, uploadVODRequest.CallbackUrl)
+		cache.DefaultStreamCache.Segmenting.Store(streamName, cache.StreamInfo{
+			SourceFile:            uploadVODRequest.Url,
+			CallbackUrl:           uploadVODRequest.CallbackUrl,
+			UploadDir:             uploadVODRequest.OutputLocations[0].URL,
+			AccessToken:           uploadVODRequest.AccessToken,
+			TranscodeAPIUrl:       uploadVODRequest.TranscodeAPIUrl,
+			HardcodedBroadcasters: uploadVODRequest.HardcodedBroadcasters,
+		})
 
 		// process the request
 		if err := d.processUploadVOD(streamName, uploadVODRequest.Url, tURL); err != nil {

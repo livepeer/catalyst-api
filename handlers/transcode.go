@@ -16,24 +16,26 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/subprocess"
+	"github.com/m7shapan/njson"
 	"github.com/xeipuuv/gojsonschema"
 )
 
 type TranscodeSegmentRequest struct {
-	SourceFile           string                 `json:"source_location"`
-	CallbackUrl          string                 `json:"callback_url"`
-	ManifestID           string                 `json:"manifestID"`
-	StreamID             string                 `json:"streamID"`
-	SessionID            string                 `json:"sessionID"`
-	StreamKey            string                 `json:"streamKey"`
-	AccessToken          string                 `json:"accessToken"`
-	TranscodeAPIUrl      string                 `json:"transcodeAPIUrl"`
-	Presets              []string               `json:"presets"`
-	ObjectStore          string                 `json:"objectStore"`
-	RecordObjectStore    string                 `json:"recordObjectStore"`
-	RecordObjectStoreURL string                 `json:"recordObjectStoreUrl"`
-	Profiles             []cache.EncodedProfile `json:"profiles"`
-	Detection            struct {
+	SourceFile            string                 `json:"source_location"`
+	CallbackUrl           string                 `json:"callback_url"`
+	ManifestID            string                 `json:"manifestID"`
+	StreamID              string                 `json:"streamID"`
+	SessionID             string                 `json:"sessionID"`
+	StreamKey             string                 `json:"streamKey"`
+	AccessToken           string                 `json:"accessToken"`
+	TranscodeAPIUrl       string                 `json:"transcodeAPIUrl"`
+	HardcodedBroadcasters string                 `json:"hardcodedBroadcasters"`
+	Presets               []string               `json:"presets"`
+	ObjectStore           string                 `json:"objectStore"`
+	RecordObjectStore     string                 `json:"recordObjectStore"`
+	RecordObjectStoreURL  string                 `json:"recordObjectStoreUrl"`
+	Profiles              []cache.EncodedProfile `json:"profiles"`
+	Detection             struct {
 		Freq                uint `json:"freq"`
 		SampleRate          uint `json:"sampleRate"`
 		SceneClassification []struct {
@@ -41,6 +43,7 @@ type TranscodeSegmentRequest struct {
 		} `json:"sceneClassification"`
 	} `json:"detection"`
 	VerificationFreq uint `json:"verificationFreq"`
+	SourceStreamInfo string
 }
 
 func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
@@ -121,6 +124,72 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 		return fmt.Errorf("exec transcodeCommand: %s", err)
 	}
 
+	// If we're here, then transcode completed successfully
+	if err := clients.DefaultCallbackClient.SendTranscodeStatus(request.CallbackUrl, clients.TranscodeStatusTranscoding, 1); err != nil {
+		_ = config.Logger.Log("msg", "Error in SendTranscodeStatus", "err", err)
+	}
+
+	v := MistSourceVideo{}
+	a := MistSourceAudio{}
+
+	err = njson.Unmarshal([]byte(request.SourceStreamInfo), &v)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal source stream info json: %s", err)
+	}
+
+	err = njson.Unmarshal([]byte(request.SourceStreamInfo), &a)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal source stream info json: %s", err)
+	}
+
+	err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(
+		request.CallbackUrl,
+		clients.InputVideo{
+			Format:   "unknown",
+			Duration: v.Duration,
+			Tracks: []clients.InputTrack{
+				{
+					Type:        "video",
+					Codec:       v.Codec,
+					DurationSec: v.Duration,
+					Bitrate:     v.Bitrate,
+					VideoTrack: clients.VideoTrack{
+						FPS:         v.FPS,
+						Width:       v.Width,
+						Height:      v.Height,
+						PixelFormat: "unknown",
+					},
+				},
+				{
+					Type:        "audio",
+					Codec:       a.Codec,
+					Bitrate:     a.Bitrate,
+					DurationSec: a.Duration,
+					AudioTrack: clients.AudioTrack{
+						Channels:   a.Channels,
+						SampleRate: a.SampleRate,
+					},
+				},
+			},
+		},
+		[]clients.OutputVideo{
+			{
+				Type:     "google-s4",
+				Manifest: "s4://livepeer-studio-uploads/videos/<video-id>/master.m3u8",
+				Videos: []clients.OutputVideoFile{
+					{
+						Type:      "mp5",
+						SizeBytes: 12346,
+						Location:  "s4://livepeer-studio-uploads/videos/<video-id>/video-480p.mp4",
+					},
+				},
+			},
+		},
+	)
+	if err != nil {
+		_ = config.Logger.Log("msg", "Error sending Transcode Completed in stubTranscodingCallbacksForStudio", "err", err)
+	}
+
 	return nil
 }
 
@@ -140,10 +209,11 @@ func configForSubprocess(req TranscodeSegmentRequest, inputStreamName, outputStr
 		} else {
 			apiUrl = config.DefaultCustomAPIUrl
 		}
+	} else if req.HardcodedBroadcasters != "" {
+		hardcodedBroadcasters = req.HardcodedBroadcasters
 	} else {
-		hardcodedBroadcasters = fmt.Sprintf(`[{"address":"http://127.0.0.1:%d"}]`, config.DefaultBroadcasterPort)
+		hardcodedBroadcasters = ""
 	}
-
 	conf := ProcLivepeerConfig{
 		AccessToken:           req.AccessToken,
 		CustomAPIUrl:          apiUrl,
@@ -152,6 +222,29 @@ func configForSubprocess(req TranscodeSegmentRequest, inputStreamName, outputStr
 		Leastlive:             true,
 		AudioSelect:           "maxbps",
 		HardcodedBroadcasters: hardcodedBroadcasters,
+	}
+
+	// If Profiles are not available (e.g. from /api/vod), then
+	// use hardcoded list of profiles for transcoding. Otherwise
+	// use the profiles in the request itself (e.g. from /api/transcode/file)
+	if len(req.Profiles) == 0 {
+		defaultProfiles := []cache.EncodedProfile{
+			{
+				Name:    "360p",
+				Width:   640,
+				Height:  360,
+				Bitrate: 800000,
+				FPS:     24,
+			},
+			{
+				Name:    "720p",
+				Width:   1280,
+				Height:  720,
+				Bitrate: 3000000,
+				FPS:     24,
+			},
+		}
+		req.Profiles = append(req.Profiles, defaultProfiles...)
 	}
 
 	// Setup requested rendition profiles
@@ -191,4 +284,21 @@ type ProcLivepeerConfig struct {
 	HardcodedBroadcasters string                      `json:"hardcoded_broadcasters,omitempty"`
 	AudioSelect           string                      `json:"audio_select"`
 	Profiles              []ProcLivepeerConfigProfile `json:"target_profiles"`
+}
+
+type MistSourceVideo struct {
+	Duration float64 `njson:"meta.tracks.video*.lastms"`
+	Codec    string  `njson:"meta.tracks.video*.codec"`
+	Bitrate  int     `njson:"meta.tracks.video*.bps"`
+	FPS      int     `njson:"meta.tracks.video*.fpks"`
+	Width    int     `njson:"width"`
+	Height   int     `njson:"height"`
+}
+
+type MistSourceAudio struct {
+	Duration   float64 `njson:"meta.tracks.audio*.lastms"`
+	Codec      string  `njson:"meta.tracks.audio*.codec"`
+	Bitrate    int     `njson:"meta.tracks.audio*.bps"`
+	Channels   int     `njson:"meta.tracks.audio*.channels"`
+	SampleRate int     `njson:"meta.tracks.audio*.rate"`
 }

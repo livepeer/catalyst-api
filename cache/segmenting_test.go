@@ -8,13 +8,23 @@ import (
 
 func TestStoreAndRetrieveSegmenting(t *testing.T) {
 	c := NewStreamCache()
-	c.Segmenting.Store("some-stream-name", "http://some-callback-url.com")
+	c.Segmenting.Store(
+		"some-stream-name",
+		StreamInfo{
+			CallbackUrl: "http://some-callback-url.com",
+		},
+	)
 	require.Equal(t, "http://some-callback-url.com", c.Segmenting.GetCallbackUrl("some-stream-name"))
 }
 
 func TestStoreAndRemoveSegmenting(t *testing.T) {
 	c := NewStreamCache()
-	c.Segmenting.Store("some-stream-name", "http://some-callback-url.com")
+	c.Segmenting.Store(
+		"some-stream-name",
+		StreamInfo{
+			CallbackUrl: "http://some-callback-url.com",
+		},
+	)
 	require.Equal(t, "http://some-callback-url.com", c.Segmenting.GetCallbackUrl("some-stream-name"))
 
 	c.Segmenting.Remove("some-stream-name")

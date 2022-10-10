@@ -6,6 +6,12 @@ properties:
   callback_url:
     type: "string"
     format: "uri"
+  accessToken:
+    type: "string"
+  transcodeAPIUrl:
+    type: "string"
+  hardcodedBroadcasters:
+    type: "string"
   output_locations:
     type: "array"
     items:

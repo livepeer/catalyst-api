@@ -8,6 +8,8 @@ properties:
     type: "string"
   transcodeAPIUrl:
     type: "string"
+  hardcodedBroadcasters:
+    type: "string"
   manifestID:
     type: "string"
   streamID:
