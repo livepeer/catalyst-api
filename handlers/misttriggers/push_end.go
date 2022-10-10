@@ -80,7 +80,7 @@ func (d *MistCallbackHandlersCollection) TranscodingPushEnd(w http.ResponseWrite
 	}
 
 	if err := createDtsh(actualDestination); err != nil {
-		_ = config.Logger.Log("msg", "createDtsh failed", "err", err)
+		_ = config.Logger.Log("msg", "createDtsh failed", "err", err, "destination", actualDestination)
 	}
 
 	// We do not delete triggers as source stream is wildcard stream: RENDITION_PREFIX
@@ -166,8 +166,9 @@ func createDtsh(destination string) error {
 		return err
 	}
 	go func() {
-		err := headerPrepare.Wait()
-		fmt.Println("exec headerPrepare:", err)
+		if err := headerPrepare.Wait(); err != nil {
+			_ = config.Logger.Log("msg", "createDtsh return code", "code", err, "destination", destination)
+		}
 	}()
 	return nil
 }
