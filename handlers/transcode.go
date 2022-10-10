@@ -17,6 +17,7 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
+	"github.com/m7shapan/njson"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -43,6 +44,7 @@ type TranscodeSegmentRequest struct {
 		} `json:"sceneClassification"`
 	} `json:"detection"`
 	VerificationFreq uint `json:"verificationFreq"`
+	SourceStreamInfo string
 }
 
 func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
@@ -165,6 +167,72 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 		return fmt.Errorf("exec transcodeCommand: %s", err)
 	}
 
+	// If we're here, then transcode completed successfully
+	if err := clients.DefaultCallbackClient.SendTranscodeStatus(request.CallbackUrl, clients.TranscodeStatusTranscoding, 1); err != nil {
+		_ = config.Logger.Log("msg", "Error in stubTranscodingCallbacksForStudio", "err", err)
+	}
+
+	v := MistSourceVideo{}
+	a := MistSourceAudio{}
+
+	err = njson.Unmarshal([]byte(request.SourceStreamInfo), &v)
+	if err != nil {
+		return fmt.Errorf("Failed to unmarshal source stream info json: %s", err)
+	}
+
+	err = njson.Unmarshal([]byte(request.SourceStreamInfo), &a)
+	if err != nil {
+		return fmt.Errorf("Failed to unmarshal source stream info json: %s", err)
+	}
+
+	err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(
+		request.CallbackUrl,
+		clients.InputVideo{
+			Format:   "unknown",
+			Duration: v.Duration,
+			Tracks: []clients.InputTrack{
+				{
+					Type:        "video",
+					Codec:       v.Codec,
+					DurationSec: v.Duration,
+					Bitrate:     v.Bitrate,
+					VideoTrack: clients.VideoTrack{
+						FPS:         v.FPS,
+						Width:       v.Width,
+						Height:      v.Height,
+						PixelFormat: "unknown",
+					},
+				},
+				{
+					Type:        "audio",
+					Codec:       a.Codec,
+					Bitrate:     a.Bitrate,
+					DurationSec: a.Duration,
+					AudioTrack: clients.AudioTrack{
+						Channels:   a.Channels,
+						SampleRate: a.SampleRate,
+					},
+				},
+			},
+		},
+		[]clients.OutputVideo{
+			{
+				Type:     "google-s4",
+				Manifest: "s4://livepeer-studio-uploads/videos/<video-id>/master.m3u8",
+				Videos: []clients.OutputVideoFile{
+					{
+						Type:      "mp5",
+						SizeBytes: 12346,
+						Location:  "s4://livepeer-studio-uploads/videos/<video-id>/video-480p.mp4",
+					},
+				},
+			},
+		},
+	)
+	if err != nil {
+		_ = config.Logger.Log("msg", "Error sending Transcode Completed in stubTranscodingCallbacksForStudio", "err", err)
+	}
+
 	return nil
 }
 
@@ -259,4 +327,21 @@ type ProcLivepeerConfig struct {
 	HardcodedBroadcasters string                      `json:"hardcoded_broadcasters,omitempty"`
 	AudioSelect           string                      `json:"audio_select"`
 	Profiles              []ProcLivepeerConfigProfile `json:"target_profiles"`
+}
+
+type MistSourceVideo struct {
+	Duration float64 `njson:"meta.tracks.video*.lastms"`
+	Codec    string  `njson:"meta.tracks.video*.codec"`
+	Bitrate  int     `njson:"meta.tracks.video*.bps"`
+	FPS      int     `njson:"meta.tracks.video*.fpks"`
+	Width    int     `njson:"width"`
+	Height   int     `njson:"height"`
+}
+
+type MistSourceAudio struct {
+	Duration   float64 `njson:"meta.tracks.audio*.lastms"`
+	Codec      string  `njson:"meta.tracks.audio*.codec"`
+	Bitrate    int     `njson:"meta.tracks.audio*.bps"`
+	Channels   int     `njson:"meta.tracks.audio*.channels"`
+	SampleRate int     `njson:"meta.tracks.audio*.rate"`
 }

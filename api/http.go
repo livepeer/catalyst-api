@@ -12,9 +12,10 @@ import (
 	"github.com/livepeer/catalyst-api/middleware"
 )
 
-func ListenAndServe(apiPort, mistPort int) error {
+func ListenAndServe(apiPort, mistPort, mistHttpPort int) error {
 	mc := &clients.MistClient{
 		ApiUrl:          fmt.Sprintf("http://localhost:%d/api2", mistPort),
+		HttpReqUrl:      fmt.Sprintf("http://localhost:%d", mistHttpPort),
 		TriggerCallback: fmt.Sprintf("http://localhost:%d/api/mist/trigger", apiPort),
 	}
 

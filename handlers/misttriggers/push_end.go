@@ -130,7 +130,14 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 	}
 
 	// TODO: Start Transcoding (stubbed for now with below method)
-	stubTranscodingCallbacksForStudio(callbackUrl)
+	//stubTranscodingCallbacksForStudio(callbackUrl)
+
+	// Get the source stream's detailed track info before kicking off transcode
+	infoJson, err := d.MistClient.GetStreamInfo(streamName)
+	if err != nil {
+		_ = config.Logger.Log("msg", "Failed to get stream info", "err", err.Error(), "stream_name", streamName)
+	}
+
 	si := cache.DefaultStreamCache.Segmenting.Get(streamName)
 	transcodeRequest := handlers.TranscodeSegmentRequest{
 		SourceFile:            si.SourceFile,
@@ -138,6 +145,7 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 		AccessToken:           si.AccessToken,
 		TranscodeAPIUrl:       si.TranscodeAPIUrl,
 		HardcodedBroadcasters: si.HardcodedBroadcasters,
+		SourceStreamInfo:      infoJson,
 	}
 	go func() {
 		err := handlers.RunTranscodeProcess(d.MistClient, transcodeRequest)
