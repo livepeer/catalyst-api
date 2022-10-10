@@ -186,6 +186,7 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 
 	// Store the path back into our cached object to allow us to populate the final "Transcode Success" metadata callback
 	info.Outputs = append(info.Outputs, clients.OutputVideo{
+		Type:     "google-s3", // TODO: Stop hardcoding this once we support other schemes
 		Manifest: path,
 	})
 	cache.DefaultStreamCache.Transcoding.Store(streamName, *info)
