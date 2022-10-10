@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/clients"
@@ -45,84 +44,6 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 			errors.WriteHTTPBadRequest(w, "Unsupported X-Trigger", fmt.Errorf("unknown trigger '%s'", triggerName))
 			return
 		}
-	}
-}
-
-// This method is for Studio to have something to integrate with and to make sure we have all the callbacks + domain models
-// in place that we'll need
-func stubTranscodingCallbacksForStudio(callbackURL string) {
-	time.Sleep(5 * time.Second)
-	if err := clients.DefaultCallbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, 0.3); err != nil {
-		_ = config.Logger.Log("msg", "Error in stubTranscodingCallbacksForStudio", "err", err)
-		return
-	}
-
-	time.Sleep(5 * time.Second)
-	if err := clients.DefaultCallbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, 0.6); err != nil {
-		_ = config.Logger.Log("msg", "Error in stubTranscodingCallbacksForStudio", "err", err)
-		return
-	}
-
-	time.Sleep(5 * time.Second)
-	if err := clients.DefaultCallbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, 0.9); err != nil {
-		_ = config.Logger.Log("msg", "Error in stubTranscodingCallbacksForStudio", "err", err)
-		return
-	}
-
-	time.Sleep(5 * time.Second)
-	if err := clients.DefaultCallbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, 1); err != nil {
-		_ = config.Logger.Log("msg", "Error in stubTranscodingCallbacksForStudio", "err", err)
-		return
-	}
-
-	time.Sleep(5 * time.Second)
-	err := clients.DefaultCallbackClient.SendTranscodeStatusCompleted(
-		callbackURL,
-		clients.InputVideo{
-			Format:   "mp4",
-			Duration: 1234.5678,
-			Tracks: []clients.InputTrack{
-				{
-					Type:        "video",
-					Codec:       "h264",
-					DurationSec: 1.6,
-					Bitrate:     358315,
-					VideoTrack: clients.VideoTrack{
-						FPS:         30,
-						Width:       1920,
-						Height:      1080,
-						PixelFormat: "yuv420p",
-					},
-				},
-				{
-					Type:        "audio",
-					Codec:       "aac",
-					Bitrate:     141341,
-					DurationSec: 1.599979,
-					AudioTrack: clients.AudioTrack{
-						Channels:   2,
-						SampleRate: 48000,
-					},
-				},
-			},
-		},
-		[]clients.OutputVideo{
-			{
-				Type:     "google-s3",
-				Manifest: "s3://livepeer-studio-uploads/videos/<video-id>/master.m3u8",
-				Videos: []clients.OutputVideoFile{
-					{
-						Type:      "mp4",
-						SizeBytes: 12345,
-						Location:  "s3://livepeer-studio-uploads/videos/<video-id>/video-480p.mp4",
-					},
-				},
-			},
-		},
-	)
-	if err != nil {
-		_ = config.Logger.Log("msg", "Error sending Transcode Completed in stubTranscodingCallbacksForStudio", "err", err)
-		return
 	}
 }
 

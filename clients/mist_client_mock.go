@@ -14,6 +14,10 @@ func (s StubMistClient) DeleteStream(streamName string) error {
 	return nil
 }
 
+func (s StubMistClient) GetStreamInfo(streamName string) (string, error) {
+	return "", nil
+}
+
 func (s StubMistClient) AddTrigger(streamName, triggerName string) error {
 	return nil
 }

@@ -101,6 +101,7 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 		errors.WriteHTTPBadRequest(w, "PUSH_END trigger invoked for something that isn't a transcode stream: "+streamName, nil)
 		return
 	}
+	uniqueName := streamName[len(config.RENDITION_PREFIX):]
 
 	// Fetch the stream info from cache (cached when we kicked off the transcode process)
 	info := cache.DefaultStreamCache.Transcoding.Get(streamName)
@@ -146,7 +147,7 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 			continue
 		}
 
-		dirPath := fmt.Sprintf("%s_%dx%d/stream.m3u8", streamName, tracks[i].Width, tracks[i].Height)
+		dirPath := fmt.Sprintf("_%s_%dx%d/stream.m3u8", uniqueName, tracks[i].Width, tracks[i].Height)
 		dirPathUrl, err := url.JoinPath(info.UploadDir, dirPath)
 		if err != nil {
 			errors.WriteHTTPInternalServerError(w, "Failed to generate the upload directory path: "+streamName, err)
@@ -180,7 +181,7 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 	// Generate a sorted list for multivariant playlist (reverse order of bitrate then resolution):
 	sort.Sort(sort.Reverse(ByBitrate(trackList)))
 	manifest := createPlaylist(multivariantPlaylist, trackList)
-	err = uploadPlaylist(fmt.Sprintf("%s/%s-master.m3u8", rootPathUrl.String(), streamName), manifest)
+	err = uploadPlaylist(fmt.Sprintf("%s/%s-master.m3u8", rootPathUrl.String(), uniqueName), manifest)
 	if err != nil {
 		errors.WriteHTTPInternalServerError(w, "Failed to upload multivariant master playlist: "+streamName, err)
 		return
