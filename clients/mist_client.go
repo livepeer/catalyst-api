@@ -151,7 +151,7 @@ func (mc *MistClient) GetStreamInfo(streamName string) (string, error) {
 
 	resp, err := mc.sendHttpRequest(streamName)
 	if err != nil {
-		return "nada", err
+		return "", err
 	}
 	return string(resp), err
 }
