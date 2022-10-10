@@ -2,8 +2,6 @@ package cache
 
 import (
 	"sync"
-
-	"github.com/livepeer/catalyst-api/clients"
 )
 
 type TranscodingCache struct {
@@ -27,11 +25,10 @@ type EncodedProfile struct {
 
 type SegmentInfo struct {
 	CallbackUrl  string
-	Source       string                // S3 input we are transcoding
-	UploadDir    string                // S3 destination url for multiple renditions
-	Profiles     []EncodedProfile      // Requested encoding profiles to produce
-	Destinations []string              // Rendition URLS go here on push start and removed on push end
-	Outputs      []clients.OutputVideo // Information about the final transcoded outputs we've created
+	Source       string           // S3 input we are transcoding
+	UploadDir    string           // S3 destination url for multiple renditions
+	Profiles     []EncodedProfile // Requested encoding profiles to produce
+	Destinations []string         // Rendition URLS go here on push start and removed on push end
 }
 
 func (si SegmentInfo) ContainsDestination(destination string) bool {
