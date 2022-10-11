@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
+
+	"github.com/livepeer/catalyst-api/config"
 )
 
 type MistAPIClient interface {
@@ -28,16 +30,19 @@ type MistClient struct {
 }
 
 func (mc *MistClient) AddStream(streamName, sourceUrl string) error {
+	_ = config.Logger.Log("msg", "mistClient.AddStream", "streamName", streamName, "sourceURL", sourceUrl)
 	c := commandAddStream(streamName, sourceUrl)
 	return wrapErr(validateAddStream(mc.sendCommand(c)), streamName)
 }
 
 func (mc *MistClient) PushStart(streamName, targetURL string) error {
+	_ = config.Logger.Log("msg", "mistClient.PushStart", "streamName", streamName, "targetURL", targetURL)
 	c := commandPushStart(streamName, targetURL)
 	return wrapErr(validatePushStart(mc.sendCommand(c)), streamName)
 }
 
 func (mc *MistClient) DeleteStream(streamName string) error {
+	_ = config.Logger.Log("msg", "mistClient.DeleteStream", "streamName", streamName)
 	c := commandDeleteStream(streamName)
 	return wrapErr(validateDeleteStream(mc.sendCommand(c)), streamName)
 }
@@ -50,6 +55,7 @@ func (mc *MistClient) DeleteStream(streamName string) error {
 // 4. Override the triggers
 // 5. Release the lock
 func (mc *MistClient) AddTrigger(streamName, triggerName string) error {
+	_ = config.Logger.Log("msg", "mistClient.AddTrigger", "streamName", streamName, "triggerName", triggerName)
 	mc.configMu.Lock()
 	defer mc.configMu.Unlock()
 
@@ -70,6 +76,7 @@ func (mc *MistClient) AddTrigger(streamName, triggerName string) error {
 // 4. Override the triggers
 // 5. Release the lock
 func (mc *MistClient) DeleteTrigger(streamName, triggerName string) error {
+	_ = config.Logger.Log("msg", "mistClient.DeleteTrigger", "streamName", streamName, "triggerName", triggerName)
 	mc.configMu.Lock()
 	defer mc.configMu.Unlock()
 
