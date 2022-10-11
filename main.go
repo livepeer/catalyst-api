@@ -13,6 +13,7 @@ func main() {
 	port := flag.Int("port", 4949, "Port to listen on")
 	mistPort := flag.Int("mist-port", 4242, "Port to listen on")
 	mistHttpPort := flag.Int("mist-http-port", 8080, "Port to listen on")
+	apiToken := flag.String("api-token", "IAmAuthorized", "Auth header value for API access")
 	flag.StringVar(&config.RecordingCallback, "recording", "http://recording.livepeer.com/recording/status", "Callback URL for recording start&stop events")
 	mistJson := flag.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
 	flag.Parse()
@@ -22,7 +23,7 @@ func main() {
 		return
 	}
 
-	if err := api.ListenAndServe(*port, *mistPort, *mistHttpPort); err != nil {
+	if err := api.ListenAndServe(*port, *mistPort, *mistHttpPort, *apiToken); err != nil {
 		log.Fatal(err)
 	}
 }
