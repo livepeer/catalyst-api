@@ -11,8 +11,8 @@ var Version string
 // Used so that we can generate fixed timestamps in tests
 var Clock TimestampGenerator = RealTimestampGenerator{}
 
-// Path to Mist's binaries that we shell out to for transcoding and header file creation
-var PathMistDir = "/usr/local/bin"
+// Path to Mist's "Livepeer" process that we shell out to for the transcoding
+const PathMistProcLivepeer = "/usr/local/bin/MistProcLivepeer"
 
 // Port that the local Broadcaster runs on
 const DefaultBroadcasterPort = 8935

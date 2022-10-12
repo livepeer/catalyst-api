@@ -5,8 +5,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"os/exec"
-	"path"
 	"strings"
 	"time"
 
@@ -15,7 +13,6 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/handlers"
-	"github.com/livepeer/catalyst-api/subprocess"
 )
 
 // TriggerPushEnd responds to PUSH_END trigger
@@ -67,7 +64,7 @@ func (d *MistCallbackHandlersCollection) TranscodingPushEnd(w http.ResponseWrite
 		return
 	}
 
-	uploadSuccess := pushStatus != "null"
+	uploadSuccess := pushStatus == "null"
 	if uploadSuccess {
 		// TODO: Do some maths so that we don't always send 0.5
 		if err := clients.DefaultCallbackClient.SendTranscodeStatus(info.CallbackUrl, clients.TranscodeStatusTranscoding, 0.5); err != nil {
@@ -78,10 +75,6 @@ func (d *MistCallbackHandlersCollection) TranscodingPushEnd(w http.ResponseWrite
 		if err := clients.DefaultCallbackClient.SendTranscodeStatusError(info.CallbackUrl, fmt.Sprintf("Error while pushing to %s: %s", actualDestination, pushStatus)); err != nil {
 			_ = config.Logger.Log("msg", "Error sending transcode error status in TranscodingPushEnd", "err", err)
 		}
-	}
-
-	if err := createDtsh(actualDestination); err != nil {
-		_ = config.Logger.Log("msg", "createDtsh failed", "err", err, "destination", actualDestination)
 	}
 
 	// We do not delete triggers as source stream is wildcard stream: RENDITION_PREFIX
@@ -169,26 +162,4 @@ func uuidFromPushUrl(uri string) (string, error) {
 		return "", fmt.Errorf("push url path malformed: element count %d %s", len(path), pushUrl.EscapedPath())
 	}
 	return path[len(path)-2], nil
-}
-
-func createDtsh(destination string) error {
-	url, err := url.Parse(destination)
-	if err != nil {
-		return err
-	}
-	url.RawQuery = ""
-	url.Fragment = ""
-	headerPrepare := exec.Command(path.Join(config.PathMistDir, "MistInHLS"), "-H", url.String())
-	if err = subprocess.LogOutputs(headerPrepare); err != nil {
-		return err
-	}
-	if err = headerPrepare.Start(); err != nil {
-		return err
-	}
-	go func() {
-		if err := headerPrepare.Wait(); err != nil {
-			_ = config.Logger.Log("msg", "createDtsh return code", "code", err, "destination", destination)
-		}
-	}()
-	return nil
 }
