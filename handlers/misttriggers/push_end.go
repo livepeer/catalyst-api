@@ -43,7 +43,6 @@ func (d *MistCallbackHandlersCollection) TriggerPushEnd(w http.ResponseWriter, r
 
 	switch streamNameToPipeline(streamName) {
 	case Transcoding:
-		// TODO: Left commented for illustration of the alternate code path here as this is the next piece we'll pull out of https://github.com/livepeer/catalyst-api/pull/30
 		d.TranscodingPushEnd(w, req, streamName, destination, actualDestination, pushStatus)
 	case Segmenting:
 		d.SegmentingPushEnd(w, req, streamName)
@@ -87,7 +86,6 @@ func (d *MistCallbackHandlersCollection) TranscodingPushEnd(w http.ResponseWrite
 	// We do not delete triggers as source stream is wildcard stream: RENDITION_PREFIX
 	cache.DefaultStreamCache.Transcoding.RemovePushDestination(streamName, destination)
 	if cache.DefaultStreamCache.Transcoding.AreDestinationsEmpty(streamName) {
-		// TODO: Fill this in properly
 		if err := clients.DefaultCallbackClient.SendTranscodeStatusCompleted(info.CallbackUrl, clients.InputVideo{}, []clients.OutputVideo{}); err != nil {
 			_ = config.Logger.Log("msg", "Error sending transcode completed status in TranscodingPushEnd", "err", err)
 		}
@@ -145,11 +143,12 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 	si := cache.DefaultStreamCache.Segmenting.Get(streamName)
 	transcodeRequest := handlers.TranscodeSegmentRequest{
 		SourceFile:            si.SourceFile,
-		CallbackUrl:           si.CallbackUrl,
+		CallbackURL:           si.CallbackURL,
 		AccessToken:           si.AccessToken,
 		TranscodeAPIUrl:       si.TranscodeAPIUrl,
 		HardcodedBroadcasters: si.HardcodedBroadcasters,
 		SourceStreamInfo:      infoJson,
+		UploadURL:             si.UploadURL,
 	}
 	go func() {
 		err := handlers.RunTranscodeProcess(d.MistClient, transcodeRequest)

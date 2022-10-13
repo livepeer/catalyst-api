@@ -36,6 +36,7 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 		_ = config.Logger.Log(
 			"msg", "Received Mist Trigger",
 			"trigger_name", triggerName,
+			"payload", string(payload),
 		)
 
 		switch triggerName {
