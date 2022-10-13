@@ -11,8 +11,8 @@ type SegmentingCache struct {
 
 type StreamInfo struct {
 	SourceFile            string
-	CallbackUrl           string
-	UploadDir             string
+	CallbackURL           string
+	UploadURL             string
 	AccessToken           string
 	TranscodeAPIUrl       string
 	HardcodedBroadcasters string
@@ -29,7 +29,7 @@ func (c *SegmentingCache) GetCallbackUrl(streamName string) string {
 	defer c.mutex.Unlock()
 	info, ok := c.cache[streamName]
 	if ok {
-		return info.CallbackUrl
+		return info.CallbackURL
 	}
 	return ""
 }
@@ -48,8 +48,8 @@ func (c *SegmentingCache) Store(streamName string, streamInfo StreamInfo) {
 	c.mutex.Lock()
 	c.cache[streamName] = StreamInfo{
 		SourceFile:            streamInfo.SourceFile,
-		CallbackUrl:           streamInfo.CallbackUrl,
-		UploadDir:             streamInfo.UploadDir,
+		CallbackURL:           streamInfo.CallbackURL,
+		UploadURL:             streamInfo.UploadURL,
 		AccessToken:           streamInfo.AccessToken,
 		TranscodeAPIUrl:       streamInfo.TranscodeAPIUrl,
 		HardcodedBroadcasters: streamInfo.HardcodedBroadcasters,

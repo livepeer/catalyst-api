@@ -178,6 +178,7 @@ func (d *MistCallbackHandlersCollection) TriggerLiveTrackList(w http.ResponseWri
 	sort.Sort(sort.Reverse(ByBitrate(trackList)))
 	manifest := createPlaylist(multivariantPlaylist, trackList)
 	path := fmt.Sprintf("%s/%s-master.m3u8", rootPathUrl.String(), uniqueName)
+
 	err = uploadPlaylist(path, manifest)
 	if err != nil {
 		errors.WriteHTTPInternalServerError(w, "Failed to upload multivariant master playlist: "+streamName, err)

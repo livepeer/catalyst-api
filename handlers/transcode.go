@@ -22,18 +22,12 @@ import (
 
 type TranscodeSegmentRequest struct {
 	SourceFile            string                 `json:"source_location"`
-	CallbackUrl           string                 `json:"callback_url"`
-	ManifestID            string                 `json:"manifestID"`
-	StreamID              string                 `json:"streamID"`
-	SessionID             string                 `json:"sessionID"`
+	CallbackURL           string                 `json:"callback_url"`
+	UploadURL             string                 `json:"upload_url"`
 	StreamKey             string                 `json:"streamKey"`
 	AccessToken           string                 `json:"accessToken"`
 	TranscodeAPIUrl       string                 `json:"transcodeAPIUrl"`
 	HardcodedBroadcasters string                 `json:"hardcodedBroadcasters"`
-	Presets               []string               `json:"presets"`
-	ObjectStore           string                 `json:"objectStore"`
-	RecordObjectStore     string                 `json:"recordObjectStore"`
-	RecordObjectStoreURL  string                 `json:"recordObjectStoreUrl"`
 	Profiles              []cache.EncodedProfile `json:"profiles"`
 	Detection             struct {
 		Freq                uint `json:"freq"`
@@ -42,7 +36,6 @@ type TranscodeSegmentRequest struct {
 			Name string `json:"name"`
 		} `json:"sceneClassification"`
 	} `json:"detection"`
-	VerificationFreq uint `json:"verificationFreq"`
 	SourceStreamInfo string
 }
 
@@ -79,7 +72,7 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 // RunTranscodeProcess starts `MistLivepeeerProc` as a subprocess to transcode inputStream into renditionsStream.
 func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegmentRequest) error {
 
-	inputUrl, err := url.Parse(request.SourceFile)
+	uploadURL, err := url.Parse(request.UploadURL)
 	if err != nil {
 		return fmt.Errorf("invalid request source location: %s, error: %s", request.SourceFile, err)
 	}
@@ -107,11 +100,11 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 		return fmt.Errorf("failed to start MistProcLivepeer: %s", err)
 	}
 
-	dir, _ := url.Parse(".")
-	uploadDir := inputUrl.ResolveReference(dir)
+	dir, _ := url.Parse("transcoded/")
+	uploadDir := uploadURL.ResolveReference(dir)
 	// Cache the stream data, later used in the trigger handlers called by Mist
 	cache.DefaultStreamCache.Transcoding.Store(renditionsStream, cache.SegmentInfo{
-		CallbackUrl: request.CallbackUrl,
+		CallbackUrl: request.CallbackURL,
 		Source:      request.SourceFile,
 		Profiles:    request.Profiles[:],
 		UploadDir:   uploadDir.String(),
@@ -125,7 +118,7 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 	}
 
 	// If we're here, then transcode completed successfully
-	if err := clients.DefaultCallbackClient.SendTranscodeStatus(request.CallbackUrl, clients.TranscodeStatusTranscoding, 1); err != nil {
+	if err := clients.DefaultCallbackClient.SendTranscodeStatus(request.CallbackURL, clients.TranscodeStatusTranscoding, 1); err != nil {
 		_ = config.Logger.Log("msg", "Error in SendTranscodeStatus", "err", err)
 	}
 
@@ -148,7 +141,7 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 	}
 
 	err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(
-		request.CallbackUrl,
+		request.CallbackURL,
 		clients.InputVideo{
 			Format:   "unknown",
 			Duration: v.Duration,
