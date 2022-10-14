@@ -117,9 +117,6 @@ func (d *CatalystAPIHandlersCollection) processUploadVOD(streamName, sourceURL, 
 	if err := d.MistClient.AddStream(streamName, sourceURL); err != nil {
 		return err
 	}
-	if err := d.MistClient.AddTrigger(streamName, "PUSH_END"); err != nil {
-		return err
-	}
 	if err := d.MistClient.PushStart(streamName, targetURL); err != nil {
 		return err
 	}
