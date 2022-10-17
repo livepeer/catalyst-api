@@ -3,7 +3,7 @@ GO_BUILD_DIR?=build/
 ldflags := -X 'github.com/livepeer/catalyst-api/config.Version=$(shell git rev-parse HEAD)'
 
 .PHONY: all
-all: build fmt test lint
+all: build fmt test lint integration-test
 
 .PHONY: build
 build:
@@ -12,6 +12,10 @@ build:
 .PHONY: fmt
 fmt:
 	go fmt ./...
+
+.PHONY: integration-test
+integration-test:
+	cd test && godog run --strict --stop-on-failure 2> ./logs/test.log
 
 .PHONY: lint
 lint:

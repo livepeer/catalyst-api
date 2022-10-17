@@ -12,3 +12,5 @@
 *.out
 
 build
+test/app
+test/logs/*.log
