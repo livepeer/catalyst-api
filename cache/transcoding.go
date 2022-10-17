@@ -2,8 +2,10 @@ package cache
 
 import (
 	"sync"
+	"time"
 
 	"github.com/livepeer/catalyst-api/clients"
+	"github.com/livepeer/catalyst-api/config"
 )
 
 type TranscodingCache struct {
@@ -32,6 +34,29 @@ type SegmentInfo struct {
 	Profiles     []EncodedProfile      // Requested encoding profiles to produce
 	Destinations []string              // Rendition URLS go here on push start and removed on push end
 	Outputs      []clients.OutputVideo // Information about the final transcoded outputs we've created
+}
+
+// Send "keepalive" callbacks to ensure the caller (Studio) knows transcoding is still ongoing and hasn't failed
+func (t *TranscodingCache) SendTranscodingHeartbeats(interval time.Duration, quit chan bool) {
+	for {
+		// Stop the infinite loop if we receive a quit message
+		select {
+		case <-quit:
+			return
+		default:
+		}
+
+		jobs := t.GetAll()
+		for id, job := range jobs {
+			err := clients.DefaultCallbackClient.SendTranscodeStatus(job.CallbackUrl, clients.TranscodeStatusTranscoding, 0.5)
+			if err == nil {
+				_ = config.Logger.Log("msg", "Sent Transcode Status heartbeat", "id", id, "callback_url", job.CallbackUrl)
+			} else {
+				_ = config.Logger.Log("msg", "failed to send Transcode Status heartbeat", "id", id, "callback_url", job.CallbackUrl, "error", err)
+			}
+		}
+		time.Sleep(interval)
+	}
 }
 
 func (si SegmentInfo) ContainsDestination(destination string) bool {
@@ -91,6 +116,12 @@ func (c *TranscodingCache) Get(streamName string) *SegmentInfo {
 		return info
 	}
 	return nil
+}
+
+func (c *TranscodingCache) GetAll() map[string]*SegmentInfo {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return c.pushes
 }
 
 func (c *TranscodingCache) Store(streamName string, info SegmentInfo) {

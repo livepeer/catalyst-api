@@ -3,8 +3,10 @@ package main
 import (
 	"flag"
 	"log"
+	"time"
 
 	"github.com/livepeer/catalyst-api/api"
+	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
 )
@@ -14,14 +16,19 @@ func main() {
 	mistPort := flag.Int("mist-port", 4242, "Port to listen on")
 	mistHttpPort := flag.Int("mist-http-port", 8080, "Port to listen on")
 	apiToken := flag.String("api-token", "IAmAuthorized", "Auth header value for API access")
-	flag.StringVar(&config.RecordingCallback, "recording", "http://recording.livepeer.com/recording/status", "Callback URL for recording start&stop events")
 	mistJson := flag.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
+	flag.StringVar(&config.RecordingCallback, "recording", "http://recording.livepeer.com/recording/status", "Callback URL for recording start&stop events")
 	flag.Parse()
 
 	if *mistJson {
 		mistconnector.PrintMistConfigJson("catalyst-api", "HTTP API server for translating Catalyst API requests into Mist calls", "Catalyst API", config.Version, flag.CommandLine)
 		return
 	}
+
+	// Send "keepalive" heartbeats while transcodes are ongoing
+	heartbeatStop := make(chan bool)
+	go cache.DefaultStreamCache.Transcoding.SendTranscodingHeartbeats(15*time.Second, heartbeatStop)
+	defer func() { heartbeatStop <- true }()
 
 	if err := api.ListenAndServe(*port, *mistPort, *mistHttpPort, *apiToken); err != nil {
 		log.Fatal(err)
