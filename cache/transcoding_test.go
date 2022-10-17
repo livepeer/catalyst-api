@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -53,6 +54,8 @@ func TestStoreAndRemoveTranscoding(t *testing.T) {
 func TestHeartbeatsAreFiredWithInterval(t *testing.T) {
 	// Create a stub server to receive the callbacks and a variable to track how many we get
 	var requests = map[string]int{}
+	var requestsMutex = &sync.RWMutex{}
+
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check the message is a valid TranscodeStatusMessage
 		body, err := io.ReadAll(r.Body)
@@ -64,7 +67,10 @@ func TestHeartbeatsAreFiredWithInterval(t *testing.T) {
 		parts := strings.Split(r.URL.Path, "/")
 		require.NotZero(t, len(parts), 0, "Expected "+r.URL.Path+" to have some slashes in")
 		id := parts[len(parts)-1]
+
+		requestsMutex.Lock()
 		requests[id] += 1
+		requestsMutex.Unlock()
 	}))
 	defer ts.Close()
 
@@ -98,9 +104,10 @@ func TestHeartbeatsAreFiredWithInterval(t *testing.T) {
 	time.Sleep(time.Second)
 
 	// Check that we got roughly the amount of callbacks we'd expect
+	requestsMutex.RLock()
+	defer requestsMutex.RUnlock()
 	require.GreaterOrEqual(t, requests["some-stream-name"], 3)
 	require.LessOrEqual(t, requests["some-stream-name"], 10)
-
 	require.GreaterOrEqual(t, requests["some-stream-name-2"], 3)
 	require.LessOrEqual(t, requests["some-stream-name-2"], 10)
 }
