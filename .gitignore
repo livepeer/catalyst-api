@@ -11,6 +11,6 @@
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
-build
+build/
 test/app
-test/logs/*.log
+*.log

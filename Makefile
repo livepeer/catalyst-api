@@ -28,3 +28,7 @@ run:
 .PHONY: test
 test:
 	go test ./...
+
+.PHONY: test-canary
+test-canary:
+	cd test && CUCUMBER_ENV=canary godog run --strict --stop-on-failure 2> ./logs/test.log
