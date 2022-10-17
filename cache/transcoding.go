@@ -34,10 +34,11 @@ type SegmentInfo struct {
 	Profiles     []EncodedProfile      // Requested encoding profiles to produce
 	Destinations []string              // Rendition URLS go here on push start and removed on push end
 	Outputs      []clients.OutputVideo // Information about the final transcoded outputs we've created
+	updatedAt    time.Time             // Time at which this object was last updated in cache
 }
 
 // Send "keepalive" callbacks to ensure the caller (Studio) knows transcoding is still ongoing and hasn't failed
-func (t *TranscodingCache) SendTranscodingHeartbeats(interval time.Duration, quit chan bool) {
+func (t *TranscodingCache) SendTranscodingHeartbeats(interval time.Duration, maxAge time.Duration, quit chan bool) {
 	for {
 		// Stop the infinite loop if we receive a quit message
 		select {
@@ -48,6 +49,13 @@ func (t *TranscodingCache) SendTranscodingHeartbeats(interval time.Duration, qui
 
 		jobs := t.GetAll()
 		for id, job := range jobs {
+			// If the job is past the expiry time then we've probably failed to remove it from the cache when it completed / errored
+			if job.updatedAt.Add(maxAge).Before(time.Now()) {
+				t.Remove(id)
+				_ = config.Logger.Log("msg", "Removed expired job from cache", "id", id, "callback_url", job.CallbackUrl, "last_updated", job.updatedAt.String(), "current_time", time.Now())
+				continue
+			}
+
 			err := clients.DefaultCallbackClient.SendTranscodeStatus(job.CallbackUrl, clients.TranscodeStatusTranscoding, 0.5)
 			if err == nil {
 				_ = config.Logger.Log("msg", "Sent Transcode Status heartbeat", "id", id, "callback_url", job.CallbackUrl)
@@ -126,6 +134,7 @@ func (c *TranscodingCache) GetAll() map[string]*SegmentInfo {
 
 func (c *TranscodingCache) Store(streamName string, info SegmentInfo) {
 	c.mutex.Lock()
+	info.updatedAt = time.Now()
 	c.pushes[streamName] = &info
 	c.mutex.Unlock()
 }
