@@ -169,13 +169,12 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 
 	si := cache.DefaultStreamCache.Segmenting.Get(p.StreamName)
 	transcodeRequest := handlers.TranscodeSegmentRequest{
-		SourceFile:            si.SourceFile,
-		CallbackURL:           si.CallbackURL,
-		AccessToken:           si.AccessToken,
-		TranscodeAPIUrl:       si.TranscodeAPIUrl,
-		HardcodedBroadcasters: si.HardcodedBroadcasters,
-		SourceStreamInfo:      infoJson,
-		UploadURL:             si.UploadURL,
+		SourceFile:       si.SourceFile,
+		CallbackURL:      si.CallbackURL,
+		AccessToken:      si.AccessToken,
+		TranscodeAPIUrl:  si.TranscodeAPIUrl,
+		SourceStreamInfo: infoJson,
+		UploadURL:        si.UploadURL,
 	}
 	go func() {
 		err := handlers.RunTranscodeProcess(d.MistClient, transcodeRequest)

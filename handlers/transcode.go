@@ -21,15 +21,14 @@ import (
 )
 
 type TranscodeSegmentRequest struct {
-	SourceFile            string                 `json:"source_location"`
-	CallbackURL           string                 `json:"callback_url"`
-	UploadURL             string                 `json:"upload_url"`
-	StreamKey             string                 `json:"streamKey"`
-	AccessToken           string                 `json:"accessToken"`
-	TranscodeAPIUrl       string                 `json:"transcodeAPIUrl"`
-	HardcodedBroadcasters string                 `json:"hardcodedBroadcasters"`
-	Profiles              []cache.EncodedProfile `json:"profiles"`
-	Detection             struct {
+	SourceFile      string                 `json:"source_location"`
+	CallbackURL     string                 `json:"callback_url"`
+	UploadURL       string                 `json:"upload_url"`
+	StreamKey       string                 `json:"streamKey"`
+	AccessToken     string                 `json:"accessToken"`
+	TranscodeAPIUrl string                 `json:"transcodeAPIUrl"`
+	Profiles        []cache.EncodedProfile `json:"profiles"`
+	Detection       struct {
 		Freq                uint `json:"freq"`
 		SampleRate          uint `json:"sampleRate"`
 		SceneClassification []struct {
@@ -195,10 +194,8 @@ func configForSubprocess(req TranscodeSegmentRequest, inputStreamName, outputStr
 		} else {
 			apiUrl = config.DefaultCustomAPIUrl
 		}
-	} else if req.HardcodedBroadcasters != "" {
-		hardcodedBroadcasters = req.HardcodedBroadcasters
 	} else {
-		hardcodedBroadcasters = ""
+		hardcodedBroadcasters = fmt.Sprintf(`[{"address":"http://127.0.0.1:%d"}]`, config.DefaultBroadcasterPort)
 	}
 	conf := ProcLivepeerConfig{
 		AccessToken:           req.AccessToken,

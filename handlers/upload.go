@@ -29,9 +29,8 @@ type UploadVODRequest struct {
 			TranscodedSegments bool `json:"transcoded_segments"`
 		} `json:"outputs,omitempty"`
 	} `json:"output_locations,omitempty"`
-	AccessToken           string `json:"accessToken"`
-	TranscodeAPIUrl       string `json:"transcodeAPIUrl"`
-	HardcodedBroadcasters string `json:"hardcodedBroadcasters"`
+	AccessToken     string `json:"accessToken"`
+	TranscodeAPIUrl string `json:"transcodeAPIUrl"`
 }
 
 func HasContentType(r *http.Request, mimetype string) bool {
@@ -90,12 +89,11 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		}
 		streamName := config.RandomStreamName(config.SEGMENTING_PREFIX)
 		cache.DefaultStreamCache.Segmenting.Store(streamName, cache.StreamInfo{
-			SourceFile:            uploadVODRequest.Url,
-			CallbackURL:           uploadVODRequest.CallbackUrl,
-			UploadURL:             uploadVODRequest.OutputLocations[0].URL,
-			AccessToken:           uploadVODRequest.AccessToken,
-			TranscodeAPIUrl:       uploadVODRequest.TranscodeAPIUrl,
-			HardcodedBroadcasters: uploadVODRequest.HardcodedBroadcasters,
+			SourceFile:      uploadVODRequest.Url,
+			CallbackURL:     uploadVODRequest.CallbackUrl,
+			UploadURL:       uploadVODRequest.OutputLocations[0].URL,
+			AccessToken:     uploadVODRequest.AccessToken,
+			TranscodeAPIUrl: uploadVODRequest.TranscodeAPIUrl,
 		})
 
 		// process the request
