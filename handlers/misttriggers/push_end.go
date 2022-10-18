@@ -18,6 +18,29 @@ import (
 	"github.com/livepeer/catalyst-api/subprocess"
 )
 
+type PushEndPayload struct {
+	StreamName        string
+	Destination       string
+	ActualDestination string
+	Last10LogLines    string
+	PushStatus        string
+}
+
+func ParsePushEndPayload(payload string) (PushEndPayload, error) {
+	lines := strings.Split(strings.TrimSuffix(payload, "\n"), "\n")
+	if len(lines) != 6 {
+		return PushEndPayload{}, fmt.Errorf("expected 6 lines in PUSH_END payload but got %d. Payload: %s", len(lines), payload)
+	}
+
+	return PushEndPayload{
+		StreamName:        lines[1],
+		Destination:       lines[2],
+		ActualDestination: lines[3],
+		Last10LogLines:    lines[4],
+		PushStatus:        lines[5],
+	}, nil
+}
+
 // TriggerPushEnd responds to PUSH_END trigger
 // This trigger is run whenever an outgoing push stops, for any reason.
 // This trigger is stream-specific and non-blocking. The payload for this trigger is multiple lines,
@@ -30,24 +53,19 @@ import (
 //	last 10 log messages (JSON array string)
 //	most recent push status (JSON object string)
 func (d *MistCallbackHandlersCollection) TriggerPushEnd(w http.ResponseWriter, req *http.Request, payload []byte) {
-	lines := strings.Split(strings.TrimSuffix(string(payload), "\n"), "\n")
-	if len(lines) != 6 {
-		errors.WriteHTTPBadRequest(w, "Bad request payload", fmt.Errorf("unknown payload '%s'", string(payload)))
+	p, err := ParsePushEndPayload(string(payload))
+	if err != nil {
+		errors.WriteHTTPBadRequest(w, "Error parsing PUSH_END payload", err)
 		return
 	}
-	// stream name is the second line in the Mist Trigger payload
-	streamName := lines[1]
-	destination := lines[2]
-	actualDestination := lines[3]
-	pushStatus := lines[5]
 
-	switch streamNameToPipeline(streamName) {
+	switch streamNameToPipeline(p.StreamName) {
 	case Transcoding:
-		d.TranscodingPushEnd(w, req, streamName, destination, actualDestination, pushStatus)
+		d.TranscodingPushEnd(w, req, p.StreamName, p.Destination, p.ActualDestination, p.PushStatus)
 	case Segmenting:
-		d.SegmentingPushEnd(w, req, streamName)
+		d.SegmentingPushEnd(w, req, p)
 	case Recording:
-		d.RecordingPushEnd(w, req, streamName, actualDestination, pushStatus)
+		d.RecordingPushEnd(w, req, p.StreamName, p.ActualDestination, p.PushStatus)
 	default:
 		// Not related to API logic
 	}
@@ -110,37 +128,46 @@ func (d *MistCallbackHandlersCollection) RecordingPushEnd(w http.ResponseWriter,
 	go clients.DefaultCallbackClient.SendRecordingEvent(event)
 }
 
-func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter, req *http.Request, streamName string) {
+func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter, req *http.Request, p PushEndPayload) {
 	// when uploading is done, remove trigger and stream from Mist
-	defer cache.DefaultStreamCache.Segmenting.Remove(streamName)
+	defer cache.DefaultStreamCache.Segmenting.Remove(p.StreamName)
 
-	callbackUrl := cache.DefaultStreamCache.Segmenting.GetCallbackUrl(streamName)
+	callbackUrl := cache.DefaultStreamCache.Segmenting.GetCallbackUrl(p.StreamName)
 	if callbackUrl == "" {
-		errors.WriteHTTPBadRequest(w, "PUSH_END trigger invoked for unknown stream: "+streamName, nil)
+		errors.WriteHTTPBadRequest(w, "PUSH_END trigger invoked for unknown stream: "+p.StreamName, nil)
+		return
+	}
+
+	// TODO: Parse this properly once we receive docs on it
+	// This hacky check is based on the follow example log on Staging:
+	// [[1666098071,\"FAIL\",\"Opening file '/maxbps' failed: No such file or directory\",\"video+27f0a0ertia58s7u\"]]
+	if strings.Contains(p.PushStatus, "FAIL") {
+		_ = clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, "Segmenting Failed: "+p.PushStatus)
+		_ = errors.WriteHTTPBadRequest(w, "Segmenting Failed. PUSH_END trigger for stream "+p.StreamName+" was "+p.PushStatus, nil)
 		return
 	}
 
 	// Try to clean up the trigger and stream from Mist. If these fail then we only log, since we still want to do any
 	// further cleanup stages and callbacks
-	if err := d.MistClient.DeleteTrigger(streamName, TRIGGER_PUSH_END); err != nil {
-		_ = config.Logger.Log("msg", "Failed to delete PUSH_END trigger", "err", err.Error(), "stream_name", streamName)
+	if err := d.MistClient.DeleteTrigger(p.StreamName, TRIGGER_PUSH_END); err != nil {
+		_ = config.Logger.Log("msg", "Failed to delete PUSH_END trigger", "err", err.Error(), "stream_name", p.StreamName)
 	}
-	if err := d.MistClient.DeleteStream(streamName); err != nil {
-		_ = config.Logger.Log("msg", "Failed to delete stream", "err", err.Error(), "stream_name", streamName)
+	if err := d.MistClient.DeleteStream(p.StreamName); err != nil {
+		_ = config.Logger.Log("msg", "Failed to delete stream", "err", err.Error(), "stream_name", p.StreamName)
 	}
 
 	// Let Studio know that we've finished the Segmenting phase
 	if err := clients.DefaultCallbackClient.SendTranscodeStatus(callbackUrl, clients.TranscodeStatusPreparingCompleted, 1); err != nil {
-		_ = config.Logger.Log("msg", "Failed to send transcode status callback", "err", err.Error(), "stream_name", streamName)
+		_ = config.Logger.Log("msg", "Failed to send transcode status callback", "err", err.Error(), "stream_name", p.StreamName)
 	}
 
 	// Get the source stream's detailed track info before kicking off transcode
-	infoJson, err := d.MistClient.GetStreamInfo(streamName)
+	infoJson, err := d.MistClient.GetStreamInfo(p.StreamName)
 	if err != nil {
-		_ = config.Logger.Log("msg", "Failed to get stream info", "err", err.Error(), "stream_name", streamName)
+		_ = config.Logger.Log("msg", "Failed to get stream info", "err", err.Error(), "stream_name", p.StreamName)
 	}
 
-	si := cache.DefaultStreamCache.Segmenting.Get(streamName)
+	si := cache.DefaultStreamCache.Segmenting.Get(p.StreamName)
 	transcodeRequest := handlers.TranscodeSegmentRequest{
 		SourceFile:            si.SourceFile,
 		CallbackURL:           si.CallbackURL,
@@ -153,7 +180,7 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 	go func() {
 		err := handlers.RunTranscodeProcess(d.MistClient, transcodeRequest)
 		if err != nil {
-			_ = config.Logger.Log("msg", "RunTranscodeProcess returned an error", "err", err.Error(), "stream_name", streamName)
+			_ = config.Logger.Log("msg", "RunTranscodeProcess returned an error", "err", err.Error(), "stream_name", p.StreamName)
 		}
 	}()
 }
