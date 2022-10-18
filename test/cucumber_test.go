@@ -65,7 +65,9 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 				fmt.Println("Error while killing app process:", err.Error())
 			}
 			if err := app.Wait(); err != nil {
-				fmt.Println("Error while waiting for app to exit:", err.Error())
+				if err.Error() != "signal: killed" {
+					fmt.Println("Error while waiting for app to exit:", err.Error())
+				}
 			}
 		}
 		return ctx, nil
