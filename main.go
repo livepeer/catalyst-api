@@ -27,7 +27,7 @@ func main() {
 
 	// Send "keepalive" heartbeats while transcodes are ongoing
 	heartbeatStop := make(chan bool)
-	go cache.DefaultStreamCache.Transcoding.SendTranscodingHeartbeats(15*time.Second, heartbeatStop)
+	go cache.DefaultStreamCache.Transcoding.SendTranscodingHeartbeats(15*time.Second, time.Hour, heartbeatStop)
 	defer func() { heartbeatStop <- true }()
 
 	if err := api.ListenAndServe(*port, *mistPort, *mistHttpPort, *apiToken); err != nil {

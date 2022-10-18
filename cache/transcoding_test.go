@@ -97,7 +97,7 @@ func TestHeartbeatsAreFiredWithInterval(t *testing.T) {
 
 	// Start the callback loop
 	heartbeatStop := make(chan bool)
-	go c.Transcoding.SendTranscodingHeartbeats(200*time.Millisecond, heartbeatStop)
+	go c.Transcoding.SendTranscodingHeartbeats(200*time.Millisecond, time.Hour, heartbeatStop)
 	defer func() { heartbeatStop <- true }()
 
 	// Wait for a few iterations
@@ -110,4 +110,55 @@ func TestHeartbeatsAreFiredWithInterval(t *testing.T) {
 	require.LessOrEqual(t, requests["some-stream-name"], 10)
 	require.GreaterOrEqual(t, requests["some-stream-name-2"], 3)
 	require.LessOrEqual(t, requests["some-stream-name-2"], 10)
+}
+
+func TestUpdatedAtFieldSetWhenCacheWritten(t *testing.T) {
+	c := NewStreamCache()
+	c.Transcoding.Store("some-stream-name", SegmentInfo{
+		CallbackUrl: "some-callback-url",
+		Source:      "s3://source",
+		UploadDir:   "upload-dir",
+		Destinations: []string{
+			"s3://destination-1",
+			"s3://destination-2",
+		},
+	})
+
+	si := c.Transcoding.Get("some-stream-name")
+	require.NotNil(t, si)
+	updated1 := si.updatedAt
+
+	c.Transcoding.Store("some-stream-name", *si)
+
+	si = c.Transcoding.Get("some-stream-name")
+	require.NotNil(t, si)
+	updated2 := si.updatedAt
+
+	require.True(t, updated1.Before(updated2), "Expected the timestamp from the second write to be after the one from the first")
+}
+
+func TestExpiredEntriesAreRemovedFromCache(t *testing.T) {
+	c := NewStreamCache()
+	c.Transcoding.Store("some-stream-name", SegmentInfo{
+		CallbackUrl: "some-callback-url",
+		Source:      "s3://source",
+		UploadDir:   "upload-dir",
+		Destinations: []string{
+			"s3://destination-1",
+			"s3://destination-2",
+		},
+	})
+
+	// Check the item is there when we immediately check
+	si := c.Transcoding.Get("some-stream-name")
+	require.NotNil(t, si)
+
+	// Start the callback loop
+	heartbeatStop := make(chan bool)
+	go c.Transcoding.SendTranscodingHeartbeats(200*time.Millisecond, 400*time.Millisecond, heartbeatStop)
+	defer func() { heartbeatStop <- true }()
+
+	// Check the item has been removed once we wait past the expiry time
+	time.Sleep(500 * time.Millisecond)
+	require.Nil(t, c.Transcoding.Get("some-stream-name"))
 }
