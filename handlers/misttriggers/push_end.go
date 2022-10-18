@@ -138,10 +138,8 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 		return
 	}
 
-	// TODO: Parse this properly once we receive docs on it
-	// This hacky check is based on the follow example log on Staging:
-	// [[1666098071,\"FAIL\",\"Opening file '/maxbps' failed: No such file or directory\",\"video+27f0a0ertia58s7u\"]]
-	if strings.Contains(p.PushStatus, "FAIL") {
+	// If PushStatus is null, push has failed
+	if p.PushStatus == "null" {
 		_ = clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, "Segmenting Failed: "+p.PushStatus)
 		_ = errors.WriteHTTPBadRequest(w, "Segmenting Failed. PUSH_END trigger for stream "+p.StreamName+" was "+p.PushStatus, nil)
 		return
