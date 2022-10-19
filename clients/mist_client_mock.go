@@ -14,8 +14,8 @@ func (s StubMistClient) DeleteStream(streamName string) error {
 	return nil
 }
 
-func (s StubMistClient) GetStreamInfo(streamName string) (string, error) {
-	return "", nil
+func (s StubMistClient) GetStreamInfo(streamName string) (MistStreamInfo, error) {
+	return MistStreamInfo{}, nil
 }
 
 func (s StubMistClient) AddTrigger(streamName, triggerName string) error {

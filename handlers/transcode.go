@@ -16,7 +16,6 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/subprocess"
-	"github.com/m7shapan/njson"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -35,7 +34,7 @@ type TranscodeSegmentRequest struct {
 			Name string `json:"name"`
 		} `json:"sceneClassification"`
 	} `json:"detection"`
-	SourceStreamInfo string
+	SourceStreamInfo clients.MistStreamInfo
 }
 
 func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
@@ -121,53 +120,48 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 		_ = config.Logger.Log("msg", "Error in SendTranscodeStatus", "err", err)
 	}
 
-	v := MistSourceVideo{}
-	a := MistSourceAudio{}
-
-	err = njson.Unmarshal([]byte(request.SourceStreamInfo), &v)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal source stream info json: %s", err)
-	}
-
-	err = njson.Unmarshal([]byte(request.SourceStreamInfo), &a)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal source stream info json: %s", err)
-	}
-
 	segmentInfo := cache.DefaultStreamCache.Transcoding.Get(renditionsStream)
 	if segmentInfo == nil {
 		return fmt.Errorf("failed to fetch ID %q from stream cache when building SendTranscodeStatusCompleted message", renditionsStream)
+	}
+
+	var tracks []clients.InputTrack
+	var videoDurationSecs float64
+	for _, track := range request.SourceStreamInfo.Meta.Tracks {
+		if track.Type == "video" {
+			videoDurationSecs = float64(track.Lastms) / 1000
+			tracks = append(tracks, clients.InputTrack{
+				Type:        "video",
+				Codec:       track.Codec,
+				DurationSec: videoDurationSecs,
+				Bitrate:     track.Bps,
+				VideoTrack: clients.VideoTrack{
+					FPS:         track.Fpks,
+					Width:       track.Width,
+					Height:      track.Height,
+					PixelFormat: "unknown",
+				},
+			})
+		} else if track.Type == "audio" {
+			tracks = append(tracks, clients.InputTrack{
+				Type:        "audio",
+				Codec:       track.Codec,
+				Bitrate:     track.Bps,
+				DurationSec: float64(track.Lastms) / 1000,
+				AudioTrack: clients.AudioTrack{
+					Channels:   track.Channels,
+					SampleRate: track.Rate,
+				},
+			})
+		}
 	}
 
 	err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(
 		request.CallbackURL,
 		clients.InputVideo{
 			Format:   "unknown",
-			Duration: v.Duration,
-			Tracks: []clients.InputTrack{
-				{
-					Type:        "video",
-					Codec:       v.Codec,
-					DurationSec: v.Duration,
-					Bitrate:     v.Bitrate,
-					VideoTrack: clients.VideoTrack{
-						FPS:         v.FPS,
-						Width:       v.Width,
-						Height:      v.Height,
-						PixelFormat: "unknown",
-					},
-				},
-				{
-					Type:        "audio",
-					Codec:       a.Codec,
-					Bitrate:     a.Bitrate,
-					DurationSec: a.Duration,
-					AudioTrack: clients.AudioTrack{
-						Channels:   a.Channels,
-						SampleRate: a.SampleRate,
-					},
-				},
-			},
+			Duration: videoDurationSecs,
+			Tracks:   tracks,
 		},
 		segmentInfo.Outputs,
 	)
@@ -267,21 +261,4 @@ type ProcLivepeerConfig struct {
 	HardcodedBroadcasters string                      `json:"hardcoded_broadcasters,omitempty"`
 	AudioSelect           string                      `json:"audio_select"`
 	Profiles              []ProcLivepeerConfigProfile `json:"target_profiles"`
-}
-
-type MistSourceVideo struct {
-	Duration float64 `njson:"meta.tracks.video*.lastms"`
-	Codec    string  `njson:"meta.tracks.video*.codec"`
-	Bitrate  int     `njson:"meta.tracks.video*.bps"`
-	FPS      int     `njson:"meta.tracks.video*.fpks"`
-	Width    int     `njson:"width"`
-	Height   int     `njson:"height"`
-}
-
-type MistSourceAudio struct {
-	Duration   float64 `njson:"meta.tracks.audio*.lastms"`
-	Codec      string  `njson:"meta.tracks.audio*.codec"`
-	Bitrate    int     `njson:"meta.tracks.audio*.bps"`
-	Channels   int     `njson:"meta.tracks.audio*.channels"`
-	SampleRate int     `njson:"meta.tracks.audio*.rate"`
 }
