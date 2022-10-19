@@ -29,3 +29,10 @@ func TestItFailsToParseAnInvalidRecordingEndPayload(t *testing.T) {
 	require.Contains(t, err.Error(), "error parsing line 5 of RECORDING_END payload")
 	require.Contains(t, err.Error(), "This Should Be A Number")
 }
+
+func TestItFailsToParseARecordingEndPayloadWithTooFewLines(t *testing.T) {
+	var payload = "1\n2\n3\n4\n5\n6\n7\n8\n9"
+	_, err := ParseRecordingEndPayload(payload)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "expected 10 lines in RECORDING_END payload but got 9")
+}
