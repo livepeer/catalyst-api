@@ -160,7 +160,7 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 	}
 
 	// Get the source stream's detailed track info before kicking off transcode
-	infoJson, err := d.MistClient.GetStreamInfo(p.StreamName)
+	streamInfo, err := d.MistClient.GetStreamInfo(p.StreamName)
 	if err != nil {
 		_ = config.Logger.Log("msg", "Failed to get stream info", "err", err.Error(), "stream_name", p.StreamName)
 	}
@@ -171,7 +171,7 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 		CallbackURL:      si.CallbackURL,
 		AccessToken:      si.AccessToken,
 		TranscodeAPIUrl:  si.TranscodeAPIUrl,
-		SourceStreamInfo: infoJson,
+		SourceStreamInfo: streamInfo,
 		UploadURL:        si.UploadURL,
 	}
 	go func() {

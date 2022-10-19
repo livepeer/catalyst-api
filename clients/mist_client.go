@@ -19,7 +19,7 @@ type MistAPIClient interface {
 	DeleteStream(streamName string) error
 	AddTrigger(streamName, triggerName string) error
 	DeleteTrigger(streamName, triggerName string) error
-	GetStreamInfo(streamName string) (string, error)
+	GetStreamInfo(streamName string) (MistStreamInfo, error)
 }
 
 type MistClient struct {
@@ -27,6 +27,56 @@ type MistClient struct {
 	HttpReqUrl      string
 	TriggerCallback string
 	configMu        sync.Mutex
+}
+
+type MistStreamInfoTrack struct {
+	Codec   string `json:"codec,omitempty"`
+	Firstms int    `json:"firstms,omitempty"`
+	Idx     int    `json:"idx,omitempty"`
+	Init    string `json:"init,omitempty"`
+	Lastms  int    `json:"lastms,omitempty"`
+	Maxbps  int    `json:"maxbps,omitempty"`
+	Trackid int    `json:"trackid,omitempty"`
+	Type    string `json:"type,omitempty"`
+
+	// Audio Only Fields
+	Bps      int `json:"bps,omitempty"`
+	Channels int `json:"channels,omitempty"`
+	Rate     int `json:"rate,omitempty"`
+	Size     int `json:"size,omitempty"`
+
+	// Video Only Fields
+	Bframes int `json:"bframes,omitempty"`
+	Fpks    int `json:"fpks,omitempty"`
+	Height  int `json:"height,omitempty"`
+	Width   int `json:"width,omitempty"`
+}
+
+type MistStreamInfoSource struct {
+	Hrn          string `json:"hrn,omitempty"`
+	Priority     int    `json:"priority,omitempty"`
+	Relurl       string `json:"relurl,omitempty"`
+	SimulTracks  int    `json:"simul_tracks,omitempty"`
+	TotalMatches int    `json:"total_matches,omitempty"`
+	Type         string `json:"type,omitempty"`
+	URL          string `json:"url,omitempty"`
+	PlayerURL    string `json:"player_url,omitempty"`
+}
+
+type MistStreamInfoMetadata struct {
+	Bframes int                            `json:"bframes,omitempty"`
+	Tracks  map[string]MistStreamInfoTrack `json:"tracks,omitempty"`
+	Version int                            `json:"version,omitempty"`
+	Vod     int                            `json:"vod,omitempty"`
+}
+
+type MistStreamInfo struct {
+	Height int                    `json:"height,omitempty"`
+	Meta   MistStreamInfoMetadata `json:"meta,omitempty"`
+	Selver int                    `json:"selver,omitempty"`
+	Source []MistStreamInfoSource `json:"source,omitempty"`
+	Type   string                 `json:"type,omitempty"`
+	Width  int                    `json:"width,omitempty"`
 }
 
 func (mc *MistClient) AddStream(streamName, sourceUrl string) error {
@@ -139,7 +189,6 @@ func payloadFor(command string) string {
 }
 
 func (mc *MistClient) sendHttpRequest(streamName string) (string, error) {
-
 	jsonStreamInfoUrl := mc.HttpReqUrl + "/json_" + streamName + ".js"
 
 	resp, err := http.Get(jsonStreamInfoUrl)
@@ -154,13 +203,18 @@ func (mc *MistClient) sendHttpRequest(streamName string) (string, error) {
 	return string(body), err
 }
 
-func (mc *MistClient) GetStreamInfo(streamName string) (string, error) {
-
+func (mc *MistClient) GetStreamInfo(streamName string) (MistStreamInfo, error) {
 	resp, err := mc.sendHttpRequest(streamName)
 	if err != nil {
-		return "", err
+		return MistStreamInfo{}, fmt.Errorf("error making GetStreamInfo HTTP request for %q: %s", streamName, err)
 	}
-	return string(resp), err
+
+	var msi MistStreamInfo
+	if err := json.Unmarshal([]byte(resp), &msi); err != nil {
+		return MistStreamInfo{}, fmt.Errorf("error unmarshalling MistStreamInfo JSON for %q: %s\nResponse Body: %s", streamName, err, resp)
+	}
+
+	return msi, nil
 }
 
 type addStreamCommand struct {

@@ -2,6 +2,8 @@ package clients
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -146,4 +148,181 @@ func TestResponseValidation(t *testing.T) {
 	require.Error(validateAddTrigger("catalyst_vod_gedhbdhc", "PUSH_END", `{"LTS":1,"authorize":{"status":"OK"},"config":{"accesslog":"LOG","controller":{"interface":null,"port":null,"username":null},"debug":null,"defaultStream":null,"iid":"IIcEj|Z\\|^lbDbjg","limits":null,"location":{"lat":0.0000000000,"lon":0.0000000000,"name":""},"prometheus":"koekjes","protocols":[{"connector":"AAC","online":"Enabled"},{"connector":"CMAF","online":"Enabled"},{"connector":"DTSC","online":1},{"connector":"EBML","online":"Enabled"},{"connector":"FLV","online":"Enabled"},{"connector":"H264","online":"Enabled"},{"connector":"HDS","online":"Enabled"},{"connector":"HLS","online":1},{"connector":"HTTP","online":1},{"connector":"HTTPTS","online":"Enabled"},{"connector":"JSON","online":"Enabled"},{"connector":"MP3","online":"Enabled"},{"connector":"MP4","online":"Enabled"},{"connector":"OGG","online":"Enabled"},{"connector":"RTMP","online":1},{"connector":"RTSP","online":1},{"connector":"SDP","online":"Enabled"},{"connector":"SRT","online":"Enabled"},{"connector":"TSSRT","online":1},{"connector":"WAV","online":"Enabled"},{"connector":"WebRTC","online":"Enabled"},{"connector":null,"online":"Missing connector name"}],"serverid":null,"sessionInputMode":"14","sessionOutputMode":"14","sessionStreamInfoMode":"1","sessionUnspecifiedMode":"0","sessionViewerMode":"14","sidMode":"0","time":1660027761,"triggers":{"RECORDING_END":[{"handler":"http://host.docker.internal:8080/api/mist/trigger","streams":["some-other-stream"],"sync":false}]},"trustedproxy":[],"version":"eb84bc4ba743885734c60b312ca97ed07311d86f Generic_64"}}`, nil))
 	require.Error(validateAddTrigger("catalyst_vod_gedhbdhc", "PUSH_END", `{"LTS":1,"authorize":{"status":"OK"},"config":{"accesslog":"LOG","controller":{"interface":null,"port":null,"username":null},"debug":null,"defaultStream":null,"iid":"IIcEj|Z\\|^lbDbjg","limits":null,"location":{"lat":0.0000000000,"lon":0.0000000000,"name":""},"prometheus":"koekjes","protocols":[{"connector":"AAC","online":"Enabled"},{"connector":"CMAF","online":"Enabled"},{"connector":"DTSC","online":1},{"connector":"EBML","online":"Enabled"},{"connector":"FLV","online":"Enabled"},{"connector":"H264","online":"Enabled"},{"connector":"HDS","online":"Enabled"},{"connector":"HLS","online":1},{"connector":"HTTP","online":1},{"connector":"HTTPTS","online":"Enabled"},{"connector":"JSON","online":"Enabled"},{"connector":"MP3","online":"Enabled"},{"connector":"MP4","online":"Enabled"},{"connector":"OGG","online":"Enabled"},{"connector":"RTMP","online":1},{"connector":"RTSP","online":1},{"connector":"SDP","online":"Enabled"},{"connector":"SRT","online":"Enabled"},{"connector":"TSSRT","online":1},{"connector":"WAV","online":"Enabled"},{"connector":"WebRTC","online":"Enabled"},{"connector":null,"online":"Missing connector name"}],"serverid":null,"sessionInputMode":"14","sessionOutputMode":"14","sessionStreamInfoMode":"1","sessionUnspecifiedMode":"0","sessionViewerMode":"14","sidMode":"0","time":1660027761,"triggers":{"PUSH_END":[{"handler":"http://host.docker.internal:8080/api/mist/trigger","streams":["some-other-stream"],"sync":false}],"RECORDING_END":null},"trustedproxy":[],"version":"eb84bc4ba743885734c60b312ca97ed07311d86f Generic_64"}}`, nil))
 	require.Error(validateDeleteTrigger("catalyst_vod_gedhbdhc", "PUSH_END", `{"LTS":1,"authorize":{"status":"OK"},"config":{"accesslog":"LOG","controller":{"interface":null,"port":null,"username":null},"debug":null,"defaultStream":null,"iid":"IIcEj|Z\\|^lbDbjg","limits":null,"location":{"lat":0.0000000000,"lon":0.0000000000,"name":""},"prometheus":"koekjes","protocols":[{"connector":"AAC","online":"Enabled"},{"connector":"CMAF","online":"Enabled"},{"connector":"DTSC","online":1},{"connector":"EBML","online":"Enabled"},{"connector":"FLV","online":"Enabled"},{"connector":"H264","online":"Enabled"},{"connector":"HDS","online":"Enabled"},{"connector":"HLS","online":1},{"connector":"HTTP","online":1},{"connector":"HTTPTS","online":"Enabled"},{"connector":"JSON","online":"Enabled"},{"connector":"MP3","online":"Enabled"},{"connector":"MP4","online":"Enabled"},{"connector":"OGG","online":"Enabled"},{"connector":"RTMP","online":1},{"connector":"RTSP","online":1},{"connector":"SDP","online":"Enabled"},{"connector":"SRT","online":"Enabled"},{"connector":"TSSRT","online":1},{"connector":"WAV","online":"Enabled"},{"connector":"WebRTC","online":"Enabled"},{"connector":null,"online":"Missing connector name"}],"serverid":null,"sessionInputMode":"14","sessionOutputMode":"14","sessionStreamInfoMode":"1","sessionUnspecifiedMode":"0","sessionViewerMode":"14","sidMode":"0","time":1660027761,"triggers":{"PUSH_END":[{"handler":"http://host.docker.internal:8080/api/mist/trigger","streams":["catalyst_vod_gedhbdhc"],"sync":false}],"RECORDING_END":null},"trustedproxy":[],"version":"eb84bc4ba743885734c60b312ca97ed07311d86f Generic_64"}}`, nil))
+}
+
+func TestItCanParseAMistStreamStatus(t *testing.T) {
+	status := `{
+		"height": 720,
+		"meta": {
+		  "bframes": 1,
+		  "tracks": {
+			"audio_AAC_2ch_44100hz_1": {
+			  "bps": 14000,
+			  "channels": 2,
+			  "codec": "AAC",
+			  "firstms": 0,
+			  "idx": 1,
+			  "init": "\u0012\u0010",
+			  "lastms": 596450,
+			  "maxbps": 14247,
+			  "rate": 44100,
+			  "size": 16,
+			  "trackid": 2,
+			  "type": "audio"
+			},
+			"video_H264_1280x720_0fps_0": {
+			  "bframes": 1,
+			  "bps": 296627,
+			  "codec": "H264",
+			  "firstms": 0,
+			  "fpks": 0,
+			  "height": 720,
+			  "idx": 0,
+			  "init": "\u0001d\u0000",
+			  "lastms": 596416,
+			  "maxbps": 814800,
+			  "trackid": 1,
+			  "type": "video",
+			  "width": 1280
+			}
+		  },
+		  "version": 4,
+		  "vod": 1
+		},
+		"selver": 2,
+		"source": [
+		  {
+			"priority": 11,
+			"relurl": "catalyst_vod_dhggaaab.sdp?tkn=2369431652",
+			"simul_tracks": 2,
+			"total_matches": 2,
+			"type": "html5/application/sdp",
+			"url": "https://localhost/catalyst_vod_dhggaaab.sdp?tkn=2369431652"
+		  },
+		  {
+			"hrn": "HLS (TS)",
+			"priority": 9,
+			"relurl": "hls/catalyst_vod_dhggaaab/index.m3u8?tkn=2369431652",
+			"simul_tracks": 2,
+			"total_matches": 2,
+			"type": "html5/application/vnd.apple.mpegurl",
+			"url": "http://localhost:8081/hls/catalyst_vod_dhggaaab/index.m3u8?tkn=2369431652"
+		  },
+		  {
+			"hrn": "MKV progressive",
+			"priority": 9,
+			"relurl": "catalyst_vod_dhggaaab.webm?tkn=2369431652",
+			"simul_tracks": 2,
+			"total_matches": 2,
+			"type": "html5/video/webm",
+			"url": "https://localhost/catalyst_vod_dhggaaab.webm?tkn=2369431652"
+		  },
+		  {
+			"hrn": "HLS (TS)",
+			"priority": 9,
+			"relurl": "hls/catalyst_vod_dhggaaab/index.m3u8?tkn=2369431652",
+			"simul_tracks": 2,
+			"total_matches": 2,
+			"type": "html5/application/vnd.apple.mpegurl",
+			"url": "https://localhost/hls/catalyst_vod_dhggaaab/index.m3u8?tkn=2369431652"
+		  },
+		  {
+			"hrn": "RTMP",
+			"player_url": "/flashplayer.swf",
+			"priority": 7,
+			"relurl": "play/catalyst_vod_dhggaaab?tkn=2369431652",
+			"simul_tracks": 2,
+			"total_matches": 2,
+			"type": "flash/10",
+			"url": "rtmp://localhost/play/catalyst_vod_dhggaaab?tkn=2369431652"
+		  },
+		  {
+			"hrn": "Flash Dynamic (HDS)",
+			"player_url": "/flashplayer.swf",
+			"priority": 6,
+			"relurl": "dynamic/catalyst_vod_dhggaaab/manifest.f4m?tkn=2369431652",
+			"simul_tracks": 2,
+			"total_matches": 2,
+			"type": "flash/11",
+			"url": "https://localhost/dynamic/catalyst_vod_dhggaaab/manifest.f4m?tkn=2369431652"
+		  },
+		  {
+			"hrn": "FLV progressive",
+			"player_url": "/oldflashplayer.swf",
+			"priority": 5,
+			"relurl": "catalyst_vod_dhggaaab.flv?tkn=2369431652",
+			"simul_tracks": 2,
+			"total_matches": 2,
+			"type": "flash/7",
+			"url": "https://localhost/catalyst_vod_dhggaaab.flv?tkn=2369431652"
+		  },
+		  {
+			"hrn": "RTSP",
+			"priority": 2,
+			"relurl": "catalyst_vod_dhggaaab?tkn=2369431652",
+			"simul_tracks": 2,
+			"total_matches": 2,
+			"type": "rtsp",
+			"url": "rtsp://localhost:5554/catalyst_vod_dhggaaab?tkn=2369431652"
+		  },
+		  {
+			"hrn": "TS HTTP progressive",
+			"priority": 1,
+			"relurl": "catalyst_vod_dhggaaab.ts?tkn=2369431652",
+			"simul_tracks": 2,
+			"total_matches": 2,
+			"type": "html5/video/mpeg",
+			"url": "https://localhost/catalyst_vod_dhggaaab.ts?tkn=2369431652"
+		  },
+		  {
+			"hrn": "AAC progressive",
+			"priority": 8,
+			"relurl": "catalyst_vod_dhggaaab.aac?tkn=2369431652",
+			"simul_tracks": 1,
+			"total_matches": 1,
+			"type": "html5/audio/aac",
+			"url": "https://localhost/catalyst_vod_dhggaaab.aac?tkn=2369431652"
+		  },
+		  {
+			"hrn": "Raw WebSocket",
+			"priority": 2,
+			"relurl": "catalyst_vod_dhggaaab.h264?tkn=2369431652",
+			"simul_tracks": 1,
+			"total_matches": 1,
+			"type": "ws/video/raw",
+			"url": "wss://localhost/catalyst_vod_dhggaaab.h264?tkn=2369431652"
+		  },
+		  {
+			"hrn": "Raw progressive",
+			"priority": 1,
+			"relurl": "catalyst_vod_dhggaaab.h264?tkn=2369431652",
+			"simul_tracks": 1,
+			"total_matches": 1,
+			"type": "html5/video/raw",
+			"url": "https://localhost/catalyst_vod_dhggaaab.h264?tkn=2369431652"
+		  }
+		],
+		"type": "vod",
+		"width": 1280
+	  }`
+
+	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/json_some-stream-name.js", r.URL.Path)
+
+		_, err := w.Write([]byte(status))
+		require.NoError(t, err)
+	}))
+	defer svr.Close()
+
+	mc := &MistClient{
+		HttpReqUrl: svr.URL,
+	}
+
+	msi, err := mc.GetStreamInfo("some-stream-name")
+	require.NoError(t, err)
+
+	// Check a few fields to confirm the JSON parsing has worked
+	require.Equal(t, msi.Height, 720)
+	require.Equal(t, msi.Meta.Tracks["audio_AAC_2ch_44100hz_1"].Bps, 14000)
+	require.Equal(t, msi.Source[0].Relurl, "catalyst_vod_dhggaaab.sdp?tkn=2369431652")
 }
