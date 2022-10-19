@@ -138,7 +138,7 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 		return
 	}
 
-	// TODO: Find a better way to determine if the push status was successfull (i.e. segmenting step was successful) 
+	// TODO: Find a better way to determine if the push status was successfull (i.e. segmenting step was successful)
 	if !strings.Contains(p.Last10LogLines, "Buffer completely played out") {
 		_ = clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, "Segmenting Failed: "+p.PushStatus)
 		_ = errors.WriteHTTPBadRequest(w, "Segmenting Failed. PUSH_END trigger for stream "+p.StreamName+" was "+p.PushStatus, nil)
