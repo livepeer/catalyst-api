@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kylelemons/godebug/pretty"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 )
@@ -114,6 +115,7 @@ func (c *TranscodingCache) Remove(streamName string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	delete(c.pushes, streamName)
+	c.debugPrint("remove", streamName)
 }
 
 func (c *TranscodingCache) Get(streamName string) *SegmentInfo {
@@ -134,7 +136,13 @@ func (c *TranscodingCache) GetAll() map[string]*SegmentInfo {
 
 func (c *TranscodingCache) Store(streamName string, info SegmentInfo) {
 	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	info.updatedAt = time.Now()
 	c.pushes[streamName] = &info
-	c.mutex.Unlock()
+	c.debugPrint("add", streamName)
+}
+
+func (c *TranscodingCache) debugPrint(action, streamName string) {
+	var id string = action + " " + streamName + ": TranscodingCache"
+	pretty.Print(id, c.pushes)
 }
