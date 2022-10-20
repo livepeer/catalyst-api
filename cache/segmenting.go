@@ -2,6 +2,8 @@ package cache
 
 import (
 	"sync"
+
+	"github.com/kylelemons/godebug/pretty"
 )
 
 type SegmentingCache struct {
@@ -22,6 +24,7 @@ func (c *SegmentingCache) Remove(streamName string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	delete(c.cache, streamName)
+	c.debugPrint("remove", streamName)
 }
 
 func (c *SegmentingCache) GetCallbackUrl(streamName string) string {
@@ -46,6 +49,7 @@ func (c *SegmentingCache) Get(streamName string) StreamInfo {
 
 func (c *SegmentingCache) Store(streamName string, streamInfo StreamInfo) {
 	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	c.cache[streamName] = StreamInfo{
 		SourceFile:            streamInfo.SourceFile,
 		CallbackURL:           streamInfo.CallbackURL,
@@ -54,5 +58,10 @@ func (c *SegmentingCache) Store(streamName string, streamInfo StreamInfo) {
 		TranscodeAPIUrl:       streamInfo.TranscodeAPIUrl,
 		HardcodedBroadcasters: streamInfo.HardcodedBroadcasters,
 	}
-	c.mutex.Unlock()
+	c.debugPrint("add", streamName)
+}
+
+func (c *SegmentingCache) debugPrint(action, streamName string) {
+	var id string = action + " " + streamName + ": SegmentingCache"
+	pretty.Print(id, c.cache)
 }
