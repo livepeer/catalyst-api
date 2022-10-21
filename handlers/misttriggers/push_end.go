@@ -134,9 +134,8 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 		return
 	}
 
-	// If we fail with this error, we won't get a RECORDING_END trigger and so we do the cache cleanup and send the error callback
-	if !strings.Contains(p.Last10LogLines, "Buffer completely played out") {
-		defer cache.DefaultStreamCache.Segmenting.Remove(p.StreamName)
+	// TODO: Find a better way to determine if the push status failed or not (i.e. segmenting step was successful)
+	if strings.Contains(p.Last10LogLines, "FAIL") {
 		_ = clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, "Segmenting Failed: "+p.PushStatus)
 		_ = config.Logger.Log(w, "Segmenting Failed. PUSH_END trigger for stream "+p.StreamName+" was "+p.PushStatus)
 		return
