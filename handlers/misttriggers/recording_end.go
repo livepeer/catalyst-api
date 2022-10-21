@@ -2,6 +2,7 @@ package misttriggers
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -70,6 +71,19 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 	streamInfo, err := d.MistClient.GetStreamInfo(p.StreamName)
 	if err != nil {
 		_ = config.Logger.Log("msg", "Failed to get stream info", "err", err.Error(), "stream_name", p.StreamName)
+	}
+
+	// Compare duration of source stream to the segmented stream to ensure the input file was completely segmented before attempting to transcode
+	var inputVideoLengthMillis int
+	for track, trackInfo := range streamInfo.Meta.Tracks {
+		if strings.Contains(track, "video") {
+			inputVideoLengthMillis = trackInfo.Lastms
+		}
+	}
+	if math.Abs(float64(inputVideoLengthMillis-p.StreamMediaDurationMillis)) > 500 {
+		_ = config.Logger.Log("msg", "Input video duration does not match segmented video duration",
+			"input video duration (ms):", inputVideoLengthMillis, "segmented video duration (ms):", p.StreamMediaDurationMillis)
+		return
 	}
 
 	si := cache.DefaultStreamCache.Segmenting.Get(p.StreamName)
