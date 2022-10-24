@@ -254,7 +254,7 @@ type ProcLivepeerConfigProfile struct {
 
 type ProcLivepeerConfig struct {
 	AccessToken           string                      `json:"access_token,omitempty"`
-	CustomAPIUrl          string                      `json:"custom_api_url,omitempty"`
+	CustomAPIUrl          string                      `json:"custom_url,omitempty"`
 	InputStreamName       string                      `json:"source"`
 	OutputStreamName      string                      `json:"sink"`
 	Leastlive             bool                        `json:"leastlive"`
