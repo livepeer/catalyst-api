@@ -34,17 +34,31 @@ func streamOutput(src io.Reader, out io.Writer) {
 	}
 }
 
-// LogOutputs starts new goroutines to print cmd's stdout & stderr to our stdout & stderr
-func LogOutputs(cmd *exec.Cmd) error {
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("Failed to open stderr pipe: %s", err)
-	}
+func LogStdout(cmd *exec.Cmd) error {
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
-		return fmt.Errorf("Failed to open stdout pipe: %s", err)
+		return fmt.Errorf("failed to open stdout pipe: %v", err)
+	}
+	go streamOutput(stdoutPipe, os.Stdout)
+	return nil
+}
+
+func LogStderr(cmd *exec.Cmd) error {
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to open stderr pipe: %v", err)
 	}
 	go streamOutput(stderrPipe, os.Stderr)
-	go streamOutput(stdoutPipe, os.Stdout)
+	return nil
+}
+
+// LogOutputs starts new goroutines to print cmd's stdout & stderr to our stdout & stderr
+func LogOutputs(cmd *exec.Cmd) error {
+	if err := LogStderr(cmd); err != nil {
+		return err
+	}
+	if err := LogStdout(cmd); err != nil {
+		return err
+	}
 	return nil
 }

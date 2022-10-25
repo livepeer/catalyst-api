@@ -21,8 +21,7 @@ func IsTranscodeStream(streamName string) bool {
 func GenerateStreamNames() (string, string) {
 	suffix := randomTrailer()
 	inputStream := SOURCE_PREFIX + suffix
-	renditionsStream := RENDITION_PREFIX + suffix
-	return inputStream, renditionsStream
+	return inputStream, suffix
 }
 
 func RandomStreamName(prefix string) string {

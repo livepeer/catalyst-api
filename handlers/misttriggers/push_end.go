@@ -178,6 +178,9 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 		err := handlers.RunTranscodeProcess(d.MistClient, transcodeRequest)
 		if err != nil {
 			_ = config.Logger.Log("msg", "RunTranscodeProcess returned an error", "err", err.Error(), "stream_name", p.StreamName)
+			if err := clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, fmt.Sprintf("%v", err)); err != nil {
+				_ = config.Logger.Log("msg", "Error sending transcode error status", "err", err)
+			}
 		}
 	}()
 }
