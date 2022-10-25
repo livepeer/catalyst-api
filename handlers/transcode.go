@@ -76,7 +76,7 @@ func RunTranscodeProcess(mistClient clients.MistAPIClient, request TranscodeSegm
 	}
 
 	inputStream, renditionsStream := config.GenerateStreamNames()
-	if err := mistClient.AddStream(inputStream, request.SourceFile); err != nil {
+	if err := mistClient.AddStream(inputStream, request.UploadURL); err != nil {
 		return fmt.Errorf("error adding stream to Mist: %s", err)
 	}
 
