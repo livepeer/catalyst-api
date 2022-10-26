@@ -59,54 +59,12 @@ func (d *MistCallbackHandlersCollection) TriggerPushEnd(w http.ResponseWriter, r
 	}
 
 	switch streamNameToPipeline(p.StreamName) {
-	case Transcoding:
-		d.TranscodingPushEnd(w, req, p.StreamName, p.Destination, p.ActualDestination, p.PushStatus)
 	case Segmenting:
 		d.SegmentingPushEnd(w, req, p)
 	case Recording:
 		d.RecordingPushEnd(w, req, p.StreamName, p.ActualDestination, p.PushStatus)
 	default:
 		// Not related to API logic
-	}
-}
-
-func (d *MistCallbackHandlersCollection) TranscodingPushEnd(w http.ResponseWriter, req *http.Request, streamName, destination, actualDestination, pushStatus string) {
-	info := cache.DefaultStreamCache.Transcoding.Get(streamName)
-	if info == nil {
-		errors.WriteHTTPBadRequest(w, "PUSH_END unknown push source: "+streamName, nil)
-		return
-	}
-
-	// Check if we have a record of this destination
-	if !info.ContainsDestination(destination) {
-		errors.WriteHTTPBadRequest(w, fmt.Sprintf("PUSH_END can't find destination %q for stream %q", destination, streamName), nil)
-		return
-	}
-
-	uploadSuccess := pushStatus != "null"
-	if uploadSuccess {
-		// TODO: Do some maths so that we don't always send 0.5
-		if err := clients.DefaultCallbackClient.SendTranscodeStatus(info.CallbackUrl, clients.TranscodeStatusTranscoding, 0.5); err != nil {
-			_ = config.Logger.Log("msg", "Error sending transcode status in TranscodingPushEnd", "err", err)
-		}
-	} else {
-		// We forward pushStatus json to callback
-		if err := clients.DefaultCallbackClient.SendTranscodeStatusError(info.CallbackUrl, fmt.Sprintf("Error while pushing to %s: %s", actualDestination, pushStatus)); err != nil {
-			_ = config.Logger.Log("msg", "Error sending transcode error status in TranscodingPushEnd", "err", err)
-		}
-	}
-
-	if err := createDtsh(actualDestination); err != nil {
-		_ = config.Logger.Log("msg", "createDtsh failed", "err", err, "destination", actualDestination)
-	}
-
-	// We do not delete triggers as source stream is wildcard stream: RENDITION_PREFIX
-	cache.DefaultStreamCache.Transcoding.RemovePushDestination(streamName, destination)
-	if cache.DefaultStreamCache.Transcoding.AreDestinationsEmpty(streamName) {
-		if err := clients.DefaultCallbackClient.SendTranscodeStatusCompleted(info.CallbackUrl, clients.InputVideo{}, []clients.OutputVideo{}); err != nil {
-			_ = config.Logger.Log("msg", "Error sending transcode completed status in TranscodingPushEnd", "err", err)
-		}
-		cache.DefaultStreamCache.Transcoding.Remove(streamName)
 	}
 }
 

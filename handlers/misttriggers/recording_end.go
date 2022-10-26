@@ -12,6 +12,7 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/handlers"
+	"github.com/livepeer/catalyst-api/transcode"
 )
 
 // This trigger is run whenever an output to file finishes writing, either through the pushing system (with a file target) or when ran manually.
@@ -96,7 +97,7 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 		UploadURL:        si.UploadURL,
 	}
 	go func() {
-		err := handlers.RunTranscodeProcess(d.MistClient, transcodeRequest)
+		err := transcode.RunTranscodeProcess(transcodeRequest.SourceFile, transcodeRequest.UploadURL)
 		if err != nil {
 			_ = config.Logger.Log("msg", "RunTranscodeProcess returned an error", "err", err.Error(), "stream_name", p.StreamName)
 		}
