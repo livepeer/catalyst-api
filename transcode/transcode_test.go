@@ -19,15 +19,27 @@ const exampleManifest = `#EXTM3U
 #EXT-X-ENDLIST`
 
 func TestItCanParseAValidManifest(t *testing.T) {
-	// Create a temporary file on the local filesystem
-	f, err := os.CreateTemp(os.TempDir(), "manifest*.m3u8")
+	dir := os.TempDir()
+
+	// Create temporary manifest + segment files on the local filesystem
+	manifestFile, err := os.CreateTemp(dir, "manifest-*.m3u8")
+	require.NoError(t, err)
+
+	segment0, err := os.Create(dir + "/0.ts")
+	require.NoError(t, err)
+
+	segment1, err := os.Create(dir + "/5000.ts")
 	require.NoError(t, err)
 
 	// Write some data to it
-	_, err = f.WriteString(exampleManifest)
+	_, err = manifestFile.WriteString(exampleManifest)
+	require.NoError(t, err)
+	_, err = segment0.WriteString("segment data")
+	require.NoError(t, err)
+	_, err = segment1.WriteString("lots of segment data")
 	require.NoError(t, err)
 
 	// Check we don't get an error downloading or parsing it
-	err = RunTranscodeProcess(f.Name(), "/tmp/target.m3u8")
+	err = RunTranscodeProcess(manifestFile.Name(), "/tmp/target.m3u8")
 	require.NoError(t, err)
 }
