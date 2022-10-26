@@ -14,7 +14,6 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
-	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/subprocess"
 )
 
@@ -129,57 +128,18 @@ func (d *MistCallbackHandlersCollection) RecordingPushEnd(w http.ResponseWriter,
 }
 
 func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter, req *http.Request, p PushEndPayload) {
-	// when uploading is done, remove trigger and stream from Mist
-	defer cache.DefaultStreamCache.Segmenting.Remove(p.StreamName)
-
 	callbackUrl := cache.DefaultStreamCache.Segmenting.GetCallbackUrl(p.StreamName)
 	if callbackUrl == "" {
-		errors.WriteHTTPBadRequest(w, "PUSH_END trigger invoked for unknown stream: "+p.StreamName, nil)
+		_ = config.Logger.Log(w, "PUSH_END trigger invoked for unknown stream: "+p.StreamName)
 		return
 	}
 
 	// TODO: Find a better way to determine if the push status failed or not (i.e. segmenting step was successful)
 	if strings.Contains(p.Last10LogLines, "FAIL") {
 		_ = clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, "Segmenting Failed: "+p.PushStatus)
-		_ = errors.WriteHTTPBadRequest(w, "Segmenting Failed. PUSH_END trigger for stream "+p.StreamName+" was "+p.PushStatus, nil)
+		_ = config.Logger.Log(w, "Segmenting Failed. PUSH_END trigger for stream "+p.StreamName+" was "+p.PushStatus)
 		return
 	}
-
-	// Try to clean up the trigger and stream from Mist. If these fail then we only log, since we still want to do any
-	// further cleanup stages and callbacks
-	if err := d.MistClient.DeleteTrigger(p.StreamName, TRIGGER_PUSH_END); err != nil {
-		_ = config.Logger.Log("msg", "Failed to delete PUSH_END trigger", "err", err.Error(), "stream_name", p.StreamName)
-	}
-	if err := d.MistClient.DeleteStream(p.StreamName); err != nil {
-		_ = config.Logger.Log("msg", "Failed to delete stream", "err", err.Error(), "stream_name", p.StreamName)
-	}
-
-	// Let Studio know that we've finished the Segmenting phase
-	if err := clients.DefaultCallbackClient.SendTranscodeStatus(callbackUrl, clients.TranscodeStatusPreparingCompleted, 1); err != nil {
-		_ = config.Logger.Log("msg", "Failed to send transcode status callback", "err", err.Error(), "stream_name", p.StreamName)
-	}
-
-	// Get the source stream's detailed track info before kicking off transcode
-	streamInfo, err := d.MistClient.GetStreamInfo(p.StreamName)
-	if err != nil {
-		_ = config.Logger.Log("msg", "Failed to get stream info", "err", err.Error(), "stream_name", p.StreamName)
-	}
-
-	si := cache.DefaultStreamCache.Segmenting.Get(p.StreamName)
-	transcodeRequest := handlers.TranscodeSegmentRequest{
-		SourceFile:       si.SourceFile,
-		CallbackURL:      si.CallbackURL,
-		AccessToken:      si.AccessToken,
-		TranscodeAPIUrl:  si.TranscodeAPIUrl,
-		SourceStreamInfo: streamInfo,
-		UploadURL:        si.UploadURL,
-	}
-	go func() {
-		err := handlers.RunTranscodeProcess(d.MistClient, transcodeRequest)
-		if err != nil {
-			_ = config.Logger.Log("msg", "RunTranscodeProcess returned an error", "err", err.Error(), "stream_name", p.StreamName)
-		}
-	}()
 }
 
 func uuidFromPushUrl(uri string) (string, error) {
