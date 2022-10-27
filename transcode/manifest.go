@@ -99,7 +99,8 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetManifes
 			}
 		}
 
-		err = clients.UploadToOSURL(fmt.Sprintf("%s/rendition-%d", baseURL, i), "rendition.m3u8", strings.NewReader(renditionPlaylist.String()))
+		renditionManifestBaseURL := fmt.Sprintf("%s/rendition-%d", baseURL, i)
+		err = clients.UploadToOSURL(renditionManifestBaseURL, "rendition.m3u8", strings.NewReader(renditionPlaylist.String()))
 		if err != nil {
 			return fmt.Errorf("failed to upload rendition playlist: %s", err)
 		}
