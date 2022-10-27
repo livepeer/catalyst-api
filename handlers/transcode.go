@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/transcode"
@@ -14,13 +13,13 @@ import (
 )
 
 type TranscodeSegmentRequest struct {
-	SourceFile      string                 `json:"source_location"`
-	CallbackURL     string                 `json:"callback_url"`
-	UploadURL       string                 `json:"upload_url"`
-	StreamKey       string                 `json:"streamKey"`
-	AccessToken     string                 `json:"accessToken"`
-	TranscodeAPIUrl string                 `json:"transcodeAPIUrl"`
-	Profiles        []cache.EncodedProfile `json:"profiles"`
+	SourceFile      string                   `json:"source_location"`
+	CallbackURL     string                   `json:"callback_url"`
+	UploadURL       string                   `json:"upload_url"`
+	StreamKey       string                   `json:"streamKey"`
+	AccessToken     string                   `json:"accessToken"`
+	TranscodeAPIUrl string                   `json:"transcodeAPIUrl"`
+	Profiles        []clients.EncodedProfile `json:"profiles"`
 	Detection       struct {
 		Freq                uint `json:"freq"`
 		SampleRate          uint `json:"sampleRate"`
