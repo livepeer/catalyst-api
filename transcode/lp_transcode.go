@@ -10,55 +10,116 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
-	"strconv"
 	"time"
 
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/config"
 )
 
-// TranscodeSegment sends media to Livepeer network and returns rendition segments
-// If manifestId == "" one will be created and deleted after use, pass real value to reuse across multiple calls
-func TranscodeSegment(r SegmentTranscodeRequest, manifestId string) (TranscodeResult, error) {
-	t := TranscodeResult{}
-	// Get available bradcasters
-	bList, err := findBroadcaster(r)
+const TRANSCODE_TIMEOUT = 10 * time.Second
+const API_TIMEOUT = 10 * time.Second
+
+type TranscodeResult struct {
+	Renditions []*RenditionSegment
+}
+
+type RenditionSegment struct {
+	Name      string
+	MediaData []byte
+	MediaUrl  *string
+}
+
+type createStreamPayload struct {
+	Name     string                 `json:"name,omitempty"`
+	Profiles []cache.EncodedProfile `json:"profiles"`
+}
+
+type LivepeerTranscodeConfiguration struct {
+	Profiles []cache.EncodedProfile `json:"profiles"`
+}
+
+type Credentials struct {
+	AccessToken  string `json:"access_token"`
+	CustomAPIURL string `json:"custom_api_url"`
+}
+
+type BroadcasterList []struct {
+	Address string `json:"address"`
+}
+
+type StreamAllocResponse struct {
+	ManifestId string `json:"id"`
+}
+
+type LocalBroadcasterClient struct {
+	broadcasterURL url.URL
+}
+
+func NewLocalBroadcasterClient(broadcasterURL string) (LocalBroadcasterClient, error) {
+	u, err := url.Parse(broadcasterURL)
 	if err != nil {
-		return t, fmt.Errorf("findBroadcaster failed %v", err)
+		return LocalBroadcasterClient{}, fmt.Errorf("error parsing local broadcaster URL %q: %s", config.DefaultBroadcasterURL, err)
+	}
+	return LocalBroadcasterClient{
+		broadcasterURL: *u,
+	}, nil
+}
+
+func (c *LocalBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumber int64, durationMillis int64, profiles []cache.EncodedProfile) (TranscodeResult, error) {
+	conf := LivepeerTranscodeConfiguration{}
+	conf.Profiles = append(conf.Profiles, profiles...)
+	transcodeConfig, err := json.Marshal(&conf)
+	if err != nil {
+		return TranscodeResult{}, fmt.Errorf("for local B, profiles json encode failed: %v", err)
 	}
 
-	if manifestId == "" {
-		// Get streamName (manifestId)
-		if r.isLocalBroadcaster() {
-			manifestId = config.RandomTrailer()
-		} else {
-			manifestId, err = CreateStream(r)
-			if err != nil {
-				return t, fmt.Errorf("CreateStream(): %v", err)
-			}
-			defer ReleaseManifestId(r, manifestId)
-		}
+	return transcodeSegment(segment, sequenceNumber, durationMillis, c.broadcasterURL, config.RandomTrailer(), true, profiles, string(transcodeConfig))
+}
+
+type RemoteBroadcasterClient struct {
+	credentials Credentials
+}
+
+func (c *RemoteBroadcasterClient) TranscodeSegmentWithRemoteBroadcaster(segment io.Reader, sequenceNumber int64, durationMillis int64, profiles []cache.EncodedProfile, streamName string) (TranscodeResult, error) {
+	// Get available broadcasters
+	bList, err := findBroadcaster(c.credentials)
+	if err != nil {
+		return TranscodeResult{}, fmt.Errorf("findBroadcaster failed %v", err)
 	}
+
+	manifestId, err := CreateStream(c.credentials, streamName, profiles)
+	if err != nil {
+		return TranscodeResult{}, fmt.Errorf("CreateStream(): %v", err)
+	}
+	defer ReleaseManifestId(c.credentials, manifestId)
 
 	// Select one broadcaster
-	bUrl, err := pickRandomBroadcaster(bList)
+	broadcasterURL, err := pickRandomBroadcaster(bList)
 	if err != nil {
-		return t, fmt.Errorf("pickRandomBroadcaster failed %v", err)
+		return TranscodeResult{}, fmt.Errorf("pickRandomBroadcaster failed %v", err)
 	}
+
+	return transcodeSegment(segment, sequenceNumber, durationMillis, broadcasterURL, manifestId, false, profiles, "")
+}
+
+// TranscodeSegment sends media to Livepeer network and returns rendition segments
+// If manifestId == "" one will be created and deleted after use, pass real value to reuse across multiple calls
+func transcodeSegment(inputSegment io.Reader, sequenceNumber, mediaDurationMillis int64, broadcasterURL url.URL, manifestId string, localBroadcaster bool, profiles []cache.EncodedProfile, transcodeConfigHeader string) (TranscodeResult, error) {
+	t := TranscodeResult{}
 
 	// Send segment to be transcoded
 	client := &http.Client{
-		Timeout: r.TranscodeTimeout,
+		Timeout: TRANSCODE_TIMEOUT,
 		Transport: &http.Transport{
 			DisableKeepAlives:  true,
 			DisableCompression: true,
 		},
 	}
-	requestURL, err := bUrl.Parse(fmt.Sprintf("live/%s/%d.ts", manifestId, r.SequenceNumber))
+	requestURL, err := broadcasterURL.Parse(fmt.Sprintf("live/%s/%d.ts", manifestId, sequenceNumber))
 	if err != nil {
-		return t, fmt.Errorf("appending stream to api url %s: %v", r.Credentials.CustomApiUrl, err)
+		return t, fmt.Errorf("appending stream to broadcaster url %s: %v", broadcasterURL.String(), err)
 	}
-	req, err := http.NewRequest(http.MethodPost, requestURL.String(), r.MediaDataReader)
+	req, err := http.NewRequest(http.MethodPost, requestURL.String(), inputSegment)
 	if err != nil {
 		return t, fmt.Errorf("NewRequest POST for url %s: %v", requestURL.String(), err)
 	}
@@ -67,15 +128,10 @@ func TranscodeSegment(r SegmentTranscodeRequest, manifestId string) (TranscodeRe
 	req.TransferEncoding = append(req.TransferEncoding, "chunked")
 	req.Header.Add("Content-Type", "video/mp2t")
 	req.Header.Add("Accept", "multipart/mixed")
-	req.Header.Add("Content-Duration", strconv.FormatInt(r.MediaDurationMs, 10))
-	if r.isLocalBroadcaster() {
-		conf := LivepeerTranscodeConfiguration{}
-		conf.Profiles = append(conf.Profiles, r.TargetProfiles...)
-		jsonEncoded, err := json.Marshal(&conf)
-		if err != nil {
-			return t, fmt.Errorf("for local B, profiles json encode failed: %v", err)
-		}
-		req.Header.Add("Livepeer-Transcode-Configuration", string(jsonEncoded))
+	req.Header.Add("Content-Duration", fmt.Sprintf("%d", mediaDurationMillis))
+	if transcodeConfigHeader != "" {
+		req.Header.Add("Livepeer-Transcode-Configuration", transcodeConfigHeader)
+
 	}
 	res, err := client.Do(req)
 	if err != nil {
@@ -128,30 +184,26 @@ func TranscodeSegment(r SegmentTranscodeRequest, manifestId string) (TranscodeRe
 }
 
 // findBroadcaster contacts Livepeer API for a broadcaster to use if localBroadcaster is not defined
-func findBroadcaster(r SegmentTranscodeRequest) (BroadcasterList, error) {
-	if r.isLocalBroadcaster() {
-		// We use random ManifestId
-		return *r.LocalBroadcaster, nil
-	}
-	if r.Credentials.AccessToken == "" || r.Credentials.CustomApiUrl == "" {
+func findBroadcaster(c Credentials) (BroadcasterList, error) {
+	if c.AccessToken == "" || c.CustomAPIURL == "" {
 		return BroadcasterList{}, fmt.Errorf("empty credentials")
 	}
 	client := &http.Client{
-		Timeout: r.ApiTimeout,
+		Timeout: API_TIMEOUT,
 		Transport: &http.Transport{
 			DisableKeepAlives:  true,
 			DisableCompression: true,
 		},
 	}
-	requestURL, err := url.JoinPath(r.Credentials.CustomApiUrl, "broadcaster")
+	requestURL, err := url.JoinPath(c.CustomAPIURL, "broadcaster")
 	if err != nil {
-		return BroadcasterList{}, fmt.Errorf("appending broadcaster to api url %s: %v", r.Credentials.CustomApiUrl, err)
+		return BroadcasterList{}, fmt.Errorf("appending broadcaster to api url %s: %v", c.CustomAPIURL, err)
 	}
 	req, err := http.NewRequest(http.MethodGet, requestURL, nil)
 	if err != nil {
 		return BroadcasterList{}, fmt.Errorf("NewRequest GET for url %s: %v", requestURL, err)
 	}
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", r.Credentials.AccessToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.AccessToken))
 	res, err := client.Do(req)
 	if err != nil {
 		return BroadcasterList{}, fmt.Errorf("http do(%s): %v", requestURL, err)
@@ -174,21 +226,21 @@ func findBroadcaster(r SegmentTranscodeRequest) (BroadcasterList, error) {
 
 // CreateStream registers new stream on Livepeer infra and returns manifestId
 // Call `ReleaseManifestId(manifestId)` after use
-func CreateStream(r SegmentTranscodeRequest) (string, error) {
+func CreateStream(c Credentials, streamName string, profiles []cache.EncodedProfile) (string, error) {
 	client := &http.Client{
-		Timeout: r.ApiTimeout,
+		Timeout: API_TIMEOUT,
 		Transport: &http.Transport{
 			DisableKeepAlives:  true,
 			DisableCompression: true,
 		},
 	}
-	requestURL, err := url.JoinPath(r.Credentials.CustomApiUrl, "stream")
+	requestURL, err := url.JoinPath(c.CustomAPIURL, "stream")
 	if err != nil {
-		return "", fmt.Errorf("appending stream to api url %s: %v", r.Credentials.CustomApiUrl, err)
+		return "", fmt.Errorf("appending stream to api url %s: %v", c.CustomAPIURL, err)
 	}
 	// prepare payload
-	payload := createStreamPayload{Name: r.StreamName}
-	payload.Profiles = append(payload.Profiles, r.TargetProfiles...)
+	payload := createStreamPayload{Name: streamName}
+	payload.Profiles = append(payload.Profiles, profiles...)
 	payloadBytes, err := json.Marshal(&payload)
 	if err != nil {
 		return "", fmt.Errorf("POST url=%s json encode error %v struct=%v", requestURL, err, payload)
@@ -197,7 +249,7 @@ func CreateStream(r SegmentTranscodeRequest) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("NewRequest POST for url %s: %v", requestURL, err)
 	}
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", r.Credentials.AccessToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.AccessToken))
 	req.Header.Add("Content-Type", "application/json")
 	res, err := client.Do(req)
 	if err != nil {
@@ -219,17 +271,17 @@ func CreateStream(r SegmentTranscodeRequest) (string, error) {
 }
 
 // ReleaseManifestId deletes manifestId created by prior call to CreateStream()
-func ReleaseManifestId(r SegmentTranscodeRequest, manifestId string) {
+func ReleaseManifestId(c Credentials, manifestId string) {
 	client := &http.Client{
-		Timeout: r.ApiTimeout,
+		Timeout: API_TIMEOUT,
 		Transport: &http.Transport{
 			DisableKeepAlives:  true,
 			DisableCompression: true,
 		},
 	}
-	requestURL, err := url.JoinPath(r.Credentials.CustomApiUrl, fmt.Sprintf("stream/%s", manifestId))
+	requestURL, err := url.JoinPath(c.CustomAPIURL, fmt.Sprintf("stream/%s", manifestId))
 	if err != nil {
-		_ = config.Logger.Log("msg", "error construct api url", "api", r.Credentials.CustomApiUrl, "manifestId", manifestId)
+		_ = config.Logger.Log("msg", "error construct api url", "api", c.CustomAPIURL, "manifestId", manifestId)
 		return
 	}
 	req, err := http.NewRequest(http.MethodDelete, requestURL, nil)
@@ -237,7 +289,7 @@ func ReleaseManifestId(r SegmentTranscodeRequest, manifestId string) {
 		_ = config.Logger.Log("msg", "NewRequest DELETE", "url", requestURL, "manifestId", manifestId)
 		return
 	}
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", r.Credentials.AccessToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.AccessToken))
 	res, err := client.Do(req)
 	if err != nil {
 		_ = config.Logger.Log("msg", "error deleting stream", "url", requestURL, "manifestId", manifestId, "err", err)
@@ -260,50 +312,4 @@ func pickRandomBroadcaster(list BroadcasterList) (url.URL, error) {
 
 func httpOk(statusCode int) bool {
 	return statusCode >= 200 && statusCode < 300
-}
-
-type SegmentTranscodeRequest struct {
-	Credentials      Credentials
-	StreamName       string
-	SequenceNumber   int64
-	MediaDataReader  io.Reader // mpegts encoded segment Reader
-	MediaDurationMs  int64
-	TargetProfiles   []cache.EncodedProfile
-	LocalBroadcaster *BroadcasterList
-	TranscodeTimeout time.Duration
-	ApiTimeout       time.Duration
-}
-
-type TranscodeResult struct {
-	Renditions []*RenditionSegment
-}
-
-type RenditionSegment struct {
-	Name      string
-	MediaData []byte
-	MediaUrl  *string
-}
-
-type createStreamPayload struct {
-	Name     string                 `json:"name,omitempty"`
-	Profiles []cache.EncodedProfile `json:"profiles"`
-}
-
-type LivepeerTranscodeConfiguration struct {
-	Profiles []cache.EncodedProfile `json:"profiles"`
-}
-
-func (r *SegmentTranscodeRequest) isLocalBroadcaster() bool { return r.LocalBroadcaster != nil }
-
-type Credentials struct {
-	AccessToken  string `json:"access_token"`
-	CustomApiUrl string `json:"custom_api_url"`
-}
-
-type BroadcasterList []struct {
-	Address string `json:"address"`
-}
-
-type StreamAllocResponse struct {
-	ManifestId string `json:"id"`
 }
