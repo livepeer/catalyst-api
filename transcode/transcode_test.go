@@ -1,6 +1,10 @@
 package transcode
 
 import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -45,6 +49,20 @@ func TestItCanTranscode(t *testing.T) {
 	outputDir := os.TempDir()
 	outputMasterManifest := filepath.Join(outputDir, "output-master.m3u8")
 
+	// Set up a server to receive callbacks and store them in an array for future verification
+	var callbacks []map[string]interface{}
+	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check that we got the callback we're expecting
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+
+		var callback map[string]interface{}
+		err = json.Unmarshal(body, &callback)
+		require.NoError(t, err)
+		callbacks = append(callbacks, callback)
+	}))
+	defer callbackServer.Close()
+
 	// Check we don't get an error downloading or parsing it
 	err = RunTranscodeProcess(
 		manifestFile.Name(),
@@ -63,6 +81,7 @@ func TestItCanTranscode(t *testing.T) {
 				Height: 720,
 			},
 		},
+		callbackServer.URL,
 	)
 	require.NoError(t, err)
 
@@ -72,4 +91,17 @@ func TestItCanTranscode(t *testing.T) {
 	require.Greater(t, len(masterManifestBytes), 0)
 	require.Contains(t, string(masterManifestBytes), "#EXTM3U")
 	require.Contains(t, string(masterManifestBytes), "#EXT-X-STREAM-INF")
+
+	// Check we received a progress callback for each segment
+	require.Equal(t, 2, len(callbacks))
+	require.Equal(t, 0.7, callbacks[0]["completion_ratio"])
+	require.Equal(t, 1.0, callbacks[1]["completion_ratio"])
+}
+
+func TestItCalculatesTheTranscodeCompletionPercentageCorrectly(t *testing.T) {
+	require.Equal(t, 0.5, calculateCompletedRatio(2, 1))
+	require.Equal(t, 0.5, calculateCompletedRatio(4, 2))
+	require.Equal(t, 0.1, calculateCompletedRatio(10, 1))
+	require.Equal(t, 0.01, calculateCompletedRatio(100, 1))
+	require.Equal(t, 0.6, calculateCompletedRatio(100, 60))
 }

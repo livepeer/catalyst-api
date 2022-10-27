@@ -28,7 +28,7 @@ var defaultTranscodeProfiles = []cache.EncodedProfile{
 	},
 }
 
-func RunTranscodeProcess(sourceManifestOSURL, targetManifestOSURL string, transcodeProfiles []cache.EncodedProfile) error {
+func RunTranscodeProcess(sourceManifestOSURL, targetManifestOSURL string, transcodeProfiles []cache.EncodedProfile, callbackURL string) error {
 	_ = config.Logger.Log("msg", "RunTranscodeProcess (v2) Beginning", "source", sourceManifestOSURL, "target", targetManifestOSURL)
 
 	// If Profiles haven't been overridden, use the default set
@@ -49,7 +49,7 @@ func RunTranscodeProcess(sourceManifestOSURL, targetManifestOSURL string, transc
 	}
 
 	// Iterate through the segment URLs and transcode them
-	for _, u := range sourceSegmentURLs {
+	for i, u := range sourceSegmentURLs {
 		rc, err := clients.DownloadOSURL(u)
 		if err != nil {
 			return fmt.Errorf("failed to download source segment %q: %s", u, err)
@@ -64,6 +64,11 @@ func RunTranscodeProcess(sourceManifestOSURL, targetManifestOSURL string, transc
 			return fmt.Errorf("failed to read source segment data %q: %s", u, err)
 		}
 		_ = config.Logger.Log("msg", "downloaded source segment", "url", u, "size_bytes", nRead, "error", err)
+
+		var completedRatio = calculateCompletedRatio(len(sourceSegmentURLs), i+1)
+		if err = clients.DefaultCallbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, completedRatio); err != nil {
+			_ = config.Logger.Log("msg", "failed to send transcode status callback", "url", callbackURL, "error", err)
+		}
 	}
 
 	// Build the manifests and push them to storage
@@ -73,4 +78,8 @@ func RunTranscodeProcess(sourceManifestOSURL, targetManifestOSURL string, transc
 	}
 
 	return nil
+}
+
+func calculateCompletedRatio(totalSegments, completedSegments int) float64 {
+	return (1 / float64(totalSegments)) * float64(completedSegments)
 }
