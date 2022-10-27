@@ -68,6 +68,15 @@ func TranscodeSegment(r SegmentTranscodeRequest, manifestId string) (TranscodeRe
 	req.Header.Add("Content-Type", "video/mp2t")
 	req.Header.Add("Accept", "multipart/mixed")
 	req.Header.Add("Content-Duration", strconv.FormatInt(r.MediaDurationMs, 10))
+	if r.isLocalBroadcaster() {
+		conf := LivepeerTranscodeConfiguration{}
+		conf.Profiles = append(conf.Profiles, r.TargetProfiles...)
+		jsonEncoded, err := json.Marshal(&conf)
+		if err != nil {
+			return t, fmt.Errorf("for local B, profiles json encode failed: %v", err)
+		}
+		req.Header.Add("Livepeer-Transcode-Configuration", string(jsonEncoded))
+	}
 	res, err := client.Do(req)
 	if err != nil {
 		return t, fmt.Errorf("http do(%s): %v", requestURL, err)
@@ -277,6 +286,10 @@ type RenditionSegment struct {
 
 type createStreamPayload struct {
 	Name     string                 `json:"name,omitempty"`
+	Profiles []cache.EncodedProfile `json:"profiles"`
+}
+
+type LivepeerTranscodeConfiguration struct {
 	Profiles []cache.EncodedProfile `json:"profiles"`
 }
 
