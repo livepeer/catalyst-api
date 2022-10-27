@@ -9,6 +9,11 @@ all: build fmt test lint integration-test
 build:
 	go build -ldflags="$(ldflags)" -o "$(GO_BUILD_DIR)catalyst-api" main.go
 
+.PHONY: build-linux
+build-linux:
+	# Useful for cross-compiling from Mac for testing on an environment
+	env GOOS=linux GOARCH=amd64 go build -o "$(GO_BUILD_DIR)catalyst-api-linux" main.go
+
 .PHONY: fmt
 fmt:
 	go fmt ./...
