@@ -97,7 +97,7 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 		UploadURL:        si.UploadURL,
 	}
 	go func() {
-		err := transcode.RunTranscodeProcess(transcodeRequest.SourceFile, transcodeRequest.UploadURL)
+		err := transcode.RunTranscodeProcess(transcodeRequest.SourceFile, transcodeRequest.UploadURL, transcodeRequest.Profiles)
 		if err != nil {
 			_ = config.Logger.Log("msg", "RunTranscodeProcess returned an error", "err", err.Error(), "stream_name", p.StreamName)
 		}

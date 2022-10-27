@@ -55,9 +55,12 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 			return
 		}
 
-		if err := transcode.RunTranscodeProcess(transcodeRequest.SourceFile, transcodeRequest.UploadURL); err != nil {
+		// TODO: Do this asynchronously
+		if err := transcode.RunTranscodeProcess(transcodeRequest.SourceFile, transcodeRequest.UploadURL, transcodeRequest.Profiles); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Error running Transcode process", err)
 		}
+
+		// TODO: Success callback to Studio
 	}
 }
 
