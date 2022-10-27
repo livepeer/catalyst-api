@@ -14,28 +14,14 @@ type TranscodingCache struct {
 	mutex  sync.Mutex
 }
 
-type EncodedProfile struct {
-	Name         string `json:"name,omitempty"`
-	Width        int32  `json:"width,omitempty"`
-	Height       int32  `json:"height,omitempty"`
-	Bitrate      int32  `json:"bitrate,omitempty"`
-	FPS          uint   `json:"fps,omitempty"`
-	FPSDen       uint   `json:"fpsDen,omitempty"`
-	Profile      string `json:"profile,omitempty"`
-	GOP          string `json:"gop,omitempty"`
-	Encoder      string `json:"encoder,omitempty"`
-	ColorDepth   int32  `json:"colorDepth,omitempty"`
-	ChromaFormat int32  `json:"chromaFormat,omitempty"`
-}
-
 type SegmentInfo struct {
 	CallbackUrl  string
-	Source       string                // S3 input we are transcoding
-	UploadDir    string                // S3 destination url for multiple renditions
-	Profiles     []EncodedProfile      // Requested encoding profiles to produce
-	Destinations []string              // Rendition URLS go here on push start and removed on push end
-	Outputs      []clients.OutputVideo // Information about the final transcoded outputs we've created
-	updatedAt    time.Time             // Time at which this object was last updated in cache
+	Source       string                   // S3 input we are transcoding
+	UploadDir    string                   // S3 destination url for multiple renditions
+	Profiles     []clients.EncodedProfile // Requested encoding profiles to produce
+	Destinations []string                 // Rendition URLS go here on push start and removed on push end
+	Outputs      []clients.OutputVideo    // Information about the final transcoded outputs we've created
+	updatedAt    time.Time                // Time at which this object was last updated in cache
 }
 
 // Send "keepalive" callbacks to ensure the caller (Studio) knows transcoding is still ongoing and hasn't failed
