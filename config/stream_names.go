@@ -19,17 +19,17 @@ func IsTranscodeStream(streamName string) bool {
 }
 
 func GenerateStreamNames() (string, string) {
-	suffix := randomTrailer()
+	suffix := RandomTrailer()
 	inputStream := SOURCE_PREFIX + suffix
 	renditionsStream := RENDITION_PREFIX + suffix
 	return inputStream, renditionsStream
 }
 
 func RandomStreamName(prefix string) string {
-	return fmt.Sprintf("%s%s", prefix, randomTrailer())
+	return fmt.Sprintf("%s%s", prefix, RandomTrailer())
 }
 
-func randomTrailer() string {
+func RandomTrailer() string {
 	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 	const length = 8
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))

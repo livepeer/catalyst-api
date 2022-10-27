@@ -15,17 +15,17 @@ type TranscodingCache struct {
 }
 
 type EncodedProfile struct {
-	Name         string `json:"name"`
-	Width        int32  `json:"width"`
-	Height       int32  `json:"height"`
-	Bitrate      int32  `json:"bitrate"`
-	FPS          uint   `json:"fps"`
-	FPSDen       uint   `json:"fpsDen"`
-	Profile      string `json:"profile"`
-	GOP          string `json:"gop"`
-	Encoder      string `json:"encoder"`
-	ColorDepth   int32  `json:"colorDepth"`
-	ChromaFormat int32  `json:"chromaFormat"`
+	Name         string `json:"name,omitempty"`
+	Width        int32  `json:"width,omitempty"`
+	Height       int32  `json:"height,omitempty"`
+	Bitrate      int32  `json:"bitrate,omitempty"`
+	FPS          uint   `json:"fps,omitempty"`
+	FPSDen       uint   `json:"fpsDen,omitempty"`
+	Profile      string `json:"profile,omitempty"`
+	GOP          string `json:"gop,omitempty"`
+	Encoder      string `json:"encoder,omitempty"`
+	ColorDepth   int32  `json:"colorDepth,omitempty"`
+	ChromaFormat int32  `json:"chromaFormat,omitempty"`
 }
 
 type SegmentInfo struct {
