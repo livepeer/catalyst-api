@@ -112,7 +112,7 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 	transcodedManifestURL := segmentedUploadURL.ResolveReference(relativeTranscodeURL)
 
 	go func() {
-		err := transcode.RunTranscodeProcess(transcodeRequest.UploadURL, transcodedManifestURL.String(), transcodeRequest.Profiles)
+		err := transcode.RunTranscodeProcess(transcodeRequest.UploadURL, transcodedManifestURL.String(), transcodeRequest.Profiles, callbackUrl)
 		if err != nil {
 			_ = config.Logger.Log(
 				"msg", "RunTranscodeProcess returned an error",
@@ -121,6 +121,23 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 				"source", transcodeRequest.SourceFile,
 				"target", transcodeRequest.UploadURL,
 			)
+
+			if err := clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, "Transcoding Failed: "+err.Error()); err != nil {
+				_ = config.Logger.Log("msg", "Failed to send Error callback", "err", err.Error(), "stream_name", p.StreamName)
+			}
+		} else {
+			// TODO: Fill in with real values once we have them back from the transcoder
+			err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(
+				callbackUrl,
+				clients.InputVideo{
+					Format: "unknown",
+				},
+				[]clients.OutputVideo{},
+			)
+
+			if err != nil {
+				_ = config.Logger.Log("msg", "Failed to send Completed callback", "err", err.Error(), "stream_name", p.StreamName)
+			}
 		}
 	}()
 }
