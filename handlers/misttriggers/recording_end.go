@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -96,10 +97,30 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 		SourceStreamInfo: streamInfo,
 		UploadURL:        si.UploadURL,
 	}
+
+	// Create a separate subdirectory for the transcoded renditions
+	segmentedUploadURL, err := url.Parse(transcodeRequest.UploadURL)
+	if err != nil {
+		_ = config.Logger.Log("msg", "failed to parse transcodeRequest.UploadURL", "error", err)
+		return
+	}
+	relativeTranscodeURL, err := url.Parse("transcoded/index.m3u8")
+	if err != nil {
+		_ = config.Logger.Log("msg", "failed to parse relativeTranscodeURL", "error", err)
+		return
+	}
+	transcodedManifestURL := segmentedUploadURL.ResolveReference(relativeTranscodeURL)
+
 	go func() {
-		err := transcode.RunTranscodeProcess(transcodeRequest.SourceFile, transcodeRequest.UploadURL, transcodeRequest.Profiles)
+		err := transcode.RunTranscodeProcess(transcodeRequest.UploadURL, transcodedManifestURL.String(), transcodeRequest.Profiles)
 		if err != nil {
-			_ = config.Logger.Log("msg", "RunTranscodeProcess returned an error", "err", err.Error(), "stream_name", p.StreamName)
+			_ = config.Logger.Log(
+				"msg", "RunTranscodeProcess returned an error",
+				"err", err.Error(),
+				"stream_name", p.StreamName,
+				"source", transcodeRequest.SourceFile,
+				"target", transcodeRequest.UploadURL,
+			)
 		}
 	}()
 }

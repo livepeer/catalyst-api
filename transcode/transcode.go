@@ -10,8 +10,31 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 )
 
+// The default set of encoding profiles to use when none are specified
+var defaultTranscodeProfiles = []cache.EncodedProfile{
+	{
+		Name:    "720p",
+		Bitrate: 2000000,
+		FPS:     30,
+		Width:   1280,
+		Height:  720,
+	},
+	{
+		Name:    "360p",
+		Bitrate: 500000,
+		FPS:     30,
+		Width:   640,
+		Height:  360,
+	},
+}
+
 func RunTranscodeProcess(sourceManifestOSURL, targetManifestOSURL string, transcodeProfiles []cache.EncodedProfile) error {
 	_ = config.Logger.Log("msg", "RunTranscodeProcess (v2) Beginning", "source", sourceManifestOSURL, "target", targetManifestOSURL)
+
+	// If Profiles haven't been overridden, use the default set
+	if len(transcodeProfiles) == 0 {
+		transcodeProfiles = defaultTranscodeProfiles
+	}
 
 	// Download the "source" manifest that contains all the segments we'll be transcoding
 	sourceManifest, err := DownloadRenditionManifest(sourceManifestOSURL)
