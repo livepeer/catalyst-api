@@ -84,15 +84,13 @@ func TestItCanGenerateAndWriteManifests(t *testing.T) {
 	sourceMediaPlaylist, ok := sourceManifest.(*m3u8.MediaPlaylist)
 	require.True(t, ok)
 
-	dir, err := os.MkdirTemp(os.TempDir(), "TestItCanGenerateAndWriteManifests-*")
+	outputDir, err := os.MkdirTemp(os.TempDir(), "TestItCanGenerateAndWriteManifests-*")
 	require.NoError(t, err)
-
-	masterManifestPath := filepath.Join(dir, "master.m3u8")
 
 	// Do the thing
 	err = GenerateAndUploadManifests(
 		*sourceMediaPlaylist,
-		masterManifestPath,
+		outputDir,
 		[]clients.EncodedProfile{
 			{
 				Name:   "lowlowlow",
@@ -111,8 +109,9 @@ func TestItCanGenerateAndWriteManifests(t *testing.T) {
 	require.NoError(t, err)
 
 	// Confirm we wrote out the master manifest that we expected
-	require.FileExists(t, masterManifestPath)
-	masterManifestContents, err := os.ReadFile(masterManifestPath)
+	masterManifest := filepath.Join(outputDir, "index.m3u8")
+	require.FileExists(t, masterManifest)
+	masterManifestContents, err := os.ReadFile(masterManifest)
 	require.NoError(t, err)
 
 	const expectedMasterManifest = `#EXTM3U
@@ -125,7 +124,7 @@ rendition-1/rendition.m3u8
 	require.Equal(t, expectedMasterManifest, string(masterManifestContents))
 
 	// Confirm we wrote out the rendition manifests that we expected
-	require.FileExists(t, filepath.Join(dir, "rendition-0/rendition.m3u8"))
-	require.FileExists(t, filepath.Join(dir, "rendition-1/rendition.m3u8"))
-	require.NoFileExists(t, filepath.Join(dir, "rendition-2/rendition.m3u8"))
+	require.FileExists(t, filepath.Join(outputDir, "rendition-0/rendition.m3u8"))
+	require.FileExists(t, filepath.Join(outputDir, "rendition-1/rendition.m3u8"))
+	require.NoFileExists(t, filepath.Join(outputDir, "rendition-2/rendition.m3u8"))
 }

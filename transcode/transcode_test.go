@@ -77,11 +77,11 @@ func TestItCanTranscode(t *testing.T) {
 			Renditions: []*clients.RenditionSegment{
 				{
 					Name:      "lowlowlow",
-					MediaData: []byte{},
+					MediaData: []byte("pretend media data"),
 				},
 				{
 					Name:      "super-high-def",
-					MediaData: []byte{},
+					MediaData: []byte("pretend high-def media data"),
 				},
 			},
 		},
