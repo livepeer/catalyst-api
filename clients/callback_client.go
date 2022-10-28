@@ -216,15 +216,16 @@ type TranscodeStatusMessage struct {
 }
 
 type VideoTrack struct {
-	Width       int    `json:"width,omitempty"`
-	Height      int    `json:"height,omitempty"`
-	PixelFormat string `json:"pixel_format,omitempty"`
-	FPS         int    `json:"fps,omitempty"`
+	Width       int     `json:"width,omitempty"`
+	Height      int     `json:"height,omitempty"`
+	PixelFormat string  `json:"pixel_format,omitempty"`
+	FPS         float64 `json:"fps,omitempty"`
 }
 
 type AudioTrack struct {
 	Channels   int `json:"channels,omitempty"`
 	SampleRate int `json:"sample_rate,omitempty"`
+	SampleBits int `json:"sample_bits,omitempty"`
 }
 
 type InputTrack struct {
