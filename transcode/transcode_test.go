@@ -55,7 +55,6 @@ func TestItCanTranscode(t *testing.T) {
 
 	// Set up somewhere to output the results to
 	outputDir := os.TempDir()
-	outputMasterManifest := filepath.Join(outputDir, "output-master.m3u8")
 
 	// Set up a server to receive callbacks and store them in an array for future verification
 	var callbacks []map[string]interface{}
@@ -100,7 +99,7 @@ func TestItCanTranscode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Confirm the master manifest was created and that it looks like a manifest
-	masterManifestBytes, err := os.ReadFile(outputMasterManifest)
+	masterManifestBytes, err := os.ReadFile(filepath.Join(outputDir, "transcoded/index.m3u8"))
 	require.NoError(t, err)
 	require.Greater(t, len(masterManifestBytes), 0)
 	require.Contains(t, string(masterManifestBytes), "#EXTM3U")
