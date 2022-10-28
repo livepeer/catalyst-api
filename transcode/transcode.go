@@ -4,14 +4,32 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net/url"
 
-	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 )
 
+type TranscodeSegmentRequest struct {
+	SourceFile      string                   `json:"source_location"`
+	CallbackURL     string                   `json:"callback_url"`
+	UploadURL       string                   `json:"upload_url"`
+	StreamKey       string                   `json:"streamKey"`
+	AccessToken     string                   `json:"accessToken"`
+	TranscodeAPIUrl string                   `json:"transcodeAPIUrl"`
+	Profiles        []clients.EncodedProfile `json:"profiles"`
+	Detection       struct {
+		Freq                uint `json:"freq"`
+		SampleRate          uint `json:"sampleRate"`
+		SceneClassification []struct {
+			Name string `json:"name"`
+		} `json:"sceneClassification"`
+	} `json:"detection"`
+	SourceStreamInfo clients.MistStreamInfo
+}
+
 // The default set of encoding profiles to use when none are specified
-var defaultTranscodeProfiles = []cache.EncodedProfile{
+var defaultTranscodeProfiles = []clients.EncodedProfile{
 	{
 		Name:    "720p",
 		Bitrate: 2000000,
@@ -28,8 +46,34 @@ var defaultTranscodeProfiles = []cache.EncodedProfile{
 	},
 }
 
-func RunTranscodeProcess(sourceManifestOSURL, targetManifestOSURL string, transcodeProfiles []cache.EncodedProfile, callbackURL string) error {
-	_ = config.Logger.Log("msg", "RunTranscodeProcess (v2) Beginning", "source", sourceManifestOSURL, "target", targetManifestOSURL)
+var localBroadcasterClient clients.BroadcasterClient
+
+func init() {
+	b, err := clients.NewLocalBroadcasterClient(config.DefaultBroadcasterURL)
+	if err != nil {
+		panic(fmt.Sprintf("Error initialising Local Broadcaster Client with URL %q: %s", config.DefaultBroadcasterURL, err))
+	}
+	localBroadcasterClient = b
+}
+
+func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, durationMillis int64) error {
+	_ = config.Logger.Log("msg", "RunTranscodeProcess (v2) Beginning", "source", transcodeRequest.SourceFile, "target", transcodeRequest.UploadURL)
+
+	// Create a separate subdirectory for the transcoded renditions
+	segmentedUploadURL, err := url.Parse(transcodeRequest.UploadURL)
+	if err != nil {
+		return fmt.Errorf("failed to parse transcodeRequest.UploadURL: %s", err)
+	}
+	relativeTranscodeURL, err := url.Parse("transcoded/index.m3u8")
+	if err != nil {
+		return fmt.Errorf("failed to parse relativeTranscodeURL: %s", err)
+	}
+
+	targetManifestOSURL := segmentedUploadURL.ResolveReference(relativeTranscodeURL)
+	// Grab some useful parameters to be used later from the TranscodeSegmentRequest
+	sourceManifestOSURL := transcodeRequest.UploadURL
+	transcodeProfiles := transcodeRequest.Profiles
+	callbackURL := transcodeRequest.CallbackURL
 
 	// If Profiles haven't been overridden, use the default set
 	if len(transcodeProfiles) == 0 {
@@ -56,14 +100,36 @@ func RunTranscodeProcess(sourceManifestOSURL, targetManifestOSURL string, transc
 		}
 
 		// Download and read the segment, log the size in bytes and discard for now
-		// TODO: Push the segments through the transcoder
-		// TODO: Upload the output segments
 		buf := &bytes.Buffer{}
 		nRead, err := io.Copy(buf, rc)
 		if err != nil {
 			return fmt.Errorf("failed to read source segment data %q: %s", u, err)
 		}
 		_ = config.Logger.Log("msg", "downloaded source segment", "url", u, "size_bytes", nRead, "error", err)
+
+		// If an AccessToken is provided via the request for transcode, then use remote Broadcasters.
+		// Otherwise, use the local harcoded Broadcaster.
+		if transcodeRequest.AccessToken != "" {
+			creds := clients.Credentials{
+				AccessToken:  transcodeRequest.AccessToken,
+				CustomAPIURL: transcodeRequest.TranscodeAPIUrl,
+			}
+			broadcasterClient, _ := clients.NewRemoteBroadcasterClient(creds)
+
+			tr, err := broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(buf, int64(i), transcodeProfiles, streamName, durationMillis)
+			if err != nil {
+				return fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
+			}
+			fmt.Println("transcodeResult", tr) //remove this
+			// TODO: Upload the output segments
+		} else {
+			tr, err := localBroadcasterClient.TranscodeSegment(buf, int64(i), transcodeProfiles, durationMillis)
+			if err != nil {
+				return fmt.Errorf("failed to run TranscodeSegment: %s", err)
+			}
+			fmt.Println("transcodeResult", tr) //remove this
+			// TODO: Upload the output segments
+		}
 
 		var completedRatio = calculateCompletedRatio(len(sourceSegmentURLs), i+1)
 		if err = clients.DefaultCallbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, completedRatio); err != nil {
@@ -72,7 +138,7 @@ func RunTranscodeProcess(sourceManifestOSURL, targetManifestOSURL string, transc
 	}
 
 	// Build the manifests and push them to storage
-	err = GenerateAndUploadManifests(sourceManifest, targetManifestOSURL, transcodeProfiles)
+	err = GenerateAndUploadManifests(sourceManifest, targetManifestOSURL.String(), transcodeProfiles)
 	if err != nil {
 		return err
 	}

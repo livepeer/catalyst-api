@@ -9,6 +9,12 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 )
 
+// Currently only implemented by LocalBroadcasterClient
+// TODO: Try to come up with a unified interface across Local and Remote
+type BroadcasterClient interface {
+	TranscodeSegment(segment io.Reader, sequenceNumber int64, profiles []EncodedProfile, durationMillis int64) (TranscodeResult, error)
+}
+
 type LocalBroadcasterClient struct {
 	broadcasterURL url.URL
 }
@@ -23,7 +29,7 @@ func NewLocalBroadcasterClient(broadcasterURL string) (LocalBroadcasterClient, e
 	}, nil
 }
 
-func (c *LocalBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumber int64, durationMillis int64, profiles []EncodedProfile) (TranscodeResult, error) {
+func (c LocalBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumber int64, profiles []EncodedProfile, durationMillis int64) (TranscodeResult, error) {
 	conf := LivepeerTranscodeConfiguration{}
 	conf.Profiles = append(conf.Profiles, profiles...)
 	transcodeConfig, err := json.Marshal(&conf)

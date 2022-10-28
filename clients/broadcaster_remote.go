@@ -16,7 +16,16 @@ type RemoteBroadcasterClient struct {
 	credentials Credentials
 }
 
-func (c *RemoteBroadcasterClient) TranscodeSegmentWithRemoteBroadcaster(segment io.Reader, sequenceNumber int64, durationMillis int64, profiles []EncodedProfile, streamName string) (TranscodeResult, error) {
+func NewRemoteBroadcasterClient(credentials Credentials) (RemoteBroadcasterClient, error) {
+	if credentials.AccessToken == "" || credentials.CustomAPIURL == "" {
+		return RemoteBroadcasterClient{}, fmt.Errorf("error parsing credentials: empty access-token or api URL")
+	}
+	return RemoteBroadcasterClient{
+		credentials: credentials,
+	}, nil
+}
+
+func (c *RemoteBroadcasterClient) TranscodeSegmentWithRemoteBroadcaster(segment io.Reader, sequenceNumber int64, profiles []EncodedProfile, streamName string, durationMillis int64) (TranscodeResult, error) {
 	// Get available broadcasters
 	bList, err := findBroadcaster(c.credentials)
 	if err != nil {

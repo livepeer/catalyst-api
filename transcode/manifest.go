@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/grafov/m3u8"
-	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
 )
 
@@ -58,7 +57,7 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 }
 
 // Generate a Master manifest, plus one Rendition manifest for each Profile we're transcoding, then write them to storage
-func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetManifestOSURL string, transcodeProfiles []cache.EncodedProfile) error {
+func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetManifestOSURL string, transcodeProfiles []clients.EncodedProfile) error {
 	// Generate the base target OS URL to which we can append filenames / subdirectories to
 	baseURL := targetManifestOSURL[:strings.LastIndex(targetManifestOSURL, "/")]
 

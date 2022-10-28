@@ -6,35 +6,16 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/transcode"
 	"github.com/xeipuuv/gojsonschema"
 )
 
-type TranscodeSegmentRequest struct {
-	SourceFile      string                   `json:"source_location"`
-	CallbackURL     string                   `json:"callback_url"`
-	UploadURL       string                   `json:"upload_url"`
-	StreamKey       string                   `json:"streamKey"`
-	AccessToken     string                   `json:"accessToken"`
-	TranscodeAPIUrl string                   `json:"transcodeAPIUrl"`
-	Profiles        []clients.EncodedProfile `json:"profiles"`
-	Detection       struct {
-		Freq                uint `json:"freq"`
-		SampleRate          uint `json:"sampleRate"`
-		SceneClassification []struct {
-			Name string `json:"name"`
-		} `json:"sceneClassification"`
-	} `json:"detection"`
-	SourceStreamInfo clients.MistStreamInfo
-}
-
 func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 	schema := inputSchemasCompiled["TranscodeSegment"]
 
 	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-		var transcodeRequest TranscodeSegmentRequest
+		var transcodeRequest transcode.TranscodeSegmentRequest
 		payload, err := io.ReadAll(req.Body)
 		if err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot read body", err)
@@ -54,8 +35,9 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 			return
 		}
 
-		// TODO: Do this asynchronously
-		err = transcode.RunTranscodeProcess(transcodeRequest.SourceFile, transcodeRequest.UploadURL, transcodeRequest.Profiles, transcodeRequest.CallbackURL)
+		// TODO: Do this asynchronously and pass valid stream-name and input file duration
+		//	 when the transcode api endpoint is accessed (only used for testing for now)
+		err = transcode.RunTranscodeProcess(transcodeRequest, "", 0)
 		if err != nil {
 			errors.WriteHTTPInternalServerError(w, "Error running Transcode process", err)
 		}
