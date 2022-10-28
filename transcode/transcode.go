@@ -59,18 +59,18 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	_ = config.Logger.Log("msg", "RunTranscodeProcess (v2) Beginning", "source", transcodeRequest.SourceFile, "target", transcodeRequest.UploadURL)
 
 	// Create a separate subdirectory for the transcoded renditions
-	segmentedUploadURL, err := url.Parse(transcodeRequest.UploadURL)
+	renditionsUploadURL, err := url.Parse(transcodeRequest.UploadURL)
 	if err != nil {
-		return fmt.Errorf("failed to parse transcodeRequest.UploadURL: %s", err)
+		return fmt.Errorf("failed to parse UploadURL: %s", err)
 	}
 	relativeTranscodeURL, err := url.Parse("transcoded/")
 	if err != nil {
 		return fmt.Errorf("failed to parse relativeTranscodeURL: %s", err)
 	}
 
-	targetOSURL := segmentedUploadURL.ResolveReference(relativeTranscodeURL)
+	targetOSURL := renditionsUploadURL.ResolveReference(relativeTranscodeURL)
 	// Grab some useful parameters to be used later from the TranscodeSegmentRequest
-	sourceManifestOSURL := transcodeRequest.UploadURL
+	sourceManifestOSURL := transcodeRequest.SourceFile
 	transcodeProfiles := transcodeRequest.Profiles
 	callbackURL := transcodeRequest.CallbackURL
 

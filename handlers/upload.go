@@ -91,7 +91,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		cache.DefaultStreamCache.Segmenting.Store(streamName, cache.StreamInfo{
 			SourceFile:      uploadVODRequest.Url,
 			CallbackURL:     uploadVODRequest.CallbackUrl,
-			UploadURL:       uploadVODRequest.OutputLocations[0].URL,
+			UploadURL:       tURL,
 			AccessToken:     uploadVODRequest.AccessToken,
 			TranscodeAPIUrl: uploadVODRequest.TranscodeAPIUrl,
 		})

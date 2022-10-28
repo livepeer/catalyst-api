@@ -88,12 +88,12 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 
 	si := cache.DefaultStreamCache.Segmenting.Get(p.StreamName)
 	transcodeRequest := transcode.TranscodeSegmentRequest{
-		SourceFile:       si.SourceFile,
+		SourceFile:       si.UploadURL, // Source of transcoding stage is output from segmenting stage
+		UploadURL:        si.UploadURL, // Store transcoded renditions in the same dir as segmented playlist
 		CallbackURL:      si.CallbackURL,
 		AccessToken:      si.AccessToken,
 		TranscodeAPIUrl:  si.TranscodeAPIUrl,
 		SourceStreamInfo: streamInfo,
-		UploadURL:        si.UploadURL,
 	}
 
 	go func() {
