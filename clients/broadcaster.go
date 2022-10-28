@@ -34,7 +34,7 @@ type LivepeerTranscodeConfiguration struct {
 
 type Credentials struct {
 	AccessToken  string `json:"access_token"`
-	CustomAPIURL string `json:"custom_api_url"`
+	CustomAPIURL string `json:"custom_url"`
 }
 
 type BroadcasterList []struct {

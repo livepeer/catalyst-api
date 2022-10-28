@@ -34,7 +34,7 @@ type MistStreamInfoTrack struct {
 	Firstms int    `json:"firstms,omitempty"`
 	Idx     int    `json:"idx,omitempty"`
 	Init    string `json:"init,omitempty"`
-	Lastms  int    `json:"lastms,omitempty"`
+	Lastms  int64  `json:"lastms,omitempty"`
 	Maxbps  int    `json:"maxbps,omitempty"`
 	Trackid int    `json:"trackid,omitempty"`
 	Type    string `json:"type,omitempty"`

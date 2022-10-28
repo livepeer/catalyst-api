@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
-	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/transcode"
 )
 
@@ -76,7 +74,7 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 	}
 
 	// Compare duration of source stream to the segmented stream to ensure the input file was completely segmented before attempting to transcode
-	var inputVideoLengthMillis int
+	var inputVideoLengthMillis int64
 	for track, trackInfo := range streamInfo.Meta.Tracks {
 		if strings.Contains(track, "video") {
 			inputVideoLengthMillis = trackInfo.Lastms
@@ -89,7 +87,7 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 	}
 
 	si := cache.DefaultStreamCache.Segmenting.Get(p.StreamName)
-	transcodeRequest := handlers.TranscodeSegmentRequest{
+	transcodeRequest := transcode.TranscodeSegmentRequest{
 		SourceFile:       si.SourceFile,
 		CallbackURL:      si.CallbackURL,
 		AccessToken:      si.AccessToken,
@@ -98,21 +96,8 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 		UploadURL:        si.UploadURL,
 	}
 
-	// Create a separate subdirectory for the transcoded renditions
-	segmentedUploadURL, err := url.Parse(transcodeRequest.UploadURL)
-	if err != nil {
-		_ = config.Logger.Log("msg", "failed to parse transcodeRequest.UploadURL", "error", err)
-		return
-	}
-	relativeTranscodeURL, err := url.Parse("transcoded/index.m3u8")
-	if err != nil {
-		_ = config.Logger.Log("msg", "failed to parse relativeTranscodeURL", "error", err)
-		return
-	}
-	transcodedManifestURL := segmentedUploadURL.ResolveReference(relativeTranscodeURL)
-
 	go func() {
-		err := transcode.RunTranscodeProcess(transcodeRequest.UploadURL, transcodedManifestURL.String(), transcodeRequest.Profiles, callbackUrl)
+		err := transcode.RunTranscodeProcess(transcodeRequest, p.StreamName, p.StreamMediaDurationMillis)
 		if err != nil {
 			_ = config.Logger.Log(
 				"msg", "RunTranscodeProcess returned an error",
@@ -150,9 +135,9 @@ type RecordingEndPayload struct {
 	WritingDurationSecs       int
 	ConnectionStartTimeUnix   int
 	ConnectionEndTimeUnix     int
-	StreamMediaDurationMillis int
-	FirstMediaTimestampMillis int
-	LastMediaTimestampMillis  int
+	StreamMediaDurationMillis int64
+	FirstMediaTimestampMillis int64
+	LastMediaTimestampMillis  int64
 }
 
 func ParseRecordingEndPayload(payload string) (RecordingEndPayload, error) {
@@ -181,17 +166,17 @@ func ParseRecordingEndPayload(payload string) (RecordingEndPayload, error) {
 		return RecordingEndPayload{}, fmt.Errorf("error parsing line %d of RECORDING_END payload as an int. Line contents: %s. Error: %s", 6, lines[6], err)
 	}
 
-	StreamMediaDurationMillis, err := strconv.Atoi(lines[7])
+	StreamMediaDurationMillis, err := strconv.ParseInt(lines[7], 10, 64)
 	if err != nil {
 		return RecordingEndPayload{}, fmt.Errorf("error parsing line %d of RECORDING_END payload as an int. Line contents: %s. Error: %s", 7, lines[7], err)
 	}
 
-	FirstMediaTimestampMillis, err := strconv.Atoi(lines[8])
+	FirstMediaTimestampMillis, err := strconv.ParseInt(lines[8], 10, 64)
 	if err != nil {
 		return RecordingEndPayload{}, fmt.Errorf("error parsing line %d of RECORDING_END payload as an int. Line contents: %s. Error: %s", 8, lines[8], err)
 	}
 
-	LastMediaTimestampMillis, err := strconv.Atoi(lines[9])
+	LastMediaTimestampMillis, err := strconv.ParseInt(lines[9], 10, 64)
 	if err != nil {
 		return RecordingEndPayload{}, fmt.Errorf("error parsing line %d of RECORDING_END payload as an int. Line contents: %s. Error: %s", 9, lines[9], err)
 	}
