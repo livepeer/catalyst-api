@@ -46,7 +46,18 @@ var defaultTranscodeProfiles = []clients.EncodedProfile{
 	},
 }
 
+var localBroadcasterClient clients.BroadcasterClient
+
+func init() {
+	b, err := clients.NewLocalBroadcasterClient(config.DefaultBroadcasterURL)
+	if err != nil {
+		panic(fmt.Sprintf("Error initialising Local Broadcaster Client with URL %q: %s", config.DefaultBroadcasterURL, err))
+	}
+	localBroadcasterClient = b
+}
+
 func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, durationMillis int64) error {
+	_ = config.Logger.Log("msg", "RunTranscodeProcess (v2) Beginning", "source", transcodeRequest.SourceFile, "target", transcodeRequest.UploadURL)
 
 	// Create a separate subdirectory for the transcoded renditions
 	segmentedUploadURL, err := url.Parse(transcodeRequest.UploadURL)
@@ -57,13 +68,12 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	if err != nil {
 		return fmt.Errorf("failed to parse relativeTranscodeURL: %s", err)
 	}
+
 	targetManifestOSURL := segmentedUploadURL.ResolveReference(relativeTranscodeURL)
 	// Grab some useful parameters to be used later from the TranscodeSegmentRequest
 	sourceManifestOSURL := transcodeRequest.UploadURL
 	transcodeProfiles := transcodeRequest.Profiles
 	callbackURL := transcodeRequest.CallbackURL
-
-	_ = config.Logger.Log("msg", "RunTranscodeProcess (v2) Beginning", "source", sourceManifestOSURL, "target", targetManifestOSURL)
 
 	// If Profiles haven't been overridden, use the default set
 	if len(transcodeProfiles) == 0 {
@@ -71,6 +81,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Download the "source" manifest that contains all the segments we'll be transcoding
+	println(sourceManifestOSURL)
 	sourceManifest, err := DownloadRenditionManifest(sourceManifestOSURL)
 	if err != nil {
 		return fmt.Errorf("error downloading source manifest: %s", err)
@@ -113,8 +124,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			fmt.Println("transcodeResult", tr) //remove this
 			// TODO: Upload the output segments
 		} else {
-			broadcasterClient, _ := clients.NewLocalBroadcasterClient(config.DefaultBroadcasterURL)
-			tr, err := broadcasterClient.TranscodeSegment(buf, int64(i), transcodeProfiles, durationMillis)
+			tr, err := localBroadcasterClient.TranscodeSegment(buf, int64(i), transcodeProfiles, durationMillis)
 			if err != nil {
 				return fmt.Errorf("failed to run TranscodeSegment: %s", err)
 			}

@@ -17,9 +17,9 @@ func TestItCanParseAValidRecordingEndPayload(t *testing.T) {
 	require.Equal(t, p.WritingDurationSecs, 5)
 	require.Equal(t, p.ConnectionStartTimeUnix, 6)
 	require.Equal(t, p.ConnectionEndTimeUnix, 7)
-	require.Equal(t, p.StreamMediaDurationMillis, 8)
-	require.Equal(t, p.FirstMediaTimestampMillis, 9)
-	require.Equal(t, p.LastMediaTimestampMillis, 10)
+	require.Equal(t, p.StreamMediaDurationMillis, int64(8))
+	require.Equal(t, p.FirstMediaTimestampMillis, int64(9))
+	require.Equal(t, p.LastMediaTimestampMillis, int64(10))
 }
 
 func TestItFailsToParseAnInvalidRecordingEndPayload(t *testing.T) {

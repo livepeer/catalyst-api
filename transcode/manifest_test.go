@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/grafov/m3u8"
-	"github.com/livepeer/catalyst-api/cache"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/stretchr/testify/require"
 )
 
@@ -93,7 +93,7 @@ func TestItCanGenerateAndWriteManifests(t *testing.T) {
 	err = GenerateAndUploadManifests(
 		*sourceMediaPlaylist,
 		masterManifestPath,
-		[]cache.EncodedProfile{
+		[]clients.EncodedProfile{
 			{
 				Name:   "lowlowlow",
 				FPS:    60,

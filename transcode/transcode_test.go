@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/livepeer/catalyst-api/cache"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,6 +23,14 @@ const exampleMediaManifest = `#EXTM3U
 #EXTINF:5.3340000000,
 5000.ts
 #EXT-X-ENDLIST`
+
+type StubBroadcasterClient struct {
+	tr clients.TranscodeResult
+}
+
+func (c StubBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumber int64, profiles []clients.EncodedProfile, durationMillis int64) (clients.TranscodeResult, error) {
+	return c.tr, nil
+}
 
 func TestItCanTranscode(t *testing.T) {
 	dir := os.TempDir()
@@ -63,25 +71,31 @@ func TestItCanTranscode(t *testing.T) {
 	}))
 	defer callbackServer.Close()
 
+	// Set up a fake Broadcaster
+	localBroadcasterClient = StubBroadcasterClient{}
+
 	// Check we don't get an error downloading or parsing it
 	err = RunTranscodeProcess(
-		manifestFile.Name(),
-		outputMasterManifest,
-		[]cache.EncodedProfile{
-			{
-				Name:   "lowlowlow",
-				FPS:    60,
-				Width:  800,
-				Height: 600,
+		TranscodeSegmentRequest{
+			Profiles: []clients.EncodedProfile{
+				{
+					Name:   "lowlowlow",
+					FPS:    60,
+					Width:  800,
+					Height: 600,
+				},
+				{
+					Name:   "super-high-def",
+					FPS:    30,
+					Width:  1080,
+					Height: 720,
+				},
 			},
-			{
-				Name:   "super-high-def",
-				FPS:    30,
-				Width:  1080,
-				Height: 720,
-			},
+			CallbackURL: callbackServer.URL,
+			UploadURL:   manifestFile.Name(),
 		},
-		callbackServer.URL,
+		"streamName",
+		123,
 	)
 	require.NoError(t, err)
 
