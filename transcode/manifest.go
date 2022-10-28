@@ -57,10 +57,7 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 }
 
 // Generate a Master manifest, plus one Rendition manifest for each Profile we're transcoding, then write them to storage
-func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetManifestOSURL string, transcodeProfiles []clients.EncodedProfile) error {
-	// Generate the base target OS URL to which we can append filenames / subdirectories to
-	baseURL := targetManifestOSURL[:strings.LastIndex(targetManifestOSURL, "/")]
-
+func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL string, transcodeProfiles []clients.EncodedProfile) error {
 	// Generate the master + rendition output manifests
 	masterPlaylist := m3u8.NewMasterPlaylist()
 
@@ -69,7 +66,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetManifes
 		masterPlaylist.Append(
 			fmt.Sprintf("rendition-%d/rendition.m3u8", i),
 			&m3u8.MediaPlaylist{
-				TargetDuration: 2, // TODO: Don't hardcode
+				TargetDuration: 10, // TODO: Don't hardcode
 			},
 			m3u8.VariantParams{
 				Name:       fmt.Sprintf("%d-%s", i, profile.Name),
@@ -98,14 +95,17 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetManifes
 			}
 		}
 
-		renditionManifestBaseURL := fmt.Sprintf("%s/rendition-%d", baseURL, i)
+		// Write #EXT-X-ENDLIST
+		renditionPlaylist.Close()
+
+		renditionManifestBaseURL := fmt.Sprintf("%s/rendition-%d", targetOSURL, i)
 		err = clients.UploadToOSURL(renditionManifestBaseURL, "rendition.m3u8", strings.NewReader(renditionPlaylist.String()))
 		if err != nil {
 			return fmt.Errorf("failed to upload rendition playlist: %s", err)
 		}
 	}
 
-	err := clients.UploadToOSURL(targetManifestOSURL, "", strings.NewReader(masterPlaylist.String()))
+	err := clients.UploadToOSURL(targetOSURL, "index.m3u8", strings.NewReader(masterPlaylist.String()))
 	if err != nil {
 		return fmt.Errorf("failed to upload master playlist: %s", err)
 	}

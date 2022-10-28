@@ -3,7 +3,6 @@ package transcode
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"net/url"
 
 	"github.com/livepeer/catalyst-api/clients"
@@ -64,12 +63,12 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	if err != nil {
 		return fmt.Errorf("failed to parse transcodeRequest.UploadURL: %s", err)
 	}
-	relativeTranscodeURL, err := url.Parse("transcoded/index.m3u8")
+	relativeTranscodeURL, err := url.Parse("transcoded/")
 	if err != nil {
 		return fmt.Errorf("failed to parse relativeTranscodeURL: %s", err)
 	}
 
-	targetManifestOSURL := segmentedUploadURL.ResolveReference(relativeTranscodeURL)
+	targetOSURL := segmentedUploadURL.ResolveReference(relativeTranscodeURL)
 	// Grab some useful parameters to be used later from the TranscodeSegmentRequest
 	sourceManifestOSURL := transcodeRequest.UploadURL
 	transcodeProfiles := transcodeRequest.Profiles
@@ -93,19 +92,12 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Iterate through the segment URLs and transcode them
-	for i, u := range sourceSegmentURLs {
+	// TODO: Some level of parallelisation once we're happy this works well
+	for segmentIndex, u := range sourceSegmentURLs {
 		rc, err := clients.DownloadOSURL(u)
 		if err != nil {
 			return fmt.Errorf("failed to download source segment %q: %s", u, err)
 		}
-
-		// Download and read the segment, log the size in bytes and discard for now
-		buf := &bytes.Buffer{}
-		nRead, err := io.Copy(buf, rc)
-		if err != nil {
-			return fmt.Errorf("failed to read source segment data %q: %s", u, err)
-		}
-		_ = config.Logger.Log("msg", "downloaded source segment", "url", u, "size_bytes", nRead, "error", err)
 
 		// If an AccessToken is provided via the request for transcode, then use remote Broadcasters.
 		// Otherwise, use the local harcoded Broadcaster.
@@ -116,34 +108,60 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			}
 			broadcasterClient, _ := clients.NewRemoteBroadcasterClient(creds)
 
-			tr, err := broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(buf, int64(i), transcodeProfiles, streamName, durationMillis)
+			tr, err := broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(rc, int64(segmentIndex), transcodeProfiles, streamName, durationMillis)
 			if err != nil {
 				return fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
 			}
 			fmt.Println("transcodeResult", tr) //remove this
 			// TODO: Upload the output segments
 		} else {
-			tr, err := localBroadcasterClient.TranscodeSegment(buf, int64(i), transcodeProfiles, durationMillis)
+			tr, err := localBroadcasterClient.TranscodeSegment(rc, int64(segmentIndex), transcodeProfiles, durationMillis)
 			if err != nil {
 				return fmt.Errorf("failed to run TranscodeSegment: %s", err)
 			}
-			fmt.Println("transcodeResult", tr) //remove this
-			// TODO: Upload the output segments
+
+			for _, transcodedSegment := range tr.Renditions {
+				renditionIndex := getProfileIndex(transcodeProfiles, transcodedSegment.Name)
+				if renditionIndex == -1 {
+					return fmt.Errorf("failed to find profile with name %q while parsing rendition segment", transcodedSegment.Name)
+				}
+
+				relativeRenditionPath := fmt.Sprintf("rendition-%d/", renditionIndex)
+				relativeRenditionURL, err := url.Parse(relativeRenditionPath)
+				if err != nil {
+					return fmt.Errorf("error building rendition segment URL %q: %s", relativeRenditionPath, err)
+				}
+				renditionURL := targetOSURL.ResolveReference(relativeRenditionURL)
+
+				err = clients.UploadToOSURL(renditionURL.String(), fmt.Sprintf("%d.ts", segmentIndex), bytes.NewReader(transcodedSegment.MediaData))
+				if err != nil {
+					return fmt.Errorf("failed to upload master playlist: %s", err)
+				}
+			}
 		}
 
-		var completedRatio = calculateCompletedRatio(len(sourceSegmentURLs), i+1)
+		var completedRatio = calculateCompletedRatio(len(sourceSegmentURLs), segmentIndex+1)
 		if err = clients.DefaultCallbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, completedRatio); err != nil {
 			_ = config.Logger.Log("msg", "failed to send transcode status callback", "url", callbackURL, "error", err)
 		}
 	}
 
 	// Build the manifests and push them to storage
-	err = GenerateAndUploadManifests(sourceManifest, targetManifestOSURL.String(), transcodeProfiles)
+	err = GenerateAndUploadManifests(sourceManifest, targetOSURL.String(), transcodeProfiles)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func getProfileIndex(transcodeProfiles []clients.EncodedProfile, profile string) int {
+	for i, p := range transcodeProfiles {
+		if p.Name == profile {
+			return i
+		}
+	}
+	return -1
 }
 
 func calculateCompletedRatio(totalSegments, completedSegments int) float64 {
