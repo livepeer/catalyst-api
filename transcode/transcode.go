@@ -81,7 +81,6 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Download the "source" manifest that contains all the segments we'll be transcoding
-	println(sourceManifestOSURL)
 	sourceManifest, err := DownloadRenditionManifest(sourceManifestOSURL)
 	if err != nil {
 		return fmt.Errorf("error downloading source manifest: %s", err)
