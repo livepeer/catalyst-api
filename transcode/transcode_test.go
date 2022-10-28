@@ -105,6 +105,7 @@ func TestItCanTranscode(t *testing.T) {
 				},
 			},
 			CallbackURL: callbackServer.URL,
+			SourceFile:  manifestFile.Name(),
 			UploadURL:   manifestFile.Name(),
 		},
 		"streamName",
