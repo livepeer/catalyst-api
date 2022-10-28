@@ -111,7 +111,6 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 				_ = config.Logger.Log("msg", "Failed to send Error callback", "err", err.Error(), "stream_name", p.StreamName)
 			}
 		} else {
-			// TODO: Fill in with real values once we have them back from the transcoder
 			inputInfo := clients.InputVideo{
 				Format:    "mp4", // hardcoded as mist stream is in dtsc format.
 				Duration:  float64(p.StreamMediaDurationMillis) / 1000.0,
