@@ -31,16 +31,16 @@ type MistClient struct {
 
 type MistStreamInfoTrack struct {
 	Codec   string `json:"codec,omitempty"`
-	Firstms int    `json:"firstms,omitempty"`
+	Firstms int64  `json:"firstms,omitempty"`
 	Idx     int    `json:"idx,omitempty"`
 	Init    string `json:"init,omitempty"`
 	Lastms  int64  `json:"lastms,omitempty"`
 	Maxbps  int    `json:"maxbps,omitempty"`
 	Trackid int    `json:"trackid,omitempty"`
 	Type    string `json:"type,omitempty"`
+	Bps     int    `json:"bps,omitempty"`
 
 	// Audio Only Fields
-	Bps      int `json:"bps,omitempty"`
 	Channels int `json:"channels,omitempty"`
 	Rate     int `json:"rate,omitempty"`
 	Size     int `json:"size,omitempty"`
