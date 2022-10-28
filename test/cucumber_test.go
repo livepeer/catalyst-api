@@ -92,9 +92,9 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 			}
 		}
 
-		stepContext.Mist.Shutdown(ctx)
-		stepContext.Studio.Shutdown(ctx)
-		stepContext.MinioAdmin.ServiceStop(ctx)
+		_ = stepContext.Mist.Shutdown(ctx)
+		_ = stepContext.Studio.Shutdown(ctx)
+		_ = stepContext.MinioAdmin.ServiceStop(ctx)
 		return ctx, nil
 	})
 }

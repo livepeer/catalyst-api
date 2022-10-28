@@ -18,12 +18,12 @@ var minioAddress = "127.0.0.1:9000"
 func (s *StepContext) StartStudioAPI(listen string) error {
 	router := httprouter.New()
 	router.POST("/cb", func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-		io.WriteString(w, "")
+		_, _ = io.WriteString(w, "")
 	})
 
 	s.Studio = http.Server{Addr: listen, Handler: router}
 	go func() {
-		s.Studio.ListenAndServe()
+		_ = s.Studio.ListenAndServe()
 	}()
 
 	return nil
@@ -57,17 +57,17 @@ func (s *StepContext) StartMist(listen string) error {
 			for name, value := range stream {
 				source := value.(map[string]interface{})
 				streamName := name
-				io.WriteString(w, `{"authorize":{"status":"OK"},"streams":{"`+streamName+`":{"name":"`+streamName+`","source":"`+source["source"].(string)+`"},"incomplete list":1}}`)
+				_, _ = io.WriteString(w, `{"authorize":{"status":"OK"},"streams":{"`+streamName+`":{"name":"`+streamName+`","source":"`+source["source"].(string)+`"},"incomplete list":1}}`)
 				break
 			}
 		} else if push_start != nil {
-			io.WriteString(w, `{"authorize":{"status":"OK"}}`)
+			_, _ = io.WriteString(w, `{"authorize":{"status":"OK"}}`)
 		}
 	})
 
 	s.Mist = http.Server{Addr: listen, Handler: router}
 	go func() {
-		s.Mist.ListenAndServe()
+		_ = s.Mist.ListenAndServe()
 	}()
 
 	return nil
