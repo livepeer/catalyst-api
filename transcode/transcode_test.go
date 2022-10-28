@@ -70,8 +70,22 @@ func TestItCanTranscode(t *testing.T) {
 	}))
 	defer callbackServer.Close()
 
-	// Set up a fake Broadcaster
-	localBroadcasterClient = StubBroadcasterClient{}
+	// Set up a fake Broadcaster that returns the rendition segments we'd expect based on the
+	// transcode request we send in the next step
+	localBroadcasterClient = StubBroadcasterClient{
+		tr: clients.TranscodeResult{
+			Renditions: []*clients.RenditionSegment{
+				{
+					Name:      "lowlowlow",
+					MediaData: []byte{},
+				},
+				{
+					Name:      "super-high-def",
+					MediaData: []byte{},
+				},
+			},
+		},
+	}
 
 	// Check we don't get an error downloading or parsing it
 	err = RunTranscodeProcess(
