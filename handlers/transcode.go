@@ -37,7 +37,7 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 
 		// TODO: Do this asynchronously and pass valid stream-name and input file duration
 		//	 when the transcode api endpoint is accessed (only used for testing for now)
-		err = transcode.RunTranscodeProcess(transcodeRequest, "", 0)
+		err = transcode.RunTranscodeProcess(transcodeRequest, "")
 		if err != nil {
 			errors.WriteHTTPInternalServerError(w, "Error running Transcode process", err)
 		}
