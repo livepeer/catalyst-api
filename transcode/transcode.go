@@ -98,7 +98,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		if err != nil {
 			return fmt.Errorf("failed to download source segment %q: %s", u, err)
 		}
-
+		var tr clients.TranscodeResult
 		// If an AccessToken is provided via the request for transcode, then use remote Broadcasters.
 		// Otherwise, use the local harcoded Broadcaster.
 		if transcodeRequest.AccessToken != "" {
@@ -108,35 +108,36 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			}
 			broadcasterClient, _ := clients.NewRemoteBroadcasterClient(creds)
 
-			tr, err := broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(rc, int64(segmentIndex), transcodeProfiles, streamName, u.DurationMillis)
+			tr, err = broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(rc, int64(segmentIndex), transcodeProfiles, streamName, u.DurationMillis)
 			if err != nil {
 				return fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
 			}
 			fmt.Println("transcodeResult", tr) //remove this
 			// TODO: Upload the output segments
 		} else {
-			tr, err := localBroadcasterClient.TranscodeSegment(rc, int64(segmentIndex), transcodeProfiles, u.DurationMillis)
+			tr, err = localBroadcasterClient.TranscodeSegment(rc, int64(segmentIndex), transcodeProfiles, u.DurationMillis)
 			if err != nil {
 				return fmt.Errorf("failed to run TranscodeSegment: %s", err)
 			}
 
-			for _, transcodedSegment := range tr.Renditions {
-				renditionIndex := getProfileIndex(transcodeProfiles, transcodedSegment.Name)
-				if renditionIndex == -1 {
-					return fmt.Errorf("failed to find profile with name %q while parsing rendition segment", transcodedSegment.Name)
-				}
+		}
 
-				relativeRenditionPath := fmt.Sprintf("rendition-%d/", renditionIndex)
-				relativeRenditionURL, err := url.Parse(relativeRenditionPath)
-				if err != nil {
-					return fmt.Errorf("error building rendition segment URL %q: %s", relativeRenditionPath, err)
-				}
-				renditionURL := targetOSURL.ResolveReference(relativeRenditionURL)
+		for _, transcodedSegment := range tr.Renditions {
+			renditionIndex := getProfileIndex(transcodeProfiles, transcodedSegment.Name)
+			if renditionIndex == -1 {
+				return fmt.Errorf("failed to find profile with name %q while parsing rendition segment", transcodedSegment.Name)
+			}
 
-				err = clients.UploadToOSURL(renditionURL.String(), fmt.Sprintf("%d.ts", segmentIndex), bytes.NewReader(transcodedSegment.MediaData))
-				if err != nil {
-					return fmt.Errorf("failed to upload master playlist: %s", err)
-				}
+			relativeRenditionPath := fmt.Sprintf("rendition-%d/", renditionIndex)
+			relativeRenditionURL, err := url.Parse(relativeRenditionPath)
+			if err != nil {
+				return fmt.Errorf("error building rendition segment URL %q: %s", relativeRenditionPath, err)
+			}
+			renditionURL := targetOSURL.ResolveReference(relativeRenditionURL)
+
+			err = clients.UploadToOSURL(renditionURL.String(), fmt.Sprintf("%d.ts", segmentIndex), bytes.NewReader(transcodedSegment.MediaData))
+			if err != nil {
+				return fmt.Errorf("failed to upload master playlist: %s", err)
 			}
 		}
 
