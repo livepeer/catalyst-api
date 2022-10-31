@@ -97,7 +97,32 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 	}
 
 	go func() {
-		err := transcode.RunTranscodeProcess(transcodeRequest, p.StreamName)
+		inputInfo := clients.InputVideo{
+			Format:    "mp4", // hardcoded as mist stream is in dtsc format.
+			Duration:  float64(p.StreamMediaDurationMillis) / 1000.0,
+			SizeBytes: p.WrittenBytes,
+		}
+		for _, track := range streamInfo.Meta.Tracks {
+			inputInfo.Tracks = append(inputInfo.Tracks, clients.InputTrack{
+				Type:         track.Type,
+				Codec:        track.Codec,
+				Bitrate:      track.Bps * 8,
+				DurationSec:  float64(track.Lastms-track.Firstms) / 1000.0,
+				StartTimeSec: float64(track.Firstms) / 1000.0,
+				VideoTrack: clients.VideoTrack{
+					Width:  track.Width,
+					Height: track.Height,
+					FPS:    float64(track.Fpks) / 1000.0,
+				},
+				AudioTrack: clients.AudioTrack{
+					Channels:   track.Channels,
+					SampleRate: track.Rate,
+					SampleBits: track.Size,
+				},
+			})
+		}
+
+		err := transcode.RunTranscodeProcess(transcodeRequest, p.StreamName, inputInfo)
 		if err != nil {
 			_ = config.Logger.Log(
 				"msg", "RunTranscodeProcess returned an error",
@@ -109,40 +134,6 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 
 			if err := clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, "Transcoding Failed: "+err.Error()); err != nil {
 				_ = config.Logger.Log("msg", "Failed to send Error callback", "err", err.Error(), "stream_name", p.StreamName)
-			}
-		} else {
-			inputInfo := clients.InputVideo{
-				Format:    "mp4", // hardcoded as mist stream is in dtsc format.
-				Duration:  float64(p.StreamMediaDurationMillis) / 1000.0,
-				SizeBytes: p.WrittenBytes,
-			}
-			for _, track := range streamInfo.Meta.Tracks {
-				inputInfo.Tracks = append(inputInfo.Tracks, clients.InputTrack{
-					Type:         track.Type,
-					Codec:        track.Codec,
-					Bitrate:      track.Bps * 8,
-					DurationSec:  float64(track.Lastms-track.Firstms) / 1000.0,
-					StartTimeSec: float64(track.Firstms) / 1000.0,
-					VideoTrack: clients.VideoTrack{
-						Width:  track.Width,
-						Height: track.Height,
-						FPS:    float64(track.Fpks) / 1000.0,
-					},
-					AudioTrack: clients.AudioTrack{
-						Channels:   track.Channels,
-						SampleRate: track.Rate,
-						SampleBits: track.Size,
-					},
-				})
-			}
-			err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(
-				callbackUrl,
-				inputInfo,
-				[]clients.OutputVideo{},
-			)
-
-			if err != nil {
-				_ = config.Logger.Log("msg", "Failed to send Completed callback", "err", err.Error(), "stream_name", p.StreamName)
 			}
 		}
 	}()
