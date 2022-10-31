@@ -59,7 +59,7 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 			urls,
 			SourceSegment{
 				URL:            u,
-				DurationMillis: int64(segment.Duration * 1000),
+				DurationMillis: int64(segment.Duration),
 			},
 		)
 	}
