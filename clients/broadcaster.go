@@ -96,6 +96,8 @@ func transcodeSegment(inputSegment io.Reader, sequenceNumber, mediaDurationMilli
 	if err != nil {
 		return t, fmt.Errorf("http do(%s): %v", requestURL, err)
 	}
+	defer res.Body.Close()
+
 	if !httpOk(res.StatusCode) {
 		return t, fmt.Errorf("http POST(%s) returned %d %s", requestURL, res.StatusCode, res.Status)
 	}
