@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/cucumber/godog"
@@ -17,9 +18,23 @@ var app *exec.Cmd
 
 func init() {
 	// Build the app
-	build := exec.Command("go", "build", "-o", "test/app")
-	build.Dir = ".."
-	if buildErr := build.Run(); buildErr != nil {
+	buildApp := exec.Command("go", "build", "-o", "test/app")
+	buildApp.Dir = ".."
+	if buildErr := buildApp.Run(); buildErr != nil {
+		panic(buildErr)
+	}
+
+	// Get minio
+	getMinio := exec.Command("go", "get", "github.com/minio/minio")
+	getMinio.Dir = ".."
+	if buildErr := getMinio.Run(); buildErr != nil {
+		panic(buildErr)
+	}
+
+	// Build minio
+	buildMinio := exec.Command("go", "build", "-o", "test/minio", "github.com/minio/minio")
+	buildMinio.Dir = ".."
+	if buildErr := buildMinio.Run(); buildErr != nil {
 		panic(buildErr)
 	}
 
@@ -55,9 +70,15 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	}
 
 	ctx.Step(`^the VOD API is running$`, startApp)
-	ctx.Step(`^I call the "([^"]*)" endpoint and receive a response within "(\d+)" seconds$`, stepContext.CallAPI)
-	ctx.Step(`^I receive an HTTP "(\d+)".*`, stepContext.CheckHTTPResponseCode)
-	ctx.Step(`^I receive an HTTP body '([^']*)'$`, stepContext.CheckHTTPResponseBody)
+	ctx.Step(`^the Client app is authenticated$`, stepContext.SetAuthHeaders)
+	ctx.Step(`^an object store is available$`, stepContext.StartObjectStore)
+	ctx.Step(`^Studio API server is running at "([^"]*)"$`, stepContext.StartStudioAPI)
+	ctx.Step(`^Mist is running at "([^"]*)"$`, stepContext.StartMist)
+
+	ctx.Step(`^I query the "([^"]*)" endpoint$`, stepContext.CreateGetRequest)
+	ctx.Step(`^I submit to the "([^"]*)" endpoint with "([^"]*)"$`, stepContext.CreatePostRequest)
+	ctx.Step(`^receive a response within "(\d+)" seconds$`, stepContext.CallAPI)
+	ctx.Step(`^I get an HTTP response with code "([^"]*)" and the following body "([^"]*)"$`, stepContext.CheckHTTPResponseCodeAndBody)
 
 	ctx.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
 		if app != nil && app.Process != nil {
@@ -70,6 +91,27 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 				}
 			}
 		}
+
+		_ = stepContext.Mist.Shutdown(ctx)
+		_ = stepContext.Studio.Shutdown(ctx)
+		_ = stepContext.MinioAdmin.ServiceStop(ctx)
 		return ctx, nil
 	})
+}
+
+func TestFeatures(t *testing.T) {
+	suite := godog.TestSuite{
+		ScenarioInitializer: InitializeScenario,
+		Options: &godog.Options{
+			TestingT:      t,
+			Strict:        true,
+			StopOnFailure: true,
+			Format:        "cucumber",
+			Paths:         []string{"features"},
+		},
+	}
+
+	if suite.Run() != 0 {
+		t.Fatal("non-zero status returned, failed to run feature tests")
+	}
 }
