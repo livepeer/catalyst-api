@@ -23,7 +23,7 @@ func ListenAndServe(apiPort, mistPort, mistHttpPort int, apiToken string) error 
 	router := NewCatalystAPIRouter(mc, apiToken)
 
 	_ = config.Logger.Log(
-		"msg", "Starting Catalyst API",
+		"msg", "Starting Catalyst API!",
 		"version", config.Version,
 		"host", listen,
 	)
