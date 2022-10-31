@@ -88,9 +88,7 @@ func TestItParsesManifestAndConvertsRelativeURLs(t *testing.T) {
 
 	require.Equal(t, 2, len(us))
 	require.Equal(t, "s3+https://REDACTED:REDACTED@storage.googleapis.com/something/0.ts", us[0].URL)
-	require.Equal(t, int64(10416), us[0].DurationMillis)
 	require.Equal(t, "s3+https://REDACTED:REDACTED@storage.googleapis.com/something/5000.ts", us[1].URL)
-	require.Equal(t, int64(5334), us[1].DurationMillis)
 }
 
 func TestItCanGenerateAndWriteManifests(t *testing.T) {

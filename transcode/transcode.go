@@ -91,6 +91,9 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return fmt.Errorf("error generating source segment URLs: %s", err)
 	}
 
+	// Generate a unique ID to use when talking to the Broadcaster
+	manifestID := config.RandomTrailer()
+
 	// Iterate through the segment URLs and transcode them
 	for segmentIndex, u := range sourceSegmentURLs {
 		rc, err := clients.DownloadOSURL(u.URL)
@@ -114,7 +117,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			fmt.Println("transcodeResult", tr) //remove this
 			// TODO: Upload the output segments
 		} else {
-			tr, err := localBroadcasterClient.TranscodeSegment(rc, int64(segmentIndex), transcodeProfiles, u.DurationMillis)
+			tr, err := localBroadcasterClient.TranscodeSegment(rc, int64(segmentIndex), transcodeProfiles, u.DurationMillis, manifestID)
 			if err != nil {
 				return fmt.Errorf("failed to run TranscodeSegment: %s", err)
 			}

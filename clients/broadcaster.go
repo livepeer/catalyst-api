@@ -61,19 +61,16 @@ type EncodedProfile struct {
 	ChromaFormat int32  `json:"chromaFormat,omitempty"`
 }
 
+var client = &http.Client{
+	Timeout: TRANSCODE_TIMEOUT,
+}
+
 // TranscodeSegment sends media to Livepeer network and returns rendition segments
 // If manifestId == "" one will be created and deleted after use, pass real value to reuse across multiple calls
 func transcodeSegment(inputSegment io.Reader, sequenceNumber, mediaDurationMillis int64, broadcasterURL url.URL, manifestId string, profiles []EncodedProfile, transcodeConfigHeader string) (TranscodeResult, error) {
 	t := TranscodeResult{}
 
 	// Send segment to be transcoded
-	client := &http.Client{
-		Timeout: TRANSCODE_TIMEOUT,
-		Transport: &http.Transport{
-			DisableKeepAlives:  true,
-			DisableCompression: true,
-		},
-	}
 	requestURL, err := broadcasterURL.Parse(fmt.Sprintf("live/%s/%d.ts", manifestId, sequenceNumber))
 	if err != nil {
 		return t, fmt.Errorf("appending stream to broadcaster url %s: %v", broadcasterURL.String(), err)
@@ -82,8 +79,6 @@ func transcodeSegment(inputSegment io.Reader, sequenceNumber, mediaDurationMilli
 	if err != nil {
 		return t, fmt.Errorf("NewRequest POST for url %s: %v", requestURL.String(), err)
 	}
-	req.Close = true
-	req.ContentLength = -1
 	req.TransferEncoding = append(req.TransferEncoding, "chunked")
 	req.Header.Add("Content-Type", "video/mp2t")
 	req.Header.Add("Accept", "multipart/mixed")
