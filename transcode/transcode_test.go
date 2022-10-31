@@ -108,7 +108,6 @@ func TestItCanTranscode(t *testing.T) {
 			UploadURL:   manifestFile.Name(),
 		},
 		"streamName",
-		123,
 	)
 	require.NoError(t, err)
 

@@ -97,7 +97,7 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 	}
 
 	go func() {
-		err := transcode.RunTranscodeProcess(transcodeRequest, p.StreamName, p.StreamMediaDurationMillis)
+		err := transcode.RunTranscodeProcess(transcodeRequest, p.StreamName)
 		if err != nil {
 			_ = config.Logger.Log(
 				"msg", "RunTranscodeProcess returned an error",

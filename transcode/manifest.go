@@ -36,9 +36,14 @@ func DownloadRenditionManifest(sourceManifestOSURL string) (m3u8.MediaPlaylist, 
 	return *mediaPlaylist, nil
 }
 
+type SourceSegment struct {
+	URL            string
+	DurationMillis int64
+}
+
 // Loop over each segment and convert it from a relative to a full ObjectStore-compatible URL
-func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist) ([]string, error) {
-	var urls []string
+func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist) ([]SourceSegment, error) {
+	var urls []SourceSegment
 	for _, segment := range manifest.Segments {
 		// The segments list is a ring buffer - see https://github.com/grafov/m3u8/issues/140
 		// and so we only know we've hit the end of the list when we find a nil element
@@ -50,7 +55,13 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 		if err != nil {
 			return nil, err
 		}
-		urls = append(urls, u)
+		urls = append(
+			urls,
+			SourceSegment{
+				URL:            u,
+				DurationMillis: int64(segment.Duration * 1000),
+			},
+		)
 	}
 
 	return urls, nil

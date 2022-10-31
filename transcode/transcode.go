@@ -55,7 +55,7 @@ func init() {
 	localBroadcasterClient = b
 }
 
-func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, durationMillis int64) error {
+func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string) error {
 	_ = config.Logger.Log("msg", "RunTranscodeProcess (v2) Beginning", "source", transcodeRequest.SourceFile, "target", transcodeRequest.UploadURL)
 
 	// Create a separate subdirectory for the transcoded renditions
@@ -94,7 +94,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// Iterate through the segment URLs and transcode them
 	// TODO: Some level of parallelisation once we're happy this works well
 	for segmentIndex, u := range sourceSegmentURLs {
-		rc, err := clients.DownloadOSURL(u)
+		rc, err := clients.DownloadOSURL(u.URL)
 		if err != nil {
 			return fmt.Errorf("failed to download source segment %q: %s", u, err)
 		}
@@ -108,14 +108,14 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			}
 			broadcasterClient, _ := clients.NewRemoteBroadcasterClient(creds)
 
-			tr, err := broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(rc, int64(segmentIndex), transcodeProfiles, streamName, durationMillis)
+			tr, err := broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(rc, int64(segmentIndex), transcodeProfiles, streamName, u.DurationMillis)
 			if err != nil {
 				return fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
 			}
 			fmt.Println("transcodeResult", tr) //remove this
 			// TODO: Upload the output segments
 		} else {
-			tr, err := localBroadcasterClient.TranscodeSegment(rc, int64(segmentIndex), transcodeProfiles, durationMillis)
+			tr, err := localBroadcasterClient.TranscodeSegment(rc, int64(segmentIndex), transcodeProfiles, u.DurationMillis)
 			if err != nil {
 				return fmt.Errorf("failed to run TranscodeSegment: %s", err)
 			}
