@@ -112,7 +112,6 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 }
 
 func (d *CatalystAPIHandlersCollection) processUploadVOD(streamName, sourceURL, targetURL string) error {
-	// TODO: remove this logic to force input URLs to mp4/mov format
 	sourceURL = "mp4:" + sourceURL
 	if err := d.MistClient.AddStream(streamName, sourceURL); err != nil {
 		return err

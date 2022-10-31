@@ -41,8 +41,6 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 		if err != nil {
 			errors.WriteHTTPInternalServerError(w, "Error running Transcode process", err)
 		}
-
-		// TODO: Success callback to Studio
 	}
 }
 

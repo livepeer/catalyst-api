@@ -77,7 +77,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		masterPlaylist.Append(
 			fmt.Sprintf("rendition-%d/rendition.m3u8", i),
 			&m3u8.MediaPlaylist{
-				TargetDuration: 10, // TODO: Don't hardcode
+				TargetDuration: sourceManifest.TargetDuration,
 			},
 			m3u8.VariantParams{
 				Name:       fmt.Sprintf("%d-%s", i, profile.Name),
