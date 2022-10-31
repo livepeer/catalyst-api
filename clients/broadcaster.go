@@ -10,7 +10,9 @@ import (
 	"time"
 )
 
-const TRANSCODE_TIMEOUT = 10 * time.Second
+// Broadcaster-node already has built-in retry logic. We want to rely on that and set generous timeout here:
+const TRANSCODE_TIMEOUT = 3 * time.Minute
+
 const API_TIMEOUT = 10 * time.Second
 
 type TranscodeResult struct {
