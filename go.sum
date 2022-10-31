@@ -787,8 +787,8 @@ github.com/minio/mc v0.0.0-20221019004256-8493f97e042f h1:KCnteVGtNIDAgxYRjaxTqX
 github.com/minio/mc v0.0.0-20221019004256-8493f97e042f/go.mod h1:KjPIICV48Wsziu4PceC+aiq3m8c8dbtALD6I0yEEqmw=
 github.com/minio/md5-simd v1.1.2 h1:Gdi1DZK69+ZVMoNHRXJyNcxrMA4dSxoYHZSQbirFg34=
 github.com/minio/md5-simd v1.1.2/go.mod h1:MzdKDxYpY2BT9XQFocsiZf/NKVtR7nkE4RoEpN+20RM=
-github.com/minio/minio v0.0.0-20221028094843-dc92bb464668 h1:pOs7rqpDJzRezSB530Rb7vq8UuxGWCl9c9xktVxdLjk=
-github.com/minio/minio v0.0.0-20221028094843-dc92bb464668/go.mod h1:bCBKsfwzIKdi1t/dfl6M6XVIjmsLD7p+2/X/qVKyinU=
+github.com/minio/minio v0.0.0-20221031142750-ecc932d5ddb7 h1:k9suzbLX3Eq/eCGeb1GAOKKb/aPPCU5uzdtZQkSU7BY=
+github.com/minio/minio v0.0.0-20221031142750-ecc932d5ddb7/go.mod h1:bCBKsfwzIKdi1t/dfl6M6XVIjmsLD7p+2/X/qVKyinU=
 github.com/minio/minio-go/v7 v7.0.41/go.mod h1:nCrRzjoSUQh8hgKKtu3Y708OLvRLtuASMg2/nvmbarw=
 github.com/minio/minio-go/v7 v7.0.43-0.20221021202758-c6319beb6b27 h1:EqNpIeNzjGQjAe9Ih5gVW/4PccAse9+aa46hAoQSCQY=
 github.com/minio/minio-go/v7 v7.0.43-0.20221021202758-c6319beb6b27/go.mod h1:nCrRzjoSUQh8hgKKtu3Y708OLvRLtuASMg2/nvmbarw=

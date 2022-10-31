@@ -105,7 +105,7 @@ func TestItCanGenerateAndWriteManifests(t *testing.T) {
 	require.NoError(t, err)
 
 	// Do the thing
-	err = GenerateAndUploadManifests(
+	masterManifestURL, err := GenerateAndUploadManifests(
 		*sourceMediaPlaylist,
 		outputDir,
 		[]clients.EncodedProfile{
@@ -128,6 +128,7 @@ func TestItCanGenerateAndWriteManifests(t *testing.T) {
 	// Confirm we wrote out the master manifest that we expected
 	masterManifest := filepath.Join(outputDir, "index.m3u8")
 	require.FileExists(t, masterManifest)
+	require.Equal(t, masterManifest, masterManifestURL)
 	masterManifestContents, err := os.ReadFile(masterManifest)
 	require.NoError(t, err)
 

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/transcode"
 	"github.com/xeipuuv/gojsonschema"
@@ -35,9 +36,8 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 			return
 		}
 
-		// TODO: Do this asynchronously and pass valid stream-name and input file duration
-		//	 when the transcode api endpoint is accessed (only used for testing for now)
-		err = transcode.RunTranscodeProcess(transcodeRequest, "")
+		// TODO: Do this asynchronously and pass valid parameters
+		err = transcode.RunTranscodeProcess(transcodeRequest, "", clients.InputVideo{})
 		if err != nil {
 			errors.WriteHTTPInternalServerError(w, "Error running Transcode process", err)
 		}
