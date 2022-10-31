@@ -92,7 +92,6 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Iterate through the segment URLs and transcode them
-	// TODO: Some level of parallelisation once we're happy this works well
 	for segmentIndex, u := range sourceSegmentURLs {
 		rc, err := clients.DownloadOSURL(u.URL)
 		if err != nil {
