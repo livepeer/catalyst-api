@@ -28,7 +28,7 @@ type StubBroadcasterClient struct {
 	tr clients.TranscodeResult
 }
 
-func (c StubBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumber int64, profiles []clients.EncodedProfile, durationMillis int64) (clients.TranscodeResult, error) {
+func (c StubBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumber int64, profiles []clients.EncodedProfile, durationMillis int64, manifestID string) (clients.TranscodeResult, error) {
 	return c.tr, nil
 }
 
