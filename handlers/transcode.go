@@ -36,8 +36,9 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 			return
 		}
 
-		// TODO: Do this asynchronously and pass valid parameters
-		err = transcode.RunTranscodeProcess(transcodeRequest, "", clients.InputVideo{})
+		// Note: This is no longer used pipeline stage
+		// TODO: Revisit later with better mistserver integration
+		_, err = transcode.RunTranscodeProcess(transcodeRequest, "", clients.InputVideo{})
 		if err != nil {
 			errors.WriteHTTPInternalServerError(w, "Error running Transcode process", err)
 		}

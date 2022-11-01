@@ -88,7 +88,7 @@ func TestItCanTranscode(t *testing.T) {
 	}
 
 	// Check we don't get an error downloading or parsing it
-	err = RunTranscodeProcess(
+	_, err = RunTranscodeProcess(
 		TranscodeSegmentRequest{
 			Profiles: []clients.EncodedProfile{
 				{
