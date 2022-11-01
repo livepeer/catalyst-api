@@ -9,7 +9,7 @@ require (
 	github.com/kylelemons/godebug v1.1.0
 	github.com/livepeer/go-tools v0.0.0-20220926110222-2ebcbb5685b4
 	github.com/livepeer/livepeer-data v0.4.22
-	github.com/minio/madmin-go v1.6.6
+	github.com/minio/madmin-go v1.7.2
 	github.com/stretchr/testify v1.8.0
 	github.com/xeipuuv/gojsonschema v1.2.0
 	sigs.k8s.io/yaml v1.3.0
