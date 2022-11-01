@@ -77,7 +77,6 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// Grab some useful parameters to be used later from the TranscodeSegmentRequest
 	sourceManifestOSURL := transcodeRequest.UploadURL
 	transcodeProfiles := transcodeRequest.Profiles
-	callbackURL := transcodeRequest.CallbackURL
 
 	// If Profiles haven't been overridden, use the default set
 	if len(transcodeProfiles) == 0 {
@@ -111,9 +110,6 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	// Generate a unique ID to use when talking to the Broadcaster
 	manifestID := config.RandomTrailer()
-
-	// Iterate through the segment URLs and transcode them
-
 	// Use channel to queue segments
 	queue := make(chan segmentInfo, len(sourceSegmentURLs))
 	for segmentIndex, u := range sourceSegmentURLs {
@@ -122,70 +118,11 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	close(queue)
 	// Use channel for recieving the errors
 	errors := make(chan error, 100)
-	var completed sync.WaitGroup
-	// Single worker code :
-	transcodeSegment := func() {
-		defer completed.Done()
-		for segment := range queue {
-			rc, err := clients.DownloadOSURL(segment.Input.URL)
-			if err != nil {
-				errors <- fmt.Errorf("failed to download source segment %q: %s", segment.Input, err)
-				return
-			}
-			var tr clients.TranscodeResult
-			// If an AccessToken is provided via the request for transcode, then use remote Broadcasters.
-			// Otherwise, use the local harcoded Broadcaster.
-			if transcodeRequest.AccessToken != "" {
-				creds := clients.Credentials{
-					AccessToken:  transcodeRequest.AccessToken,
-					CustomAPIURL: transcodeRequest.TranscodeAPIUrl,
-				}
-				broadcasterClient, _ := clients.NewRemoteBroadcasterClient(creds)
-				// TODO: failed to run TranscodeSegmentWithRemoteBroadcaster: CreateStream(): http POST(https://origin.livepeer.com/api/stream) returned 422 422 Unprocessable Entity
-				tr, err = broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(rc, int64(segment.Index), transcodeProfiles, streamName, segment.Input.DurationMillis)
-				if err != nil {
-					errors <- fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
-					return
-				}
-			} else {
-				tr, err = localBroadcasterClient.TranscodeSegment(rc, int64(segment.Index), transcodeProfiles, segment.Input.DurationMillis, manifestID)
-				if err != nil {
-					errors <- fmt.Errorf("failed to run TranscodeSegment: %s", err)
-					return
-				}
-			}
-			for _, transcodedSegment := range tr.Renditions {
-				renditionIndex := getProfileIndex(transcodeProfiles, transcodedSegment.Name)
-				if renditionIndex == -1 {
-					errors <- fmt.Errorf("failed to find profile with name %q while parsing rendition segment", transcodedSegment.Name)
-					return
-				}
-
-				relativeRenditionPath := fmt.Sprintf("rendition-%d/", renditionIndex)
-				relativeRenditionURL, err := url.Parse(relativeRenditionPath)
-				if err != nil {
-					errors <- fmt.Errorf("error building rendition segment URL %q: %s", relativeRenditionPath, err)
-					return
-				}
-				renditionURL := targetOSURL.ResolveReference(relativeRenditionURL)
-
-				err = clients.UploadToOSURL(renditionURL.String(), fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData))
-				if err != nil {
-					errors <- fmt.Errorf("failed to upload master playlist: %s", err)
-					return
-				}
-			}
-
-			var completedRatio = calculateCompletedRatio(len(sourceSegmentURLs), segment.Index+1)
-			if err = clients.DefaultCallbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, completedRatio); err != nil {
-				_ = config.Logger.Log("msg", "failed to send transcode status callback", "url", callbackURL, "error", err)
-			}
-		}
-	}
 	// Start number of workers in parallel
+	var completed sync.WaitGroup
 	completed.Add(config.TranscodingParallelJobs)
 	for index := 0; index < config.TranscodingParallelJobs; index++ {
-		go transcodeSegment()
+		go transcodeSegment(streamName, manifestID, transcodeRequest, transcodeProfiles, queue, errors, sourceSegmentURLs, targetOSURL, &completed)
 	}
 	// Wait for all segments to transcode or first error
 	select {
@@ -207,12 +144,71 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		},
 	}
 	// Send the success callback
-	err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(callbackURL, inputInfo, outputs)
+	err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(transcodeRequest.CallbackURL, inputInfo, outputs)
 	if err != nil {
 		_ = config.Logger.Log("msg", "Failed to send TranscodeStatusCompleted callback", "err", err.Error())
 	}
 	// Return outputs for .dtsh file creation
 	return outputs, nil
+}
+
+func transcodeSegment(streamName, manifestID string, transcodeRequest TranscodeSegmentRequest, transcodeProfiles []clients.EncodedProfile, queue chan segmentInfo, errors chan error, sourceSegmentURLs []SourceSegment, targetOSURL *url.URL, completed *sync.WaitGroup) {
+	defer completed.Done()
+	for segment := range queue {
+		rc, err := clients.DownloadOSURL(segment.Input.URL)
+		if err != nil {
+			errors <- fmt.Errorf("failed to download source segment %q: %s", segment.Input, err)
+			return
+		}
+		var tr clients.TranscodeResult
+		// If an AccessToken is provided via the request for transcode, then use remote Broadcasters.
+		// Otherwise, use the local harcoded Broadcaster.
+		if transcodeRequest.AccessToken != "" {
+			creds := clients.Credentials{
+				AccessToken:  transcodeRequest.AccessToken,
+				CustomAPIURL: transcodeRequest.TranscodeAPIUrl,
+			}
+			broadcasterClient, _ := clients.NewRemoteBroadcasterClient(creds)
+			// TODO: failed to run TranscodeSegmentWithRemoteBroadcaster: CreateStream(): http POST(https://origin.livepeer.com/api/stream) returned 422 422 Unprocessable Entity
+			tr, err = broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(rc, int64(segment.Index), transcodeProfiles, streamName, segment.Input.DurationMillis)
+			if err != nil {
+				errors <- fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
+				return
+			}
+		} else {
+			tr, err = localBroadcasterClient.TranscodeSegment(rc, int64(segment.Index), transcodeProfiles, segment.Input.DurationMillis, manifestID)
+			if err != nil {
+				errors <- fmt.Errorf("failed to run TranscodeSegment: %s", err)
+				return
+			}
+		}
+		for _, transcodedSegment := range tr.Renditions {
+			renditionIndex := getProfileIndex(transcodeProfiles, transcodedSegment.Name)
+			if renditionIndex == -1 {
+				errors <- fmt.Errorf("failed to find profile with name %q while parsing rendition segment", transcodedSegment.Name)
+				return
+			}
+
+			relativeRenditionPath := fmt.Sprintf("rendition-%d/", renditionIndex)
+			relativeRenditionURL, err := url.Parse(relativeRenditionPath)
+			if err != nil {
+				errors <- fmt.Errorf("error building rendition segment URL %q: %s", relativeRenditionPath, err)
+				return
+			}
+			renditionURL := targetOSURL.ResolveReference(relativeRenditionURL)
+
+			err = clients.UploadToOSURL(renditionURL.String(), fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData))
+			if err != nil {
+				errors <- fmt.Errorf("failed to upload master playlist: %s", err)
+				return
+			}
+		}
+
+		var completedRatio = calculateCompletedRatio(len(sourceSegmentURLs), segment.Index+1)
+		if err = clients.DefaultCallbackClient.SendTranscodeStatus(transcodeRequest.CallbackURL, clients.TranscodeStatusTranscoding, completedRatio); err != nil {
+			_ = config.Logger.Log("msg", "failed to send transcode status callback", "url", transcodeRequest.CallbackURL, "error", err)
+		}
+	}
 }
 
 func getProfileIndex(transcodeProfiles []clients.EncodedProfile, profile string) int {
