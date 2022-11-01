@@ -49,16 +49,16 @@ type StreamAllocResponse struct {
 
 type EncodedProfile struct {
 	Name         string `json:"name,omitempty"`
-	Width        int32  `json:"width,omitempty"`
-	Height       int32  `json:"height,omitempty"`
-	Bitrate      int32  `json:"bitrate,omitempty"`
-	FPS          uint   `json:"fps,omitempty"`
-	FPSDen       uint   `json:"fpsDen,omitempty"`
+	Width        int64  `json:"width,omitempty"`
+	Height       int64  `json:"height,omitempty"`
+	Bitrate      int64  `json:"bitrate,omitempty"`
+	FPS          int64  `json:"fps,omitempty"`
+	FPSDen       int64  `json:"fpsDen,omitempty"`
 	Profile      string `json:"profile,omitempty"`
 	GOP          string `json:"gop,omitempty"`
 	Encoder      string `json:"encoder,omitempty"`
-	ColorDepth   int32  `json:"colorDepth,omitempty"`
-	ChromaFormat int32  `json:"chromaFormat,omitempty"`
+	ColorDepth   int64  `json:"colorDepth,omitempty"`
+	ChromaFormat int64  `json:"chromaFormat,omitempty"`
 }
 
 var client = &http.Client{

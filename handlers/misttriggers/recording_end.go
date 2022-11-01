@@ -106,12 +106,12 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 			inputInfo.Tracks = append(inputInfo.Tracks, clients.InputTrack{
 				Type:         track.Type,
 				Codec:        track.Codec,
-				Bitrate:      track.Bps * 8,
+				Bitrate:      int64(track.Bps * 8),
 				DurationSec:  float64(track.Lastms-track.Firstms) / 1000.0,
 				StartTimeSec: float64(track.Firstms) / 1000.0,
 				VideoTrack: clients.VideoTrack{
-					Width:  track.Width,
-					Height: track.Height,
+					Width:  int64(track.Width),
+					Height: int64(track.Height),
 					FPS:    float64(track.Fpks) / 1000.0,
 				},
 				AudioTrack: clients.AudioTrack{

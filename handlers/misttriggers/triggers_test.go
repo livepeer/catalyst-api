@@ -45,7 +45,7 @@ func TestRecordingStart(t *testing.T) {
 		require.Equal(t, "videoSomeStreamName", message.StreamName)
 		require.Equal(t, "start", message.Event)
 		require.GreaterOrEqual(t, message.Timestamp, testStartTime)
-		require.Less(t, message.Timestamp, testStartTime+2)
+		require.Less(t, message.Timestamp, testStartTime+100)
 		require.NotEmpty(t, message.RecordingId)
 		callbackHappened <- true
 	}))
@@ -89,7 +89,7 @@ func TestRecordingCompleted(t *testing.T) {
 		require.NotNil(t, message.Success)
 		require.True(t, *message.Success)
 		require.GreaterOrEqual(t, message.Timestamp, testStartTime)
-		require.Less(t, message.Timestamp, testStartTime+2)
+		require.Less(t, message.Timestamp, testStartTime+100)
 		callbackHappened <- true
 	}))
 	defer callbackServer.Close()
