@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
@@ -123,6 +124,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	completed.Add(config.TranscodingParallelJobs)
 	for index := 0; index < config.TranscodingParallelJobs; index++ {
 		go transcodeSegment(streamName, manifestID, transcodeRequest, transcodeProfiles, queue, errors, sourceSegmentURLs, targetOSURL, &completed)
+		time.Sleep(713 * time.Millisecond) // Add some desync interval to avoid load spikes on segment-encode-end
 	}
 	// Wait for all segments to transcode or first error
 	select {
