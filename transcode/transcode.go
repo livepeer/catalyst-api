@@ -85,7 +85,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		if isInputVideoBiggerThanDefaults(inputInfo) {
 			videoTrack, err := inputInfo.GetVideoTrack()
 			if err != nil {
-				return fmt.Errorf("error finding a video track: %s", err)
+				return outputs, fmt.Errorf("error finding a video track: %s", err)
 			}
 			transcodeProfiles = append(defaultTranscodeProfiles, clients.EncodedProfile{
 				Name:    "source",
