@@ -28,7 +28,7 @@ type StubBroadcasterClient struct {
 	tr clients.TranscodeResult
 }
 
-func (c StubBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumber int64, profiles []clients.EncodedProfile, durationMillis int64) (clients.TranscodeResult, error) {
+func (c StubBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumber int64, profiles []clients.EncodedProfile, durationMillis int64, manifestID string) (clients.TranscodeResult, error) {
 	return c.tr, nil
 }
 
@@ -108,6 +108,12 @@ func TestItCanTranscode(t *testing.T) {
 			UploadURL:   manifestFile.Name(),
 		},
 		"streamName",
+		clients.InputVideo{
+			Duration:  123.0,
+			Format:    "some-format",
+			SizeBytes: 123,
+			Tracks:    []clients.InputTrack{},
+		},
 	)
 	require.NoError(t, err)
 
@@ -119,9 +125,13 @@ func TestItCanTranscode(t *testing.T) {
 	require.Contains(t, string(masterManifestBytes), "#EXT-X-STREAM-INF")
 
 	// Check we received a progress callback for each segment
-	require.Equal(t, 2, len(callbacks))
+	require.Equal(t, 3, len(callbacks))
 	require.Equal(t, 0.7, callbacks[0]["completion_ratio"])
 	require.Equal(t, 1.0, callbacks[1]["completion_ratio"])
+
+	// Check we received a final Transcode Completed callback
+	require.Equal(t, 1.0, callbacks[2]["completion_ratio"])
+	require.Equal(t, "success", callbacks[2]["status"])
 }
 
 func TestItCalculatesTheTranscodeCompletionPercentageCorrectly(t *testing.T) {

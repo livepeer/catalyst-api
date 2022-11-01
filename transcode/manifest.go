@@ -3,11 +3,14 @@ package transcode
 import (
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"strings"
 
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/clients"
 )
+
+const MASTER_MANIFEST_FILENAME = "index.m3u8"
 
 func DownloadRenditionManifest(sourceManifestOSURL string) (m3u8.MediaPlaylist, error) {
 	// Download the manifest
@@ -59,7 +62,7 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 			urls,
 			SourceSegment{
 				URL:            u,
-				DurationMillis: int64(segment.Duration * 1000),
+				DurationMillis: int64(segment.Duration),
 			},
 		)
 	}
@@ -68,7 +71,8 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 }
 
 // Generate a Master manifest, plus one Rendition manifest for each Profile we're transcoding, then write them to storage
-func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL string, transcodeProfiles []clients.EncodedProfile) error {
+// Returns the master manifest URL on success
+func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL string, transcodeProfiles []clients.EncodedProfile) (string, error) {
 	// Generate the master + rendition output manifests
 	masterPlaylist := m3u8.NewMasterPlaylist()
 
@@ -77,7 +81,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		masterPlaylist.Append(
 			fmt.Sprintf("rendition-%d/rendition.m3u8", i),
 			&m3u8.MediaPlaylist{
-				TargetDuration: 10, // TODO: Don't hardcode
+				TargetDuration: sourceManifest.TargetDuration,
 			},
 			m3u8.VariantParams{
 				Name:       fmt.Sprintf("%d-%s", i, profile.Name),
@@ -90,7 +94,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		// For each profile, create and upload a new rendition manifest
 		renditionPlaylist, err := m3u8.NewMediaPlaylist(sourceManifest.WinSize(), sourceManifest.Count())
 		if err != nil {
-			return fmt.Errorf("failed to create rendition manifest for profile %q: %s", profile.Name, err)
+			return "", fmt.Errorf("failed to create rendition manifest for profile %q: %s", profile.Name, err)
 		}
 
 		// Add segments to the manifest
@@ -102,7 +106,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 			}
 			err := renditionPlaylist.Append(fmt.Sprintf("%d.ts", i), sourceSegment.Duration, "")
 			if err != nil {
-				return fmt.Errorf("failed to append to rendition playlist number %d: %s", i, err)
+				return "", fmt.Errorf("failed to append to rendition playlist number %d: %s", i, err)
 			}
 		}
 
@@ -112,16 +116,16 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		renditionManifestBaseURL := fmt.Sprintf("%s/rendition-%d", targetOSURL, i)
 		err = clients.UploadToOSURL(renditionManifestBaseURL, "rendition.m3u8", strings.NewReader(renditionPlaylist.String()))
 		if err != nil {
-			return fmt.Errorf("failed to upload rendition playlist: %s", err)
+			return "", fmt.Errorf("failed to upload rendition playlist: %s", err)
 		}
 	}
 
-	err := clients.UploadToOSURL(targetOSURL, "index.m3u8", strings.NewReader(masterPlaylist.String()))
+	err := clients.UploadToOSURL(targetOSURL, MASTER_MANIFEST_FILENAME, strings.NewReader(masterPlaylist.String()))
 	if err != nil {
-		return fmt.Errorf("failed to upload master playlist: %s", err)
+		return "", fmt.Errorf("failed to upload master playlist: %s", err)
 	}
 
-	return nil
+	return filepath.Join(targetOSURL, MASTER_MANIFEST_FILENAME), nil
 }
 
 func manifestURLToSegmentURL(manifestURL, segmentFilename string) (string, error) {

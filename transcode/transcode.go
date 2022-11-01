@@ -55,7 +55,7 @@ func init() {
 	localBroadcasterClient = b
 }
 
-func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string) error {
+func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo clients.InputVideo) error {
 	_ = config.Logger.Log("msg", "RunTranscodeProcess (v2) Beginning", "source", transcodeRequest.SourceFile, "target", transcodeRequest.UploadURL)
 
 	// Create a separate subdirectory for the transcoded renditions
@@ -91,8 +91,10 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return fmt.Errorf("error generating source segment URLs: %s", err)
 	}
 
+	// Generate a unique ID to use when talking to the Broadcaster
+	manifestID := config.RandomTrailer()
+
 	// Iterate through the segment URLs and transcode them
-	// TODO: Some level of parallelisation once we're happy this works well
 	for segmentIndex, u := range sourceSegmentURLs {
 		rc, err := clients.DownloadOSURL(u.URL)
 		if err != nil {
@@ -115,7 +117,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			}
 		} else {
 			// Get renditions from local broadcaster
-			tr, err = localBroadcasterClient.TranscodeSegment(rc, int64(segmentIndex), transcodeProfiles, u.DurationMillis)
+			tr, err = localBroadcasterClient.TranscodeSegment(rc, int64(segmentIndex), transcodeProfiles, u.DurationMillis, manifestID)
 			if err != nil {
 				return fmt.Errorf("failed to run TranscodeSegment: %s", err)
 			}
@@ -147,9 +149,20 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Build the manifests and push them to storage
-	err = GenerateAndUploadManifests(sourceManifest, targetOSURL.String(), transcodeProfiles)
+	manifestManifestURL, err := GenerateAndUploadManifests(sourceManifest, targetOSURL.String(), transcodeProfiles)
 	if err != nil {
 		return err
+	}
+
+	// Send the success callback
+	err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(callbackURL, inputInfo, []clients.OutputVideo{
+		{
+			Type:     "google-s3",
+			Manifest: manifestManifestURL,
+		},
+	})
+	if err != nil {
+		_ = config.Logger.Log("msg", "Failed to send TranscodeStatusCompleted callback", "err", err.Error())
 	}
 
 	return nil
