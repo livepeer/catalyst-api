@@ -216,8 +216,8 @@ type TranscodeStatusMessage struct {
 }
 
 type VideoTrack struct {
-	Width       int     `json:"width,omitempty"`
-	Height      int     `json:"height,omitempty"`
+	Width       int64   `json:"width,omitempty"`
+	Height      int64   `json:"height,omitempty"`
 	PixelFormat string  `json:"pixel_format,omitempty"`
 	FPS         float64 `json:"fps,omitempty"`
 }
@@ -231,9 +231,9 @@ type AudioTrack struct {
 type InputTrack struct {
 	Type         string  `json:"type"`
 	Codec        string  `json:"codec"`
-	Bitrate      int     `json:"bitrate"`
+	Bitrate      int64   `json:"bitrate"`
 	DurationSec  float64 `json:"duration"`
-	SizeBytes    int     `json:"size"`
+	SizeBytes    int64   `json:"size"`
 	StartTimeSec float64 `json:"start_time"`
 
 	// Fields only used if this is a Video Track
@@ -267,4 +267,16 @@ type TranscodeStatusCompletedMessage struct {
 	Type       string        `json:"type"`
 	InputVideo InputVideo    `json:"video_spec"`
 	Outputs    []OutputVideo `json:"outputs"`
+}
+
+// Finds the video track from the list of input video tracks
+// If multiple video tracks present, returns the first one
+// If no video tracks present, returns an error
+func (i InputVideo) GetVideoTrack() (InputTrack, error) {
+	for _, t := range i.Tracks {
+		if t.Type == "video" {
+			return t, nil
+		}
+	}
+	return InputTrack{}, fmt.Errorf("no video tracks found")
 }
