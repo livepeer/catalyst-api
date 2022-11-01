@@ -27,14 +27,17 @@ type TranscodeSegmentRequest struct {
 	SourceStreamInfo clients.MistStreamInfo
 }
 
+var MAX_DEFAULT_RENDITION_WIDTH = int64(1280)
+var MAX_DEFAULT_RENDITION_HEIGHT = int64(720)
+
 // The default set of encoding profiles to use when none are specified
 var defaultTranscodeProfiles = []clients.EncodedProfile{
 	{
 		Name:    "720p",
 		Bitrate: 2000000,
 		FPS:     30,
-		Width:   1280,
-		Height:  720,
+		Width:   MAX_DEFAULT_RENDITION_WIDTH,
+		Height:  MAX_DEFAULT_RENDITION_HEIGHT,
 	},
 	{
 		Name:    "360p",
@@ -77,6 +80,20 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// If Profiles haven't been overridden, use the default set
 	if len(transcodeProfiles) == 0 {
 		transcodeProfiles = defaultTranscodeProfiles
+
+		if isInputVideoBiggerThanDefaults(inputInfo) {
+			videoTrack, err := inputInfo.GetVideoTrack()
+			if err != nil {
+				return fmt.Errorf("error finding a video track: %s", err)
+			}
+			transcodeProfiles = append(defaultTranscodeProfiles, clients.EncodedProfile{
+				Name:    "source",
+				Bitrate: videoTrack.Bitrate,
+				FPS:     int64(videoTrack.FPS),
+				Width:   videoTrack.Width,
+				Height:  videoTrack.Height,
+			})
+		}
 	}
 
 	// Download the "source" manifest that contains all the segments we'll be transcoding
@@ -179,4 +196,18 @@ func getProfileIndex(transcodeProfiles []clients.EncodedProfile, profile string)
 
 func calculateCompletedRatio(totalSegments, completedSegments int) float64 {
 	return (1 / float64(totalSegments)) * float64(completedSegments)
+}
+
+func isInputVideoBiggerThanDefaults(iv clients.InputVideo) bool {
+	for _, t := range iv.Tracks {
+		if t.Type == "video" {
+			if t.Width > MAX_DEFAULT_RENDITION_WIDTH {
+				return true
+			}
+			if t.Height > MAX_DEFAULT_RENDITION_HEIGHT {
+				return true
+			}
+		}
+	}
+	return false
 }
