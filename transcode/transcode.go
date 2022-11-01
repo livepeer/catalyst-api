@@ -93,7 +93,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Generate a unique ID to use when talking to the Broadcaster
-	manifestID := config.RandomTrailer()
+	manifestID := "manifest-" + config.RandomTrailer(8)
 
 	// Iterate through the segment URLs and transcode them
 	for segmentIndex, u := range sourceSegmentURLs {

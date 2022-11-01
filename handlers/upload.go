@@ -33,6 +33,10 @@ type UploadVODRequest struct {
 	TranscodeAPIUrl string `json:"transcodeAPIUrl"`
 }
 
+type UploadVODResponse struct {
+	RequestID string `json:request_id`
+}
+
 func HasContentType(r *http.Request, mimetype string) bool {
 	contentType := r.Header.Get("Content-Type")
 	if contentType == "" {
@@ -75,6 +79,9 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			return
 		}
 
+		// Generate a Request ID that will be used throughout all logging
+		var requestID = "RequestID-" + config.RandomTrailer(8)
+
 		// find source segment URL
 		var tURL string
 		for _, o := range uploadVODRequest.OutputLocations {
@@ -105,9 +112,20 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			errors.WriteHTTPInternalServerError(w, "Cannot send transcode status", err)
 		}
 
-		if _, err := io.WriteString(w, fmt.Sprint(len(uploadVODRequest.OutputLocations))); err != nil {
-			errors.WriteHTTPInternalServerError(w, "Cannot write output locations", err)
+		resp := UploadVODResponse{
+			RequestID: requestID,
 		}
+		respBytes, err := json.Marshal(resp)
+		if err != nil {
+			_ = config.Logger.Log(w, "Failed to build a /upload HTTP API response: "+err.Error())
+			return
+		}
+		
+		if _, err := w.Write(respBytes); err != nil {
+			_ = config.Logger.Log(w, "Failed to write a /upload HTTP API response: "+err.Error())
+			return
+		}
+		
 	}
 }
 
