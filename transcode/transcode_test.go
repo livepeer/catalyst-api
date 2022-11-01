@@ -98,13 +98,13 @@ func TestItCanTranscode(t *testing.T) {
 			Duration:  123.0,
 			Format:    "some-format",
 			SizeBytes: 123,
-			Tracks:    []clients.InputTrack{
+			Tracks: []clients.InputTrack{
 				{
-Type: "video",
-VideoTrack: clients.VideoTrack{
-	Width: 2020,
-	Height: 2020,
-},
+					Type: "video",
+					VideoTrack: clients.VideoTrack{
+						Width:  2020,
+						Height: 2020,
+					},
 				},
 			},
 		},
