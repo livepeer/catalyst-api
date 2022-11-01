@@ -55,17 +55,18 @@ func init() {
 	localBroadcasterClient = b
 }
 
-func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo clients.InputVideo) error {
+func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo clients.InputVideo) ([]clients.OutputVideo, error) {
 	_ = config.Logger.Log("msg", "RunTranscodeProcess (v2) Beginning", "source", transcodeRequest.SourceFile, "target", transcodeRequest.UploadURL)
+	outputs := []clients.OutputVideo{}
 
 	// Create a separate subdirectory for the transcoded renditions
 	segmentedUploadURL, err := url.Parse(transcodeRequest.UploadURL)
 	if err != nil {
-		return fmt.Errorf("failed to parse transcodeRequest.UploadURL: %s", err)
+		return outputs, fmt.Errorf("failed to parse transcodeRequest.UploadURL: %s", err)
 	}
 	relativeTranscodeURL, err := url.Parse("transcoded/")
 	if err != nil {
-		return fmt.Errorf("failed to parse relativeTranscodeURL: %s", err)
+		return outputs, fmt.Errorf("failed to parse relativeTranscodeURL: %s", err)
 	}
 
 	targetOSURL := segmentedUploadURL.ResolveReference(relativeTranscodeURL)
@@ -82,13 +83,13 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// Download the "source" manifest that contains all the segments we'll be transcoding
 	sourceManifest, err := DownloadRenditionManifest(sourceManifestOSURL)
 	if err != nil {
-		return fmt.Errorf("error downloading source manifest: %s", err)
+		return outputs, fmt.Errorf("error downloading source manifest: %s", err)
 	}
 
 	// Generate the full segment URLs from the manifest
 	sourceSegmentURLs, err := GetSourceSegmentURLs(sourceManifestOSURL, sourceManifest)
 	if err != nil {
-		return fmt.Errorf("error generating source segment URLs: %s", err)
+		return outputs, fmt.Errorf("error generating source segment URLs: %s", err)
 	}
 
 	// Generate a unique ID to use when talking to the Broadcaster
@@ -98,9 +99,10 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	for segmentIndex, u := range sourceSegmentURLs {
 		rc, err := clients.DownloadOSURL(u.URL)
 		if err != nil {
-			return fmt.Errorf("failed to download source segment %q: %s", u, err)
+			return outputs, fmt.Errorf("failed to download source segment %q: %s", u, err)
 		}
 
+		var tr clients.TranscodeResult
 		// If an AccessToken is provided via the request for transcode, then use remote Broadcasters.
 		// Otherwise, use the local harcoded Broadcaster.
 		if transcodeRequest.AccessToken != "" {
@@ -109,36 +111,35 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				CustomAPIURL: transcodeRequest.TranscodeAPIUrl,
 			}
 			broadcasterClient, _ := clients.NewRemoteBroadcasterClient(creds)
-
-			tr, err := broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(rc, int64(segmentIndex), transcodeProfiles, streamName, u.DurationMillis)
+			// Get renditions from remote broadcaster
+			tr, err = broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(rc, int64(segmentIndex), transcodeProfiles, streamName, u.DurationMillis)
 			if err != nil {
-				return fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
+				return outputs, fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
 			}
-			fmt.Println("transcodeResult", tr) //remove this
-			// TODO: Upload the output segments
 		} else {
-			tr, err := localBroadcasterClient.TranscodeSegment(rc, int64(segmentIndex), transcodeProfiles, u.DurationMillis, manifestID)
+			// Get renditions from local broadcaster
+			tr, err = localBroadcasterClient.TranscodeSegment(rc, int64(segmentIndex), transcodeProfiles, u.DurationMillis, manifestID)
 			if err != nil {
-				return fmt.Errorf("failed to run TranscodeSegment: %s", err)
+				return outputs, fmt.Errorf("failed to run TranscodeSegment: %s", err)
+			}
+		}
+		// Store renditions
+		for _, transcodedSegment := range tr.Renditions {
+			renditionIndex := getProfileIndex(transcodeProfiles, transcodedSegment.Name)
+			if renditionIndex == -1 {
+				return outputs, fmt.Errorf("failed to find profile with name %q while parsing rendition segment", transcodedSegment.Name)
 			}
 
-			for _, transcodedSegment := range tr.Renditions {
-				renditionIndex := getProfileIndex(transcodeProfiles, transcodedSegment.Name)
-				if renditionIndex == -1 {
-					return fmt.Errorf("failed to find profile with name %q while parsing rendition segment", transcodedSegment.Name)
-				}
+			relativeRenditionPath := fmt.Sprintf("rendition-%d/", renditionIndex)
+			relativeRenditionURL, err := url.Parse(relativeRenditionPath)
+			if err != nil {
+				return outputs, fmt.Errorf("error building rendition segment URL %q: %s", relativeRenditionPath, err)
+			}
+			renditionURL := targetOSURL.ResolveReference(relativeRenditionURL)
 
-				relativeRenditionPath := fmt.Sprintf("rendition-%d/", renditionIndex)
-				relativeRenditionURL, err := url.Parse(relativeRenditionPath)
-				if err != nil {
-					return fmt.Errorf("error building rendition segment URL %q: %s", relativeRenditionPath, err)
-				}
-				renditionURL := targetOSURL.ResolveReference(relativeRenditionURL)
-
-				err = clients.UploadToOSURL(renditionURL.String(), fmt.Sprintf("%d.ts", segmentIndex), bytes.NewReader(transcodedSegment.MediaData))
-				if err != nil {
-					return fmt.Errorf("failed to upload master playlist: %s", err)
-				}
+			err = clients.UploadToOSURL(renditionURL.String(), fmt.Sprintf("%d.ts", segmentIndex), bytes.NewReader(transcodedSegment.MediaData))
+			if err != nil {
+				return outputs, fmt.Errorf("failed to upload master playlist: %s", err)
 			}
 		}
 
@@ -151,21 +152,22 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// Build the manifests and push them to storage
 	manifestManifestURL, err := GenerateAndUploadManifests(sourceManifest, targetOSURL.String(), transcodeProfiles)
 	if err != nil {
-		return err
+		return outputs, err
 	}
 
-	// Send the success callback
-	err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(callbackURL, inputInfo, []clients.OutputVideo{
+	outputs = []clients.OutputVideo{
 		{
 			Type:     "google-s3",
 			Manifest: manifestManifestURL,
 		},
-	})
+	}
+	// Send the success callback
+	err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(callbackURL, inputInfo, outputs)
 	if err != nil {
 		_ = config.Logger.Log("msg", "Failed to send TranscodeStatusCompleted callback", "err", err.Error())
 	}
-
-	return nil
+	// Return outputs for .dtsh file creation
+	return outputs, nil
 }
 
 func getProfileIndex(transcodeProfiles []clients.EncodedProfile, profile string) int {

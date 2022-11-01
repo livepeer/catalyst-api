@@ -122,7 +122,7 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 			})
 		}
 
-		err := transcode.RunTranscodeProcess(transcodeRequest, p.StreamName, inputInfo)
+		_, err := transcode.RunTranscodeProcess(transcodeRequest, p.StreamName, inputInfo)
 		if err != nil {
 			_ = config.Logger.Log(
 				"msg", "RunTranscodeProcess returned an error",
@@ -135,7 +135,11 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 			if err := clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, "Transcoding Failed: "+err.Error()); err != nil {
 				_ = config.Logger.Log("msg", "Failed to send Error callback", "err", err.Error(), "stream_name", p.StreamName)
 			}
+			return
 		}
+
+		// TODO: prepare .dtsh headers for all rendition playlists
+
 	}()
 }
 
