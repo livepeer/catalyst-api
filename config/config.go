@@ -30,3 +30,5 @@ func init() {
 }
 
 var RecordingCallback string = "http://127.0.0.1:8008/recording/status"
+
+var TranscodingParallelJobs int = 5
