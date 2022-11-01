@@ -7,6 +7,7 @@ import (
 
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/log"
 )
 
 type TranscodeSegmentRequest struct {
@@ -25,6 +26,7 @@ type TranscodeSegmentRequest struct {
 		} `json:"sceneClassification"`
 	} `json:"detection"`
 	SourceStreamInfo clients.MistStreamInfo
+	RequestID        string
 }
 
 // The default set of encoding profiles to use when none are specified
@@ -56,7 +58,9 @@ func init() {
 }
 
 func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo clients.InputVideo) ([]clients.OutputVideo, error) {
-	_ = config.Logger.Log("msg", "RunTranscodeProcess (v2) Beginning", "source", transcodeRequest.SourceFile, "target", transcodeRequest.UploadURL)
+	log.AddContext(transcodeRequest.RequestID, "source", transcodeRequest.SourceFile, "target", transcodeRequest.UploadURL, "stream_name", streamName)
+	log.Log(transcodeRequest.RequestID, "RunTranscodeProcess (v2) Beginning")
+
 	outputs := []clients.OutputVideo{}
 
 	// Create a separate subdirectory for the transcoded renditions
@@ -145,7 +149,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 		var completedRatio = calculateCompletedRatio(len(sourceSegmentURLs), segmentIndex+1)
 		if err = clients.DefaultCallbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusTranscoding, completedRatio); err != nil {
-			_ = config.Logger.Log("msg", "failed to send transcode status callback", "url", callbackURL, "error", err)
+			log.LogError(transcodeRequest.RequestID, "failed to send transcode status callback", err, "url", callbackURL)
 		}
 	}
 
@@ -164,7 +168,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// Send the success callback
 	err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(callbackURL, inputInfo, outputs)
 	if err != nil {
-		_ = config.Logger.Log("msg", "Failed to send TranscodeStatusCompleted callback", "err", err.Error())
+		log.LogError(transcodeRequest.RequestID, "Failed to send TranscodeStatusCompleted callback", err, "url", callbackURL)
 	}
 	// Return outputs for .dtsh file creation
 	return outputs, nil

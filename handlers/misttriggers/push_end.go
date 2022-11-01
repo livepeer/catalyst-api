@@ -2,7 +2,6 @@ package misttriggers
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"os/exec"
@@ -14,6 +13,7 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
+	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/subprocess"
 )
 
@@ -79,7 +79,7 @@ func (d *MistCallbackHandlersCollection) RecordingPushEnd(w http.ResponseWriter,
 		Success:    &pushSuccess,
 	}
 	if event.RecordingId, err = uuidFromPushUrl(actualDestination); err != nil {
-		log.Printf("RecordingPushEnd extract uuid failed %v", err)
+		log.LogNoRequestID("RecordingPushEnd extract uuid failed %v", err)
 		return
 	}
 	go clients.DefaultCallbackClient.SendRecordingEvent(event)
@@ -88,14 +88,16 @@ func (d *MistCallbackHandlersCollection) RecordingPushEnd(w http.ResponseWriter,
 func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter, req *http.Request, p PushEndPayload) {
 	callbackUrl := cache.DefaultStreamCache.Segmenting.GetCallbackUrl(p.StreamName)
 	if callbackUrl == "" {
-		_ = config.Logger.Log(w, "PUSH_END trigger invoked for unknown stream: "+p.StreamName)
+		log.LogNoRequestID("PUSH_END trigger invoked for unknown stream: " + p.StreamName)
 		return
 	}
+
+	requestID := cache.DefaultStreamCache.Segmenting.GetRequestID(p.StreamName)
 
 	// TODO: Find a better way to determine if the push status failed or not (i.e. segmenting step was successful)
 	if strings.Contains(p.Last10LogLines, "FAIL") {
 		_ = clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, "Segmenting Failed: "+p.PushStatus)
-		_ = config.Logger.Log(w, "Segmenting Failed. PUSH_END trigger for stream "+p.StreamName+" was "+p.PushStatus)
+		log.Log(requestID, "Segmenting Failed. PUSH_END trigger for stream "+p.StreamName+" was "+p.PushStatus)
 		return
 	}
 }
@@ -112,7 +114,7 @@ func uuidFromPushUrl(uri string) (string, error) {
 	return path[len(path)-2], nil
 }
 
-func createDtsh(destination string) error {
+func createDtsh(requestID, destination string) error {
 	url, err := url.Parse(destination)
 	if err != nil {
 		return err
@@ -128,7 +130,7 @@ func createDtsh(destination string) error {
 	}
 	go func() {
 		if err := headerPrepare.Wait(); err != nil {
-			_ = config.Logger.Log("msg", "createDtsh return code", "code", err, "destination", destination)
+			log.Log(requestID, "createDtsh return code", "code", err, "destination", destination)
 		}
 	}()
 	return nil

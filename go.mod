@@ -145,7 +145,7 @@ require (
 	github.com/minio/kes v0.21.1 // indirect
 	github.com/minio/mc v0.0.0-20221019004256-8493f97e042f // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
-	github.com/minio/minio v0.0.0-20221031142750-ecc932d5ddb7 // indirect
+	github.com/minio/minio v0.0.0-20221031215226-4fb47cd5683c // indirect
 	github.com/minio/minio-go/v7 v7.0.43-0.20221021202758-c6319beb6b27 // indirect
 	github.com/minio/pkg v1.5.4 // indirect
 	github.com/minio/selfupdate v0.5.0 // indirect
@@ -247,6 +247,7 @@ require (
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/grafov/m3u8 v0.11.1
 	github.com/hashicorp/go-retryablehttp v0.7.1
+	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect

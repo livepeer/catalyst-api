@@ -18,6 +18,7 @@ type StreamInfo struct {
 	AccessToken           string
 	TranscodeAPIUrl       string
 	HardcodedBroadcasters string
+	RequestID             string
 }
 
 func (c *SegmentingCache) Remove(streamName string) {
@@ -33,6 +34,16 @@ func (c *SegmentingCache) GetCallbackUrl(streamName string) string {
 	info, ok := c.cache[streamName]
 	if ok {
 		return info.CallbackURL
+	}
+	return ""
+}
+
+func (c *SegmentingCache) GetRequestID(streamName string) string {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	info, ok := c.cache[streamName]
+	if ok {
+		return info.RequestID
 	}
 	return ""
 }

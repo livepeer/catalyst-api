@@ -9,8 +9,8 @@ import (
 
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
-	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
+	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/transcode"
 )
 
@@ -50,27 +50,30 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 	// when uploading is done, remove trigger and stream from Mist
 	defer cache.DefaultStreamCache.Segmenting.Remove(p.StreamName)
 
+	// Grab the Request ID to enable us to log properly
+	requestID := cache.DefaultStreamCache.Segmenting.GetRequestID(p.StreamName)
+
 	callbackUrl := cache.DefaultStreamCache.Segmenting.GetCallbackUrl(p.StreamName)
 	if callbackUrl == "" {
-		_ = config.Logger.Log("msg", "RECORDING_END trigger invoked for unknown stream", "stream_name", p.StreamName)
+		log.Log(requestID, "RECORDING_END trigger invoked for unknown stream")
 		return
 	}
 
 	// Try to clean up the trigger and stream from Mist. If these fail then we only log, since we still want to do any
 	// further cleanup stages and callbacks
 	if err := d.MistClient.DeleteStream(p.StreamName); err != nil {
-		_ = config.Logger.Log("msg", "Failed to delete stream in triggerRecordingEndSegmenting", "err", err.Error(), "stream_name", p.StreamName)
+		log.LogError(requestID, "Failed to delete stream in triggerRecordingEndSegmenting", err)
 	}
 
 	// Let Studio know that we've finished the Segmenting phase
 	if err := clients.DefaultCallbackClient.SendTranscodeStatus(callbackUrl, clients.TranscodeStatusPreparingCompleted, 1); err != nil {
-		_ = config.Logger.Log("msg", "Failed to send transcode status callback", "err", err.Error(), "stream_name", p.StreamName)
+		log.LogError(requestID, "Failed to send transcode status callback", err)
 	}
 
 	// Get the source stream's detailed track info before kicking off transcode
 	streamInfo, err := d.MistClient.GetStreamInfo(p.StreamName)
 	if err != nil {
-		_ = config.Logger.Log("msg", "Failed to get stream info", "err", err.Error(), "stream_name", p.StreamName)
+		log.LogError(requestID, "Failed to get stream info", err)
 	}
 
 	// Compare duration of source stream to the segmented stream to ensure the input file was completely segmented before attempting to transcode
@@ -81,8 +84,7 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 		}
 	}
 	if math.Abs(float64(inputVideoLengthMillis-p.StreamMediaDurationMillis)) > 500 {
-		_ = config.Logger.Log("msg", "Input video duration does not match segmented video duration",
-			"input video duration (ms):", inputVideoLengthMillis, "segmented video duration (ms):", p.StreamMediaDurationMillis)
+		log.Log(requestID, "Input video duration does not match segmented video duration", "input_duration_ms", inputVideoLengthMillis, "segmented_duration_ms", p.StreamMediaDurationMillis)
 		return
 	}
 
@@ -94,6 +96,7 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 		TranscodeAPIUrl:  si.TranscodeAPIUrl,
 		SourceStreamInfo: streamInfo,
 		UploadURL:        si.UploadURL,
+		RequestID:        requestID,
 	}
 
 	go func() {
@@ -124,16 +127,10 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 
 		_, err := transcode.RunTranscodeProcess(transcodeRequest, p.StreamName, inputInfo)
 		if err != nil {
-			_ = config.Logger.Log(
-				"msg", "RunTranscodeProcess returned an error",
-				"err", err.Error(),
-				"stream_name", p.StreamName,
-				"source", transcodeRequest.SourceFile,
-				"target", transcodeRequest.UploadURL,
-			)
+			log.LogError(requestID, "RunTranscodeProcess returned an error", err)
 
 			if err := clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, "Transcoding Failed: "+err.Error()); err != nil {
-				_ = config.Logger.Log("msg", "Failed to send Error callback", "err", err.Error(), "stream_name", p.StreamName)
+				log.LogError(requestID, "Failed to send Error callback", err)
 			}
 			return
 		}

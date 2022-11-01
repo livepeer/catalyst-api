@@ -13,6 +13,7 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
+	"github.com/livepeer/catalyst-api/log"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -34,7 +35,7 @@ type UploadVODRequest struct {
 }
 
 type UploadVODResponse struct {
-	RequestID string `json:request_id`
+	RequestID string `json:"request_id"`
 }
 
 func HasContentType(r *http.Request, mimetype string) bool {
@@ -81,6 +82,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 
 		// Generate a Request ID that will be used throughout all logging
 		var requestID = "RequestID-" + config.RandomTrailer(8)
+		log.AddContext(requestID, "source", uploadVODRequest.Url)
 
 		// find source segment URL
 		var tURL string
@@ -94,6 +96,8 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("no source segment URL in request"))
 			return
 		}
+		log.AddContext(requestID, "segmented_url", tURL)
+
 		streamName := config.RandomStreamName(config.SEGMENTING_PREFIX)
 		cache.DefaultStreamCache.Segmenting.Store(streamName, cache.StreamInfo{
 			SourceFile:      uploadVODRequest.Url,
@@ -101,6 +105,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			UploadURL:       uploadVODRequest.OutputLocations[0].URL,
 			AccessToken:     uploadVODRequest.AccessToken,
 			TranscodeAPIUrl: uploadVODRequest.TranscodeAPIUrl,
+			RequestID:       requestID,
 		})
 
 		// process the request
@@ -117,15 +122,15 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		}
 		respBytes, err := json.Marshal(resp)
 		if err != nil {
-			_ = config.Logger.Log(w, "Failed to build a /upload HTTP API response: "+err.Error())
+			log.LogError(requestID, "Failed to build a /upload HTTP API response", err)
 			return
 		}
-		
+
 		if _, err := w.Write(respBytes); err != nil {
-			_ = config.Logger.Log(w, "Failed to write a /upload HTTP API response: "+err.Error())
+			log.LogError(requestID, "Failed to write a /upload HTTP API response", err)
 			return
 		}
-		
+
 	}
 }
 

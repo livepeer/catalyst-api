@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
+	"github.com/livepeer/catalyst-api/log"
 )
 
 type responseWriter struct {
@@ -39,12 +39,12 @@ func LogRequest() func(httprouter.Handle) httprouter.Handle {
 			defer func() {
 				if err := recover(); err != nil {
 					errors.WriteHTTPInternalServerError(wrapped, "Internal Server Error", nil)
-					_ = config.Logger.Log("err", err, "trace", debug.Stack())
+					log.LogNoRequestID("returning HTTP 500", "err", err, "trace", debug.Stack())
 				}
 			}()
 
 			next(wrapped, r, ps)
-			_ = config.Logger.Log(
+			log.LogNoRequestID("received HTTP request",
 				"remote", r.RemoteAddr,
 				"proto", r.Proto,
 				"method", r.Method,
@@ -52,7 +52,6 @@ func LogRequest() func(httprouter.Handle) httprouter.Handle {
 				"duration", time.Since(start),
 				"status", wrapped.status,
 			)
-
 		}
 
 		return fn

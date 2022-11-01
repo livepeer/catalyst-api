@@ -9,12 +9,14 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/log"
 )
 
 type RemoteBroadcasterClient struct {
 	credentials Credentials
 }
+
+var apiClient = &http.Client{Timeout: API_TIMEOUT}
 
 func NewRemoteBroadcasterClient(credentials Credentials) (RemoteBroadcasterClient, error) {
 	if credentials.AccessToken == "" || credentials.CustomAPIURL == "" {
@@ -36,7 +38,12 @@ func (c *RemoteBroadcasterClient) TranscodeSegmentWithRemoteBroadcaster(segment 
 	if err != nil {
 		return TranscodeResult{}, fmt.Errorf("CreateStream(): %v", err)
 	}
-	defer ReleaseManifestId(c.credentials, manifestId)
+	defer func() {
+		err := ReleaseManifestID(c.credentials, manifestId)
+		if err != nil {
+			log.LogNoRequestID("Error calling ReleaseManifestID", "error", err)
+		}
+	}()
 
 	// Select one broadcaster
 	broadcasterURL, err := pickRandomBroadcaster(bList)
@@ -134,35 +141,29 @@ func CreateStream(c Credentials, streamName string, profiles []EncodedProfile) (
 	return response.ManifestId, nil
 }
 
-// ReleaseManifestId deletes manifestId created by prior call to CreateStream()
-func ReleaseManifestId(c Credentials, manifestId string) {
-	client := &http.Client{
-		Timeout: API_TIMEOUT,
-		Transport: &http.Transport{
-			DisableKeepAlives:  true,
-			DisableCompression: true,
-		},
-	}
+// ReleaseManifestID deletes manifestId created by prior call to CreateStream()
+func ReleaseManifestID(c Credentials, manifestId string) error {
 	requestURL, err := url.JoinPath(c.CustomAPIURL, fmt.Sprintf("stream/%s", manifestId))
 	if err != nil {
-		_ = config.Logger.Log("msg", "error construct api url", "api", c.CustomAPIURL, "manifestId", manifestId)
-		return
+		return fmt.Errorf("Error construction API URL. API: %s, manifestID: %s", c.CustomAPIURL, manifestId)
 	}
+
 	req, err := http.NewRequest(http.MethodDelete, requestURL, nil)
 	if err != nil {
-		_ = config.Logger.Log("msg", "NewRequest DELETE", "url", requestURL, "manifestId", manifestId)
-		return
+		return fmt.Errorf("Creating HTTP request to release manifest ID failed. URL: %s, manifestID: %s", requestURL, manifestId)
 	}
+
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.AccessToken))
-	res, err := client.Do(req)
+	res, err := apiClient.Do(req)
 	if err != nil {
-		_ = config.Logger.Log("msg", "error deleting stream", "url", requestURL, "manifestId", manifestId, "err", err)
-		return
+		return fmt.Errorf("Releasing Manifest ID failed. URL: %s, manifestID: %s, err: %s", requestURL, manifestId, err)
 	}
+
 	if !httpOk(res.StatusCode) {
-		_ = config.Logger.Log("msg", "error deleting stream", "url", requestURL, "manifestId", manifestId, "status", res.StatusCode, "txt", res.Status)
-		return
+		return fmt.Errorf("Releasing Manifest ID failed. URL: %s, manifestID: %s, HTTP Code: %s", requestURL, manifestId, res.Status)
 	}
+
+	return nil
 }
 
 func pickRandomBroadcaster(list BroadcasterList) (url.URL, error) {

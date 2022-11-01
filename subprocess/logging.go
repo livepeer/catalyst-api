@@ -7,7 +7,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/log"
 )
 
 func streamOutput(src io.Reader, out io.Writer) {
@@ -19,16 +19,16 @@ func streamOutput(src io.Reader, out io.Writer) {
 			break
 		}
 		if err == io.EOF {
-			_ = config.Logger.Log("msg", "streamOutput() improper termination", "line", line)
+			log.LogNoRequestID("streamOutput() improper termination", "line", line)
 			return
 		}
 		if err != nil {
-			_ = config.Logger.Log("msg", "streamOutput ReadSlice error", "err", err)
+			log.LogNoRequestID("streamOutput ReadSlice error", "err", err)
 			return
 		}
 		_, err = out.Write(line)
 		if err != nil {
-			_ = config.Logger.Log("msg", "streamOutput out.Write error", "err", err)
+			log.LogNoRequestID("streamOutput out.Write error", "err", err)
 			return
 		}
 	}
@@ -38,11 +38,11 @@ func streamOutput(src io.Reader, out io.Writer) {
 func LogOutputs(cmd *exec.Cmd) error {
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
-		return fmt.Errorf("Failed to open stderr pipe: %s", err)
+		return fmt.Errorf("failed to open stderr pipe: %s", err)
 	}
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
-		return fmt.Errorf("Failed to open stdout pipe: %s", err)
+		return fmt.Errorf("failed to open stdout pipe: %s", err)
 	}
 	go streamOutput(stderrPipe, os.Stderr)
 	go streamOutput(stdoutPipe, os.Stdout)

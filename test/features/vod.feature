@@ -18,4 +18,4 @@ Feature: VOD Streaming
   Scenario: Submit a video asset to stream as VOD
     When I submit to the "/api/vod" endpoint with "a valid upload vod request"
     And receive a response within "3" seconds
-    Then I get an HTTP response with code "200" and the following body "2"
+    Then I get an HTTP response with code "200"
