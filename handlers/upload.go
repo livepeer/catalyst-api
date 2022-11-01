@@ -13,6 +13,7 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
+	"github.com/livepeer/catalyst-api/log"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -31,6 +32,10 @@ type UploadVODRequest struct {
 	} `json:"output_locations,omitempty"`
 	AccessToken     string `json:"accessToken"`
 	TranscodeAPIUrl string `json:"transcodeAPIUrl"`
+}
+
+type UploadVODResponse struct {
+	RequestID string `json:"request_id"`
 }
 
 func HasContentType(r *http.Request, mimetype string) bool {
@@ -75,6 +80,10 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			return
 		}
 
+		// Generate a Request ID that will be used throughout all logging
+		var requestID = "RequestID-" + config.RandomTrailer(8)
+		log.AddContext(requestID, "source", uploadVODRequest.Url)
+
 		// find source segment URL
 		var tURL string
 		for _, o := range uploadVODRequest.OutputLocations {
@@ -87,6 +96,8 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("no source segment URL in request"))
 			return
 		}
+		log.AddContext(requestID, "segmented_url", tURL)
+
 		streamName := config.RandomStreamName(config.SEGMENTING_PREFIX)
 		cache.DefaultStreamCache.Segmenting.Store(streamName, cache.StreamInfo{
 			SourceFile:      uploadVODRequest.Url,
@@ -94,6 +105,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			UploadURL:       uploadVODRequest.OutputLocations[0].URL,
 			AccessToken:     uploadVODRequest.AccessToken,
 			TranscodeAPIUrl: uploadVODRequest.TranscodeAPIUrl,
+			RequestID:       requestID,
 		})
 
 		// process the request
@@ -105,9 +117,20 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			errors.WriteHTTPInternalServerError(w, "Cannot send transcode status", err)
 		}
 
-		if _, err := io.WriteString(w, fmt.Sprint(len(uploadVODRequest.OutputLocations))); err != nil {
-			errors.WriteHTTPInternalServerError(w, "Cannot write output locations", err)
+		resp := UploadVODResponse{
+			RequestID: requestID,
 		}
+		respBytes, err := json.Marshal(resp)
+		if err != nil {
+			log.LogError(requestID, "Failed to build a /upload HTTP API response", err)
+			return
+		}
+
+		if _, err := w.Write(respBytes); err != nil {
+			log.LogError(requestID, "Failed to write a /upload HTTP API response", err)
+			return
+		}
+
 	}
 }
 

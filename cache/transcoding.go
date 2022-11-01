@@ -6,7 +6,7 @@ import (
 
 	"github.com/kylelemons/godebug/pretty"
 	"github.com/livepeer/catalyst-api/clients"
-	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/log"
 )
 
 type TranscodingCache struct {
@@ -39,15 +39,14 @@ func (t *TranscodingCache) SendTranscodingHeartbeats(interval time.Duration, max
 			// If the job is past the expiry time then we've probably failed to remove it from the cache when it completed / errored
 			if job.updatedAt.Add(maxAge).Before(time.Now()) {
 				t.Remove(id)
-				_ = config.Logger.Log("msg", "Removed expired job from cache", "id", id, "callback_url", job.CallbackUrl, "last_updated", job.updatedAt.String(), "current_time", time.Now())
 				continue
 			}
 
 			err := clients.DefaultCallbackClient.SendTranscodeStatus(job.CallbackUrl, clients.TranscodeStatusTranscoding, 0.5)
 			if err == nil {
-				_ = config.Logger.Log("msg", "Sent Transcode Status heartbeat", "id", id, "callback_url", job.CallbackUrl)
+				log.LogNoRequestID("Sent Transcode Status heartbeat", "id", id, "callback_url", job.CallbackUrl)
 			} else {
-				_ = config.Logger.Log("msg", "failed to send Transcode Status heartbeat", "id", id, "callback_url", job.CallbackUrl, "error", err)
+				log.LogNoRequestID("failed to send Transcode Status heartbeat", "id", id, "callback_url", job.CallbackUrl, "error", err)
 			}
 		}
 		time.Sleep(interval)

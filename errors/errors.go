@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/log"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -24,7 +24,7 @@ func writeHttpError(w http.ResponseWriter, msg string, status int, err error) ap
 	}
 
 	if err := json.NewEncoder(w).Encode(map[string]string{"error": msg, "error_detail": errorDetail}); err != nil {
-		_ = config.Logger.Log("msg", "error writing HTTP error", "http_error_msg", msg, "error", err)
+		log.LogNoRequestID("error writing HTTP error", "http_error_msg", msg, "error", err)
 	}
 	return apiError{msg, status, err}
 }

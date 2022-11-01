@@ -9,6 +9,7 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
+	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/middleware"
 )
 
@@ -22,8 +23,8 @@ func ListenAndServe(apiPort, mistPort, mistHttpPort int, apiToken string) error 
 	listen := fmt.Sprintf("0.0.0.0:%d", apiPort)
 	router := NewCatalystAPIRouter(mc, apiToken)
 
-	_ = config.Logger.Log(
-		"msg", "Starting Catalyst API!",
+	log.LogNoRequestID(
+		"Starting Catalyst API!",
 		"version", config.Version,
 		"host", listen,
 	)
