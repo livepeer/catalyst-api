@@ -9,6 +9,7 @@ import (
 
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/log"
 )
 
 type TranscodeSegmentRequest struct {
@@ -27,6 +28,7 @@ type TranscodeSegmentRequest struct {
 		} `json:"sceneClassification"`
 	} `json:"detection"`
 	SourceStreamInfo clients.MistStreamInfo
+	RequestID        string
 }
 
 var MAX_DEFAULT_RENDITION_WIDTH = int64(1280)
@@ -61,7 +63,9 @@ func init() {
 }
 
 func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo clients.InputVideo) ([]clients.OutputVideo, error) {
-	_ = config.Logger.Log("msg", "RunTranscodeProcess (v2) Beginning", "source", transcodeRequest.SourceFile, "target", transcodeRequest.UploadURL)
+	log.AddContext(transcodeRequest.RequestID, "source", transcodeRequest.SourceFile, "target", transcodeRequest.UploadURL, "stream_name", streamName)
+	log.Log(transcodeRequest.RequestID, "RunTranscodeProcess (v2) Beginning")
+
 	outputs := []clients.OutputVideo{}
 
 	// Create a separate subdirectory for the transcoded renditions
@@ -110,7 +114,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Generate a unique ID to use when talking to the Broadcaster
-	manifestID := config.RandomTrailer()
+	manifestID := "manifest-" + config.RandomTrailer(8)
 	// Use channel to queue segments
 	queue := make(chan segmentInfo, len(sourceSegmentURLs))
 	for segmentIndex, u := range sourceSegmentURLs {
@@ -148,7 +152,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// Send the success callback
 	err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(transcodeRequest.CallbackURL, inputInfo, outputs)
 	if err != nil {
-		_ = config.Logger.Log("msg", "Failed to send TranscodeStatusCompleted callback", "err", err.Error())
+		log.LogError(transcodeRequest.RequestID, "Failed to send TranscodeStatusCompleted callback", err, "url", transcodeRequest.CallbackURL)
 	}
 	// Return outputs for .dtsh file creation
 	return outputs, nil
@@ -208,7 +212,7 @@ func transcodeSegment(streamName, manifestID string, transcodeRequest TranscodeS
 
 		var completedRatio = calculateCompletedRatio(len(sourceSegmentURLs), segment.Index+1)
 		if err = clients.DefaultCallbackClient.SendTranscodeStatus(transcodeRequest.CallbackURL, clients.TranscodeStatusTranscoding, completedRatio); err != nil {
-			_ = config.Logger.Log("msg", "failed to send transcode status callback", "url", transcodeRequest.CallbackURL, "error", err)
+			log.LogError(transcodeRequest.RequestID, "failed to send transcode status callback", err, "url", transcodeRequest.CallbackURL)
 		}
 	}
 }

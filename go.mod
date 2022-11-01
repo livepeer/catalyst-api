@@ -81,6 +81,7 @@ require (
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/grafov/m3u8 v0.11.1
 	github.com/hashicorp/go-retryablehttp v0.7.1
+	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -151,7 +152,10 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 	router.ServeHTTP(rr, req)
 
 	require.Equal(http.StatusOK, rr.Result().StatusCode)
-	require.Equal("2", rr.Body.String())
+
+	var uvr UploadVODResponse
+	require.NoError(json.Unmarshal(rr.Body.Bytes(), &uvr))
+	require.Greater(len(uvr.RequestID), 1) // Check that we got some value for Request ID
 }
 
 func TestInvalidPayloadVODUploadHandler(t *testing.T) {
