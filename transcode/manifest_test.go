@@ -135,9 +135,9 @@ func TestItCanGenerateAndWriteManifests(t *testing.T) {
 
 	const expectedMasterManifest = `#EXTM3U
 #EXT-X-VERSION:3
-#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=800x600,NAME="0-lowlowlow",FRAME-RATE=60.000
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=0,RESOLUTION=1080x720,NAME="0-super-high-def",FRAME-RATE=30.000
 rendition-0/index.m3u8
-#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=1080x720,NAME="1-super-high-def",FRAME-RATE=30.000
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=0,RESOLUTION=800x600,NAME="1-lowlowlow",FRAME-RATE=60.000
 rendition-1/index.m3u8
 `
 	require.Equal(t, expectedMasterManifest, string(masterManifestContents))

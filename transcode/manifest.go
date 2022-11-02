@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/grafov/m3u8"
@@ -76,9 +77,21 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 	// Generate the master + rendition output manifests
 	masterPlaylist := m3u8.NewMasterPlaylist()
 
+	sort.Slice(transcodedStats, func(a, b int) bool {
+		if transcodedStats[a].BitsPerSecond > transcodedStats[b].BitsPerSecond {
+			return true
+		} else if transcodedStats[a].BitsPerSecond < transcodedStats[b].BitsPerSecond {
+			return false
+		} else {
+			var resolutionA = transcodedStats[a].Width * transcodedStats[a].Height
+			var resolutionB = transcodedStats[b].Width * transcodedStats[b].Height
+
+			return resolutionA > resolutionB
+		}
+	})
+
 	for i, profile := range transcodedStats {
 		// For each profile, add a new entry to the master manifest
-		bitsPerSecond := uint32(float64(profile.Bytes) * 8000.0 / float64(profile.DurationMs))
 		masterPlaylist.Append(
 			fmt.Sprintf("rendition-%d/index.m3u8", i),
 			&m3u8.MediaPlaylist{
@@ -86,7 +99,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 			},
 			m3u8.VariantParams{
 				Name:       fmt.Sprintf("%d-%s", i, profile.Name),
-				Bandwidth:  bitsPerSecond,
+				Bandwidth:  profile.BitsPerSecond,
 				FrameRate:  float64(profile.FPS),
 				Resolution: fmt.Sprintf("%dx%d", profile.Width, profile.Height),
 			},

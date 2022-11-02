@@ -235,6 +235,11 @@ func transcodeSegment(segment segmentInfo, streamName, manifestID string, transc
 		transcodedStats[renditionIndex].Bytes += int64(len(transcodedSegment.MediaData))
 		transcodedStats[renditionIndex].DurationMs += float64(segment.Input.DurationMillis)
 	}
+
+	for _, stats := range transcodedStats {
+		stats.BitsPerSecond = uint32(float64(stats.Bytes) * 8000.0 / float64(stats.DurationMs))
+	}
+
 	return nil
 }
 
@@ -300,4 +305,5 @@ type RenditionStats struct {
 	Bytes            int64
 	DurationMs       float64
 	ManifestLocation string
+	BitsPerSecond    uint32
 }
