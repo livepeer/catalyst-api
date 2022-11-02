@@ -32,6 +32,8 @@ type UploadVODRequest struct {
 	} `json:"output_locations,omitempty"`
 	AccessToken     string `json:"accessToken"`
 	TranscodeAPIUrl string `json:"transcodeAPIUrl"`
+	// Forwarded to transcoding stage:
+	Profiles []clients.EncodedProfile `json:"profiles"`
 }
 
 type UploadVODResponse struct {
@@ -106,6 +108,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			AccessToken:     uploadVODRequest.AccessToken,
 			TranscodeAPIUrl: uploadVODRequest.TranscodeAPIUrl,
 			RequestID:       requestID,
+			Profiles:        uploadVODRequest.Profiles,
 		})
 
 		// process the request
