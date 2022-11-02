@@ -72,12 +72,13 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 
 // Generate a Master manifest, plus one Rendition manifest for each Profile we're transcoding, then write them to storage
 // Returns the master manifest URL on success
-func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL string, transcodeProfiles []clients.EncodedProfile) (string, error) {
+func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL string, transcodedStats []RenditionStats) (string, error) {
 	// Generate the master + rendition output manifests
 	masterPlaylist := m3u8.NewMasterPlaylist()
 
-	for i, profile := range transcodeProfiles {
+	for i, profile := range transcodedStats {
 		// For each profile, add a new entry to the master manifest
+		bitsPerSecond := uint32(float64(profile.Bytes) * 8000.0 / float64(profile.DurationMs))
 		masterPlaylist.Append(
 			fmt.Sprintf("rendition-%d/rendition.m3u8", i),
 			&m3u8.MediaPlaylist{
@@ -85,7 +86,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 			},
 			m3u8.VariantParams{
 				Name:       fmt.Sprintf("%d-%s", i, profile.Name),
-				Bandwidth:  uint32(1), // TODO: Don't hardcode - this should come from the transcoder output
+				Bandwidth:  bitsPerSecond,
 				FrameRate:  float64(profile.FPS),
 				Resolution: fmt.Sprintf("%dx%d", profile.Width, profile.Height),
 			},

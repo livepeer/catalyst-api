@@ -81,6 +81,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	targetOSURL := segmentedUploadURL.ResolveReference(relativeTranscodeURL)
 	// Grab some useful parameters to be used later from the TranscodeSegmentRequest
 	sourceManifestOSURL := transcodeRequest.UploadURL
+	// transcodeProfiles are desired constraints for transcoding process
 	transcodeProfiles := transcodeRequest.Profiles
 
 	// If Profiles haven't been overridden, use the default set
@@ -115,6 +116,10 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	// Generate a unique ID to use when talking to the Broadcaster
 	manifestID := "manifest-" + config.RandomTrailer(8)
+	// transcodedStats hold actual info from transcoded results within requested constraints (this usually differs from requested profiles)
+	transcodedStats := statsFromProfiles(transcodeProfiles)
+
+	// Iterate through the segment URLs and transcode them
 	// Use channel to queue segments
 	queue := make(chan segmentInfo, len(sourceSegmentURLs))
 	for segmentIndex, u := range sourceSegmentURLs {
@@ -130,7 +135,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		go func() {
 			defer completed.Done()
 			for segment := range queue {
-				err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, targetOSURL)
+				err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, targetOSURL, transcodedStats)
 				if err != nil {
 					errors <- err
 					return
@@ -152,7 +157,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Build the manifests and push them to storage
-	manifestManifestURL, err := GenerateAndUploadManifests(sourceManifest, targetOSURL.String(), transcodeProfiles)
+	manifestManifestURL, err := GenerateAndUploadManifests(sourceManifest, targetOSURL.String(), transcodedStats)
 	if err != nil {
 		return outputs, err
 	}
@@ -172,7 +177,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	return outputs, nil
 }
 
-func transcodeSegment(segment segmentInfo, streamName, manifestID string, transcodeRequest TranscodeSegmentRequest, transcodeProfiles []clients.EncodedProfile, targetOSURL *url.URL) error {
+func transcodeSegment(segment segmentInfo, streamName, manifestID string, transcodeRequest TranscodeSegmentRequest, transcodeProfiles []clients.EncodedProfile, targetOSURL *url.URL, transcodedStats []RenditionStats) error {
 	rc, err := clients.DownloadOSURL(segment.Input.URL)
 	if err != nil {
 		return fmt.Errorf("failed to download source segment %q: %s", segment.Input, err)
@@ -214,6 +219,9 @@ func transcodeSegment(segment segmentInfo, streamName, manifestID string, transc
 		if err != nil {
 			return fmt.Errorf("failed to upload master playlist: %s", err)
 		}
+		// bitrate calculation
+		transcodedStats[renditionIndex].Bytes += int64(len(transcodedSegment.MediaData))
+		transcodedStats[renditionIndex].DurationMs += float64(segment.Input.DurationMillis)
 	}
 	return nil
 }
@@ -257,4 +265,26 @@ func channelFromWaitgroup(wg *sync.WaitGroup) chan bool {
 type segmentInfo struct {
 	Input SourceSegment
 	Index int
+}
+
+func statsFromProfiles(profiles []clients.EncodedProfile) []RenditionStats {
+	stats := []RenditionStats{}
+	for _, profile := range profiles {
+		stats = append(stats, RenditionStats{
+			Name:   profile.Name,
+			Width:  profile.Width,  // TODO: extract this from actual media retrieved from B
+			Height: profile.Height, // TODO: extract this from actual media retrieved from B
+			FPS:    profile.FPS,    // TODO: extract this from actual media retrieved from B
+		})
+	}
+	return stats
+}
+
+type RenditionStats struct {
+	Name       string
+	Width      int64
+	Height     int64
+	FPS        int64
+	Bytes      int64
+	DurationMs float64
 }
