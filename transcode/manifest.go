@@ -114,10 +114,17 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		// Write #EXT-X-ENDLIST
 		renditionPlaylist.Close()
 
+		manifestFilename := "rendition.m3u8"
 		renditionManifestBaseURL := fmt.Sprintf("%s/rendition-%d", targetOSURL, i)
-		err = clients.UploadToOSURL(renditionManifestBaseURL, "rendition.m3u8", strings.NewReader(renditionPlaylist.String()))
+		err = clients.UploadToOSURL(renditionManifestBaseURL, manifestFilename, strings.NewReader(renditionPlaylist.String()))
 		if err != nil {
 			return "", fmt.Errorf("failed to upload rendition playlist: %s", err)
+		}
+		// update manifest location
+		transcodedStats[i].ManifestLocation, err = url.JoinPath(renditionManifestBaseURL, manifestFilename)
+		if err != nil {
+			// should not block the ingestion flow or make it fail on error.
+			transcodedStats[i].ManifestLocation = ""
 		}
 	}
 

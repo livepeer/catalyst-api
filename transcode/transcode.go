@@ -162,12 +162,11 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, err
 	}
 
-	outputs = []clients.OutputVideo{
-		{
-			Type:     "google-s3",
-			Manifest: manifestManifestURL,
-		},
+	output := clients.OutputVideo{Type: "google-s3", Manifest: manifestManifestURL}
+	for _, rendition := range transcodedStats {
+		output.Videos = append(output.Videos, clients.OutputVideoFile{Location: rendition.ManifestLocation})
 	}
+	outputs = []clients.OutputVideo{output}
 	// Send the success callback
 	err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(transcodeRequest.CallbackURL, inputInfo, outputs)
 	if err != nil {
@@ -281,10 +280,11 @@ func statsFromProfiles(profiles []clients.EncodedProfile) []RenditionStats {
 }
 
 type RenditionStats struct {
-	Name       string
-	Width      int64
-	Height     int64
-	FPS        int64
-	Bytes      int64
-	DurationMs float64
+	Name             string
+	Width            int64
+	Height           int64
+	FPS              int64
+	Bytes            int64
+	DurationMs       float64
+	ManifestLocation string
 }
