@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/url"
+	"path"
 	"sync"
 	"time"
 
@@ -73,12 +74,25 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	if err != nil {
 		return outputs, fmt.Errorf("failed to parse transcodeRequest.UploadURL: %s", err)
 	}
-	relativeTranscodeURL, err := url.Parse("transcoded/")
-	if err != nil {
-		return outputs, fmt.Errorf("failed to parse relativeTranscodeURL: %s", err)
-	}
 
-	targetOSURL := segmentedUploadURL.ResolveReference(relativeTranscodeURL)
+	// Go back to the root directory to set as the output for transcode renditions
+	targetTranscodedPath := path.Dir(path.Dir(segmentedUploadURL.Path))
+	// Use the same manifest filename that was used for the segmented manifest
+	targetTranscodedManifestFilename := path.Base(segmentedUploadURL.String())
+	targetTranscodedOutputPath := path.Join(targetTranscodedPath, targetTranscodedManifestFilename)
+	// Generate the manifest output path (e.g. /user/hls/index.m3u8)
+	tpath, err := url.Parse(targetTranscodedOutputPath)
+	if err != nil {
+		return outputs, fmt.Errorf("failed to parse targetTranscodedOutputPath: %s", err)
+	}
+	targetTranscodedOutputURL := segmentedUploadURL.ResolveReference(tpath)
+	// Generate the manifest output URL (e.g. s3+https://USER:PASS@storage.googleapis.com/user/hls/index.m3u8)
+	tout, err := url.Parse(targetTranscodedPath)
+	if err != nil {
+		return outputs, fmt.Errorf("failed to parse targetTranscodedPath: %s", err)
+	}
+	targetTranscodedRenditionOutputURL := segmentedUploadURL.ResolveReference(tout)
+
 	// Grab some useful parameters to be used later from the TranscodeSegmentRequest
 	sourceManifestOSURL := transcodeRequest.UploadURL
 	// transcodeProfiles are desired constraints for transcoding process
