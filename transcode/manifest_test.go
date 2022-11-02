@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/grafov/m3u8"
-	"github.com/livepeer/catalyst-api/clients"
 	"github.com/stretchr/testify/require"
 )
 
@@ -106,18 +105,22 @@ func TestItCanGenerateAndWriteManifests(t *testing.T) {
 	masterManifestURL, err := GenerateAndUploadManifests(
 		*sourceMediaPlaylist,
 		outputDir,
-		[]clients.EncodedProfile{
+		[]RenditionStats{
 			{
-				Name:   "lowlowlow",
-				FPS:    60,
-				Width:  800,
-				Height: 600,
+				Name:       "lowlowlow",
+				FPS:        60,
+				Width:      800,
+				Height:     600,
+				Bytes:      1,
+				DurationMs: 8000,
 			},
 			{
-				Name:   "super-high-def",
-				FPS:    30,
-				Width:  1080,
-				Height: 720,
+				Name:       "super-high-def",
+				FPS:        30,
+				Width:      1080,
+				Height:     720,
+				Bytes:      1,
+				DurationMs: 8000,
 			},
 		},
 	)

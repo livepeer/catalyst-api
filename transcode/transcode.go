@@ -79,6 +79,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	targetOSURL := segmentedUploadURL.ResolveReference(relativeTranscodeURL)
 	// Grab some useful parameters to be used later from the TranscodeSegmentRequest
 	sourceManifestOSURL := transcodeRequest.UploadURL
+	// transcodeProfiles are desired constraints for transcoding process
 	transcodeProfiles := transcodeRequest.Profiles
 	callbackURL := transcodeRequest.CallbackURL
 
@@ -115,6 +116,8 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	// Generate a unique ID to use when talking to the Broadcaster
 	manifestID := "manifest-" + config.RandomTrailer(8)
+	// transcodedStats hold actual info from transcoded results within requested constraints (this usually differs from requested profiles)
+	transcodedStats := statsFromProfiles(transcodeProfiles)
 
 	// Iterate through the segment URLs and transcode them
 	for segmentIndex, u := range sourceSegmentURLs {
@@ -162,6 +165,9 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			if err != nil {
 				return outputs, fmt.Errorf("failed to upload master playlist: %s", err)
 			}
+			// bitrate calculation
+			transcodedStats[renditionIndex].Bytes += int64(len(transcodedSegment.MediaData))
+			transcodedStats[renditionIndex].DurationMs += float64(u.DurationMillis)
 		}
 
 		var completedRatio = calculateCompletedRatio(len(sourceSegmentURLs), segmentIndex+1)
@@ -171,7 +177,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Build the manifests and push them to storage
-	manifestManifestURL, err := GenerateAndUploadManifests(sourceManifest, targetOSURL.String(), transcodeProfiles)
+	manifestManifestURL, err := GenerateAndUploadManifests(sourceManifest, targetOSURL.String(), transcodedStats)
 	if err != nil {
 		return outputs, err
 	}
@@ -216,4 +222,28 @@ func isInputVideoBiggerThanDefaults(iv clients.InputVideo) bool {
 		}
 	}
 	return false
+}
+
+func statsFromProfiles(profiles []clients.EncodedProfile) []RenditionStats {
+	stats := []RenditionStats{}
+	for index, profile := range profiles {
+		stats = append(stats, RenditionStats{
+			Index:  int64(index),
+			Name:   profile.Name,
+			Width:  profile.Width,  // TODO: extract this from actual media retrieved from B
+			Height: profile.Height, // TODO: extract this from actual media retrieved from B
+			FPS:    profile.FPS,    // TODO: extract this from actual media retrieved from B
+		})
+	}
+	return stats
+}
+
+type RenditionStats struct {
+	Index      int64
+	Name       string
+	Width      int64
+	Height     int64
+	FPS        int64
+	Bytes      int64
+	DurationMs float64
 }
