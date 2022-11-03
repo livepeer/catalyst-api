@@ -126,7 +126,7 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 		"output_locations": [
 			{
 				"type": "object_store",
-				"url": "memory://localhost/output",
+				"url": "memory://localhost/output.m3u8",
  				"outputs": {
 					"source_segments": true
 				}
@@ -150,7 +150,6 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 	rr := httptest.NewRecorder()
 	router.POST("/api/vod", catalystApiHandlers.UploadVOD())
 	router.ServeHTTP(rr, req)
-
 	require.Equal(http.StatusOK, rr.Result().StatusCode)
 
 	var uvr UploadVODResponse
