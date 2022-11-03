@@ -231,7 +231,7 @@ func createDtsh(requestID, destination string) error {
 	}
 	url.RawQuery = ""
 	url.Fragment = ""
-	headerPrepare := exec.Command(path.Join(config.PathMistDir, "MistInHLS"), "-H", url.String())
+	headerPrepare := exec.Command(path.Join(config.PathMistDir, "MistInHLS"), "-H", url.String(), "-g", "5")
 	if err = subprocess.LogOutputs(headerPrepare); err != nil {
 		return err
 	}
