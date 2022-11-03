@@ -136,14 +136,14 @@ func TestItCanGenerateAndWriteManifests(t *testing.T) {
 	const expectedMasterManifest = `#EXTM3U
 #EXT-X-VERSION:3
 #EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=800x600,NAME="0-lowlowlow",FRAME-RATE=60.000
-rendition-0/rendition.m3u8
+rendition-0/index.m3u8
 #EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=1080x720,NAME="1-super-high-def",FRAME-RATE=30.000
-rendition-1/rendition.m3u8
+rendition-1/index.m3u8
 `
 	require.Equal(t, expectedMasterManifest, string(masterManifestContents))
 
 	// Confirm we wrote out the rendition manifests that we expected
-	require.FileExists(t, filepath.Join(outputDir, "rendition-0/rendition.m3u8"))
-	require.FileExists(t, filepath.Join(outputDir, "rendition-1/rendition.m3u8"))
-	require.NoFileExists(t, filepath.Join(outputDir, "rendition-2/rendition.m3u8"))
+	require.FileExists(t, filepath.Join(outputDir, "rendition-0/index.m3u8"))
+	require.FileExists(t, filepath.Join(outputDir, "rendition-1/index.m3u8"))
+	require.NoFileExists(t, filepath.Join(outputDir, "rendition-2/index.m3u8"))
 }

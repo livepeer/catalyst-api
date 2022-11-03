@@ -80,7 +80,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		// For each profile, add a new entry to the master manifest
 		bitsPerSecond := uint32(float64(profile.Bytes) * 8000.0 / float64(profile.DurationMs))
 		masterPlaylist.Append(
-			fmt.Sprintf("rendition-%d/rendition.m3u8", i),
+			fmt.Sprintf("rendition-%d/index.m3u8", i),
 			&m3u8.MediaPlaylist{
 				TargetDuration: sourceManifest.TargetDuration,
 			},
@@ -114,7 +114,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		// Write #EXT-X-ENDLIST
 		renditionPlaylist.Close()
 
-		manifestFilename := "rendition.m3u8"
+		manifestFilename := "index.m3u8"
 		renditionManifestBaseURL := fmt.Sprintf("%s/rendition-%d", targetOSURL, i)
 		err = clients.UploadToOSURL(renditionManifestBaseURL, manifestFilename, strings.NewReader(renditionPlaylist.String()))
 		if err != nil {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/url"
+	"path"
 	"sync"
 	"time"
 
@@ -68,17 +69,31 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	outputs := []clients.OutputVideo{}
 
-	// Create a separate subdirectory for the transcoded renditions
-	segmentedUploadURL, err := url.Parse(transcodeRequest.UploadURL)
+	// Parse the manifest destination of the segmented output specified in the request
+	segmentedOutputManifestURL, err := url.Parse(transcodeRequest.UploadURL)
 	if err != nil {
 		return outputs, fmt.Errorf("failed to parse transcodeRequest.UploadURL: %s", err)
 	}
-	relativeTranscodeURL, err := url.Parse("transcoded/")
+	// Go back to the root directory to set as the output for transcode renditions
+	targetTranscodedPath := path.Dir(path.Dir(segmentedOutputManifestURL.Path))
+	// Use the same manifest filename that was used for the segmented manifest
+	targetTranscodedManifestFilename := path.Base(segmentedOutputManifestURL.String())
+	// Generate the new output path of the transcoded manifest
+	targetTranscodedOutputPath := path.Join(targetTranscodedPath, targetTranscodedManifestFilename)
+	// Generate the manifest output URL from the manifest output path (e.g. s3+https://USER:PASS@storage.googleapis.com/user/hls/index.m3u8)
+	tpath, err := url.Parse(targetTranscodedOutputPath)
 	if err != nil {
-		return outputs, fmt.Errorf("failed to parse relativeTranscodeURL: %s", err)
+		return outputs, fmt.Errorf("failed to parse targetTranscodedOutputPath: %s", err)
 	}
+	targetTranscodedOutputURL := segmentedOutputManifestURL.ResolveReference(tpath)
+	fmt.Println(targetTranscodedOutputURL)
+	// Generate the rendition output URL (e.g. s3+https://USER:PASS@storage.googleapis.com/user/hls/)
+	tout, err := url.Parse(targetTranscodedPath)
+	if err != nil {
+		return outputs, fmt.Errorf("failed to parse targetTranscodedPath: %s", err)
+	}
+	targetTranscodedRenditionOutputURL := segmentedOutputManifestURL.ResolveReference(tout)
 
-	targetOSURL := segmentedUploadURL.ResolveReference(relativeTranscodeURL)
 	// Grab some useful parameters to be used later from the TranscodeSegmentRequest
 	sourceManifestOSURL := transcodeRequest.UploadURL
 	// transcodeProfiles are desired constraints for transcoding process
@@ -135,7 +150,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		go func() {
 			defer completed.Done()
 			for segment := range queue {
-				err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, targetOSURL, transcodedStats)
+				err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, targetTranscodedRenditionOutputURL, transcodedStats)
 				if err != nil {
 					errors <- err
 					return
@@ -157,12 +172,12 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Build the manifests and push them to storage
-	manifestManifestURL, err := GenerateAndUploadManifests(sourceManifest, targetOSURL.String(), transcodedStats)
+	manifestManifestURL, err := GenerateAndUploadManifests(sourceManifest, targetTranscodedRenditionOutputURL.String(), transcodedStats)
 	if err != nil {
 		return outputs, err
 	}
 
-	output := clients.OutputVideo{Type: "google-s3", Manifest: manifestManifestURL}
+	output := clients.OutputVideo{Type: "object_store", Manifest: manifestManifestURL}
 	for _, rendition := range transcodedStats {
 		output.Videos = append(output.Videos, clients.OutputVideoFile{Location: rendition.ManifestLocation})
 	}
@@ -207,14 +222,12 @@ func transcodeSegment(segment segmentInfo, streamName, manifestID string, transc
 			return fmt.Errorf("failed to find profile with name %q while parsing rendition segment", transcodedSegment.Name)
 		}
 
-		relativeRenditionPath := fmt.Sprintf("rendition-%d/", renditionIndex)
-		relativeRenditionURL, err := url.Parse(relativeRenditionPath)
+		targetRenditionURL, err := url.JoinPath(targetOSURL.String(), fmt.Sprintf("rendition-%d/", renditionIndex))
 		if err != nil {
-			return fmt.Errorf("error building rendition segment URL %q: %s", relativeRenditionPath, err)
+			return fmt.Errorf("error building rendition segment URL %q: %s", targetRenditionURL, err)
 		}
-		renditionURL := targetOSURL.ResolveReference(relativeRenditionURL)
 
-		err = clients.UploadToOSURL(renditionURL.String(), fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData))
+		err = clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData))
 		if err != nil {
 			return fmt.Errorf("failed to upload master playlist: %s", err)
 		}

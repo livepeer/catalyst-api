@@ -6,6 +6,8 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
+	"path"
 	"strings"
 
 	"github.com/julienschmidt/httprouter"
@@ -96,20 +98,40 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("no source segment URL in request"))
 			return
 		}
-		log.AddContext(requestID, "segmented_url", tURL)
+
+		// Create a separate subdirectory for the source segments
+		// Use the output directory specified in request as the output directory of transcoded renditions
+		targetURL, err := url.Parse(tURL)
+		if err != nil {
+			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file shoul    d end in .m3u8 extension"))
+		}
+		targetDirPath := path.Dir(targetURL.Path)
+		targetManifestFilename := path.Base(targetURL.String())
+		targetExtension := path.Ext(targetManifestFilename)
+		if targetExtension != ".m3u8" {
+			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file should end in .m3u8 extension"))
+		}
+		targetSegmentedOutputPath := path.Join(targetDirPath, "source", targetManifestFilename)
+		sout, err := url.Parse(targetSegmentedOutputPath)
+		if err != nil {
+			errors.WriteHTTPInternalServerError(w, "Cannot parse targetSegmentedOutputPath", err)
+		}
+		targetSegmentedOutputURL := targetURL.ResolveReference(sout)
+
+		log.AddContext(requestID, "segmented_url", targetSegmentedOutputURL.String())
 
 		streamName := config.RandomStreamName(config.SEGMENTING_PREFIX)
 		cache.DefaultStreamCache.Segmenting.Store(streamName, cache.StreamInfo{
 			SourceFile:      uploadVODRequest.Url,
 			CallbackURL:     uploadVODRequest.CallbackUrl,
-			UploadURL:       uploadVODRequest.OutputLocations[0].URL,
+			UploadURL:       targetSegmentedOutputURL.String(),
 			AccessToken:     uploadVODRequest.AccessToken,
 			TranscodeAPIUrl: uploadVODRequest.TranscodeAPIUrl,
 			RequestID:       requestID,
 		})
 
 		// process the request
-		if err := d.processUploadVOD(streamName, uploadVODRequest.Url, tURL); err != nil {
+		if err := d.processUploadVOD(streamName, uploadVODRequest.Url, targetSegmentedOutputURL.String()); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot process upload VOD request", err)
 		}
 
