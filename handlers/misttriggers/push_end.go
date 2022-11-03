@@ -4,17 +4,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os/exec"
-	"path"
 	"strings"
 	"time"
 
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
-	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
-	"github.com/livepeer/catalyst-api/subprocess"
 )
 
 type PushEndPayload struct {
@@ -112,26 +108,4 @@ func uuidFromPushUrl(uri string) (string, error) {
 		return "", fmt.Errorf("push url path malformed: element count %d %s", len(path), pushUrl.EscapedPath())
 	}
 	return path[len(path)-2], nil
-}
-
-func createDtsh(requestID, destination string) error {
-	url, err := url.Parse(destination)
-	if err != nil {
-		return err
-	}
-	url.RawQuery = ""
-	url.Fragment = ""
-	headerPrepare := exec.Command(path.Join(config.PathMistDir, "MistInHLS"), "-H", url.String())
-	if err = subprocess.LogOutputs(headerPrepare); err != nil {
-		return err
-	}
-	if err = headerPrepare.Start(); err != nil {
-		return err
-	}
-	go func() {
-		if err := headerPrepare.Wait(); err != nil {
-			log.Log(requestID, "createDtsh return code", "code", err, "destination", destination)
-		}
-	}()
-	return nil
 }
