@@ -121,7 +121,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	if len(transcodeProfiles) == 0 {
 		transcodeProfiles, err = getPlaybackProfiles(inputInfo)
 		if err != nil {
-			return outputs, fmt.Errorf("failed to get playback profiles: %s", err)
+			return outputs, fmt.Errorf("failed to get playback profiles: %w", err)
 		}
 	}
 
