@@ -86,6 +86,11 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		var requestID = "RequestID-" + config.RandomTrailer(8)
 		log.AddContext(requestID, "source", uploadVODRequest.Url)
 
+		if err := applyInputGateway(&uploadVODRequest.Url); err != nil {
+			errors.WriteHTTPBadRequest(w, "error in applyInputGateway()", err)
+			return
+		}
+
 		// find source segment URL
 		var tURL string
 		for _, o := range uploadVODRequest.OutputLocations {
@@ -165,5 +170,22 @@ func (d *CatalystAPIHandlersCollection) processUploadVOD(streamName, sourceURL, 
 		return err
 	}
 
+	return nil
+}
+
+const SCHEME_IPFS = "ipfs"
+const SCHEME_ARWEAVE = "ar"
+
+func applyInputGateway(inputUrl *string) error {
+	sourceUrl, err := url.Parse(*inputUrl)
+	if err != nil {
+		return err
+	}
+	switch sourceUrl.Scheme {
+	case SCHEME_IPFS:
+		*inputUrl = fmt.Sprintf("https://cloudflare-ipfs.com/ipfs/%s", sourceUrl.Host)
+	case SCHEME_ARWEAVE:
+		*inputUrl = fmt.Sprintf("https://arweave.net/%s", sourceUrl.Host)
+	}
 	return nil
 }
