@@ -40,11 +40,11 @@ func TestItCanTranscode(t *testing.T) {
 
 	// Create 2 layers of subdirectories to ensure runs of the test don't interfere with each other
 	// and that it simulates the production layout
-	dir = filepath.Join(dir, "unit-test-dir-"+config.RandomTrailer(8))
-	err := os.Mkdir(dir, os.ModePerm)
+	topLevelDir := filepath.Join(dir, "unit-test-dir-"+config.RandomTrailer(8))
+	err := os.Mkdir(topLevelDir, os.ModePerm)
 	require.NoError(t, err)
 
-	dir = filepath.Join(dir, "unit-test-subdir")
+	dir = filepath.Join(topLevelDir, "unit-test-subdir")
 	err = os.Mkdir(dir, os.ModePerm)
 	require.NoError(t, err)
 
@@ -65,9 +65,6 @@ func TestItCanTranscode(t *testing.T) {
 	require.NoError(t, err)
 	_, err = segment1.WriteString("lots of segment data")
 	require.NoError(t, err)
-
-	// Set up somewhere to output the results to
-	outputDir := os.TempDir()
 
 	// Set up a server to receive callbacks and store them in an array for future verification
 	var callbacks []map[string]interface{}
@@ -125,7 +122,7 @@ func TestItCanTranscode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Confirm the master manifest was created and that it looks like a manifest
-	masterManifestBytes, err := os.ReadFile(filepath.Join(outputDir, "index.m3u8"))
+	masterManifestBytes, err := os.ReadFile(filepath.Join(topLevelDir, "index.m3u8"))
 	require.NoError(t, err)
 	require.Greater(t, len(masterManifestBytes), 0)
 	require.Contains(t, string(masterManifestBytes), "#EXTM3U")
@@ -157,7 +154,7 @@ func TestItCalculatesTheTranscodeCompletionPercentageCorrectly(t *testing.T) {
 func TestComparisonOfSourceWithDefaultProfiles(t *testing.T) {
 	isWideVideobigger := isInputVideoBiggerThanDefaults(clients.InputVideo{
 		Tracks: []clients.InputTrack{
-			clients.InputTrack{
+			{
 				Type: "video",
 				VideoTrack: clients.VideoTrack{
 					Width:  1000000,
@@ -170,7 +167,7 @@ func TestComparisonOfSourceWithDefaultProfiles(t *testing.T) {
 
 	isTallVideoBigger := isInputVideoBiggerThanDefaults(clients.InputVideo{
 		Tracks: []clients.InputTrack{
-			clients.InputTrack{
+			{
 				Type: "video",
 				VideoTrack: clients.VideoTrack{
 					Width:  1,
@@ -183,7 +180,7 @@ func TestComparisonOfSourceWithDefaultProfiles(t *testing.T) {
 
 	isSmallVideoBigger := isInputVideoBiggerThanDefaults(clients.InputVideo{
 		Tracks: []clients.InputTrack{
-			clients.InputTrack{
+			{
 				Type: "video",
 				VideoTrack: clients.VideoTrack{
 					Width:  1279,
