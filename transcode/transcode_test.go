@@ -48,6 +48,10 @@ func TestItCanTranscode(t *testing.T) {
 	err = os.Mkdir(dir, os.ModePerm)
 	require.NoError(t, err)
 
+	dir = filepath.Join(dir, "unit-test-subdir")
+	err = os.Mkdir(dir, os.ModePerm)
+	require.NoError(t, err)
+
 	// Create temporary manifest + segment files on the local filesystem
 	manifestFile, err := os.CreateTemp(dir, "index.m3u8")
 	require.NoError(t, err)
