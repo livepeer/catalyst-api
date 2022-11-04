@@ -269,7 +269,7 @@ func getPlaybackProfiles(iv clients.InputVideo) ([]clients.EncodedProfile, error
 	if err != nil {
 		return nil, fmt.Errorf("no video track found in input video: %w", err)
 	}
-	profiles := make([]clients.EncodedProfile, 0, len(defaultTranscodeProfiles))
+	profiles := make([]clients.EncodedProfile, 0, len(defaultTranscodeProfiles)+1)
 	for _, profile := range defaultTranscodeProfiles {
 		// transcoding job will adjust the width to match aspect ratio. no need to
 		// check it here.
