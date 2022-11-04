@@ -110,7 +110,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			transcodeProfiles = append(defaultTranscodeProfiles, clients.EncodedProfile{
 				Name:    "source",
 				Bitrate: videoTrack.Bitrate,
-				FPS:     int64(videoTrack.FPS),
+				FPS:     0,
 				Width:   videoTrack.Width,
 				Height:  videoTrack.Height,
 			})
