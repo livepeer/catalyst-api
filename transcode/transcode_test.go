@@ -36,7 +36,7 @@ func TestItCanTranscode(t *testing.T) {
 	dir := os.TempDir()
 
 	// Create temporary manifest + segment files on the local filesystem
-	manifestFile, err := os.CreateTemp(dir+"/path/to/", "index.m3u8")
+	manifestFile, err := os.CreateTemp(dir, "index.m3u8")
 	require.NoError(t, err)
 
 	segment0, err := os.Create(dir + "/0.ts")
