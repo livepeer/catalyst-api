@@ -38,18 +38,32 @@ var MAX_DEFAULT_RENDITION_HEIGHT = int64(720)
 // The default set of encoding profiles to use when none are specified
 var defaultTranscodeProfiles = []clients.EncodedProfile{
 	{
-		Name:    "720p",
-		Bitrate: 2000000,
-		FPS:     30,
-		Width:   MAX_DEFAULT_RENDITION_WIDTH,
-		Height:  MAX_DEFAULT_RENDITION_HEIGHT,
+		Name:    "240p0",
+		FPS:     0,
+		Bitrate: 250_000,
+		Width:   426,
+		Height:  240,
 	},
 	{
-		Name:    "360p",
-		Bitrate: 500000,
-		FPS:     30,
+		Name:    "360p0",
+		FPS:     0,
+		Bitrate: 800_000,
 		Width:   640,
 		Height:  360,
+	},
+	{
+		Name:    "480p0",
+		FPS:     0,
+		Bitrate: 1_600_000,
+		Width:   854,
+		Height:  480,
+	},
+	{
+		Name:    "720p0",
+		FPS:     0,
+		Bitrate: 3_000_000,
+		Width:   1280,
+		Height:  720,
 	},
 }
 
