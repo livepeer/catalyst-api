@@ -141,6 +141,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		}
 	}
 
+	fmt.Println("Uploading master manfiest to", targetOSURL, "filename:", MASTER_MANIFEST_FILENAME)
 	err := clients.UploadToOSURL(targetOSURL, MASTER_MANIFEST_FILENAME, strings.NewReader(masterPlaylist.String()))
 	if err != nil {
 		return "", fmt.Errorf("failed to upload master playlist: %s", err)
