@@ -123,19 +123,6 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		if err != nil {
 			return outputs, fmt.Errorf("failed to get playback profiles: %s", err)
 		}
-		if isInputVideoBiggerThanDefaults(inputInfo) {
-			videoTrack, err := inputInfo.GetVideoTrack()
-			if err != nil {
-				return outputs, fmt.Errorf("error finding a video track: %s", err)
-			}
-			transcodeProfiles = append(transcodeProfiles, clients.EncodedProfile{
-				Name:    "source",
-				Bitrate: videoTrack.Bitrate,
-				FPS:     0,
-				Width:   videoTrack.Width,
-				Height:  videoTrack.Height,
-			})
-		}
 	}
 
 	// Download the "source" manifest that contains all the segments we'll be transcoding
@@ -278,31 +265,33 @@ func calculateCompletedRatio(totalSegments, completedSegments int) float64 {
 }
 
 func getPlaybackProfiles(iv clients.InputVideo) ([]clients.EncodedProfile, error) {
-	var video *clients.InputTrack
-	for _, track := range iv.Tracks {
-		if track.Type == "video" {
-			video = &track
-		}
+	video, err := iv.GetVideoTrack()
+	if err != nil {
+		return nil, fmt.Errorf("no video track found in input video: %w", err)
 	}
-	if video == nil {
-		return nil, fmt.Errorf("no video track found in input video")
-	}
-	filtered := make([]clients.EncodedProfile, 0, len(defaultTranscodeProfiles))
+	profiles := make([]clients.EncodedProfile, 0, len(defaultTranscodeProfiles))
 	for _, profile := range defaultTranscodeProfiles {
 		// transcoding job will adjust the width to match aspect ratio. no need to
 		// check it here.
 		lowerQualityThanSrc := profile.Height <= video.Height && profile.Bitrate < video.Bitrate
 		if lowerQualityThanSrc {
-			filtered = append(filtered, profile)
+			profiles = append(profiles, profile)
 		}
 	}
-	if len(filtered) == 0 {
-		return []clients.EncodedProfile{lowBitrateProfile(video)}, nil
+	if len(profiles) == 0 {
+		profiles = []clients.EncodedProfile{lowBitrateProfile(video)}
 	}
-	return filtered, nil
+	profiles = append(profiles, clients.EncodedProfile{
+		Name:    "source",
+		Bitrate: video.Bitrate,
+		FPS:     0,
+		Width:   video.Width,
+		Height:  video.Height,
+	})
+	return profiles, nil
 }
 
-func lowBitrateProfile(video *clients.InputTrack) clients.EncodedProfile {
+func lowBitrateProfile(video clients.InputTrack) clients.EncodedProfile {
 	bitrate := video.Bitrate / 3
 	if bitrate < MIN_VIDEO_BITRATE && video.Bitrate > MIN_VIDEO_BITRATE {
 		bitrate = MIN_VIDEO_BITRATE
@@ -316,20 +305,6 @@ func lowBitrateProfile(video *clients.InputTrack) clients.EncodedProfile {
 		Width:   video.Width,
 		Height:  video.Height,
 	}
-}
-
-func isInputVideoBiggerThanDefaults(iv clients.InputVideo) bool {
-	for _, t := range iv.Tracks {
-		if t.Type == "video" {
-			if t.Width > MAX_DEFAULT_RENDITION_WIDTH {
-				return true
-			}
-			if t.Height > MAX_DEFAULT_RENDITION_HEIGHT {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func channelFromWaitgroup(wg *sync.WaitGroup) chan bool {
