@@ -101,13 +101,13 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	// If Profiles haven't been overridden, use the default set
 	if len(transcodeProfiles) == 0 {
-		transcodeProfiles = defaultTranscodeProfiles
+		transcodeProfiles = append([]clients.EncodedProfile(nil), defaultTranscodeProfiles...)
 		if isInputVideoBiggerThanDefaults(inputInfo) {
 			videoTrack, err := inputInfo.GetVideoTrack()
 			if err != nil {
 				return outputs, fmt.Errorf("error finding a video track: %s", err)
 			}
-			transcodeProfiles = append(defaultTranscodeProfiles, clients.EncodedProfile{
+			transcodeProfiles = append(transcodeProfiles, clients.EncodedProfile{
 				Name:    "source",
 				Bitrate: videoTrack.Bitrate,
 				FPS:     0,
