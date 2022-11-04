@@ -48,7 +48,7 @@ func TestItCanTranscode(t *testing.T) {
 	err = os.Mkdir(dir, os.ModePerm)
 	require.NoError(t, err)
 
-	dir = filepath.Join(dir, "unit-test-subdir")
+	dir = filepath.Join(topLevelDir, "unit-test-subdir")
 	err = os.Mkdir(dir, os.ModePerm)
 	require.NoError(t, err)
 
