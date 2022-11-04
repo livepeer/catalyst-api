@@ -2,6 +2,7 @@ package transcode
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/url"
 	"path"
@@ -11,6 +12,7 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/progress"
 )
 
 type TranscodeSegmentRequest struct {
@@ -130,6 +132,19 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// transcodedStats hold actual info from transcoded results within requested constraints (this usually differs from requested profiles)
 	transcodedStats := statsFromProfiles(transcodeProfiles)
 
+	accumulator := progress.NewAccumulator()
+	progressCtx, cancelProgress := context.WithCancel(context.Background())
+	defer cancelProgress()
+	go progress.ReportProgress(
+		progressCtx,
+		clients.DefaultCallbackClient,
+		transcodeRequest.CallbackURL,
+		transcodeRequest.RequestID,
+		uint64(len(sourceSegmentURLs)),
+		accumulator.Size,
+		0, 1,
+	)
+
 	// Iterate through the segment URLs and transcode them
 	// Use channel to queue segments
 	queue := make(chan segmentInfo, len(sourceSegmentURLs))
@@ -151,10 +166,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 					errors <- err
 					return
 				}
-				var completedRatio = calculateCompletedRatio(len(sourceSegmentURLs), segment.Index+1)
-				if err = clients.DefaultCallbackClient.SendTranscodeStatus(transcodeRequest.CallbackURL, clients.TranscodeStatusTranscoding, completedRatio); err != nil {
-					log.LogError(transcodeRequest.RequestID, "failed to send transcode status callback", err, "url", transcodeRequest.CallbackURL)
-				}
+				accumulator.Accumulate(uint64(segment.Index + 1))
 			}
 		}()
 		// Add some desync interval to avoid load spikes on segment-encode-end

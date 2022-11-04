@@ -136,14 +136,12 @@ func TestItCanTranscode(t *testing.T) {
 	require.Contains(t, string(masterManifestBytes), "rendition-0/index.m3u8")
 	require.Contains(t, string(masterManifestBytes), "rendition-1/index.m3u8")
 
-	// Check we received a progress callback for each segment
-	require.Equal(t, 3, len(callbacks))
-	require.Equal(t, 0.7, callbacks[0]["completion_ratio"])
-	require.Equal(t, 1.0, callbacks[1]["completion_ratio"])
+	// Check we received progress callback at least for the completion (progress package will handle update frequency)
+	require.GreaterOrEqual(t, len(callbacks), 1)
+	require.Equal(t, 1.0, callbacks[len(callbacks)-1]["completion_ratio"])
 
 	// Check we received a final Transcode Completed callback
-	require.Equal(t, 1.0, callbacks[2]["completion_ratio"])
-	require.Equal(t, "success", callbacks[2]["status"])
+	require.Equal(t, "success", callbacks[1]["status"])
 }
 
 func TestItCalculatesTheTranscodeCompletionPercentageCorrectly(t *testing.T) {
