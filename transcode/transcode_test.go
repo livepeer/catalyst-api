@@ -2,6 +2,7 @@ package transcode
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -34,6 +35,7 @@ func (c StubBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumbe
 
 func TestItCanTranscode(t *testing.T) {
 	dir := os.TempDir()
+	fmt.Println("TestItCanTranscode running using Temp Dir:", dir)
 
 	// Create temporary manifest + segment files on the local filesystem
 	manifestFile, err := os.CreateTemp(dir, "index.m3u8")
