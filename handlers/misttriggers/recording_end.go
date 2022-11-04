@@ -143,6 +143,11 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 		// prepare .dtsh headers for all rendition playlists
 		for _, output := range outputs {
 			// output is multivariant playlist
+			err := createDtsh(requestID, output.Manifest)
+			if err != nil {
+				// should not block the ingestion flow or make it fail on error.
+				log.Log(requestID, "master createDtsh() failed", "code", err, "destination", output.Manifest)
+			}
 			for _, rendition := range output.Videos {
 				// we create dtsh for all rendition playlists
 				err := createDtsh(requestID, rendition.Location)
