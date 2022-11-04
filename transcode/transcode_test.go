@@ -38,7 +38,7 @@ func TestItCanTranscode(t *testing.T) {
 	dir := os.TempDir()
 	fmt.Println("TestItCanTranscode running using Temp Dir:", dir)
 
-	dir = filepath.Join(dir, "unit-test-dir-" + config.RandomTrailer(8))
+	dir = filepath.Join(dir, "unit-test-dir-"+config.RandomTrailer(8))
 	err := os.Mkdir(dir, os.ModePerm)
 	require.NoError(t, err)
 
