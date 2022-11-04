@@ -38,8 +38,14 @@ func TestItCanTranscode(t *testing.T) {
 	dir := os.TempDir()
 	fmt.Println("TestItCanTranscode running using Temp Dir:", dir)
 
+	// Create 2 layers of subdirectories to ensure runs of the test don't interfere with each other
+	// and that it simulates the production layout
 	dir = filepath.Join(dir, "unit-test-dir-"+config.RandomTrailer(8))
 	err := os.Mkdir(dir, os.ModePerm)
+	require.NoError(t, err)
+
+	dir = filepath.Join(dir, "unit-test-subdir")
+	err = os.Mkdir(dir, os.ModePerm)
 	require.NoError(t, err)
 
 	// Create temporary manifest + segment files on the local filesystem
