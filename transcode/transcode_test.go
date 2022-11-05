@@ -2,6 +2,7 @@ package transcode
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/livepeer/catalyst-api/clients"
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,9 +36,20 @@ func (c StubBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumbe
 
 func TestItCanTranscode(t *testing.T) {
 	dir := os.TempDir()
+	fmt.Println("TestItCanTranscode running using Temp Dir:", dir)
+
+	// Create 2 layers of subdirectories to ensure runs of the test don't interfere with each other
+	// and that it simulates the production layout
+	topLevelDir := filepath.Join(dir, "unit-test-dir-"+config.RandomTrailer(8))
+	err := os.Mkdir(topLevelDir, os.ModePerm)
+	require.NoError(t, err)
+
+	dir = filepath.Join(topLevelDir, "unit-test-subdir")
+	err = os.Mkdir(dir, os.ModePerm)
+	require.NoError(t, err)
 
 	// Create temporary manifest + segment files on the local filesystem
-	manifestFile, err := os.CreateTemp(dir+"/path/to/", "index.m3u8")
+	manifestFile, err := os.CreateTemp(dir, "index.m3u8")
 	require.NoError(t, err)
 
 	segment0, err := os.Create(dir + "/0.ts")
@@ -52,9 +65,6 @@ func TestItCanTranscode(t *testing.T) {
 	require.NoError(t, err)
 	_, err = segment1.WriteString("lots of segment data")
 	require.NoError(t, err)
-
-	// Set up somewhere to output the results to
-	outputDir := os.TempDir()
 
 	// Set up a server to receive callbacks and store them in an array for future verification
 	var callbacks []map[string]interface{}
@@ -112,16 +122,16 @@ func TestItCanTranscode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Confirm the master manifest was created and that it looks like a manifest
-	masterManifestBytes, err := os.ReadFile(filepath.Join(outputDir, "transcoded/index.m3u8"))
+	masterManifestBytes, err := os.ReadFile(filepath.Join(topLevelDir, "index.m3u8"))
 	require.NoError(t, err)
 	require.Greater(t, len(masterManifestBytes), 0)
 	require.Contains(t, string(masterManifestBytes), "#EXTM3U")
 	require.Contains(t, string(masterManifestBytes), "#EXT-X-STREAM-INF")
 
 	// Confirm that the master manifest contains links to 3 renditions (2 defaults + 1 to match the source dimensions)
-	require.Contains(t, string(masterManifestBytes), "rendition-0/rendition.m3u8")
-	require.Contains(t, string(masterManifestBytes), "rendition-1/rendition.m3u8")
-	require.Contains(t, string(masterManifestBytes), "rendition-2/rendition.m3u8")
+	require.Contains(t, string(masterManifestBytes), "rendition-0/index.m3u8")
+	require.Contains(t, string(masterManifestBytes), "rendition-1/index.m3u8")
+	require.Contains(t, string(masterManifestBytes), "rendition-2/index.m3u8")
 
 	// Check we received a progress callback for each segment
 	require.Equal(t, 3, len(callbacks))
@@ -144,7 +154,7 @@ func TestItCalculatesTheTranscodeCompletionPercentageCorrectly(t *testing.T) {
 func TestComparisonOfSourceWithDefaultProfiles(t *testing.T) {
 	isWideVideobigger := isInputVideoBiggerThanDefaults(clients.InputVideo{
 		Tracks: []clients.InputTrack{
-			clients.InputTrack{
+			{
 				Type: "video",
 				VideoTrack: clients.VideoTrack{
 					Width:  1000000,
@@ -157,7 +167,7 @@ func TestComparisonOfSourceWithDefaultProfiles(t *testing.T) {
 
 	isTallVideoBigger := isInputVideoBiggerThanDefaults(clients.InputVideo{
 		Tracks: []clients.InputTrack{
-			clients.InputTrack{
+			{
 				Type: "video",
 				VideoTrack: clients.VideoTrack{
 					Width:  1,
@@ -170,7 +180,7 @@ func TestComparisonOfSourceWithDefaultProfiles(t *testing.T) {
 
 	isSmallVideoBigger := isInputVideoBiggerThanDefaults(clients.InputVideo{
 		Tracks: []clients.InputTrack{
-			clients.InputTrack{
+			{
 				Type: "video",
 				VideoTrack: clients.VideoTrack{
 					Width:  1279,

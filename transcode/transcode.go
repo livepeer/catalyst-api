@@ -94,18 +94,6 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 	// Go back to the root directory to set as the output for transcode renditions
 	targetTranscodedPath := path.Dir(path.Dir(segmentedOutputManifestURL.Path))
-	// Use the same manifest filename that was used for the segmented manifest
-	targetTranscodedManifestFilename := path.Base(segmentedOutputManifestURL.String())
-	// Generate the new output path of the transcoded manifest
-	targetTranscodedOutputPath := path.Join(targetTranscodedPath, targetTranscodedManifestFilename)
-	// Generate the manifest output URL from the manifest output path (e.g. s3+https://USER:PASS@storage.googleapis.com/user/hls/index.m3u8)
-	tpath, err := url.Parse(targetTranscodedOutputPath)
-	if err != nil {
-		return outputs, fmt.Errorf("failed to parse targetTranscodedOutputPath: %s", err)
-	}
-	targetTranscodedOutputURL := segmentedOutputManifestURL.ResolveReference(tpath)
-	fmt.Println(targetTranscodedOutputURL)
-	// Generate the rendition output URL (e.g. s3+https://USER:PASS@storage.googleapis.com/user/hls/)
 	tout, err := url.Parse(targetTranscodedPath)
 	if err != nil {
 		return outputs, fmt.Errorf("failed to parse targetTranscodedPath: %s", err)
