@@ -68,6 +68,7 @@ func (c *SegmentingCache) Store(streamName string, streamInfo StreamInfo) {
 		AccessToken:           streamInfo.AccessToken,
 		TranscodeAPIUrl:       streamInfo.TranscodeAPIUrl,
 		HardcodedBroadcasters: streamInfo.HardcodedBroadcasters,
+		RequestID:             streamInfo.RequestID,
 	}
 	c.debugPrint("add", streamName)
 }

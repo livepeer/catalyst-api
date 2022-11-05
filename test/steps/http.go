@@ -47,7 +47,7 @@ func (s *StepContext) getDefaultUploadRequestPayload() string {
 		"output_locations": [
 			{
 				"type": "object_store",
-				"url": "memory://localhost/output",
+				"url": "memory://localhost/output.m3u8",
  				"outputs": {
 					"source_segments": true
 				}
@@ -98,7 +98,8 @@ func (s *StepContext) CheckHTTPResponseCodeAndBody(code int, expectedBody string
 
 func (s *StepContext) CheckHTTPResponseCode(code int) error {
 	if s.latestResponse.StatusCode != code {
-		return fmt.Errorf("expected HTTP response code %d but got %d", code, s.latestResponse.StatusCode)
+		body, _ := io.ReadAll(s.latestResponse.Body)
+		return fmt.Errorf("expected HTTP response code %d but got %d. Body: %s", code, s.latestResponse.StatusCode, body)
 	}
 	return nil
 }

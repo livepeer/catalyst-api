@@ -52,7 +52,7 @@ type EncodedProfile struct {
 	Width        int64  `json:"width,omitempty"`
 	Height       int64  `json:"height,omitempty"`
 	Bitrate      int64  `json:"bitrate,omitempty"`
-	FPS          int64  `json:"fps,omitempty"`
+	FPS          int64  `json:"fps"`
 	FPSDen       int64  `json:"fpsDen,omitempty"`
 	Profile      string `json:"profile,omitempty"`
 	GOP          string `json:"gop,omitempty"`
