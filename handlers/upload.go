@@ -116,13 +116,13 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		if err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot parse targetSegmentedOutputPath", err)
 		}
-		
+
 		targetSegmentedOutputURL := targetURL.ResolveReference(sout)
 		log.AddContext(requestID, "segmented_url", targetSegmentedOutputURL.String())
 
 		streamName := config.RandomStreamName(config.SEGMENTING_PREFIX)
 		log.AddContext(requestID, "stream_name", streamName)
-		
+
 		cache.DefaultStreamCache.Segmenting.Store(streamName, cache.StreamInfo{
 			SourceFile:      uploadVODRequest.Url,
 			CallbackURL:     uploadVODRequest.CallbackUrl,
