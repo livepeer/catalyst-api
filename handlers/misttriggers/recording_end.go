@@ -143,12 +143,17 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 		// prepare .dtsh headers for all rendition playlists
 		for _, output := range outputs {
 			// output is multivariant playlist
+			err := createDtsh(requestID, output.Manifest)
+			if err != nil {
+				// should not block the ingestion flow or make it fail on error.
+				log.LogError(requestID, "master createDtsh() failed", err, "destination", output.Manifest)
+			}
 			for _, rendition := range output.Videos {
 				// we create dtsh for all rendition playlists
 				err := createDtsh(requestID, rendition.Location)
 				if err != nil {
 					// should not block the ingestion flow or make it fail on error.
-					log.Log(requestID, "createDtsh() failed", "code", err, "destination", rendition.Location)
+					log.LogError(requestID, "createDtsh() failed", err, "destination", rendition.Location)
 				}
 			}
 		}
@@ -240,7 +245,7 @@ func createDtsh(requestID, destination string) error {
 	}
 	go func() {
 		if err := headerPrepare.Wait(); err != nil {
-			log.Log(requestID, "createDtsh return code", "code", err, "destination", destination)
+			log.LogError(requestID, "createDtsh return code", err, "destination", destination)
 		}
 	}()
 	return nil
