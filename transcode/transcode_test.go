@@ -86,11 +86,11 @@ func TestItCanTranscode(t *testing.T) {
 		tr: clients.TranscodeResult{
 			Renditions: []*clients.RenditionSegment{
 				{
-					Name:      "360p",
+					Name:      "low-bitrate",
 					MediaData: []byte("pretend media data"),
 				},
 				{
-					Name:      "720p",
+					Name:      "source",
 					MediaData: []byte("pretend high-def media data"),
 				},
 			},
@@ -128,10 +128,9 @@ func TestItCanTranscode(t *testing.T) {
 	require.Contains(t, string(masterManifestBytes), "#EXTM3U")
 	require.Contains(t, string(masterManifestBytes), "#EXT-X-STREAM-INF")
 
-	// Confirm that the master manifest contains links to 3 renditions (2 defaults + 1 to match the source dimensions)
+	// Confirm that the master manifest contains links to 2 renditions
 	require.Contains(t, string(masterManifestBytes), "rendition-0/index.m3u8")
 	require.Contains(t, string(masterManifestBytes), "rendition-1/index.m3u8")
-	require.Contains(t, string(masterManifestBytes), "rendition-2/index.m3u8")
 
 	// Check we received a progress callback for each segment
 	require.Equal(t, 3, len(callbacks))
@@ -149,45 +148,4 @@ func TestItCalculatesTheTranscodeCompletionPercentageCorrectly(t *testing.T) {
 	require.Equal(t, 0.1, calculateCompletedRatio(10, 1))
 	require.Equal(t, 0.01, calculateCompletedRatio(100, 1))
 	require.Equal(t, 0.6, calculateCompletedRatio(100, 60))
-}
-
-func TestComparisonOfSourceWithDefaultProfiles(t *testing.T) {
-	isWideVideobigger := isInputVideoBiggerThanDefaults(clients.InputVideo{
-		Tracks: []clients.InputTrack{
-			{
-				Type: "video",
-				VideoTrack: clients.VideoTrack{
-					Width:  1000000,
-					Height: 1,
-				},
-			},
-		},
-	})
-	require.True(t, isWideVideobigger)
-
-	isTallVideoBigger := isInputVideoBiggerThanDefaults(clients.InputVideo{
-		Tracks: []clients.InputTrack{
-			{
-				Type: "video",
-				VideoTrack: clients.VideoTrack{
-					Width:  1,
-					Height: 1000000,
-				},
-			},
-		},
-	})
-	require.True(t, isTallVideoBigger)
-
-	isSmallVideoBigger := isInputVideoBiggerThanDefaults(clients.InputVideo{
-		Tracks: []clients.InputTrack{
-			{
-				Type: "video",
-				VideoTrack: clients.VideoTrack{
-					Width:  1279,
-					Height: 719,
-				},
-			},
-		},
-	})
-	require.False(t, isSmallVideoBigger)
 }
