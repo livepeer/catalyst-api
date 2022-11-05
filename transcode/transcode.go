@@ -32,24 +32,42 @@ type TranscodeSegmentRequest struct {
 	RequestID        string
 }
 
-var MAX_DEFAULT_RENDITION_WIDTH = int64(1280)
-var MAX_DEFAULT_RENDITION_HEIGHT = int64(720)
+const (
+	MIN_VIDEO_BITRATE            = 100_000
+	ABSOLUTE_MIN_VIDEO_BITRATE   = 5_000
+	MAX_DEFAULT_RENDITION_WIDTH  = 1280
+	MAX_DEFAULT_RENDITION_HEIGHT = 720
+)
 
 // The default set of encoding profiles to use when none are specified
 var defaultTranscodeProfiles = []clients.EncodedProfile{
 	{
-		Name:    "720p",
-		Bitrate: 2000000,
-		FPS:     30,
-		Width:   MAX_DEFAULT_RENDITION_WIDTH,
-		Height:  MAX_DEFAULT_RENDITION_HEIGHT,
+		Name:    "240p0",
+		FPS:     0,
+		Bitrate: 250_000,
+		Width:   426,
+		Height:  240,
 	},
 	{
-		Name:    "360p",
-		Bitrate: 500000,
-		FPS:     30,
+		Name:    "360p0",
+		FPS:     0,
+		Bitrate: 800_000,
 		Width:   640,
 		Height:  360,
+	},
+	{
+		Name:    "480p0",
+		FPS:     0,
+		Bitrate: 1_600_000,
+		Width:   854,
+		Height:  480,
+	},
+	{
+		Name:    "720p0",
+		FPS:     0,
+		Bitrate: 3_000_000,
+		Width:   1280,
+		Height:  720,
 	},
 }
 
@@ -76,18 +94,6 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 	// Go back to the root directory to set as the output for transcode renditions
 	targetTranscodedPath := path.Dir(path.Dir(segmentedOutputManifestURL.Path))
-	// Use the same manifest filename that was used for the segmented manifest
-	targetTranscodedManifestFilename := path.Base(segmentedOutputManifestURL.String())
-	// Generate the new output path of the transcoded manifest
-	targetTranscodedOutputPath := path.Join(targetTranscodedPath, targetTranscodedManifestFilename)
-	// Generate the manifest output URL from the manifest output path (e.g. s3+https://USER:PASS@storage.googleapis.com/user/hls/index.m3u8)
-	tpath, err := url.Parse(targetTranscodedOutputPath)
-	if err != nil {
-		return outputs, fmt.Errorf("failed to parse targetTranscodedOutputPath: %s", err)
-	}
-	targetTranscodedOutputURL := segmentedOutputManifestURL.ResolveReference(tpath)
-	fmt.Println(targetTranscodedOutputURL)
-	// Generate the rendition output URL (e.g. s3+https://USER:PASS@storage.googleapis.com/user/hls/)
 	tout, err := url.Parse(targetTranscodedPath)
 	if err != nil {
 		return outputs, fmt.Errorf("failed to parse targetTranscodedPath: %s", err)
@@ -101,19 +107,9 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	// If Profiles haven't been overridden, use the default set
 	if len(transcodeProfiles) == 0 {
-		transcodeProfiles = defaultTranscodeProfiles
-		if isInputVideoBiggerThanDefaults(inputInfo) {
-			videoTrack, err := inputInfo.GetVideoTrack()
-			if err != nil {
-				return outputs, fmt.Errorf("error finding a video track: %s", err)
-			}
-			transcodeProfiles = append(defaultTranscodeProfiles, clients.EncodedProfile{
-				Name:    "source",
-				Bitrate: videoTrack.Bitrate,
-				FPS:     int64(videoTrack.FPS),
-				Width:   videoTrack.Width,
-				Height:  videoTrack.Height,
-			})
+		transcodeProfiles, err = getPlaybackProfiles(inputInfo)
+		if err != nil {
+			return outputs, fmt.Errorf("failed to get playback profiles: %w", err)
 		}
 	}
 
@@ -256,18 +252,47 @@ func calculateCompletedRatio(totalSegments, completedSegments int) float64 {
 	return (1 / float64(totalSegments)) * float64(completedSegments)
 }
 
-func isInputVideoBiggerThanDefaults(iv clients.InputVideo) bool {
-	for _, t := range iv.Tracks {
-		if t.Type == "video" {
-			if t.Width > MAX_DEFAULT_RENDITION_WIDTH {
-				return true
-			}
-			if t.Height > MAX_DEFAULT_RENDITION_HEIGHT {
-				return true
-			}
+func getPlaybackProfiles(iv clients.InputVideo) ([]clients.EncodedProfile, error) {
+	video, err := iv.GetVideoTrack()
+	if err != nil {
+		return nil, fmt.Errorf("no video track found in input video: %w", err)
+	}
+	profiles := make([]clients.EncodedProfile, 0, len(defaultTranscodeProfiles)+1)
+	for _, profile := range defaultTranscodeProfiles {
+		// transcoding job will adjust the width to match aspect ratio. no need to
+		// check it here.
+		lowerQualityThanSrc := profile.Height <= video.Height && profile.Bitrate < video.Bitrate
+		if lowerQualityThanSrc {
+			profiles = append(profiles, profile)
 		}
 	}
-	return false
+	if len(profiles) == 0 {
+		profiles = []clients.EncodedProfile{lowBitrateProfile(video)}
+	}
+	profiles = append(profiles, clients.EncodedProfile{
+		Name:    "source",
+		Bitrate: video.Bitrate,
+		FPS:     0,
+		Width:   video.Width,
+		Height:  video.Height,
+	})
+	return profiles, nil
+}
+
+func lowBitrateProfile(video clients.InputTrack) clients.EncodedProfile {
+	bitrate := video.Bitrate / 3
+	if bitrate < MIN_VIDEO_BITRATE && video.Bitrate > MIN_VIDEO_BITRATE {
+		bitrate = MIN_VIDEO_BITRATE
+	} else if bitrate < ABSOLUTE_MIN_VIDEO_BITRATE {
+		bitrate = ABSOLUTE_MIN_VIDEO_BITRATE
+	}
+	return clients.EncodedProfile{
+		Name:    "low-bitrate",
+		FPS:     0,
+		Bitrate: bitrate,
+		Width:   video.Width,
+		Height:  video.Height,
+	}
 }
 
 func channelFromWaitgroup(wg *sync.WaitGroup) chan bool {
