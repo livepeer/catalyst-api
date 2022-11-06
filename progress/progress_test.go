@@ -15,19 +15,8 @@ import (
 
 func TestProgressNotificationThrottling(t *testing.T) {
 	var updateCount = 0
-	mock, url, cleanup := setup(func() { updateCount++ }, t)
+	mock, accumulator, cleanup := setup(func() { updateCount++ }, t)
 	defer cleanup()
-
-	accumulator := NewAccumulator()
-	go ReportProgress(
-		context.Background(),
-		clients.NewCallbackClient(),
-		url,
-		"taskid",
-		100,
-		accumulator.Size,
-		0, 1,
-	)
 
 	accumulator.Accumulate(1)
 	forward(mock, 1*time.Second)
@@ -40,19 +29,8 @@ func TestProgressNotificationThrottling(t *testing.T) {
 
 func TestProgressNotificationInterval(t *testing.T) {
 	var updateCount = 0
-	mock, url, cleanup := setup(func() { updateCount++ }, t)
+	mock, accumulator, cleanup := setup(func() { updateCount++ }, t)
 	defer cleanup()
-
-	accumulator := NewAccumulator()
-	go ReportProgress(
-		context.Background(),
-		clients.NewCallbackClient(),
-		url,
-		"taskid",
-		100,
-		accumulator.Size,
-		0, 1,
-	)
 
 	accumulator.Accumulate(1)
 	forward(mock, 1*time.Second)
@@ -65,19 +43,8 @@ func TestProgressNotificationInterval(t *testing.T) {
 
 func TestProgressBucketChange(t *testing.T) {
 	var updateCount = 0
-	mock, url, cleanup := setup(func() { updateCount++ }, t)
+	mock, accumulator, cleanup := setup(func() { updateCount++ }, t)
 	defer cleanup()
-
-	accumulator := NewAccumulator()
-	go ReportProgress(
-		context.Background(),
-		clients.NewCallbackClient(),
-		url,
-		"taskid",
-		100,
-		accumulator.Size,
-		0, 1,
-	)
 
 	accumulator.Accumulate(1)
 	forward(mock, 1*time.Second)
@@ -90,19 +57,8 @@ func TestProgressBucketChange(t *testing.T) {
 
 func TestFastProgressBucketChange(t *testing.T) {
 	var updateCount = 0
-	mock, url, cleanup := setup(func() { updateCount++ }, t)
+	mock, accumulator, cleanup := setup(func() { updateCount++ }, t)
 	defer cleanup()
-
-	accumulator := NewAccumulator()
-	go ReportProgress(
-		context.Background(),
-		clients.NewCallbackClient(),
-		url,
-		"taskid",
-		100,
-		accumulator.Size,
-		0, 1,
-	)
 
 	accumulator.Accumulate(1)
 	forward(mock, 1*time.Second)
@@ -113,7 +69,7 @@ func TestFastProgressBucketChange(t *testing.T) {
 	require.Equal(t, 1, updateCount)
 }
 
-func setup(callback func(), t require.TestingT) (*clock.Mock, string, func()) {
+func setup(callback func(), t require.TestingT) (*clock.Mock, *Accumulator, func()) {
 	var realClock = Clock
 	var mock = clock.NewMock()
 	Clock = mock
@@ -126,7 +82,13 @@ func setup(callback func(), t require.TestingT) (*clock.Mock, string, func()) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	return mock, server.URL, func() {
+	client := clients.NewCallbackClient()
+
+	accumulator := NewAccumulator()
+	reporter := NewProgressReporter(context.Background(), &client, server.URL, "taskid")
+	reporter.TrackCount(accumulator.Size, 100, 1)
+
+	return mock, accumulator, func() {
 		Clock = realClock
 		server.Close()
 	}

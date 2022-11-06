@@ -132,18 +132,16 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// transcodedStats hold actual info from transcoded results within requested constraints (this usually differs from requested profiles)
 	transcodedStats := statsFromProfiles(transcodeProfiles)
 
-	accumulator := progress.NewAccumulator()
-	progressCtx, cancelProgress := context.WithCancel(context.Background())
-	defer cancelProgress()
-	go progress.ReportProgress(
-		progressCtx,
-		clients.DefaultCallbackClient,
+	reporter := progress.NewProgressReporter(
+		context.Background(),
+		&clients.DefaultCallbackClient,
 		transcodeRequest.CallbackURL,
 		transcodeRequest.RequestID,
-		uint64(len(sourceSegmentURLs)),
-		accumulator.Size,
-		0, 1,
 	)
+	defer reporter.Stop()
+
+	accumulator := progress.NewAccumulator()
+	reporter.TrackCount(accumulator.Size, uint64(len(sourceSegmentURLs)), 1)
 
 	// Iterate through the segment URLs and transcode them
 	// Use channel to queue segments
