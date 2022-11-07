@@ -83,7 +83,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		}
 
 		// Generate a Request ID that will be used throughout all logging
-		var requestID = "RequestID-" + config.RandomTrailer(8)
+		var requestID = /*"RequestID-" + */ config.RandomTrailer(8)
 		log.AddContext(requestID, "source", uploadVODRequest.Url)
 
 		// find source segment URL
@@ -120,7 +120,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		targetSegmentedOutputURL := targetURL.ResolveReference(sout)
 		log.AddContext(requestID, "segmented_url", targetSegmentedOutputURL.String())
 
-		streamName := config.RandomStreamName(config.SEGMENTING_PREFIX)
+		streamName := config.SegmentingStreamName(requestID)
 		log.AddContext(requestID, "stream_name", streamName)
 
 		cache.DefaultStreamCache.Segmenting.Store(streamName, cache.StreamInfo{

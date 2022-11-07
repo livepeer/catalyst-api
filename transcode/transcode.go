@@ -125,8 +125,8 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, fmt.Errorf("error generating source segment URLs: %s", err)
 	}
 
-	// Generate a unique ID to use when talking to the Broadcaster
-	manifestID := "manifest-" + config.RandomTrailer(8)
+	// Use RequestID as part of manifestID when talking to the Broadcaster
+	manifestID := "manifest-" + transcodeRequest.RequestID
 	// transcodedStats hold actual info from transcoded results within requested constraints (this usually differs from requested profiles)
 	transcodedStats := statsFromProfiles(transcodeProfiles)
 
