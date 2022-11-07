@@ -187,7 +187,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	return outputs, nil
 }
 
-func transcodeSegment(segment segmentInfo, streamName, manifestID string, transcodeRequest TranscodeSegmentRequest, transcodeProfiles []clients.EncodedProfile, targetOSURL *url.URL, transcodedStats []RenditionStats) error {
+func transcodeSegment(segment segmentInfo, streamName, manifestID string, transcodeRequest TranscodeSegmentRequest, transcodeProfiles []clients.EncodedProfile, targetOSURL *url.URL, transcodedStats []*RenditionStats) error {
 	rc, err := clients.DownloadOSURL(segment.Input.URL)
 	if err != nil {
 		return fmt.Errorf("failed to download source segment %q: %s", segment.Input, err)
@@ -309,10 +309,10 @@ type segmentInfo struct {
 	Index int
 }
 
-func statsFromProfiles(profiles []clients.EncodedProfile) []RenditionStats {
-	stats := []RenditionStats{}
+func statsFromProfiles(profiles []clients.EncodedProfile) []*RenditionStats {
+	stats := []*RenditionStats{}
 	for _, profile := range profiles {
-		stats = append(stats, RenditionStats{
+		stats = append(stats, &RenditionStats{
 			Name:   profile.Name,
 			Width:  profile.Width,  // TODO: extract this from actual media retrieved from B
 			Height: profile.Height, // TODO: extract this from actual media retrieved from B

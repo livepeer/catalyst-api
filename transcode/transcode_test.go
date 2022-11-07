@@ -122,15 +122,19 @@ func TestItCanTranscode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Confirm the master manifest was created and that it looks like a manifest
+	var expectedMasterManifest = `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=28800,RESOLUTION=2020x2020,NAME="0-source"
+rendition-0/index.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=19200,RESOLUTION=2020x2020,NAME="1-low-bitrate"
+rendition-1/index.m3u8
+`
+
 	masterManifestBytes, err := os.ReadFile(filepath.Join(topLevelDir, "index.m3u8"))
+
 	require.NoError(t, err)
 	require.Greater(t, len(masterManifestBytes), 0)
-	require.Contains(t, string(masterManifestBytes), "#EXTM3U")
-	require.Contains(t, string(masterManifestBytes), "#EXT-X-STREAM-INF")
-
-	// Confirm that the master manifest contains links to 2 renditions
-	require.Contains(t, string(masterManifestBytes), "rendition-0/index.m3u8")
-	require.Contains(t, string(masterManifestBytes), "rendition-1/index.m3u8")
+	require.Equal(t, expectedMasterManifest, string(masterManifestBytes))
 
 	// Check we received a progress callback for each segment
 	require.Equal(t, 3, len(callbacks))
