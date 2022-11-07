@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/hashicorp/go-retryablehttp"
 )
 
 // Broadcaster-node already has built-in retry logic. We want to rely on that and set generous timeout here:
@@ -61,8 +63,13 @@ type EncodedProfile struct {
 	ChromaFormat int64  `json:"chromaFormat,omitempty"`
 }
 
-var client = &http.Client{
-	Timeout: TRANSCODE_TIMEOUT,
+var client = retryablehttp.Client{
+	RetryMax:     2,
+	RetryWaitMin: 200 * time.Millisecond,
+	RetryWaitMax: 1 * time.Second,
+	HTTPClient: &http.Client{
+		Timeout: TRANSCODE_TIMEOUT,
+	},
 }
 
 // TranscodeSegment sends media to Livepeer network and returns rendition segments
@@ -87,7 +94,7 @@ func transcodeSegment(inputSegment io.Reader, sequenceNumber, mediaDurationMilli
 		req.Header.Add("Livepeer-Transcode-Configuration", transcodeConfigHeader)
 
 	}
-	res, err := client.Do(req)
+	res, err := client.StandardClient().Do(req)
 	if err != nil {
 		return t, fmt.Errorf("http do(%s): %v", requestURL, err)
 	}

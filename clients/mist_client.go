@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"net/url"
 	"sync"
 )
@@ -77,6 +76,8 @@ type MistStreamInfo struct {
 	Width  int                    `json:"width,omitempty"`
 	Error  string                 `json:"error,omitempty"`
 }
+
+var mistRetryableClient = newRetryableClient(nil)
 
 func (mc *MistClient) AddStream(streamName, sourceUrl string) error {
 	c := commandAddStream(streamName, sourceUrl)
@@ -158,7 +159,7 @@ func (mc *MistClient) sendCommand(command interface{}) (string, error) {
 		return "", err
 	}
 	payload := payloadFor(c)
-	resp, err := http.Post(mc.ApiUrl, "application/json", bytes.NewBuffer([]byte(payload)))
+	resp, err := mistRetryableClient.Post(mc.ApiUrl, "application/json", bytes.NewBuffer([]byte(payload)))
 	if err != nil {
 		return "", err
 	}
@@ -185,7 +186,7 @@ func payloadFor(command string) string {
 func (mc *MistClient) sendHttpRequest(streamName string) (string, error) {
 	jsonStreamInfoUrl := mc.HttpReqUrl + "/json_" + streamName + ".js"
 
-	resp, err := http.Get(jsonStreamInfoUrl)
+	resp, err := mistRetryableClient.Get(jsonStreamInfoUrl)
 	if err != nil {
 		return "", err
 	}
