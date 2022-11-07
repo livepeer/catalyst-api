@@ -232,10 +232,6 @@ func transcodeSegment(segment segmentInfo, streamName, manifestID string, transc
 		transcodedStats[renditionIndex].DurationMs += float64(segment.Input.DurationMillis)
 	}
 
-	for _, stats := range transcodedStats {
-		stats.BitsPerSecond = uint32(float64(stats.Bytes) * 8000.0 / float64(stats.DurationMs))
-	}
-
 	return nil
 }
 

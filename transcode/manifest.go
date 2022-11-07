@@ -76,6 +76,9 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL string, transcodedStats []RenditionStats) (string, error) {
 	// Generate the master + rendition output manifests
 	masterPlaylist := m3u8.NewMasterPlaylist()
+	for index, stats := range transcodedStats {
+		transcodedStats[index].BitsPerSecond = uint32(float64(stats.Bytes) * 8000.0 / float64(stats.DurationMs))
+	}
 
 	sort.Slice(transcodedStats, func(a, b int) bool {
 		if transcodedStats[a].BitsPerSecond > transcodedStats[b].BitsPerSecond {
