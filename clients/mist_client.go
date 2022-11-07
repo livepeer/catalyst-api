@@ -212,7 +212,7 @@ func (mc *MistClient) GetStreamInfo(streamName string) (MistStreamInfo, error) {
 	}
 
 	if msi.Error != "" {
-		return MistStreamInfo{}, fmt.Errorf("%s", msi.Error)
+		return msi, fmt.Errorf("%s", msi.Error)
 	}
 
 	return msi, nil

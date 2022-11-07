@@ -80,7 +80,7 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 	// Get the source stream's detailed track info before kicking off transcode
 	// Mist currently returns the "booting" error even after successfully segmenting MOV files
 	streamInfo, err := d.MistClient.GetStreamInfo(p.StreamName)
-	if err != nil && err.Error() != "Stream is booting" {
+	if err != nil {
 		log.LogError(requestID, "Failed to get stream info", err)
 		return
 	}
