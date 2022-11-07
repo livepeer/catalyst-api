@@ -132,6 +132,8 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			RequestID:       requestID,
 		})
 
+		log.Log(requestID, "Beginning segmenting")
+
 		// process the request
 		if err := d.processUploadVOD(streamName, uploadVODRequest.Url, targetSegmentedOutputURL.String()); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot process upload VOD request", err)
