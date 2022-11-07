@@ -75,6 +75,7 @@ type MistStreamInfo struct {
 	Source []MistStreamInfoSource `json:"source,omitempty"`
 	Type   string                 `json:"type,omitempty"`
 	Width  int                    `json:"width,omitempty"`
+	Error  string                 `json:"error,omitempty"`
 }
 
 func (mc *MistClient) AddStream(streamName, sourceUrl string) error {
@@ -188,6 +189,9 @@ func (mc *MistClient) sendHttpRequest(streamName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("got HTTP Status %d from Mist StreamInfo API", resp.StatusCode)
+	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -205,6 +209,10 @@ func (mc *MistClient) GetStreamInfo(streamName string) (MistStreamInfo, error) {
 	var msi MistStreamInfo
 	if err := json.Unmarshal([]byte(resp), &msi); err != nil {
 		return MistStreamInfo{}, fmt.Errorf("error unmarshalling MistStreamInfo JSON for %q: %s\nResponse Body: %s", streamName, err, resp)
+	}
+
+	if msi.Error != "" {
+		return MistStreamInfo{}, fmt.Errorf("%s", msi.Error)
 	}
 
 	return msi, nil
