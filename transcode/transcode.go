@@ -95,6 +95,8 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 	// Go back to the root directory to set as the output for transcode renditions
 	targetTranscodedPath := path.Dir(path.Dir(segmentedOutputManifestURL.Path))
+
+	// Generate the rendition output URL (e.g. s3+https://USER:PASS@storage.googleapis.com/user/hls/)
 	tout, err := url.Parse(targetTranscodedPath)
 	if err != nil {
 		return outputs, fmt.Errorf("failed to parse targetTranscodedPath: %s", err)
@@ -219,7 +221,7 @@ func transcodeSegment(segment segmentInfo, streamName, manifestID string, transc
 			return fmt.Errorf("failed to find profile with name %q while parsing rendition segment", transcodedSegment.Name)
 		}
 
-		targetRenditionURL, err := url.JoinPath(targetOSURL.String(), fmt.Sprintf("rendition-%d/", renditionIndex))
+		targetRenditionURL, err := url.JoinPath(targetOSURL.String(), transcodedSegment.Name)
 		if err != nil {
 			return fmt.Errorf("error building rendition segment URL %q: %s", targetRenditionURL, err)
 		}
