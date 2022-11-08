@@ -131,8 +131,8 @@ func TestItCanTranscode(t *testing.T) {
 	require.Contains(t, string(masterManifestBytes), "#EXT-X-STREAM-INF")
 
 	// Confirm that the master manifest contains links to 2 renditions
-	require.Contains(t, string(masterManifestBytes), "rendition-0/index.m3u8")
-	require.Contains(t, string(masterManifestBytes), "rendition-1/index.m3u8")
+	require.Contains(t, string(masterManifestBytes), "low-bitrate/index.m3u8")
+	require.Contains(t, string(masterManifestBytes), "2020p0/index.m3u8")
 
 	// Check we received a progress callback for each segment
 	require.Equal(t, 3, len(callbacks))
