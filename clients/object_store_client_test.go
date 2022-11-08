@@ -1,6 +1,8 @@
 package clients
 
 import (
+	"bytes"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -44,4 +46,98 @@ func TestItFailsWithMissingFile(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to read from OS URL")
 	require.Contains(t, err.Error(), "no such file or directory")
+}
+
+func TestItRetriesReadingData(t *testing.T) {
+	var retries = 0
+	var original = makeOperation
+	makeOperation = func(fn func() error) func() error {
+		return func() error {
+			if retries <= 1 {
+				retries++
+				return errors.New("some-error")
+			} else {
+				return fn()
+			}
+		}
+	}
+	defer func() { makeOperation = original }()
+
+	// Create a temporary file on the local filesystem
+	f, err := os.CreateTemp(os.TempDir(), "manifest*.m3u8")
+	require.NoError(t, err)
+
+	// Write some data to it
+	_, err = f.WriteString(exampleFileContents)
+	require.NoError(t, err)
+
+	// Try to "download" it using the OS URL format for local filesystem files
+	_, err = DownloadOSURL(f.Name())
+
+	require.NoError(t, err)
+	require.Equal(t, 2, retries)
+}
+
+func TestItFailsAfterMaxReadsReached(t *testing.T) {
+	var retries = 0
+	var original = makeOperation
+	makeOperation = func(fn func() error) func() error {
+		return func() error {
+			retries++
+			return errors.New("some-error")
+		}
+	}
+	defer func() { makeOperation = original }()
+
+	// Create a temporary file on the local filesystem
+	f, err := os.CreateTemp(os.TempDir(), "manifest*.m3u8")
+	require.NoError(t, err)
+
+	// Write some data to it
+	_, err = f.WriteString(exampleFileContents)
+	require.NoError(t, err)
+
+	// Try to "download" it using the OS URL format for local filesystem files
+	_, err = DownloadOSURL(f.Name())
+
+	require.Error(t, err)
+	require.Equal(t, 3, retries)
+}
+
+func TestItRetriesSavingData(t *testing.T) {
+	var retries = 0
+	var original = makeOperation
+	makeOperation = func(fn func() error) func() error {
+		return func() error {
+			if retries <= 1 {
+				retries++
+				return errors.New("some-error")
+			} else {
+				return fn()
+			}
+		}
+	}
+	defer func() { makeOperation = original }()
+
+	err := UploadToOSURL(os.TempDir(), "name", bytes.NewReader([]byte("foo")))
+
+	require.NoError(t, err)
+	require.Equal(t, 2, retries)
+}
+
+func TestItFailsAfterMaxSavesRetriesReached(t *testing.T) {
+	var retries = 0
+	var original = makeOperation
+	makeOperation = func(fn func() error) func() error {
+		return func() error {
+			retries++
+			return errors.New("some-error")
+		}
+	}
+	defer func() { makeOperation = original }()
+
+	err := UploadToOSURL(os.TempDir(), "name", bytes.NewReader([]byte("foo")))
+
+	require.Error(t, err)
+	require.Equal(t, 3, retries)
 }

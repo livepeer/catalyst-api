@@ -19,13 +19,13 @@ func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 	}
 
 	var fileInfoReader *drivers.FileInfoReader
-	operation := func() error {
+	readOperation := makeOperation(func() error {
 		var err error
 		fileInfoReader, err = storageDriver.NewSession("").ReadData(context.Background(), "")
 		return err
-	}
+	})
 
-	err = backoff.Retry(operation, backoff.WithMaxRetries(backOff, 2))
+	err = backoff.Retry(readOperation, backoff.WithMaxRetries(backOff, 2))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read from OS URL %q: %s", osURL, err)
 	}
@@ -39,12 +39,12 @@ func UploadToOSURL(osURL, filename string, data io.Reader) error {
 		return fmt.Errorf("failed to parse OS URL %q: %s", osURL, err)
 	}
 
-	operation := func() error {
+	writeOperation := makeOperation(func() error {
 		_, err := storageDriver.NewSession("").SaveData(context.Background(), filename, data, nil, 30*time.Second)
 		return err
-	}
+	})
 
-	err = backoff.Retry(operation, backoff.WithMaxRetries(backOff, 2))
+	err = backoff.Retry(writeOperation, backoff.WithMaxRetries(backOff, 2))
 	if err != nil {
 		return fmt.Errorf("failed to write file %q to OS URL %q: %s", filename, osURL, err)
 	}
@@ -58,4 +58,8 @@ func newBackOffExecutor() *backoff.ExponentialBackOff {
 	backOff.MaxInterval = 1 * time.Second
 
 	return backOff
+}
+
+var makeOperation = func(fn func() error) func() error {
+	return fn
 }

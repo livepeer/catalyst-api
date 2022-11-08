@@ -10,7 +10,7 @@ require (
 	github.com/kylelemons/godebug v1.1.0
 	github.com/livepeer/go-tools v0.0.0-20220926110222-2ebcbb5685b4
 	github.com/livepeer/livepeer-data v0.4.22
-	github.com/minio/madmin-go v1.7.2
+	github.com/minio/madmin-go v1.7.4
 	github.com/stretchr/testify v1.8.0
 	github.com/xeipuuv/gojsonschema v1.2.0
 	sigs.k8s.io/yaml v1.3.0
@@ -139,15 +139,15 @@ require (
 	github.com/miekg/dns v1.1.50 // indirect
 	github.com/minio/cli v1.24.0 // indirect
 	github.com/minio/colorjson v1.0.4 // indirect
-	github.com/minio/console v0.21.2-0.20221102173545-2ff44df63675 // indirect
+	github.com/minio/console v0.21.2 // indirect
 	github.com/minio/csvparser v1.0.0 // indirect
 	github.com/minio/dperf v0.4.2 // indirect
 	github.com/minio/filepath v1.0.0 // indirect
 	github.com/minio/highwayhash v1.0.2 // indirect
 	github.com/minio/kes v0.21.1 // indirect
-	github.com/minio/mc v0.0.0-20221101010057-15e52fd862f5 // indirect
+	github.com/minio/mc v0.0.0-20221103000258-583d449e38cd // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
-	github.com/minio/minio v0.0.0-20221105180921-9547b7d0e976 // indirect
+	github.com/minio/minio v0.0.0-20221108055918-808739867ced // indirect
 	github.com/minio/minio-go/v7 v7.0.43-0.20221021202758-c6319beb6b27 // indirect
 	github.com/minio/pkg v1.5.4 // indirect
 	github.com/minio/selfupdate v0.5.0 // indirect
