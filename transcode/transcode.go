@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"strconv"
 	"sync"
 	"time"
 
@@ -270,7 +271,7 @@ func getPlaybackProfiles(iv clients.InputVideo) ([]clients.EncodedProfile, error
 		profiles = []clients.EncodedProfile{lowBitrateProfile(video)}
 	}
 	profiles = append(profiles, clients.EncodedProfile{
-		Name:    "source",
+		Name:    strconv.FormatInt(int64(video.Height), 10) + "p0",
 		Bitrate: video.Bitrate,
 		FPS:     0,
 		Width:   video.Width,
