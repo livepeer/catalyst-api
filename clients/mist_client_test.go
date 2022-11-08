@@ -326,3 +326,22 @@ func TestItCanParseAMistStreamStatus(t *testing.T) {
 	require.Equal(t, msi.Meta.Tracks["audio_AAC_2ch_44100hz_1"].Bps, 14000)
 	require.Equal(t, msi.Source[0].Relurl, "catalyst_vod_dhggaaab.sdp?tkn=2369431652")
 }
+
+func TestItCanParseAMistStreamErrorStatus(t *testing.T) {
+	status := `{"error":"Stream is booting"}`
+
+	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/json_some-stream-name.js", r.URL.Path)
+
+		_, err := w.Write([]byte(status))
+		require.NoError(t, err)
+	}))
+	defer svr.Close()
+
+	mc := &MistClient{
+		HttpReqUrl: svr.URL,
+	}
+
+	_, err := mc.GetStreamInfo("some-stream-name")
+	require.EqualError(t, err, "Stream is booting")
+}

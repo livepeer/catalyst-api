@@ -18,7 +18,12 @@ func init() {
 
 // Permanently add context to the logger. Any future logging for this Request ID will include this context
 func AddContext(requestID string, keyvals ...interface{}) {
-	_ = loggerCache.Add(requestID, kitlog.With(getLogger(requestID), keyvals...), default_logger_cache_expiry)
+	logger := kitlog.With(getLogger(requestID), keyvals...)
+
+	err := loggerCache.Replace(requestID, logger, default_logger_cache_expiry)
+	if err != nil {
+		_ = logger.Log("msg", "error replacing logger in cache: "+err.Error())
+	}
 }
 
 func Log(requestID string, message string, keyvals ...interface{}) {
@@ -46,7 +51,7 @@ func getLogger(requestID string) kitlog.Logger {
 	newLogger := kitlog.With(newLogger(), "request_id", requestID)
 	err := loggerCache.Add(requestID, newLogger, default_logger_cache_expiry)
 	if err != nil {
-		_ = newLogger.Log("msg", "error adding logger to cache", "request_id", requestID)
+		_ = newLogger.Log("msg", "error adding logger to cache", "request_id", requestID, "err", err.Error())
 	}
 	return newLogger
 }

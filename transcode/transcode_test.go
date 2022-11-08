@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/livepeer/catalyst-api/clients"
@@ -80,6 +81,10 @@ func TestItCanTranscode(t *testing.T) {
 	}))
 	defer callbackServer.Close()
 
+	sourceVideoTrack := clients.VideoTrack{
+		Width:  2020,
+		Height: 2020,
+	}
 	// Set up a fake Broadcaster that returns the rendition segments we'd expect based on the
 	// transcode request we send in the next step
 	localBroadcasterClient = StubBroadcasterClient{
@@ -90,7 +95,7 @@ func TestItCanTranscode(t *testing.T) {
 					MediaData: []byte("pretend media data"),
 				},
 				{
-					Name:      "source",
+					Name:      strconv.FormatInt(int64(sourceVideoTrack.Height), 10) + "p0",
 					MediaData: []byte("pretend high-def media data"),
 				},
 			},
@@ -110,11 +115,8 @@ func TestItCanTranscode(t *testing.T) {
 			SizeBytes: 123,
 			Tracks: []clients.InputTrack{
 				{
-					Type: "video",
-					VideoTrack: clients.VideoTrack{
-						Width:  2020,
-						Height: 2020,
-					},
+					Type:       "video",
+					VideoTrack: sourceVideoTrack,
 				},
 			},
 		},
