@@ -105,7 +105,7 @@ func TestItCanGenerateAndWriteManifests(t *testing.T) {
 	masterManifestURL, err := GenerateAndUploadManifests(
 		*sourceMediaPlaylist,
 		outputDir,
-		[]RenditionStats{
+		[]*RenditionStats{
 			{
 				Name:          "lowlowlow",
 				FPS:           60,
@@ -160,7 +160,7 @@ func TestCompliantMasterManifestOrdering(t *testing.T) {
 	_, err = GenerateAndUploadManifests(
 		*sourceMediaPlaylist,
 		outputDir,
-		[]RenditionStats{
+		[]*RenditionStats{
 			{
 				Name:          "lowlowlow",
 				FPS:           60,
