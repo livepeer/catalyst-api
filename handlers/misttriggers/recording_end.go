@@ -144,6 +144,13 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 			return
 		}
 
+		// When createDtsh() completes issue another callback signaling to studio playback is ready
+		defer func() {
+			if err := clients.DefaultCallbackClient.SendTranscodeStatusPlaybackReady(callbackUrl); err != nil {
+				log.LogError(requestID, "Failed to send playbackready callback", err)
+			}
+		}()
+
 		// prepare .dtsh headers for all rendition playlists
 		for _, output := range outputs {
 			// output is multivariant playlist

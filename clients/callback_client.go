@@ -136,6 +136,22 @@ func (c CallbackClient) SendTranscodeStatusCompleted(url string, iv InputVideo, 
 
 }
 
+func (c CallbackClient) SendTranscodeStatusPlaybackReady(callbackURL string) error {
+	tsm := TranscodeStatusMessage{
+		Status:    TranscodeStatusPlaybackReady.String(),
+		Timestamp: config.Clock.GetTimestampUTC(),
+	}
+	j, err := json.Marshal(tsm)
+	if err != nil {
+		return err
+	}
+	r, err := http.NewRequest(http.MethodPost, callbackURL, bytes.NewReader(j))
+	if err != nil {
+		return err
+	}
+	return c.DoWithRetries(r)
+}
+
 // Calculate the overall completion ratio based on the completion ratio of the current stage.
 // The weighting will need to be tweaked as we understand better the relative time spent in the
 // segmenting vs. transcoding stages.
@@ -177,6 +193,7 @@ const (
 	TranscodeStatusPreparingCompleted
 	TranscodeStatusTranscoding
 	TranscodeStatusCompleted
+	TranscodeStatusPlaybackReady
 	TranscodeStatusError
 )
 
@@ -190,6 +207,8 @@ func (ts TranscodeStatus) String() string {
 		return "transcoding"
 	case TranscodeStatusCompleted:
 		return "success"
+	case TranscodeStatusPlaybackReady:
+		return "playback-ready"
 	case TranscodeStatusError:
 		return "error"
 	}
