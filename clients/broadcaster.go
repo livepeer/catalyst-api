@@ -61,9 +61,7 @@ type EncodedProfile struct {
 	ChromaFormat int64  `json:"chromaFormat,omitempty"`
 }
 
-var client = &http.Client{
-	Timeout: TRANSCODE_TIMEOUT,
-}
+var client = newRetryableClient(&http.Client{Timeout: TRANSCODE_TIMEOUT})
 
 // TranscodeSegment sends media to Livepeer network and returns rendition segments
 // If manifestId == "" one will be created and deleted after use, pass real value to reuse across multiple calls

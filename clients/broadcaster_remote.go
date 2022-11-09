@@ -8,7 +8,9 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"time"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/livepeer/catalyst-api/log"
 )
 
@@ -16,7 +18,15 @@ type RemoteBroadcasterClient struct {
 	credentials Credentials
 }
 
-var apiClient = &http.Client{Timeout: API_TIMEOUT}
+var broadcasterClient = &http.Client{
+	Timeout: API_TIMEOUT,
+	Transport: &http.Transport{
+		DisableKeepAlives:  true,
+		DisableCompression: true,
+	},
+}
+var broadcaserRetryableClient = newRetryableClient(broadcasterClient)
+var apiRetryableClient = newRetryableClient(&http.Client{Timeout: API_TIMEOUT})
 
 func NewRemoteBroadcasterClient(credentials Credentials) (RemoteBroadcasterClient, error) {
 	if credentials.AccessToken == "" || credentials.CustomAPIURL == "" {
@@ -59,13 +69,6 @@ func findBroadcaster(c Credentials) (BroadcasterList, error) {
 	if c.AccessToken == "" || c.CustomAPIURL == "" {
 		return BroadcasterList{}, fmt.Errorf("empty credentials")
 	}
-	client := &http.Client{
-		Timeout: API_TIMEOUT,
-		Transport: &http.Transport{
-			DisableKeepAlives:  true,
-			DisableCompression: true,
-		},
-	}
 	requestURL, err := url.JoinPath(c.CustomAPIURL, "broadcaster")
 	if err != nil {
 		return BroadcasterList{}, fmt.Errorf("appending broadcaster to api url %s: %v", c.CustomAPIURL, err)
@@ -75,7 +78,7 @@ func findBroadcaster(c Credentials) (BroadcasterList, error) {
 		return BroadcasterList{}, fmt.Errorf("NewRequest GET for url %s: %v", requestURL, err)
 	}
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.AccessToken))
-	res, err := client.Do(req)
+	res, err := broadcaserRetryableClient.Do(req)
 	if err != nil {
 		return BroadcasterList{}, fmt.Errorf("http do(%s): %v", requestURL, err)
 	}
@@ -98,13 +101,6 @@ func findBroadcaster(c Credentials) (BroadcasterList, error) {
 // CreateStream registers new stream on Livepeer infra and returns manifestId
 // Call `ReleaseManifestId(manifestId)` after use
 func CreateStream(c Credentials, streamName string, profiles []EncodedProfile) (string, error) {
-	client := &http.Client{
-		Timeout: API_TIMEOUT,
-		Transport: &http.Transport{
-			DisableKeepAlives:  true,
-			DisableCompression: true,
-		},
-	}
 	requestURL, err := url.JoinPath(c.CustomAPIURL, "stream")
 	if err != nil {
 		return "", fmt.Errorf("appending stream to api url %s: %v", c.CustomAPIURL, err)
@@ -122,7 +118,7 @@ func CreateStream(c Credentials, streamName string, profiles []EncodedProfile) (
 	}
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.AccessToken))
 	req.Header.Add("Content-Type", "application/json")
-	res, err := client.Do(req)
+	res, err := broadcaserRetryableClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("http do(%s): %v", requestURL, err)
 	}
@@ -154,7 +150,7 @@ func ReleaseManifestID(c Credentials, manifestId string) error {
 	}
 
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.AccessToken))
-	res, err := apiClient.Do(req)
+	res, err := apiRetryableClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("Releasing Manifest ID failed. URL: %s, manifestID: %s, err: %s", requestURL, manifestId, err)
 	}
@@ -173,4 +169,16 @@ func pickRandomBroadcaster(list BroadcasterList) (url.URL, error) {
 		return url.URL{}, fmt.Errorf("broadcaster entry %s is not a URL %v", chosen.Address, err)
 	}
 	return *result, nil
+}
+
+func newRetryableClient(http *http.Client) *http.Client {
+	client := retryablehttp.NewClient()
+	client.RetryMax = 2
+	client.RetryWaitMin = 200 * time.Millisecond
+	client.RetryWaitMax = 1 * time.Second
+	if http != nil {
+		client.HTTPClient = http
+	}
+
+	return client.StandardClient()
 }
