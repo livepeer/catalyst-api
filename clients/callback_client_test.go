@@ -101,7 +101,7 @@ func TestItCalculatesTheOverallCompletionRatioCorrectly(t *testing.T) {
 	}{
 		{TranscodeStatusPreparing, 0.5, 0.2},           // Half complete in the Preparing stage (i.e half way between 0 and 0.4)
 		{TranscodeStatusPreparingCompleted, 1234, 0.4}, // Preparing Completed should always == 0.4 for now, regardless of what's reported as the stage ratio
-		{TranscodeStatusTranscoding, 0.5, 0.7},         // Half complete in the Transcoding stage (i.e half way between 0.4 and 1)
+		{TranscodeStatusTranscoding, 0.5, 0.65},        // Half complete in the Transcoding stage (i.e half way between 0.4 and 0.9)
 		{TranscodeStatusCompleted, 5678, 1},            // Completed should always == 1, regardless of what's reported as the stage ratio
 	}
 	for _, tc := range testCases {
