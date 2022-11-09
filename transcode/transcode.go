@@ -181,11 +181,6 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		output.Videos = append(output.Videos, clients.OutputVideoFile{Location: rendition.ManifestLocation})
 	}
 	outputs = []clients.OutputVideo{output}
-	// Send the success callback
-	err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(transcodeRequest.CallbackURL, inputInfo, outputs)
-	if err != nil {
-		log.LogError(transcodeRequest.RequestID, "Failed to send TranscodeStatusCompleted callback", err, "url", transcodeRequest.CallbackURL)
-	}
 	// Return outputs for .dtsh file creation
 	return outputs, nil
 }
