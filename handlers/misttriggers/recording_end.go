@@ -144,6 +144,15 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 			return
 		}
 
+		// When createDtsh() completes issue another callback signaling to studio playback is ready
+		defer func() {
+			// Send the success callback
+			err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(transcodeRequest.CallbackURL, inputInfo, outputs)
+			if err != nil {
+				log.LogError(transcodeRequest.RequestID, "Failed to send TranscodeStatusCompleted callback", err, "url", transcodeRequest.CallbackURL)
+			}
+		}()
+
 		// prepare .dtsh headers for all rendition playlists
 		for _, output := range outputs {
 			// output is multivariant playlist
@@ -151,14 +160,6 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 			if err != nil {
 				// should not block the ingestion flow or make it fail on error.
 				log.LogError(requestID, "master createDtsh() failed", err, "destination", output.Manifest)
-			}
-			for _, rendition := range output.Videos {
-				// we create dtsh for all rendition playlists
-				err := createDtsh(requestID, rendition.Location)
-				if err != nil {
-					// should not block the ingestion flow or make it fail on error.
-					log.LogError(requestID, "createDtsh() failed", err, "destination", rendition.Location)
-				}
 			}
 		}
 

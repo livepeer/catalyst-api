@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -103,7 +104,7 @@ func TestItCanTranscode(t *testing.T) {
 	}
 
 	// Check we don't get an error downloading or parsing it
-	_, err = RunTranscodeProcess(
+	outputs, err := RunTranscodeProcess(
 		TranscodeSegmentRequest{
 			CallbackURL: callbackServer.URL,
 			UploadURL:   manifestFile.Name(),
@@ -124,24 +125,29 @@ func TestItCanTranscode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Confirm the master manifest was created and that it looks like a manifest
+	var expectedMasterManifest = `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=28800,RESOLUTION=2020x2020,NAME="0-2020p0"
+2020p0/index.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=19200,RESOLUTION=2020x2020,NAME="1-low-bitrate"
+low-bitrate/index.m3u8
+`
+
 	masterManifestBytes, err := os.ReadFile(filepath.Join(topLevelDir, "index.m3u8"))
+
 	require.NoError(t, err)
 	require.Greater(t, len(masterManifestBytes), 0)
-	require.Contains(t, string(masterManifestBytes), "#EXTM3U")
-	require.Contains(t, string(masterManifestBytes), "#EXT-X-STREAM-INF")
-
-	// Confirm that the master manifest contains links to 2 renditions
-	require.Contains(t, string(masterManifestBytes), "low-bitrate/index.m3u8")
-	require.Contains(t, string(masterManifestBytes), "2020p0/index.m3u8")
+	require.Equal(t, expectedMasterManifest, string(masterManifestBytes))
 
 	// Check we received a progress callback for each segment
-	require.Equal(t, 3, len(callbacks))
+	require.Equal(t, 2, len(callbacks))
 	require.Equal(t, 0.65, callbacks[0]["completion_ratio"])
 	require.Equal(t, 0.9, callbacks[1]["completion_ratio"])
 
 	// Check we received a final Transcode Completed callback
-	require.Equal(t, 1.0, callbacks[2]["completion_ratio"])
-	require.Equal(t, "success", callbacks[2]["status"])
+	require.Equal(t, 1, len(outputs))
+	require.Equal(t, path.Join(topLevelDir, "index.m3u8"), outputs[0].Manifest)
+	require.Equal(t, 2, len(outputs[0].Videos))
 }
 
 func TestItCalculatesTheTranscodeCompletionPercentageCorrectly(t *testing.T) {
