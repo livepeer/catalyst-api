@@ -146,8 +146,10 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 
 		// When createDtsh() completes issue another callback signaling to studio playback is ready
 		defer func() {
-			if err := clients.DefaultCallbackClient.SendTranscodeStatusPlaybackReady(callbackUrl); err != nil {
-				log.LogError(requestID, "Failed to send playbackready callback", err)
+			// Send the success callback
+			err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(transcodeRequest.CallbackURL, inputInfo, outputs)
+			if err != nil {
+				log.LogError(transcodeRequest.RequestID, "Failed to send TranscodeStatusCompleted callback", err, "url", transcodeRequest.CallbackURL)
 			}
 		}()
 
