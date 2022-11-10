@@ -141,8 +141,8 @@ low-bitrate/index.m3u8
 
 	// Check we received a progress callback for each segment
 	require.Equal(t, 2, len(callbacks))
-	require.Equal(t, 0.7, callbacks[0]["completion_ratio"])
-	require.Equal(t, 1.0, callbacks[1]["completion_ratio"])
+	require.Equal(t, 0.65, callbacks[0]["completion_ratio"])
+	require.Equal(t, 0.9, callbacks[1]["completion_ratio"])
 
 	// Check we received a final Transcode Completed callback
 	require.Equal(t, 1, len(outputs))
