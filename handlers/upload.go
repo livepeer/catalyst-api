@@ -83,7 +83,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		}
 
 		// Generate a Request ID that will be used throughout all logging
-		var requestID = /*"RequestID-" + */ config.RandomTrailer(8)
+		var requestID = config.RandomTrailer(8)
 		log.AddContext(requestID, "source", uploadVODRequest.Url)
 
 		// find source segment URL
@@ -106,6 +106,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file should end in .m3u8 extension"))
 			return
 		}
+
 		targetDirPath := path.Dir(targetURL.Path)
 		targetManifestFilename := path.Base(targetURL.String())
 		targetExtension := path.Ext(targetManifestFilename)
@@ -113,6 +114,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file should end in .m3u8 extension"))
 			return
 		}
+
 		targetSegmentedOutputPath := path.Join(targetDirPath, "source", targetManifestFilename)
 		sout, err := url.Parse(targetSegmentedOutputPath)
 		if err != nil {
@@ -126,6 +128,26 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		streamName := config.SegmentingStreamName(requestID)
 		log.AddContext(requestID, "stream_name", streamName)
 
+		// Arweave URLs don't support HTTP Range requests and so Mist can't natively handle them for segmenting
+		// This workaround copies the file from Arweave to S3 and then tells Mist to use the S3 URL
+		if clients.IsArweaveURL(uploadVODRequest.Url) {
+			newSourceOutputPath := path.Join(targetDirPath, "source", "arweave-source.mp4")
+			newSourceOutputPathURL, err := url.Parse(newSourceOutputPath)
+			if err != nil {
+				errors.WriteHTTPInternalServerError(w, "Cannot parse newSourceOutputPath", err)
+				return
+			}
+			newSourceURL := targetURL.ResolveReference(newSourceOutputPathURL)
+			log.AddContext(requestID, "new_source_url", newSourceURL.String())
+			log.Log(requestID, "Copying file from Arweave to S3")
+
+			if err := clients.CopyArweaveToS3(uploadVODRequest.Url, newSourceURL.String()); err != nil {
+				errors.WriteHTTPBadRequest(w, "Invalid Arweave URL", err)
+				return
+			}
+			uploadVODRequest.Url = newSourceURL.String()
+		}
+
 		cache.DefaultStreamCache.Segmenting.Store(streamName, cache.StreamInfo{
 			SourceFile:      uploadVODRequest.Url,
 			CallbackURL:     uploadVODRequest.CallbackUrl,
@@ -137,7 +159,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 
 		log.Log(requestID, "Beginning segmenting")
 
-		// process the request
+		// Tell Mist to do the segmenting. Upon completion / error, Mist will call Triggers to notify us.
 		if err := d.processUploadVOD(streamName, uploadVODRequest.Url, targetSegmentedOutputURL.String()); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot process upload VOD request", err)
 			return
@@ -147,10 +169,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			errors.WriteHTTPInternalServerError(w, "Cannot send transcode status", err)
 		}
 
-		resp := UploadVODResponse{
-			RequestID: requestID,
-		}
-		respBytes, err := json.Marshal(resp)
+		respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})
 		if err != nil {
 			log.LogError(requestID, "Failed to build a /upload HTTP API response", err)
 			return
