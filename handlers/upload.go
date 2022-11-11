@@ -139,7 +139,6 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			}
 			newSourceURL := targetURL.ResolveReference(newSourceOutputPathURL)
 			log.AddContext(requestID, "new_source_url", newSourceURL.String())
-			log.Log(requestID, "Copying file from Arweave to S3")
 
 			if err := clients.CopyArweaveToS3(uploadVODRequest.Url, newSourceURL.String()); err != nil {
 				errors.WriteHTTPBadRequest(w, "Invalid Arweave URL", err)
