@@ -127,9 +127,9 @@ func TestItCanTranscode(t *testing.T) {
 	// Confirm the master manifest was created and that it looks like a manifest
 	var expectedMasterManifest = `#EXTM3U
 #EXT-X-VERSION:3
-#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=28800,RESOLUTION=2020x2020,NAME="0-2020p0"
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=27428,RESOLUTION=2020x2020,NAME="0-2020p0"
 2020p0/index.m3u8
-#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=19200,RESOLUTION=2020x2020,NAME="1-low-bitrate"
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=18285,RESOLUTION=2020x2020,NAME="1-low-bitrate"
 low-bitrate/index.m3u8
 `
 
