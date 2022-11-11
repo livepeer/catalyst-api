@@ -31,7 +31,8 @@ type createStreamPayload struct {
 }
 
 type LivepeerTranscodeConfiguration struct {
-	Profiles []EncodedProfile `json:"profiles"`
+	Profiles                   []EncodedProfile `json:"profiles"`
+	SegUploadTimeoutMultiplier int              `json:"segUploadTimeoutMultiplier"`
 }
 
 type Credentials struct {
