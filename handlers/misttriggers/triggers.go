@@ -14,10 +14,9 @@ import (
 )
 
 const (
-	TRIGGER_PUSH_END        = "PUSH_END"
-	TRIGGER_PUSH_OUT_START  = "PUSH_OUT_START"
-	TRIGGER_LIVE_TRACK_LIST = "LIVE_TRACK_LIST"
-	TRIGGER_RECORDING_END   = "RECORDING_END"
+	TRIGGER_PUSH_END       = "PUSH_END"
+	TRIGGER_PUSH_OUT_START = "PUSH_OUT_START"
+	TRIGGER_RECORDING_END  = "RECORDING_END"
 )
 
 type MistCallbackHandlersCollection struct {
@@ -48,8 +47,6 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 			d.TriggerPushOutStart(w, req, payload)
 		case TRIGGER_PUSH_END:
 			d.TriggerPushEnd(w, req, payload)
-		case TRIGGER_LIVE_TRACK_LIST:
-			d.TriggerLiveTrackList(w, req, payload)
 		case TRIGGER_RECORDING_END:
 			d.TriggerRecordingEnd(w, req, payload)
 		default:

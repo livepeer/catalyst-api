@@ -3,10 +3,8 @@ package main
 import (
 	"flag"
 	"log"
-	"time"
 
 	"github.com/livepeer/catalyst-api/api"
-	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
 )
@@ -24,11 +22,6 @@ func main() {
 		mistconnector.PrintMistConfigJson("catalyst-api", "HTTP API server for translating Catalyst API requests into Mist calls", "Catalyst API", config.Version, flag.CommandLine)
 		return
 	}
-
-	// Send "keepalive" heartbeats while transcodes are ongoing
-	heartbeatStop := make(chan bool)
-	go cache.DefaultStreamCache.Transcoding.SendTranscodingHeartbeats(15*time.Second, time.Hour, heartbeatStop)
-	defer func() { heartbeatStop <- true }()
 
 	if err := api.ListenAndServe(*port, *mistPort, *mistHttpPort, *apiToken); err != nil {
 		log.Fatal(err)

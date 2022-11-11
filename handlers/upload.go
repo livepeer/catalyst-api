@@ -103,18 +103,21 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		// Use the output directory specified in request as the output directory of transcoded renditions
 		targetURL, err := url.Parse(tURL)
 		if err != nil {
-			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file shoul    d end in .m3u8 extension"))
+			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file should end in .m3u8 extension"))
+			return
 		}
 		targetDirPath := path.Dir(targetURL.Path)
 		targetManifestFilename := path.Base(targetURL.String())
 		targetExtension := path.Ext(targetManifestFilename)
 		if targetExtension != ".m3u8" {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file should end in .m3u8 extension"))
+			return
 		}
 		targetSegmentedOutputPath := path.Join(targetDirPath, "source", targetManifestFilename)
 		sout, err := url.Parse(targetSegmentedOutputPath)
 		if err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot parse targetSegmentedOutputPath", err)
+			return
 		}
 
 		targetSegmentedOutputURL := targetURL.ResolveReference(sout)
@@ -137,6 +140,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		// process the request
 		if err := d.processUploadVOD(streamName, uploadVODRequest.Url, targetSegmentedOutputURL.String()); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot process upload VOD request", err)
+			return
 		}
 
 		if err := clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, clients.TranscodeStatusPreparing, 0.0); err != nil {

@@ -5,8 +5,7 @@ package cache
 // State is protected by mutex allowing concurent usage.
 // All state manipulation is contained in this file with goal to be brief and release mutex asap.
 type StreamCache struct {
-	Segmenting  SegmentingCache
-	Transcoding TranscodingCache
+	Segmenting SegmentingCache
 }
 
 var DefaultStreamCache = NewStreamCache()
@@ -16,9 +15,6 @@ func NewStreamCache() *StreamCache {
 	return &StreamCache{
 		Segmenting: SegmentingCache{
 			cache: make(map[string]StreamInfo),
-		},
-		Transcoding: TranscodingCache{
-			pushes: make(map[string]*SegmentInfo),
 		},
 	}
 }
