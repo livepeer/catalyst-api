@@ -29,7 +29,8 @@ func TestItCanCopyAnArweaveHTTPFileToS3(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		w.Write([]byte("some file contents"))
+		_, err := w.Write([]byte("some file contents"))
+		require.NoError(t, err)
 	}))
 	defer ts.Close()
 
