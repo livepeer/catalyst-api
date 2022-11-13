@@ -31,7 +31,7 @@ func NewLocalBroadcasterClient(broadcasterURL string) (LocalBroadcasterClient, e
 
 func (c LocalBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumber int64, profiles []EncodedProfile, durationMillis int64, manifestID string) (TranscodeResult, error) {
 	conf := LivepeerTranscodeConfiguration{
-		SegUploadTimeoutMultiplier: 3,
+		SegUploadTimeoutMultiplier: 10,
 	}
 	conf.Profiles = append(conf.Profiles, profiles...)
 	transcodeConfig, err := json.Marshal(&conf)
