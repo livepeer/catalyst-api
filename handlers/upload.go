@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/cache"
@@ -159,7 +160,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		log.Log(requestID, "Beginning segmenting")
 
 		// Tell Mist to do the segmenting. Upon completion / error, Mist will call Triggers to notify us.
-		if err := d.processUploadVOD(streamName, uploadVODRequest.Url, targetSegmentedOutputURL.String()); err != nil {
+		if err := d.processUploadVOD(requestID, uploadVODRequest.CallbackUrl, streamName, uploadVODRequest.Url, targetSegmentedOutputURL.String()); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot process upload VOD request", err)
 			return
 		}
@@ -182,14 +183,38 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 	}
 }
 
-func (d *CatalystAPIHandlersCollection) processUploadVOD(streamName, sourceURL, targetURL string) error {
+func (d *CatalystAPIHandlersCollection) processUploadVOD(requestID, callbackURL, streamName, sourceURL, targetURL string) error {
 	sourceURL = "mp4:" + sourceURL
 	if err := d.MistClient.AddStream(streamName, sourceURL); err != nil {
 		return err
 	}
-	if err := d.MistClient.PushStart(streamName, targetURL); err != nil {
-		return err
+
+	// Wait for a maximum of 5 minutes for the stream to become ready before telling Mist to start the segmenting
+	// If it's still not ready then we'll go ahead and try anyway
+	for x := 0; x < 30; x++ {
+		msi, err := d.MistClient.GetStreamInfo(streamName)
+
+		// This "error" actually means that the stream is ready.
+		// Also check if the stream info has been populated instead
+		if err != nil && (err.Error() == "Stream is offline" || len(msi.Source) > 0) {
+			log.Log(requestID, "Mist addStream complete. Beginning segmenting now")
+			break
+		}
+
+		if err != nil {
+			log.LogError(requestID, "error while waiting for Mist to be ready to segment. Waiting before re-checking.", err)
+		}
+
+		// Don't bother sleeping on the last loop iteration
+		if x < 29 {
+			time.Sleep(10 * time.Second)
+
+			// Send a heartbeat to the client to stop it timing out.
+			// Hardcoded progress, since we don't currently have a way of getting progress from Mist
+			clients.DefaultCallbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusPreparing, 0.3)
+		}
 	}
 
-	return nil
+	clients.DefaultCallbackClient.SendTranscodeStatus(callbackURL, clients.TranscodeStatusPreparing, 0.7)
+	return d.MistClient.PushStart(streamName, targetURL)
 }
