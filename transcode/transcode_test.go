@@ -178,16 +178,14 @@ func TestParallelJobFailureStopsNextBatch(t *testing.T) {
 		defer m.Unlock()
 		defer func() { handlerIndex += 1 }()
 		if handlerIndex == 0 {
-			fmt.Printf("returning nil\n")
 			return nil
 		}
 		if handlerIndex == 1 {
-			fmt.Printf("returning halted %v\n", halted)
 			return halted
 		}
-		fmt.Printf("returning late\n")
 		return fmt.Errorf("failure detected late")
 	})
+	jobs.Start()
 	err := jobs.Wait()
 	// Check we got first error
 	require.Error(t, err)
@@ -212,8 +210,10 @@ func TestParallelJobSaveTime(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 		return nil
 	})
+	jobs.Start()
 	require.NoError(t, jobs.Wait())
 	elapsed := time.Since(start)
+	require.Greater(t, elapsed, 60*time.Millisecond)
 	require.Less(t, elapsed, 160*time.Millisecond) // usually takes less than 101ms on idle machine
 	time.Sleep(10 * time.Millisecond)              // wait for other workers to exit
 }
