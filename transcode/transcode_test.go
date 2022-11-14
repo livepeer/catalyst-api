@@ -195,6 +195,7 @@ func TestParallelJobFailureStopsNextBatch(t *testing.T) {
 	// Check progress state is properly set
 	require.Equal(t, 6, jobs.GetTotalCount())
 	require.Equal(t, 1, jobs.GetCompletedCount())
+	time.Sleep(10 * time.Millisecond) // wait for other workers to exit
 }
 
 func TestParallelJobSaveTime(t *testing.T) {
@@ -214,4 +215,5 @@ func TestParallelJobSaveTime(t *testing.T) {
 	require.NoError(t, jobs.Wait())
 	elapsed := time.Since(start)
 	require.Less(t, elapsed, 160*time.Millisecond) // usually takes less than 101ms on idle machine
+	time.Sleep(10 * time.Millisecond)              // wait for other workers to exit
 }

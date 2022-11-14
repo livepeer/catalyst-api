@@ -19,6 +19,32 @@ type ParallelTranscoding struct {
 	completedSegments int
 }
 
+func NewParallelTranscoding(sourceSegmentURLs []SourceSegment, work func(segment segmentInfo) error) *ParallelTranscoding {
+	jobs := &ParallelTranscoding{
+		queue:         make(chan segmentInfo, len(sourceSegmentURLs)),
+		errors:        make(chan error, 100),
+		work:          work,
+		isRunning:     true,
+		totalSegments: len(sourceSegmentURLs),
+	}
+	// post all jobs on buffered queue for goroutines to process
+	for segmentIndex, u := range sourceSegmentURLs {
+		jobs.queue <- segmentInfo{Input: u, Index: segmentIndex}
+	}
+	close(jobs.queue)
+	return jobs
+}
+
+// Start spawns configured number of goroutines to process segments in parallel
+func (t *ParallelTranscoding) Start() {
+	t.completed.Add(config.TranscodingParallelJobs)
+	for index := 0; index < config.TranscodingParallelJobs; index++ {
+		go t.workerRoutine()
+		// Add some desync interval to avoid load spikes on segment-encode-end
+		time.Sleep(config.TranscodingParallelSleep)
+	}
+}
+
 func (t *ParallelTranscoding) Stop() {
 	t.m.Lock()
 	defer t.m.Unlock()
@@ -77,27 +103,4 @@ func (t *ParallelTranscoding) workerRoutine() {
 		}
 		t.segmentCompleted()
 	}
-}
-
-func NewParallelTranscoding(sourceSegmentURLs []SourceSegment, work func(segment segmentInfo) error) *ParallelTranscoding {
-	jobs := &ParallelTranscoding{
-		queue:         make(chan segmentInfo, len(sourceSegmentURLs)),
-		errors:        make(chan error, 100),
-		work:          work,
-		isRunning:     true,
-		totalSegments: len(sourceSegmentURLs),
-	}
-	// post all jobs on buffered queue for goroutines to process
-	for segmentIndex, u := range sourceSegmentURLs {
-		jobs.queue <- segmentInfo{Input: u, Index: segmentIndex}
-	}
-	close(jobs.queue)
-	// spawn configured number of goroutines to process segments in parallel
-	jobs.completed.Add(config.TranscodingParallelJobs)
-	for index := 0; index < config.TranscodingParallelJobs; index++ {
-		go jobs.workerRoutine()
-		// Add some desync interval to avoid load spikes on segment-encode-end
-		time.Sleep(config.TranscodingParallelSleep)
-	}
-	return jobs
 }
