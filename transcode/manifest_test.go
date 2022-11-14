@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/grafov/m3u8"
-	"github.com/livepeer/catalyst-api/clients"
 	"github.com/stretchr/testify/require"
 )
 
@@ -106,18 +105,20 @@ func TestItCanGenerateAndWriteManifests(t *testing.T) {
 	masterManifestURL, err := GenerateAndUploadManifests(
 		*sourceMediaPlaylist,
 		outputDir,
-		[]clients.EncodedProfile{
+		[]*RenditionStats{
 			{
-				Name:   "lowlowlow",
-				FPS:    60,
-				Width:  800,
-				Height: 600,
+				Name:          "lowlowlow",
+				FPS:           60,
+				Width:         800,
+				Height:        600,
+				BitsPerSecond: 1,
 			},
 			{
-				Name:   "super-high-def",
-				FPS:    30,
-				Width:  1080,
-				Height: 720,
+				Name:          "super-high-def",
+				FPS:           30,
+				Width:         1080,
+				Height:        720,
+				BitsPerSecond: 1,
 			},
 		},
 	)
@@ -132,15 +133,71 @@ func TestItCanGenerateAndWriteManifests(t *testing.T) {
 
 	const expectedMasterManifest = `#EXTM3U
 #EXT-X-VERSION:3
-#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=800x600,NAME="0-lowlowlow",FRAME-RATE=60.000
-rendition-0/rendition.m3u8
-#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=1080x720,NAME="1-super-high-def",FRAME-RATE=30.000
-rendition-1/rendition.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=1080x720,NAME="0-super-high-def",FRAME-RATE=30.000
+super-high-def/index.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=800x600,NAME="1-lowlowlow",FRAME-RATE=60.000
+lowlowlow/index.m3u8
 `
 	require.Equal(t, expectedMasterManifest, string(masterManifestContents))
 
 	// Confirm we wrote out the rendition manifests that we expected
-	require.FileExists(t, filepath.Join(outputDir, "rendition-0/rendition.m3u8"))
-	require.FileExists(t, filepath.Join(outputDir, "rendition-1/rendition.m3u8"))
-	require.NoFileExists(t, filepath.Join(outputDir, "rendition-2/rendition.m3u8"))
+	require.FileExists(t, filepath.Join(outputDir, "super-high-def/index.m3u8"))
+	require.FileExists(t, filepath.Join(outputDir, "lowlowlow/index.m3u8"))
+	require.NoFileExists(t, filepath.Join(outputDir, "small-high-def/index.m3u8"))
+}
+
+func TestCompliantMasterManifestOrdering(t *testing.T) {
+	// Set up the parameters we pass in
+	sourceManifest, _, err := m3u8.DecodeFrom(strings.NewReader(validMediaManifest), true)
+	require.NoError(t, err)
+
+	sourceMediaPlaylist, ok := sourceManifest.(*m3u8.MediaPlaylist)
+	require.True(t, ok)
+
+	outputDir, err := os.MkdirTemp(os.TempDir(), "TestCompliantMasterManifestOrdering-*")
+	require.NoError(t, err)
+
+	_, err = GenerateAndUploadManifests(
+		*sourceMediaPlaylist,
+		outputDir,
+		[]*RenditionStats{
+			{
+				Name:          "lowlowlow",
+				FPS:           60,
+				Width:         800,
+				Height:        600,
+				BitsPerSecond: 1000000,
+			},
+			{
+				Name:          "super-high-def",
+				FPS:           30,
+				Width:         1080,
+				Height:        720,
+				BitsPerSecond: 2000000,
+			},
+			{
+				Name:          "small-high-def",
+				FPS:           30,
+				Width:         800,
+				Height:        600,
+				BitsPerSecond: 2000000,
+			},
+		},
+	)
+	require.NoError(t, err)
+
+	masterManifest := filepath.Join(outputDir, "index.m3u8")
+	masterManifestContents, err := os.ReadFile(masterManifest)
+	require.NoError(t, err)
+
+	const expectedMasterManifest = `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=2000000,RESOLUTION=1080x720,NAME="0-super-high-def",FRAME-RATE=30.000
+super-high-def/index.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=2000000,RESOLUTION=800x600,NAME="1-small-high-def",FRAME-RATE=30.000
+small-high-def/index.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1000000,RESOLUTION=800x600,NAME="2-lowlowlow",FRAME-RATE=60.000
+lowlowlow/index.m3u8
+`
+	require.Equal(t, expectedMasterManifest, string(masterManifestContents))
 }

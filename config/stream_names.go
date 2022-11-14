@@ -18,15 +18,8 @@ func IsTranscodeStream(streamName string) bool {
 	return strings.HasPrefix(streamName, RENDITION_PREFIX)
 }
 
-func GenerateStreamNames() (string, string) {
-	suffix := RandomTrailer(8)
-	inputStream := SOURCE_PREFIX + suffix
-	renditionsStream := RENDITION_PREFIX + suffix
-	return inputStream, renditionsStream
-}
-
-func RandomStreamName(prefix string) string {
-	return fmt.Sprintf("%s%s", prefix, RandomTrailer(8))
+func SegmentingStreamName(requestID string) string {
+	return fmt.Sprintf("%s%s", SEGMENTING_PREFIX, requestID)
 }
 
 func RandomTrailer(length int) string {

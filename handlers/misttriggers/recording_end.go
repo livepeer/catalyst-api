@@ -4,13 +4,18 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
+	"os/exec"
+	"path"
 	"strconv"
 	"strings"
 
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/subprocess"
 	"github.com/livepeer/catalyst-api/transcode"
 )
 
@@ -61,9 +66,11 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 
 	// Try to clean up the trigger and stream from Mist. If these fail then we only log, since we still want to do any
 	// further cleanup stages and callbacks
-	if err := d.MistClient.DeleteStream(p.StreamName); err != nil {
-		log.LogError(requestID, "Failed to delete stream in triggerRecordingEndSegmenting", err)
-	}
+	defer func() {
+		if err := d.MistClient.DeleteStream(p.StreamName); err != nil {
+			log.LogError(requestID, "Failed to delete stream in triggerRecordingEndSegmenting", err)
+		}
+	}()
 
 	// Let Studio know that we've finished the Segmenting phase
 	if err := clients.DefaultCallbackClient.SendTranscodeStatus(callbackUrl, clients.TranscodeStatusPreparingCompleted, 1); err != nil {
@@ -71,9 +78,11 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 	}
 
 	// Get the source stream's detailed track info before kicking off transcode
+	// Mist currently returns the "booting" error even after successfully segmenting MOV files
 	streamInfo, err := d.MistClient.GetStreamInfo(p.StreamName)
 	if err != nil {
 		log.LogError(requestID, "Failed to get stream info", err)
+		return
 	}
 
 	// Compare duration of source stream to the segmented stream to ensure the input file was completely segmented before attempting to transcode
@@ -126,7 +135,7 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 			})
 		}
 
-		_, err := transcode.RunTranscodeProcess(transcodeRequest, p.StreamName, inputInfo)
+		outputs, err := transcode.RunTranscodeProcess(transcodeRequest, p.StreamName, inputInfo)
 		if err != nil {
 			log.LogError(requestID, "RunTranscodeProcess returned an error", err)
 
@@ -136,7 +145,24 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 			return
 		}
 
-		// TODO: prepare .dtsh headers for all rendition playlists
+		// When createDtsh() completes issue another callback signaling to studio playback is ready
+		defer func() {
+			// Send the success callback
+			err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(transcodeRequest.CallbackURL, inputInfo, outputs)
+			if err != nil {
+				log.LogError(transcodeRequest.RequestID, "Failed to send TranscodeStatusCompleted callback", err, "url", transcodeRequest.CallbackURL)
+			}
+		}()
+
+		// prepare .dtsh headers for all rendition playlists
+		for _, output := range outputs {
+			// output is multivariant playlist
+			err := createDtsh(requestID, output.Manifest)
+			if err != nil {
+				// should not block the ingestion flow or make it fail on error.
+				log.LogError(requestID, "master createDtsh() failed", err, "destination", output.Manifest)
+			}
+		}
 
 	}()
 }
@@ -207,4 +233,26 @@ func ParseRecordingEndPayload(payload string) (RecordingEndPayload, error) {
 		FirstMediaTimestampMillis: FirstMediaTimestampMillis,
 		LastMediaTimestampMillis:  LastMediaTimestampMillis,
 	}, nil
+}
+
+func createDtsh(requestID, destination string) error {
+	url, err := url.Parse(destination)
+	if err != nil {
+		return err
+	}
+	url.RawQuery = ""
+	url.Fragment = ""
+	headerPrepare := exec.Command(path.Join(config.PathMistDir, "MistInHLS"), "-H", url.String(), "-g", "5")
+	if err = subprocess.LogOutputs(headerPrepare); err != nil {
+		return err
+	}
+	if err = headerPrepare.Start(); err != nil {
+		return err
+	}
+	go func() {
+		if err := headerPrepare.Wait(); err != nil {
+			log.LogError(requestID, "createDtsh return code", err, "destination", destination)
+		}
+	}()
+	return nil
 }

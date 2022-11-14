@@ -3,7 +3,9 @@ package transcode
 import (
 	"fmt"
 	"net/url"
+	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/grafov/m3u8"
@@ -62,7 +64,7 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 			urls,
 			SourceSegment{
 				URL:            u,
-				DurationMillis: int64(segment.Duration),
+				DurationMillis: int64(segment.Duration * 1000),
 			},
 		)
 	}
@@ -72,20 +74,33 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 
 // Generate a Master manifest, plus one Rendition manifest for each Profile we're transcoding, then write them to storage
 // Returns the master manifest URL on success
-func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL string, transcodeProfiles []clients.EncodedProfile) (string, error) {
+func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL string, transcodedStats []*RenditionStats) (string, error) {
 	// Generate the master + rendition output manifests
 	masterPlaylist := m3u8.NewMasterPlaylist()
 
-	for i, profile := range transcodeProfiles {
+	sort.Slice(transcodedStats, func(a, b int) bool {
+		if transcodedStats[a].BitsPerSecond > transcodedStats[b].BitsPerSecond {
+			return true
+		} else if transcodedStats[a].BitsPerSecond < transcodedStats[b].BitsPerSecond {
+			return false
+		} else {
+			var resolutionA = transcodedStats[a].Width * transcodedStats[a].Height
+			var resolutionB = transcodedStats[b].Width * transcodedStats[b].Height
+
+			return resolutionA > resolutionB
+		}
+	})
+
+	for i, profile := range transcodedStats {
 		// For each profile, add a new entry to the master manifest
 		masterPlaylist.Append(
-			fmt.Sprintf("rendition-%d/rendition.m3u8", i),
+			path.Join(profile.Name, "index.m3u8"),
 			&m3u8.MediaPlaylist{
 				TargetDuration: sourceManifest.TargetDuration,
 			},
 			m3u8.VariantParams{
 				Name:       fmt.Sprintf("%d-%s", i, profile.Name),
-				Bandwidth:  uint32(1), // TODO: Don't hardcode - this should come from the transcoder output
+				Bandwidth:  profile.BitsPerSecond,
 				FrameRate:  float64(profile.FPS),
 				Resolution: fmt.Sprintf("%dx%d", profile.Width, profile.Height),
 			},
@@ -113,10 +128,17 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		// Write #EXT-X-ENDLIST
 		renditionPlaylist.Close()
 
-		renditionManifestBaseURL := fmt.Sprintf("%s/rendition-%d", targetOSURL, i)
-		err = clients.UploadToOSURL(renditionManifestBaseURL, "rendition.m3u8", strings.NewReader(renditionPlaylist.String()))
+		manifestFilename := "index.m3u8"
+		renditionManifestBaseURL := fmt.Sprintf("%s/%s", targetOSURL, profile.Name)
+		err = clients.UploadToOSURL(renditionManifestBaseURL, manifestFilename, strings.NewReader(renditionPlaylist.String()))
 		if err != nil {
 			return "", fmt.Errorf("failed to upload rendition playlist: %s", err)
+		}
+		// update manifest location
+		transcodedStats[i].ManifestLocation, err = url.JoinPath(renditionManifestBaseURL, manifestFilename)
+		if err != nil {
+			// should not block the ingestion flow or make it fail on error.
+			transcodedStats[i].ManifestLocation = ""
 		}
 	}
 

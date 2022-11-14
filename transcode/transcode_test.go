@@ -2,14 +2,18 @@ package transcode
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/livepeer/catalyst-api/clients"
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,9 +38,20 @@ func (c StubBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumbe
 
 func TestItCanTranscode(t *testing.T) {
 	dir := os.TempDir()
+	fmt.Println("TestItCanTranscode running using Temp Dir:", dir)
+
+	// Create 2 layers of subdirectories to ensure runs of the test don't interfere with each other
+	// and that it simulates the production layout
+	topLevelDir := filepath.Join(dir, "unit-test-dir-"+config.RandomTrailer(8))
+	err := os.Mkdir(topLevelDir, os.ModePerm)
+	require.NoError(t, err)
+
+	dir = filepath.Join(topLevelDir, "unit-test-subdir")
+	err = os.Mkdir(dir, os.ModePerm)
+	require.NoError(t, err)
 
 	// Create temporary manifest + segment files on the local filesystem
-	manifestFile, err := os.CreateTemp(dir, "manifest-*.m3u8")
+	manifestFile, err := os.CreateTemp(dir, "index.m3u8")
 	require.NoError(t, err)
 
 	segment0, err := os.Create(dir + "/0.ts")
@@ -53,9 +68,6 @@ func TestItCanTranscode(t *testing.T) {
 	_, err = segment1.WriteString("lots of segment data")
 	require.NoError(t, err)
 
-	// Set up somewhere to output the results to
-	outputDir := os.TempDir()
-
 	// Set up a server to receive callbacks and store them in an array for future verification
 	var callbacks []map[string]interface{}
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -70,17 +82,21 @@ func TestItCanTranscode(t *testing.T) {
 	}))
 	defer callbackServer.Close()
 
+	sourceVideoTrack := clients.VideoTrack{
+		Width:  2020,
+		Height: 2020,
+	}
 	// Set up a fake Broadcaster that returns the rendition segments we'd expect based on the
 	// transcode request we send in the next step
 	localBroadcasterClient = StubBroadcasterClient{
 		tr: clients.TranscodeResult{
 			Renditions: []*clients.RenditionSegment{
 				{
-					Name:      "360p",
+					Name:      "low-bitrate",
 					MediaData: []byte("pretend media data"),
 				},
 				{
-					Name:      "720p",
+					Name:      strconv.FormatInt(int64(sourceVideoTrack.Height), 10) + "p0",
 					MediaData: []byte("pretend high-def media data"),
 				},
 			},
@@ -88,7 +104,7 @@ func TestItCanTranscode(t *testing.T) {
 	}
 
 	// Check we don't get an error downloading or parsing it
-	_, err = RunTranscodeProcess(
+	outputs, err := RunTranscodeProcess(
 		TranscodeSegmentRequest{
 			CallbackURL: callbackServer.URL,
 			UploadURL:   manifestFile.Name(),
@@ -100,11 +116,8 @@ func TestItCanTranscode(t *testing.T) {
 			SizeBytes: 123,
 			Tracks: []clients.InputTrack{
 				{
-					Type: "video",
-					VideoTrack: clients.VideoTrack{
-						Width:  2020,
-						Height: 2020,
-					},
+					Type:       "video",
+					VideoTrack: sourceVideoTrack,
 				},
 			},
 		},
@@ -112,25 +125,29 @@ func TestItCanTranscode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Confirm the master manifest was created and that it looks like a manifest
-	masterManifestBytes, err := os.ReadFile(filepath.Join(outputDir, "transcoded/index.m3u8"))
+	var expectedMasterManifest = `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=27428,RESOLUTION=2020x2020,NAME="0-2020p0"
+2020p0/index.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=18285,RESOLUTION=2020x2020,NAME="1-low-bitrate"
+low-bitrate/index.m3u8
+`
+
+	masterManifestBytes, err := os.ReadFile(filepath.Join(topLevelDir, "index.m3u8"))
+
 	require.NoError(t, err)
 	require.Greater(t, len(masterManifestBytes), 0)
-	require.Contains(t, string(masterManifestBytes), "#EXTM3U")
-	require.Contains(t, string(masterManifestBytes), "#EXT-X-STREAM-INF")
-
-	// Confirm that the master manifest contains links to 3 renditions (2 defaults + 1 to match the source dimensions)
-	require.Contains(t, string(masterManifestBytes), "rendition-0/rendition.m3u8")
-	require.Contains(t, string(masterManifestBytes), "rendition-1/rendition.m3u8")
-	require.Contains(t, string(masterManifestBytes), "rendition-2/rendition.m3u8")
+	require.Equal(t, expectedMasterManifest, string(masterManifestBytes))
 
 	// Check we received a progress callback for each segment
-	require.Equal(t, 3, len(callbacks))
-	require.Equal(t, 0.7, callbacks[0]["completion_ratio"])
-	require.Equal(t, 1.0, callbacks[1]["completion_ratio"])
+	require.Equal(t, 2, len(callbacks))
+	require.Equal(t, 0.65, callbacks[0]["completion_ratio"])
+	require.Equal(t, 0.9, callbacks[1]["completion_ratio"])
 
 	// Check we received a final Transcode Completed callback
-	require.Equal(t, 1.0, callbacks[2]["completion_ratio"])
-	require.Equal(t, "success", callbacks[2]["status"])
+	require.Equal(t, 1, len(outputs))
+	require.Equal(t, path.Join(topLevelDir, "index.m3u8"), outputs[0].Manifest)
+	require.Equal(t, 2, len(outputs[0].Videos))
 }
 
 func TestItCalculatesTheTranscodeCompletionPercentageCorrectly(t *testing.T) {
@@ -139,45 +156,4 @@ func TestItCalculatesTheTranscodeCompletionPercentageCorrectly(t *testing.T) {
 	require.Equal(t, 0.1, calculateCompletedRatio(10, 1))
 	require.Equal(t, 0.01, calculateCompletedRatio(100, 1))
 	require.Equal(t, 0.6, calculateCompletedRatio(100, 60))
-}
-
-func TestComparisonOfSourceWithDefaultProfiles(t *testing.T) {
-	isWideVideobigger := isInputVideoBiggerThanDefaults(clients.InputVideo{
-		Tracks: []clients.InputTrack{
-			clients.InputTrack{
-				Type: "video",
-				VideoTrack: clients.VideoTrack{
-					Width:  1000000,
-					Height: 1,
-				},
-			},
-		},
-	})
-	require.True(t, isWideVideobigger)
-
-	isTallVideoBigger := isInputVideoBiggerThanDefaults(clients.InputVideo{
-		Tracks: []clients.InputTrack{
-			clients.InputTrack{
-				Type: "video",
-				VideoTrack: clients.VideoTrack{
-					Width:  1,
-					Height: 1000000,
-				},
-			},
-		},
-	})
-	require.True(t, isTallVideoBigger)
-
-	isSmallVideoBigger := isInputVideoBiggerThanDefaults(clients.InputVideo{
-		Tracks: []clients.InputTrack{
-			clients.InputTrack{
-				Type: "video",
-				VideoTrack: clients.VideoTrack{
-					Width:  1279,
-					Height: 719,
-				},
-			},
-		},
-	})
-	require.False(t, isSmallVideoBigger)
 }

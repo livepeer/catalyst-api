@@ -156,8 +156,10 @@ func overallCompletionRatio(status TranscodeStatus, currentStageCompletionRatio 
 	switch status {
 	case TranscodeStatusPreparing, TranscodeStatusPreparingCompleted:
 		return scaleProgress(currentStageCompletionRatio, 0, 0.4)
-	case TranscodeStatusTranscoding, TranscodeStatusCompleted:
-		return scaleProgress(currentStageCompletionRatio, 0.4, 1)
+	case TranscodeStatusTranscoding:
+		return scaleProgress(currentStageCompletionRatio, 0.4, 0.9)
+	case TranscodeStatusCompleted:
+		return scaleProgress(currentStageCompletionRatio, 0.9, 1)
 	}
 
 	// Either unhandled or an error
