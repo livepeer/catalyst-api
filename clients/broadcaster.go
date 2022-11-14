@@ -31,7 +31,8 @@ type createStreamPayload struct {
 }
 
 type LivepeerTranscodeConfiguration struct {
-	Profiles []EncodedProfile `json:"profiles"`
+	Profiles                   []EncodedProfile `json:"profiles"`
+	SegUploadTimeoutMultiplier int              `json:"segUploadTimeoutMultiplier"`
 }
 
 type Credentials struct {
@@ -52,7 +53,7 @@ type EncodedProfile struct {
 	Width        int64  `json:"width,omitempty"`
 	Height       int64  `json:"height,omitempty"`
 	Bitrate      int64  `json:"bitrate,omitempty"`
-	FPS          int64  `json:"fps,omitempty"`
+	FPS          int64  `json:"fps"`
 	FPSDen       int64  `json:"fpsDen,omitempty"`
 	Profile      string `json:"profile,omitempty"`
 	GOP          string `json:"gop,omitempty"`
@@ -61,9 +62,7 @@ type EncodedProfile struct {
 	ChromaFormat int64  `json:"chromaFormat,omitempty"`
 }
 
-var client = &http.Client{
-	Timeout: TRANSCODE_TIMEOUT,
-}
+var client = newRetryableClient(&http.Client{Timeout: TRANSCODE_TIMEOUT})
 
 // TranscodeSegment sends media to Livepeer network and returns rendition segments
 // If manifestId == "" one will be created and deleted after use, pass real value to reuse across multiple calls

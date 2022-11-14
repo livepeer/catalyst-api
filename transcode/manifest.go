@@ -3,6 +3,7 @@ package transcode
 import (
 	"fmt"
 	"net/url"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -63,7 +64,7 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 			urls,
 			SourceSegment{
 				URL:            u,
-				DurationMillis: int64(segment.Duration),
+				DurationMillis: int64(segment.Duration * 1000),
 			},
 		)
 	}
@@ -73,7 +74,7 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 
 // Generate a Master manifest, plus one Rendition manifest for each Profile we're transcoding, then write them to storage
 // Returns the master manifest URL on success
-func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL string, transcodedStats []RenditionStats) (string, error) {
+func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL string, transcodedStats []*RenditionStats) (string, error) {
 	// Generate the master + rendition output manifests
 	masterPlaylist := m3u8.NewMasterPlaylist()
 
@@ -93,7 +94,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 	for i, profile := range transcodedStats {
 		// For each profile, add a new entry to the master manifest
 		masterPlaylist.Append(
-			fmt.Sprintf("rendition-%d/index.m3u8", i),
+			path.Join(profile.Name, "index.m3u8"),
 			&m3u8.MediaPlaylist{
 				TargetDuration: sourceManifest.TargetDuration,
 			},
@@ -128,7 +129,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		renditionPlaylist.Close()
 
 		manifestFilename := "index.m3u8"
-		renditionManifestBaseURL := fmt.Sprintf("%s/rendition-%d", targetOSURL, i)
+		renditionManifestBaseURL := fmt.Sprintf("%s/%s", targetOSURL, profile.Name)
 		err = clients.UploadToOSURL(renditionManifestBaseURL, manifestFilename, strings.NewReader(renditionPlaylist.String()))
 		if err != nil {
 			return "", fmt.Errorf("failed to upload rendition playlist: %s", err)

@@ -66,9 +66,11 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 
 	// Try to clean up the trigger and stream from Mist. If these fail then we only log, since we still want to do any
 	// further cleanup stages and callbacks
-	if err := d.MistClient.DeleteStream(p.StreamName); err != nil {
-		log.LogError(requestID, "Failed to delete stream in triggerRecordingEndSegmenting", err)
-	}
+	defer func() {
+		if err := d.MistClient.DeleteStream(p.StreamName); err != nil {
+			log.LogError(requestID, "Failed to delete stream in triggerRecordingEndSegmenting", err)
+		}
+	}()
 
 	// Let Studio know that we've finished the Segmenting phase
 	if err := clients.DefaultCallbackClient.SendTranscodeStatus(callbackUrl, clients.TranscodeStatusPreparingCompleted, 1); err != nil {
@@ -76,9 +78,11 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 	}
 
 	// Get the source stream's detailed track info before kicking off transcode
+	// Mist currently returns the "booting" error even after successfully segmenting MOV files
 	streamInfo, err := d.MistClient.GetStreamInfo(p.StreamName)
 	if err != nil {
 		log.LogError(requestID, "Failed to get stream info", err)
+		return
 	}
 
 	// Compare duration of source stream to the segmented stream to ensure the input file was completely segmented before attempting to transcode
@@ -140,16 +144,22 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 			return
 		}
 
+		// When createDtsh() completes issue another callback signaling to studio playback is ready
+		defer func() {
+			// Send the success callback
+			err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(transcodeRequest.CallbackURL, inputInfo, outputs)
+			if err != nil {
+				log.LogError(transcodeRequest.RequestID, "Failed to send TranscodeStatusCompleted callback", err, "url", transcodeRequest.CallbackURL)
+			}
+		}()
+
 		// prepare .dtsh headers for all rendition playlists
 		for _, output := range outputs {
 			// output is multivariant playlist
-			for _, rendition := range output.Videos {
-				// we create dtsh for all rendition playlists
-				err := createDtsh(requestID, rendition.Location)
-				if err != nil {
-					// should not block the ingestion flow or make it fail on error.
-					log.Log(requestID, "createDtsh() failed", "code", err, "destination", rendition.Location)
-				}
+			err := createDtsh(requestID, output.Manifest)
+			if err != nil {
+				// should not block the ingestion flow or make it fail on error.
+				log.LogError(requestID, "master createDtsh() failed", err, "destination", output.Manifest)
 			}
 		}
 
@@ -240,7 +250,7 @@ func createDtsh(requestID, destination string) error {
 	}
 	go func() {
 		if err := headerPrepare.Wait(); err != nil {
-			log.Log(requestID, "createDtsh return code", "code", err, "destination", destination)
+			log.LogError(requestID, "createDtsh return code", err, "destination", destination)
 		}
 	}()
 	return nil

@@ -3,13 +3,14 @@ module github.com/livepeer/catalyst-api
 go 1.19
 
 require (
+	github.com/cenkalti/backoff/v4 v4.1.3
 	github.com/cucumber/godog v0.12.5
 	github.com/google/uuid v1.3.0
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/kylelemons/godebug v1.1.0
 	github.com/livepeer/go-tools v0.0.0-20220926110222-2ebcbb5685b4
 	github.com/livepeer/livepeer-data v0.4.22
-	github.com/minio/madmin-go v1.6.6
+	github.com/minio/madmin-go v1.7.4
 	github.com/stretchr/testify v1.8.0
 	github.com/xeipuuv/gojsonschema v1.2.0
 	sigs.k8s.io/yaml v1.3.0
@@ -31,6 +32,7 @@ require (
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.1.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.5.1 // indirect
+	github.com/gopherjs/gopherjs v0.0.0-20220104163920-15ed2e8cf2bd // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-hclog v0.16.2 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
@@ -53,6 +55,7 @@ require (
 	github.com/rs/xid v1.4.0 // indirect
 	github.com/secure-io/sio-go v0.3.1 // indirect
 	github.com/shirou/gopsutil/v3 v3.22.9 // indirect
+	github.com/smartystreets/assertions v1.1.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/objx v0.4.0 // indirect
 	github.com/tinylib/msgp v1.1.7-0.20220719154719-f3635b96e483 // indirect

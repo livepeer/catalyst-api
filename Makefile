@@ -3,7 +3,7 @@ GO_BUILD_DIR?=build/
 ldflags := -X 'github.com/livepeer/catalyst-api/config.Version=$(shell git rev-parse HEAD)'
 
 .PHONY: all
-all: build fmt test lint integration-test
+all: build fmt test lint integration-test tidy
 
 .PHONY: build
 build:
@@ -33,6 +33,10 @@ run:
 .PHONY: test
 test:
 	go test ./...
+
+.PHONY: tidy
+tidy:
+	go mod tidy
 
 .PHONY: test-canary
 test-canary:
