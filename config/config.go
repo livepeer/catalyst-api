@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"time"
 )
 
 var Version string
@@ -22,3 +23,5 @@ const DefaultCustomAPIUrl = "https://origin.livepeer.com/api/"
 var RecordingCallback string = "http://127.0.0.1:8008/recording/status"
 
 var TranscodingParallelJobs int = 5
+
+var TranscodingParallelSleep time.Duration = 713 * time.Millisecond
