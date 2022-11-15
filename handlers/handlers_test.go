@@ -159,9 +159,9 @@ func TestVODHandlerProfiles(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		multipart := multipart.NewWriter(w)
 		defer multipart.Close()
+		err = multipart.SetBoundary(boundary)
+		require.NoError(t, err)
 		for i := 0; i < len(profiles); i++ {
-			err := multipart.SetBoundary(boundary)
-			require.NoError(t, err)
 			fileName := fmt.Sprintf(`"%s_%d%s"`, profiles[i].Name, seq, ".ts")
 			hdrs := textproto.MIMEHeader{
 				"Content-Type":        {"video/mp2t" + "; name=" + fileName},
@@ -173,7 +173,6 @@ func TestVODHandlerProfiles(t *testing.T) {
 			require.NoError(t, err)
 			_, err = io.Copy(part, bytes.NewReader(videoData))
 			require.NoError(t, err)
-
 		}
 	}))
 	defer broadcasterMock.Close()
