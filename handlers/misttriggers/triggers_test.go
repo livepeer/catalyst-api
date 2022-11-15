@@ -116,7 +116,8 @@ func TestRecordingCompleted(t *testing.T) {
 
 func TestMistInHLSStart(t *testing.T) {
 	dir := t.TempDir()
-	changeDefaultMistDir(t, dir)
+	patch_cleanup := changeDefaultMistDir(t, dir)
+	defer patch_cleanup()
 	destination := "unused"
 	err := createDtsh("testRequestID", "invalid://user:abc{DEf1=lp@example.com:5432/db?sslmode=require")
 	require.IsType(t, &url.Error{}, err)
