@@ -76,6 +76,10 @@ func (c *SegmentingCache) Store(streamName string, streamInfo StreamInfo) {
 	c.debugPrint("add", streamName)
 }
 
+func (c *SegmentingCache) UnittestIntrospection() *map[string]StreamInfo {
+	return &c.cache
+}
+
 func (c *SegmentingCache) debugPrint(action, streamName string) {
 	var id string = action + " " + streamName + ": SegmentingCache"
 	pretty.Print(id, c.cache)

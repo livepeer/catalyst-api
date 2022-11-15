@@ -2,14 +2,29 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
+	"os"
+	"path"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
+	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/handlers/misttriggers"
+	"github.com/livepeer/catalyst-api/mokeypatching"
+	"github.com/livepeer/catalyst-api/transcode"
+	"github.com/livepeer/go-tools/drivers"
 	"github.com/stretchr/testify/require"
 )
 
@@ -110,6 +125,144 @@ func TestSegmentBodyFormat(t *testing.T) {
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
 		require.Equal(400, rr.Result().StatusCode, string(payload))
+	}
+}
+
+func TestVODHandlerProfiles(t *testing.T) {
+	// Create temporary manifest + segment files on the local filesystem
+	inputUrl, outputUrl := createTempManifests(t)
+
+	// Define profiles
+	profiles := []clients.EncodedProfile{
+		{Name: "p360", Width: 640, Height: 360, Bitrate: 200000, FPS: 24},
+		{Name: "p240", Width: 427, Height: 240, Bitrate: 100000, FPS: 24},
+	}
+
+	// Mock Broadcaster node returning valid response
+	var seq int
+	videoData, err := os.ReadFile("lpt.ts")
+	require.NoError(t, err)
+	broadcasterMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		seq += 1
+		// discard payload
+		_, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+		// return multipart response
+		boundary := config.RandomTrailer(10)
+		accept := req.Header.Get("Accept")
+		if accept != "multipart/mixed" {
+			w.WriteHeader(http.StatusNotAcceptable)
+			return
+		}
+		contentType := "multipart/mixed; boundary=" + boundary
+		w.Header().Set("Content-Type", contentType)
+		w.WriteHeader(http.StatusOK)
+		multipart := multipart.NewWriter(w)
+		defer multipart.Close()
+		for i := 0; i < len(profiles); i++ {
+			multipart.SetBoundary(boundary)
+			fileName := fmt.Sprintf(`"%s_%d%s"`, profiles[i].Name, seq, ".ts")
+			hdrs := textproto.MIMEHeader{
+				"Content-Type":        {"video/mp2t" + "; name=" + fileName},
+				"Content-Length":      {strconv.Itoa(len(videoData))},
+				"Content-Disposition": {"attachment; filename=" + fileName},
+				"Rendition-Name":      {profiles[i].Name},
+			}
+			part, err := multipart.CreatePart(hdrs)
+			require.NoError(t, err)
+			_, err = io.Copy(part, bytes.NewReader(videoData))
+			require.NoError(t, err)
+
+		}
+	}))
+	defer broadcasterMock.Close()
+	patch_cleanup := changeDefaultBroadcasterUrl(t, broadcasterMock.URL)
+	defer patch_cleanup()
+
+	// Start callback server to record reported events
+	callbacks := make(chan *clients.TranscodeStatusCompletedMessage, 100)
+	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		message := clients.TranscodeStatusCompletedMessage{}
+		err = json.Unmarshal(payload, &message)
+		require.NoError(t, err)
+		callbacks <- &message
+	}))
+	defer callbackServer.Close()
+
+	// Mist client
+	mc := clients.StubMistClient{}
+
+	// Clear internal state, leftovers from other tests
+	internalState := cache.DefaultStreamCache.Segmenting.UnittestIntrospection()
+	for k := range *internalState {
+		delete(*internalState, k)
+	}
+
+	// Setup handlers to test
+	mistCallbackHandlers := &misttriggers.MistCallbackHandlersCollection{MistClient: mc}
+	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: mc}
+	var jsonData = fmt.Sprintf(`{
+		"url": "%s",
+		"callback_url": "%s",
+		"profiles": [
+			{"name": "p360", "width": 640, "height": 360, "bitrate": 200000, "fps": 24},
+			{"name": "p240", "width": 427, "height": 240, "bitrate": 100000, "fps": 24}
+		],
+		"output_locations": [{
+			"type": "object_store",
+			"url": "%s",
+			"outputs": {"source_segments": true}
+		}]
+	}`, inputUrl, callbackServer.URL, outputUrl)
+	router := httprouter.New()
+	router.POST("/api/vod", catalystApiHandlers.UploadVOD())
+	router.POST("/api/mist/trigger", mistCallbackHandlers.Trigger())
+
+	// First request goes to /api/vod
+	req, _ := http.NewRequest("POST", "/api/vod", bytes.NewBuffer([]byte(jsonData)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	require.Equal(t, http.StatusOK, rr.Result().StatusCode)
+
+	// Request to /api/vod should store profiles in server state
+	// Check for stored record in internal state
+	var streamName string
+	require.True(t, func() bool {
+		for name, info := range *internalState {
+			correctCount := len(info.Profiles) == 2
+			correctNames := info.Profiles[0].Name == "p360" && info.Profiles[1].Name == "p240"
+			if correctCount && correctNames {
+				streamName = name
+				return true
+			}
+		}
+		return false
+	}())
+
+	// Second request invokes trigger
+	triggerPayload := fmt.Sprintf("%s\n%s\nhls\n1234\n3\n1667489141941\n1667489144941\n10000\n0\n10000", streamName, outputUrl)
+	req, _ = http.NewRequest("POST", "/api/mist/trigger", bytes.NewBuffer([]byte(triggerPayload)))
+	req.Header.Set("X-Trigger", "RECORDING_END")
+	rr = httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	require.Equal(t, http.StatusOK, rr.Result().StatusCode, "trigger handler failed")
+
+	// Check we received proper callback events
+	deadline, cancelCtx := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelCtx()
+	for {
+		select {
+		case message := <-callbacks:
+			if message.Status == "success" {
+				return
+			}
+			require.Equal(t, "", message.Error, "received error callback")
+		case <-deadline.Done():
+			require.FailNow(t, "expected success callback never received")
+		}
 	}
 }
 
@@ -248,3 +401,70 @@ func TestWrongContentTypeVODUploadHandler(t *testing.T) {
 	require.Equal(rr.Result().StatusCode, 415)
 	require.JSONEq(rr.Body.String(), `{"error": "Requires application/json content type", "error_detail":""}`)
 }
+
+func storeTestFile(t *testing.T, path, name, data string) {
+	// Store to dir
+	storage, err := drivers.ParseOSURL("file://"+path, true)
+	require.NoError(t, err)
+	_, err = storage.NewSession("").SaveData(context.Background(), name, bytes.NewReader([]byte(data)), nil, 1*time.Second)
+	require.NoError(t, err)
+}
+
+func createTempManifests(t *testing.T) (string, string) {
+	drivers.Testing = true
+	tmpDir := os.TempDir()
+	dir := path.Join(tmpDir, "/live/peer/test")
+	sourceDir := path.Join(tmpDir, "/live/peer/test/source")
+	err := os.MkdirAll(dir, os.ModePerm)
+	require.NoError(t, err)
+	err = os.MkdirAll(sourceDir, os.ModePerm)
+	require.NoError(t, err)
+
+	storeTestFile(t, dir, "manifest.m3u8", exampleMediaManifest)
+	storeTestFile(t, sourceDir, "manifest.m3u8", exampleMediaManifest)
+	storeTestFile(t, dir, "0.ts", "segment data")
+	storeTestFile(t, sourceDir, "0.ts", "segment data")
+	storeTestFile(t, dir, "5000.ts", "lots of segment data")
+	storeTestFile(t, sourceDir, "5000.ts", "lots of segment data")
+	storedManifest := fmt.Sprintf("file://%s", path.Join(dir, "manifest.m3u8"))
+	// Just in tests we use same manifest for segmenting request and same for transcoding
+	return storedManifest, storedManifest
+}
+
+func changeDefaultBroadcasterUrl(t *testing.T, testingServerURL string) func() {
+	var err error
+	mokeypatching.MonkeypatchingMutex.Lock()
+	// remember default value
+	originalUrl := config.DefaultBroadcasterURL
+	originalClient := transcode.LocalBroadcasterClient
+	originalMistDir := config.PathMistDir
+	// Modify configuration
+	config.DefaultBroadcasterURL = testingServerURL
+	transcode.LocalBroadcasterClient, err = clients.NewLocalBroadcasterClient(testingServerURL)
+	// Modify PathMistDir configuration
+	require.NoError(t, err)
+	tempDir := t.TempDir()
+	script := path.Join(tempDir, "MistInHLS")
+	err = os.WriteFile(script, []byte("#!/bin/sh\necho livepeer\n"), 0744)
+	require.NoError(t, err)
+	config.PathMistDir = tempDir
+
+	return func() {
+		// Restore original values
+		config.DefaultBroadcasterURL = originalUrl
+		transcode.LocalBroadcasterClient = originalClient
+		config.PathMistDir = originalMistDir
+		mokeypatching.MonkeypatchingMutex.Unlock()
+	}
+}
+
+const exampleMediaManifest = `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-PLAYLIST-TYPE:VOD
+#EXT-X-TARGETDURATION:5
+#EXT-X-MEDIA-SEQUENCE:0
+#EXTINF:10.4160000000,
+0.ts
+#EXTINF:5.3340000000,
+5000.ts
+#EXT-X-ENDLIST`
