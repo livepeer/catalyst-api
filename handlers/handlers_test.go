@@ -160,7 +160,8 @@ func TestVODHandlerProfiles(t *testing.T) {
 		multipart := multipart.NewWriter(w)
 		defer multipart.Close()
 		for i := 0; i < len(profiles); i++ {
-			multipart.SetBoundary(boundary)
+			err := multipart.SetBoundary(boundary)
+			require.NoError(t, err)
 			fileName := fmt.Sprintf(`"%s_%d%s"`, profiles[i].Name, seq, ".ts")
 			hdrs := textproto.MIMEHeader{
 				"Content-Type":        {"video/mp2t" + "; name=" + fileName},
