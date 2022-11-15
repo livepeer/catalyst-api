@@ -8,12 +8,13 @@ import (
 	"testing"
 
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/mokeypatching"
 	"github.com/stretchr/testify/require"
 )
 
 func TestItRetriesOnFailedCallbacks(t *testing.T) {
-	config.Clock = config.FixedTimestampGenerator{Timestamp: 123456789}
-	defer func() { config.Clock = config.RealTimestampGenerator{} }()
+	patch_cleanup := changeDefaultClock(t, config.FixedTimestampGenerator{Timestamp: 123456789})
+	defer patch_cleanup()
 
 	// Counter for the number of retries we've done
 	var tries int
@@ -44,8 +45,8 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 }
 
 func TestItEventuallyStopsRetrying(t *testing.T) {
-	config.Clock = config.FixedTimestampGenerator{Timestamp: 123456789}
-	defer func() { config.Clock = config.RealTimestampGenerator{} }()
+	patch_cleanup := changeDefaultClock(t, config.FixedTimestampGenerator{Timestamp: 123456789})
+	defer patch_cleanup()
 
 	// Counter for the number of retries we've done
 	var tries int
@@ -74,8 +75,8 @@ func TestItEventuallyStopsRetrying(t *testing.T) {
 }
 
 func TestTranscodeStatusErrorNotifcation(t *testing.T) {
-	config.Clock = config.FixedTimestampGenerator{Timestamp: 123456789}
-	defer func() { config.Clock = config.RealTimestampGenerator{} }()
+	patch_cleanup := changeDefaultClock(t, config.FixedTimestampGenerator{Timestamp: 123456789})
+	defer patch_cleanup()
 
 	// Set up a dummy server to receive the callbacks
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -108,5 +109,16 @@ func TestItCalculatesTheOverallCompletionRatioCorrectly(t *testing.T) {
 		t.Run(fmt.Sprintf("%f in %s", tc.completionRatio, tc.status), func(t *testing.T) {
 			require.Equal(t, tc.expectedOverallCompletionRatio, overallCompletionRatio(tc.status, tc.completionRatio))
 		})
+	}
+}
+
+func changeDefaultClock(t *testing.T, generator config.TimestampGenerator) func() {
+	mokeypatching.MonkeypatchingMutex.Lock()
+	originalValue := config.Clock
+	config.Clock = generator
+	return func() {
+		// Restore original value
+		config.Clock = originalValue
+		mokeypatching.MonkeypatchingMutex.Unlock()
 	}
 }
