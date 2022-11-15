@@ -16,6 +16,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/mokeypatching"
 	"github.com/stretchr/testify/require"
 )
 
@@ -113,7 +114,7 @@ func TestRecordingCompleted(t *testing.T) {
 
 func TestMistInHLSStart(t *testing.T) {
 	dir := t.TempDir()
-	config.PathMistDir = dir
+	changeDefaultMistDir(t, dir)
 	destination := "unused"
 	err := createDtsh("testRequestID", "invalid://user:abc{DEf1=lp@example.com:5432/db?sslmode=require")
 	require.IsType(t, &url.Error{}, err)
@@ -126,6 +127,17 @@ func TestMistInHLSStart(t *testing.T) {
 	err = createDtsh("testRequestID", destination)
 	require.NoError(t, err)
 	time.Sleep(50 * time.Millisecond)
+}
+
+func changeDefaultMistDir(t *testing.T, dir string) func() {
+	mokeypatching.MonkeypatchingMutex.Lock()
+	originalValue := config.PathMistDir
+	config.PathMistDir = dir
+	return func() {
+		// Restore original value
+		config.PathMistDir = originalValue
+		mokeypatching.MonkeypatchingMutex.Unlock()
+	}
 }
 
 type StreamSample struct {
