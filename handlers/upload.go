@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os/exec"
 	"path"
 	"strings"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/subprocess"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -156,8 +158,13 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			RequestID:       requestID,
 		})
 
-		log.Log(requestID, "Beginning segmenting")
+		// Attempt an out-of-band call to generate the dtsh headers using MistIn*
+		err = createDtsh(requestID, uploadVODRequest.Url)
+		if err != nil {
+			log.LogError(requestID, "Failed to create dtsh", err, "destination", uploadVODRequest.Url)
+		}
 
+		log.Log(requestID, "Beginning segmenting")
 		// Tell Mist to do the segmenting. Upon completion / error, Mist will call Triggers to notify us.
 		if err := d.processUploadVOD(streamName, uploadVODRequest.Url, targetSegmentedOutputURL.String()); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot process upload VOD request", err)
@@ -191,5 +198,28 @@ func (d *CatalystAPIHandlersCollection) processUploadVOD(streamName, sourceURL, 
 		return err
 	}
 
+	return nil
+}
+
+func createDtsh(requestID, destination string) error {
+	log.Log(requestID, "Generating DTSH header for ", destination)
+	url, err := url.Parse(destination)
+	if err != nil {
+		return err
+	}
+	url.RawQuery = ""
+	url.Fragment = ""
+	headerPrepare := exec.Command(path.Join(config.PathMistDir, "MistInMP4"), "-H", url.String(), "-g", "5")
+	if err = subprocess.LogOutputs(headerPrepare); err != nil {
+		return err
+	}
+	if err = headerPrepare.Start(); err != nil {
+		return err
+	}
+	go func() {
+		if err := headerPrepare.Wait(); err != nil {
+			log.LogError(requestID, "createDtsh return code", err, "destination", destination)
+		}
+	}()
 	return nil
 }
