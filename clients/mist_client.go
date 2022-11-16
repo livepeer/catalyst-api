@@ -7,7 +7,13 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"os/exec"
+	"path"
 	"sync"
+	"time"
+
+	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/subprocess"
 )
 
 type MistAPIClient interface {
@@ -17,6 +23,7 @@ type MistAPIClient interface {
 	AddTrigger(streamName, triggerName string) error
 	DeleteTrigger(streamName, triggerName string) error
 	GetStreamInfo(streamName string) (MistStreamInfo, error)
+	CreateDTSH(destination string) error
 }
 
 type MistClient struct {
@@ -92,6 +99,32 @@ func (mc *MistClient) PushStart(streamName, targetURL string) error {
 func (mc *MistClient) DeleteStream(streamName string) error {
 	c := commandDeleteStream(streamName)
 	return wrapErr(validateDeleteStream(mc.sendCommand(c)), streamName)
+}
+
+func (mc *MistClient) CreateDTSH(destination string) error {
+	url, err := url.Parse(destination)
+	if err != nil {
+		return err
+	}
+	url.RawQuery = ""
+	url.Fragment = ""
+	headerPrepare := exec.Command(path.Join(config.PathMistDir, "MistInMP4"), "-H", url.String(), "-g", "5")
+	if err = subprocess.LogOutputs(headerPrepare); err != nil {
+		return err
+	}
+
+	if err = headerPrepare.Start(); err != nil {
+		return err
+	}
+
+	// Make sure the command doesn't run indefinitely
+	// Tested on ~1Gb files and too < 10 seconds, so this should hopefully be plenty of time
+	timer := time.AfterFunc(5*time.Minute, func() {
+		_ = headerPrepare.Process.Kill()
+	})
+	defer timer.Stop()
+
+	return headerPrepare.Wait()
 }
 
 // AddTrigger adds a trigger `triggerName` for the stream `streamName`.

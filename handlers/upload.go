@@ -7,7 +7,6 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
-	"os/exec"
 	"path"
 	"strings"
 	"time"
@@ -18,7 +17,6 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
-	"github.com/livepeer/catalyst-api/subprocess"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -172,7 +170,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 
 			// Attempt an out-of-band call to generate the dtsh headers using MistIn*
 			var dtshStartTime = time.Now()
-			if err := createDtsh(uploadVODRequest.Url); err != nil {
+			if err := d.MistClient.CreateDTSH(uploadVODRequest.Url); err != nil {
 				log.LogError(requestID, "Failed to create DTSH", err, "destination", uploadVODRequest.Url)
 			} else {
 				log.Log(requestID, "Generated DTSH File", "dtsh_generation_duration", time.Since(dtshStartTime).String())
@@ -217,30 +215,4 @@ func (d *CatalystAPIHandlersCollection) processUploadVOD(streamName, sourceURL, 
 	}
 
 	return nil
-}
-
-func createDtsh(destination string) error {
-	url, err := url.Parse(destination)
-	if err != nil {
-		return err
-	}
-	url.RawQuery = ""
-	url.Fragment = ""
-	headerPrepare := exec.Command(path.Join(config.PathMistDir, "MistInMP4"), "-H", url.String(), "-g", "5")
-	if err = subprocess.LogOutputs(headerPrepare); err != nil {
-		return err
-	}
-
-	if err = headerPrepare.Start(); err != nil {
-		return err
-	}
-
-	// Make sure the command doesn't run indefinitely
-	// Tested on ~1Gb files and too < 10 seconds, so this should hopefully be plenty of time
-	timer := time.AfterFunc(5*time.Minute, func() {
-		headerPrepare.Process.Kill()
-	})
-	defer timer.Stop()
-
-	return headerPrepare.Wait()
 }
