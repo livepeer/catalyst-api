@@ -147,6 +147,14 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 			}
 		}()
 
+		// prepare .dtsh headers for all rendition playlists
+		for _, output := range outputs {
+			if err := d.MistClient.CreateDTSH(output.Manifest); err != nil {
+				// should not block the ingestion flow or make it fail on error.
+				log.LogError(requestID, "CreateDTSH() for rendition failed", err, "destination", output.Manifest)
+			}
+		}
+
 	}()
 }
 
