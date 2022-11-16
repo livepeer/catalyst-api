@@ -25,3 +25,7 @@ func (s StubMistClient) AddTrigger(streamName, triggerName string) error {
 func (s StubMistClient) DeleteTrigger(streamName, triggerName string) error {
 	return nil
 }
+
+func (s StubMistClient) CreateDTSH(destination string) error {
+	return nil
+}
