@@ -228,7 +228,13 @@ func TestVODHandlerProfiles(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Result().StatusCode)
 
 	// Request to /api/vod should store profiles in server state
-	// Check for stored record in internal state
+	// Check for stored record in internal state, waiting for it to be populated before checking
+	for i := 0; i < 5; i++ {
+		if len(*internalState) > 0 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	var streamName string
 	require.True(t, func() bool {
 		for name, info := range *internalState {

@@ -10,7 +10,9 @@ import (
 	"path"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
@@ -156,4 +158,62 @@ func TestItCalculatesTheTranscodeCompletionPercentageCorrectly(t *testing.T) {
 	require.Equal(t, 0.1, calculateCompletedRatio(10, 1))
 	require.Equal(t, 0.01, calculateCompletedRatio(100, 1))
 	require.Equal(t, 0.6, calculateCompletedRatio(100, 60))
+}
+
+func TestParallelJobFailureStopsNextBatch(t *testing.T) {
+	config.TranscodingParallelJobs = 3
+	config.TranscodingParallelSleep = 0
+	sourceSegmentURLs := []SourceSegment{
+		// First 3 jobs run in parallel, second one fails
+		{"1.ts", 1000}, {"2.ts", 1000}, {"3.ts", 1000},
+		// Rest of jobs should not be processed
+		{"4.ts", 1000}, {"5.ts", 1000}, {"6.ts", 1000},
+	}
+	halted := fmt.Errorf("halted")
+	m := sync.Mutex{}
+	var handlerIndex int = 0
+	jobs := NewParallelTranscoding(sourceSegmentURLs, func(segment segmentInfo) error {
+		time.Sleep(50 * time.Millisecond) // simulate processing
+		m.Lock()
+		defer m.Unlock()
+		defer func() { handlerIndex += 1 }()
+		if handlerIndex == 0 {
+			return nil
+		}
+		if handlerIndex == 1 {
+			return halted
+		}
+		return fmt.Errorf("failure detected late")
+	})
+	jobs.Start()
+	err := jobs.Wait()
+	// Check we got first error
+	require.Error(t, err)
+	require.Error(t, err, halted)
+	// Check progress state is properly set
+	require.Equal(t, 6, jobs.GetTotalCount())
+	require.Equal(t, 1, jobs.GetCompletedCount())
+	time.Sleep(10 * time.Millisecond) // wait for other workers to exit
+}
+
+func TestParallelJobSaveTime(t *testing.T) {
+	config.TranscodingParallelJobs = 3
+	config.TranscodingParallelSleep = 0
+	sourceSegmentURLs := []SourceSegment{
+		// First 3 jobs should end at ~51ms mark
+		{"1.ts", 1000}, {"2.ts", 1000}, {"3.ts", 1000},
+		// Second 3 jobs should end at ~101ms mark
+		{"4.ts", 1000}, {"5.ts", 1000}, {"6.ts", 1000},
+	}
+	start := time.Now()
+	jobs := NewParallelTranscoding(sourceSegmentURLs, func(segment segmentInfo) error {
+		time.Sleep(50 * time.Millisecond)
+		return nil
+	})
+	jobs.Start()
+	require.NoError(t, jobs.Wait())
+	elapsed := time.Since(start)
+	require.Greater(t, elapsed, 60*time.Millisecond)
+	require.Less(t, elapsed, 160*time.Millisecond) // usually takes less than 101ms on idle machine
+	time.Sleep(10 * time.Millisecond)              // wait for other workers to exit
 }

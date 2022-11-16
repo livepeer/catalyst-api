@@ -4,12 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"io/fs"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"os"
-	"path"
 	"testing"
 	"time"
 
@@ -111,35 +107,6 @@ func TestRecordingCompleted(t *testing.T) {
 	case <-callbackHappened:
 	case <-time.After(1 * time.Second):
 		require.FailNow(t, "no callback happened")
-	}
-}
-
-func TestMistInHLSStart(t *testing.T) {
-	dir := t.TempDir()
-	patch_cleanup := changeDefaultMistDir(t, dir)
-	defer patch_cleanup()
-	destination := "unused"
-	err := createDtsh("testRequestID", "invalid://user:abc{DEf1=lp@example.com:5432/db?sslmode=require")
-	require.IsType(t, &url.Error{}, err)
-	err = createDtsh("testRequestID", destination)
-	require.IsType(t, &fs.PathError{}, err)
-
-	script := path.Join(dir, "MistInHLS")
-	_ = os.WriteFile(script, []byte("#!/bin/sh\necho livepeer\n"), 0744)
-
-	err = createDtsh("testRequestID", destination)
-	require.NoError(t, err)
-	time.Sleep(50 * time.Millisecond)
-}
-
-func changeDefaultMistDir(t *testing.T, dir string) func() {
-	mokeypatching.MonkeypatchingMutex.Lock()
-	originalValue := config.PathMistDir
-	config.PathMistDir = dir
-	return func() {
-		// Restore original value
-		config.PathMistDir = originalValue
-		mokeypatching.MonkeypatchingMutex.Unlock()
 	}
 }
 
