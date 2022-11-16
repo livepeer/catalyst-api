@@ -19,7 +19,7 @@ This will give you another local Catalyst API instance (in addition to the one r
 By default, this runs on a different port (`4949`) to the Catalyst one (`7979`) and so to test it, run:
 
 ```
-curl 'http://localhost:4949/ok'
+curl -I 'http://localhost:4949/ok'
 ```
 
 If you see a response body of `OK` then things are working and you can begin using this instance to test the API's integration with Mist and the other parts of the Catalyst system.
