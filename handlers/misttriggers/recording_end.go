@@ -4,18 +4,13 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"net/url"
-	"os/exec"
-	"path"
 	"strconv"
 	"strings"
 
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
-	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
-	"github.com/livepeer/catalyst-api/subprocess"
 	"github.com/livepeer/catalyst-api/transcode"
 )
 
@@ -144,7 +139,6 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 			return
 		}
 
-		// When createDtsh() completes issue another callback signaling to studio playback is ready
 		defer func() {
 			// Send the success callback
 			err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(transcodeRequest.CallbackURL, inputInfo, outputs)
@@ -155,11 +149,9 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 
 		// prepare .dtsh headers for all rendition playlists
 		for _, output := range outputs {
-			// output is multivariant playlist
-			err := createDtsh(requestID, output.Manifest)
-			if err != nil {
+			if err := d.MistClient.CreateDTSH(output.Manifest); err != nil {
 				// should not block the ingestion flow or make it fail on error.
-				log.LogError(requestID, "master createDtsh() failed", err, "destination", output.Manifest)
+				log.LogError(requestID, "CreateDTSH() for rendition failed", err, "destination", output.Manifest)
 			}
 		}
 
@@ -232,26 +224,4 @@ func ParseRecordingEndPayload(payload string) (RecordingEndPayload, error) {
 		FirstMediaTimestampMillis: FirstMediaTimestampMillis,
 		LastMediaTimestampMillis:  LastMediaTimestampMillis,
 	}, nil
-}
-
-func createDtsh(requestID, destination string) error {
-	url, err := url.Parse(destination)
-	if err != nil {
-		return err
-	}
-	url.RawQuery = ""
-	url.Fragment = ""
-	headerPrepare := exec.Command(path.Join(config.PathMistDir, "MistInHLS"), "-H", url.String(), "-g", "5")
-	if err = subprocess.LogOutputs(headerPrepare); err != nil {
-		return err
-	}
-	if err = headerPrepare.Start(); err != nil {
-		return err
-	}
-	go func() {
-		if err := headerPrepare.Wait(); err != nil {
-			log.LogError(requestID, "createDtsh return code", err, "destination", destination)
-		}
-	}()
-	return nil
 }

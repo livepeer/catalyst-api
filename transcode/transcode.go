@@ -7,7 +7,6 @@ import (
 	"path"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
@@ -133,40 +132,24 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// transcodedStats hold actual info from transcoded results within requested constraints (this usually differs from requested profiles)
 	transcodedStats := statsFromProfiles(transcodeProfiles)
 
-	// Iterate through the segment URLs and transcode them
-	// Use channel to queue segments
-	queue := make(chan segmentInfo, len(sourceSegmentURLs))
-	for segmentIndex, u := range sourceSegmentURLs {
-		queue <- segmentInfo{Input: u, Index: segmentIndex}
-	}
-	close(queue)
-	// Use channel for recieving the errors
-	errors := make(chan error, 100)
-	// Start number of workers in parallel
-	var completed sync.WaitGroup
-	completed.Add(config.TranscodingParallelJobs)
-	for index := 0; index < config.TranscodingParallelJobs; index++ {
-		go func() {
-			defer completed.Done()
-			for segment := range queue {
-				err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, targetTranscodedRenditionOutputURL, transcodedStats)
-				if err != nil {
-					errors <- err
-					return
-				}
-				var completedRatio = calculateCompletedRatio(len(sourceSegmentURLs), segment.Index+1)
-				if err = clients.DefaultCallbackClient.SendTranscodeStatus(transcodeRequest.CallbackURL, clients.TranscodeStatusTranscoding, completedRatio); err != nil {
-					log.LogError(transcodeRequest.RequestID, "failed to send transcode status callback", err, "url", transcodeRequest.CallbackURL)
-				}
+	var jobs *ParallelTranscoding
+	jobs = NewParallelTranscoding(sourceSegmentURLs, func(segment segmentInfo) error {
+		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, targetTranscodedRenditionOutputURL, transcodedStats)
+		if err != nil {
+			return err
+		}
+		if jobs.IsRunning() {
+			// Sending callback only if we are still running
+			var completedRatio = calculateCompletedRatio(jobs.GetTotalCount(), jobs.GetCompletedCount()+1)
+			if err = clients.DefaultCallbackClient.SendTranscodeStatus(transcodeRequest.CallbackURL, clients.TranscodeStatusTranscoding, completedRatio); err != nil {
+				log.LogError(transcodeRequest.RequestID, "failed to send transcode status callback", err, "url", transcodeRequest.CallbackURL)
 			}
-		}()
-		// Add some desync interval to avoid load spikes on segment-encode-end
-		time.Sleep(713 * time.Millisecond)
-	}
-	// Wait for all segments to transcode or first error
-	select {
-	case <-channelFromWaitgroup(&completed):
-	case err = <-errors:
+		}
+		return nil
+	})
+	jobs.Start()
+	if err = jobs.Wait(); err != nil {
+		// return first error to caller
 		return outputs, err
 	}
 

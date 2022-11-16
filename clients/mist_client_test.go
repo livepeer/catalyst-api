@@ -2,10 +2,16 @@ package clients
 
 import (
 	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
+	"path"
 	"testing"
+	"time"
 
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -239,6 +245,31 @@ func TestItFailsWhenMaxRetriesReached(t *testing.T) {
 	_, err := mc.GetStreamInfo("some-stream-name")
 	require.Equal(t, 3, retries)
 	require.Error(t, err)
+}
+
+func TestItCanGenerateDTSH(t *testing.T) {
+	mc := &MistClient{
+		HttpReqUrl: "",
+	}
+
+	dir := t.TempDir()
+	config.PathMistDir = dir
+	destination := "unused"
+
+	err := mc.CreateDTSH("invalid://user:abc{DEf1=lp@example.com:5432/db?sslmode=require")
+	require.Error(t, err)
+	require.IsType(t, &url.Error{}, err)
+
+	err = mc.CreateDTSH(destination)
+	require.Error(t, err)
+	require.IsType(t, &fs.PathError{}, err)
+
+	script := path.Join(dir, "MistInMP4")
+	_ = os.WriteFile(script, []byte("#!/bin/sh\necho livepeer\n"), 0744)
+
+	err = mc.CreateDTSH(destination)
+	require.NoError(t, err)
+	time.Sleep(50 * time.Millisecond)
 }
 
 var mistResponse = `{
