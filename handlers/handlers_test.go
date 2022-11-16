@@ -227,14 +227,24 @@ func TestVODHandlerProfiles(t *testing.T) {
 	router.ServeHTTP(rr, req)
 	require.Equal(t, http.StatusOK, rr.Result().StatusCode)
 
-	// Request to /api/vod should store profiles in server state
-	// Check for stored record in internal state, waiting for it to be populated before checking
-	for i := 0; i < 5; i++ {
-		if len(*internalState) > 0 {
-			break
+	// Waiting for SendTranscodeStatus(TranscodeStatusPreparing, 0.2)
+	segmentingDeadline, segmentingCancelCtx := context.WithTimeout(context.Background(), 10*time.Second)
+	defer segmentingCancelCtx()
+waitsegmenting:
+	for {
+		select {
+		case message := <-callbacks:
+			// 0.2 is final progress reported for TranscodeStatusPreparing from UploadVOD()
+			if message.Status == "preparing" && message.CompletionRatio == clients.OverallCompletionRatio(clients.TranscodeStatusPreparing, 0.2) {
+				break waitsegmenting
+			}
+			// Fail on any error in callbacks
+			require.Equal(t, "", message.Error, "received error callback")
+		case <-segmentingDeadline.Done():
+			require.FailNow(t, "expected segmenting callback, never received")
 		}
-		time.Sleep(100 * time.Millisecond)
 	}
+	// Request to /api/vod should store profiles in server state. Check for stored record in internal state
 	var streamName string
 	require.True(t, func() bool {
 		for name, info := range *internalState {
@@ -267,7 +277,7 @@ func TestVODHandlerProfiles(t *testing.T) {
 			}
 			require.Equal(t, "", message.Error, "received error callback")
 		case <-deadline.Done():
-			require.FailNow(t, "expected success callback never received")
+			require.FailNow(t, "expected success callback, never received")
 		}
 	}
 }
