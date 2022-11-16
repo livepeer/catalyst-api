@@ -86,10 +86,12 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		var requestID = "RequestID-" + config.RandomTrailer(8)
 		log.AddContext(requestID, "source", uploadVODRequest.Url)
 
-		if err := applyInputGateway(&uploadVODRequest.Url); err != nil {
+		httpURL, err := dStorageToHTTP(uploadVODRequest.Url)
+		if err != nil {
 			errors.WriteHTTPBadRequest(w, "error in applyInputGateway()", err)
 			return
 		}
+		uploadVODRequest.Url = httpURL
 
 		// find source segment URL
 		var tURL string
@@ -178,16 +180,17 @@ func (d *CatalystAPIHandlersCollection) processUploadVOD(streamName, sourceURL, 
 const SCHEME_IPFS = "ipfs"
 const SCHEME_ARWEAVE = "ar"
 
-func applyInputGateway(inputUrl *string) error {
-	sourceUrl, err := url.Parse(*inputUrl)
+func dStorageToHTTP(inputUrl string) (string, error) {
+	sourceUrl, err := url.Parse(inputUrl)
 	if err != nil {
-		return err
+		return inputUrl, err
 	}
+
 	switch sourceUrl.Scheme {
 	case SCHEME_IPFS:
-		*inputUrl = fmt.Sprintf("https://cloudflare-ipfs.com/ipfs/%s", sourceUrl.Host)
+		return fmt.Sprintf("https://cloudflare-ipfs.com/ipfs/%s", sourceUrl.Host), nil
 	case SCHEME_ARWEAVE:
-		*inputUrl = fmt.Sprintf("https://arweave.net/%s", sourceUrl.Host)
+		return fmt.Sprintf("https://arweave.net/%s", sourceUrl.Host), nil
 	}
-	return nil
+	return inputUrl, nil
 }
