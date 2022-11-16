@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/cache"
@@ -124,56 +125,74 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			return
 		}
 
-		targetSegmentedOutputURL := targetURL.ResolveReference(sout)
-		log.AddContext(requestID, "segmented_url", targetSegmentedOutputURL.String())
+		// Once we're happy with the request, do the rest of the Segmenting stage asynchronously to allow us to
+		// from the API call and free up the HTTP connection
+		go func() {
+			targetSegmentedOutputURL := targetURL.ResolveReference(sout)
+			log.AddContext(requestID, "segmented_url", targetSegmentedOutputURL.String())
 
-		streamName := config.SegmentingStreamName(requestID)
-		log.AddContext(requestID, "stream_name", streamName)
+			streamName := config.SegmentingStreamName(requestID)
+			log.AddContext(requestID, "stream_name", streamName)
 
-		// Arweave URLs don't support HTTP Range requests and so Mist can't natively handle them for segmenting
-		// This workaround copies the file from Arweave to S3 and then tells Mist to use the S3 URL
-		if clients.IsArweaveURL(uploadVODRequest.Url) {
-			newSourceOutputPath := path.Join(targetDirPath, "source", "arweave-source.mp4")
-			newSourceOutputPathURL, err := url.Parse(newSourceOutputPath)
-			if err != nil {
-				errors.WriteHTTPInternalServerError(w, "Cannot parse newSourceOutputPath", err)
+			// Arweave URLs don't support HTTP Range requests and so Mist can't natively handle them for segmenting
+			// This workaround copies the file from Arweave to S3 and then tells Mist to use the S3 URL
+			if clients.IsArweaveURL(uploadVODRequest.Url) {
+				newSourceOutputPath := path.Join(targetDirPath, "source", "arweave-source.mp4")
+				newSourceOutputPathURL, err := url.Parse(newSourceOutputPath)
+				if err != nil {
+					if err := clients.DefaultCallbackClient.SendTranscodeStatusError(uploadVODRequest.CallbackUrl, "Cannot parse newSourceOutputPath"); err != nil {
+						log.LogError(requestID, "failed to send error callback", err)
+					}
+					return
+				}
+				newSourceURL := targetURL.ResolveReference(newSourceOutputPathURL)
+				log.AddContext(requestID, "new_source_url", newSourceURL.String())
+
+				if err := clients.CopyArweaveToS3(uploadVODRequest.Url, newSourceURL.String()); err != nil {
+					if err := clients.DefaultCallbackClient.SendTranscodeStatusError(uploadVODRequest.CallbackUrl, "Invalid Arweave URL"); err != nil {
+						log.LogError(requestID, "failed to send error callback", err)
+					}
+					return
+				}
+				uploadVODRequest.Url = newSourceURL.String()
+			}
+
+			cache.DefaultStreamCache.Segmenting.Store(streamName, cache.StreamInfo{
+				SourceFile:      uploadVODRequest.Url,
+				CallbackURL:     uploadVODRequest.CallbackUrl,
+				UploadURL:       targetSegmentedOutputURL.String(),
+				AccessToken:     uploadVODRequest.AccessToken,
+				TranscodeAPIUrl: uploadVODRequest.TranscodeAPIUrl,
+				RequestID:       requestID,
+			})
+
+			if err := clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, clients.TranscodeStatusPreparing, 0); err != nil {
+				errors.WriteHTTPInternalServerError(w, "Cannot send transcode status", err)
+			}
+
+			// Attempt an out-of-band call to generate the dtsh headers using MistIn*
+			var dtshStartTime = time.Now()
+			if err := createDtsh(uploadVODRequest.Url); err != nil {
+				log.LogError(requestID, "Failed to create DTSH", err, "destination", uploadVODRequest.Url)
+			} else {
+				log.Log(requestID, "Generated DTSH File", "dtsh_generation_duration", time.Since(dtshStartTime).String())
+			}
+
+			if err := clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, clients.TranscodeStatusPreparing, 0.1); err != nil {
+				errors.WriteHTTPInternalServerError(w, "Cannot send transcode status", err)
+			}
+
+			log.Log(requestID, "Beginning segmenting")
+			// Tell Mist to do the segmenting. Upon completion / error, Mist will call Triggers to notify us.
+			if err := d.processUploadVOD(streamName, uploadVODRequest.Url, targetSegmentedOutputURL.String()); err != nil {
+				log.LogError(requestID, "Cannot process upload VOD request", err)
 				return
 			}
-			newSourceURL := targetURL.ResolveReference(newSourceOutputPathURL)
-			log.AddContext(requestID, "new_source_url", newSourceURL.String())
 
-			if err := clients.CopyArweaveToS3(uploadVODRequest.Url, newSourceURL.String()); err != nil {
-				errors.WriteHTTPBadRequest(w, "Invalid Arweave URL", err)
-				return
+			if err := clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, clients.TranscodeStatusPreparing, 0.2); err != nil {
+				errors.WriteHTTPInternalServerError(w, "Cannot send transcode status", err)
 			}
-			uploadVODRequest.Url = newSourceURL.String()
-		}
-
-		cache.DefaultStreamCache.Segmenting.Store(streamName, cache.StreamInfo{
-			SourceFile:      uploadVODRequest.Url,
-			CallbackURL:     uploadVODRequest.CallbackUrl,
-			UploadURL:       targetSegmentedOutputURL.String(),
-			AccessToken:     uploadVODRequest.AccessToken,
-			TranscodeAPIUrl: uploadVODRequest.TranscodeAPIUrl,
-			RequestID:       requestID,
-		})
-
-		// Attempt an out-of-band call to generate the dtsh headers using MistIn*
-		err = createDtsh(requestID, uploadVODRequest.Url)
-		if err != nil {
-			log.LogError(requestID, "Failed to create dtsh", err, "destination", uploadVODRequest.Url)
-		}
-
-		log.Log(requestID, "Beginning segmenting")
-		// Tell Mist to do the segmenting. Upon completion / error, Mist will call Triggers to notify us.
-		if err := d.processUploadVOD(streamName, uploadVODRequest.Url, targetSegmentedOutputURL.String()); err != nil {
-			errors.WriteHTTPInternalServerError(w, "Cannot process upload VOD request", err)
-			return
-		}
-
-		if err := clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, clients.TranscodeStatusPreparing, 0.0); err != nil {
-			errors.WriteHTTPInternalServerError(w, "Cannot send transcode status", err)
-		}
+		}()
 
 		respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})
 		if err != nil {
@@ -185,7 +204,6 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			log.LogError(requestID, "Failed to write a /upload HTTP API response", err)
 			return
 		}
-
 	}
 }
 
@@ -201,8 +219,7 @@ func (d *CatalystAPIHandlersCollection) processUploadVOD(streamName, sourceURL, 
 	return nil
 }
 
-func createDtsh(requestID, destination string) error {
-	log.Log(requestID, "Generating DTSH header for ", destination)
+func createDtsh(destination string) error {
 	url, err := url.Parse(destination)
 	if err != nil {
 		return err
@@ -213,13 +230,17 @@ func createDtsh(requestID, destination string) error {
 	if err = subprocess.LogOutputs(headerPrepare); err != nil {
 		return err
 	}
+
 	if err = headerPrepare.Start(); err != nil {
 		return err
 	}
-	go func() {
-		if err := headerPrepare.Wait(); err != nil {
-			log.LogError(requestID, "createDtsh return code", err, "destination", destination)
-		}
-	}()
-	return nil
+
+	// Make sure the command doesn't run indefinitely
+	// Tested on ~1Gb files and too < 10 seconds, so this should hopefully be plenty of time
+	timer := time.AfterFunc(5*time.Minute, func() {
+		headerPrepare.Process.Kill()
+	})
+	defer timer.Stop()
+
+	return headerPrepare.Wait()
 }
