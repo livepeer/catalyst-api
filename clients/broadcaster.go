@@ -93,7 +93,17 @@ func transcodeSegment(inputSegment io.Reader, sequenceNumber, mediaDurationMilli
 	defer res.Body.Close()
 
 	if !httpOk(res.StatusCode) {
-		return t, fmt.Errorf("http POST(%s) returned %d %s", requestURL, res.StatusCode, res.Status)
+		// Read the body, because the B sometimes returns error information in there
+		// Swallow any error reading the body since there's nothing we can do about it
+		b, _ := io.ReadAll(res.Body)
+		bodyString := string(b)
+
+		// Don't include the body in the error if it's too long, since this gets used in logs and callbacks
+		if len(bodyString) > 10_000 {
+			bodyString = "<Too long to include in error>"
+		}
+
+		return t, fmt.Errorf("http POST(%s) returned %d %s. Response Body: %s", requestURL, res.StatusCode, res.Status, bodyString)
 	}
 	mediaType, params, err := mime.ParseMediaType(res.Header.Get("Content-Type"))
 	if err != nil {
