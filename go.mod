@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/livepeer/go-tools v0.0.0-20221115155924-5c5eee72e093
-	github.com/livepeer/livepeer-data v0.4.22
+	github.com/livepeer/livepeer-data v0.5.2
 	github.com/minio/madmin-go v1.7.5
 	github.com/stretchr/testify v1.8.0
 	github.com/xeipuuv/gojsonschema v1.2.0
