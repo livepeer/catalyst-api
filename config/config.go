@@ -22,6 +22,6 @@ const DefaultCustomAPIUrl = "https://origin.livepeer.com/api/"
 
 var RecordingCallback string = "http://127.0.0.1:8008/recording/status"
 
-var TranscodingParallelJobs int = 5
+var TranscodingParallelJobs int = 2
 
 var TranscodingParallelSleep time.Duration = 713 * time.Millisecond
