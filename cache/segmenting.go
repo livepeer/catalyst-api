@@ -3,8 +3,8 @@ package cache
 import (
 	"sync"
 
-	"github.com/kylelemons/godebug/pretty"
 	"github.com/livepeer/catalyst-api/clients"
+	"github.com/livepeer/catalyst-api/log"
 )
 
 type SegmentingCache struct {
@@ -23,11 +23,11 @@ type StreamInfo struct {
 	Profiles              []clients.EncodedProfile
 }
 
-func (c *SegmentingCache) Remove(streamName string) {
+func (c *SegmentingCache) Remove(requestID, streamName string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	delete(c.cache, streamName)
-	c.debugPrint("remove", streamName)
+	log.Log(requestID, "Deleting from Segmenting Cache", "stream_name", streamName)
 }
 
 func (c *SegmentingCache) GetCallbackUrl(streamName string) string {
@@ -73,14 +73,9 @@ func (c *SegmentingCache) Store(streamName string, streamInfo StreamInfo) {
 		Profiles:              streamInfo.Profiles,
 		RequestID:             streamInfo.RequestID,
 	}
-	c.debugPrint("add", streamName)
+	log.Log(streamInfo.RequestID, "Writing to Segmenting Cache", "stream_name", streamName)
 }
 
 func (c *SegmentingCache) UnittestIntrospection() *map[string]StreamInfo {
 	return &c.cache
-}
-
-func (c *SegmentingCache) debugPrint(action, streamName string) {
-	var id string = action + " " + streamName + ": SegmentingCache"
-	pretty.Print(id, c.cache)
 }

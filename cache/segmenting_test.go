@@ -27,6 +27,6 @@ func TestStoreAndRemoveSegmenting(t *testing.T) {
 	)
 	require.Equal(t, "http://some-callback-url.com", c.Segmenting.GetCallbackUrl("some-stream-name"))
 
-	c.Segmenting.Remove("some-stream-name")
+	c.Segmenting.Remove("request-id", "some-stream-name")
 	require.Equal(t, "", c.Segmenting.GetCallbackUrl("some-stream-name"))
 }
