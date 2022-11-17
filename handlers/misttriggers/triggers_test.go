@@ -12,6 +12,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/mokeypatching"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,7 +47,8 @@ func TestRecordingStart(t *testing.T) {
 		callbackHappened <- true
 	}))
 	defer callbackServer.Close()
-	config.RecordingCallback = callbackServer.URL
+	patch_cleanup := changeDefaultRecordingCallback(t, callbackServer.URL)
+	defer patch_cleanup()
 
 	router := httprouter.New()
 	router.POST("/api/mist/trigger", mistCallbackHandlers.Trigger())
@@ -89,7 +91,8 @@ func TestRecordingCompleted(t *testing.T) {
 		callbackHappened <- true
 	}))
 	defer callbackServer.Close()
-	config.RecordingCallback = callbackServer.URL
+	patch_cleanup := changeDefaultRecordingCallback(t, callbackServer.URL)
+	defer patch_cleanup()
 
 	router := httprouter.New()
 	router.POST("/api/mist/trigger", mistCallbackHandlers.Trigger())
@@ -104,6 +107,17 @@ func TestRecordingCompleted(t *testing.T) {
 	case <-callbackHappened:
 	case <-time.After(1 * time.Second):
 		require.FailNow(t, "no callback happened")
+	}
+}
+
+func changeDefaultRecordingCallback(t *testing.T, callback string) func() {
+	mokeypatching.MonkeypatchingMutex.Lock()
+	originalValue := config.RecordingCallback
+	config.RecordingCallback = callback
+	return func() {
+		// Restore original value
+		config.RecordingCallback = originalValue
+		mokeypatching.MonkeypatchingMutex.Unlock()
 	}
 }
 

@@ -99,6 +99,7 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 		AccessToken:      si.AccessToken,
 		TranscodeAPIUrl:  si.TranscodeAPIUrl,
 		SourceStreamInfo: streamInfo,
+		Profiles:         si.Profiles,
 		UploadURL:        si.UploadURL,
 		RequestID:        requestID,
 	}

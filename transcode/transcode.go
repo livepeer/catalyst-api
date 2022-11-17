@@ -71,14 +71,14 @@ var defaultTranscodeProfiles = []clients.EncodedProfile{
 	},
 }
 
-var localBroadcasterClient clients.BroadcasterClient
+var LocalBroadcasterClient clients.BroadcasterClient
 
 func init() {
 	b, err := clients.NewLocalBroadcasterClient(config.DefaultBroadcasterURL)
 	if err != nil {
 		panic(fmt.Sprintf("Error initialising Local Broadcaster Client with URL %q: %s", config.DefaultBroadcasterURL, err))
 	}
-	localBroadcasterClient = b
+	LocalBroadcasterClient = b
 }
 
 func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo clients.InputVideo) ([]clients.OutputVideo, error) {
@@ -188,7 +188,7 @@ func transcodeSegment(segment segmentInfo, streamName, manifestID string, transc
 			return fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
 		}
 	} else {
-		tr, err = localBroadcasterClient.TranscodeSegment(rc, int64(segment.Index), transcodeProfiles, segment.Input.DurationMillis, manifestID)
+		tr, err = LocalBroadcasterClient.TranscodeSegment(rc, int64(segment.Index), transcodeProfiles, segment.Input.DurationMillis, manifestID)
 		if err != nil {
 			return fmt.Errorf("failed to run TranscodeSegment: %s", err)
 		}

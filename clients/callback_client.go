@@ -71,7 +71,7 @@ func (c CallbackClient) SendRecordingEvent(event *RecordingEvent) {
 // This method will accept the completion ratio of the current stage and will translate that into the overall ratio
 func (c CallbackClient) SendTranscodeStatus(url string, status TranscodeStatus, currentStageCompletionRatio float64) error {
 	tsm := TranscodeStatusMessage{
-		CompletionRatio: overallCompletionRatio(status, currentStageCompletionRatio),
+		CompletionRatio: OverallCompletionRatio(status, currentStageCompletionRatio),
 		Status:          status.String(),
 		Timestamp:       config.Clock.GetTimestampUTC(),
 	}
@@ -113,7 +113,7 @@ func (c CallbackClient) SendTranscodeStatusError(callbackURL, errorMsg string) e
 func (c CallbackClient) SendTranscodeStatusCompleted(url string, iv InputVideo, ov []OutputVideo) error {
 	tsm := TranscodeStatusCompletedMessage{
 		TranscodeStatusMessage: TranscodeStatusMessage{
-			CompletionRatio: overallCompletionRatio(TranscodeStatusCompleted, 1),
+			CompletionRatio: OverallCompletionRatio(TranscodeStatusCompleted, 1),
 			Status:          TranscodeStatusCompleted.String(),
 			Timestamp:       config.Clock.GetTimestampUTC(),
 		},
@@ -139,7 +139,7 @@ func (c CallbackClient) SendTranscodeStatusCompleted(url string, iv InputVideo, 
 // Calculate the overall completion ratio based on the completion ratio of the current stage.
 // The weighting will need to be tweaked as we understand better the relative time spent in the
 // segmenting vs. transcoding stages.
-func overallCompletionRatio(status TranscodeStatus, currentStageCompletionRatio float64) float64 {
+func OverallCompletionRatio(status TranscodeStatus, currentStageCompletionRatio float64) float64 {
 	// Sanity check the inputs are within the 0-1 bounds
 	if currentStageCompletionRatio < 0 {
 		currentStageCompletionRatio = 0

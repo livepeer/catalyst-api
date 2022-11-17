@@ -90,7 +90,7 @@ func TestItCanTranscode(t *testing.T) {
 	}
 	// Set up a fake Broadcaster that returns the rendition segments we'd expect based on the
 	// transcode request we send in the next step
-	localBroadcasterClient = StubBroadcasterClient{
+	LocalBroadcasterClient = StubBroadcasterClient{
 		tr: clients.TranscodeResult{
 			Renditions: []*clients.RenditionSegment{
 				{

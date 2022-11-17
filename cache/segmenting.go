@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/kylelemons/godebug/pretty"
+	"github.com/livepeer/catalyst-api/clients"
 )
 
 type SegmentingCache struct {
@@ -19,6 +20,7 @@ type StreamInfo struct {
 	TranscodeAPIUrl       string
 	HardcodedBroadcasters string
 	RequestID             string
+	Profiles              []clients.EncodedProfile
 }
 
 func (c *SegmentingCache) Remove(streamName string) {
@@ -68,9 +70,14 @@ func (c *SegmentingCache) Store(streamName string, streamInfo StreamInfo) {
 		AccessToken:           streamInfo.AccessToken,
 		TranscodeAPIUrl:       streamInfo.TranscodeAPIUrl,
 		HardcodedBroadcasters: streamInfo.HardcodedBroadcasters,
+		Profiles:              streamInfo.Profiles,
 		RequestID:             streamInfo.RequestID,
 	}
 	c.debugPrint("add", streamName)
+}
+
+func (c *SegmentingCache) UnittestIntrospection() *map[string]StreamInfo {
+	return &c.cache
 }
 
 func (c *SegmentingCache) debugPrint(action, streamName string) {

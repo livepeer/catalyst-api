@@ -59,6 +59,39 @@ properties:
         - "pinata_access_key"
         additionalProperties: false
     minItems: 1
+  profiles:
+    type: "array"
+    items:
+      type: "object"
+      properties:
+        name:
+          type: "string"
+        width:
+          type: "integer"
+        height:
+          type: "integer"
+        bitrate:
+          type: "integer"
+        fps:
+          type: "integer"
+        fpsDen:
+          type: "integer"
+        profile:
+          type: "string"
+        gop:
+          type: "string"
+        encoder:
+          type: "string"
+        colorDepth:
+          type: "integer"
+        chromaFormat:
+          type: "integer"
+      additionalProperties: false
+      required:
+      -  "name"
+      - "width"
+      -  "height"
+      - "bitrate"
 required:
   - "url"
   - "callback_url"
