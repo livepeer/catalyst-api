@@ -41,13 +41,13 @@ const (
 
 // The default set of encoding profiles to use when none are specified
 var defaultTranscodeProfiles = []clients.EncodedProfile{
-	{
-		Name:    "240p0",
-		FPS:     0,
-		Bitrate: 250_000,
-		Width:   426,
-		Height:  240,
-	},
+	// {
+	// 	Name:    "240p0",
+	// 	FPS:     0,
+	// 	Bitrate: 250_000,
+	// 	Width:   426,
+	// 	Height:  240,
+	// },
 	{
 		Name:    "360p0",
 		FPS:     0,
@@ -55,13 +55,13 @@ var defaultTranscodeProfiles = []clients.EncodedProfile{
 		Width:   640,
 		Height:  360,
 	},
-	{
-		Name:    "480p0",
-		FPS:     0,
-		Bitrate: 1_600_000,
-		Width:   854,
-		Height:  480,
-	},
+	// {
+	// 	Name:    "480p0",
+	// 	FPS:     0,
+	// 	Bitrate: 1_600_000,
+	// 	Width:   854,
+	// 	Height:  480,
+	// },
 	{
 		Name:    "720p0",
 		FPS:     0,
