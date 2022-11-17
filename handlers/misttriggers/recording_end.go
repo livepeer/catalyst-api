@@ -47,11 +47,11 @@ func (d *MistCallbackHandlersCollection) TriggerRecordingEnd(w http.ResponseWrit
 }
 
 func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.ResponseWriter, p RecordingEndPayload) {
-	// when uploading is done, remove trigger and stream from Mist
-	defer cache.DefaultStreamCache.Segmenting.Remove(p.StreamName)
-
 	// Grab the Request ID to enable us to log properly
 	requestID := cache.DefaultStreamCache.Segmenting.GetRequestID(p.StreamName)
+
+	// when uploading is done, remove trigger and stream from Mist
+	defer cache.DefaultStreamCache.Segmenting.Remove(requestID, p.StreamName)
 
 	callbackUrl := cache.DefaultStreamCache.Segmenting.GetCallbackUrl(p.StreamName)
 	if callbackUrl == "" {
