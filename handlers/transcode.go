@@ -44,24 +44,3 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 		}
 	}
 }
-
-type ProcLivepeerConfigProfile struct {
-	Name       string `json:"name"`
-	Bitrate    int32  `json:"bitrate"`
-	Width      *int32 `json:"width,omitempty"`
-	Height     *int32 `json:"height,omitempty"`
-	Fps        *int32 `json:"fps,omitempty"`
-	GOP        string `json:"gop,omitempty"`
-	AvcProfile string `json:"profile,omitempty"` // H264High; High; H264Baseline; Baseline; H264Main; Main; H264ConstrainedHigh; High, without b-frames
-}
-
-type ProcLivepeerConfig struct {
-	AccessToken           string                      `json:"access_token,omitempty"`
-	CustomAPIUrl          string                      `json:"custom_url,omitempty"`
-	InputStreamName       string                      `json:"source"`
-	OutputStreamName      string                      `json:"sink"`
-	Leastlive             bool                        `json:"leastlive"`
-	HardcodedBroadcasters string                      `json:"hardcoded_broadcasters,omitempty"`
-	AudioSelect           string                      `json:"audio_select"`
-	Profiles              []ProcLivepeerConfigProfile `json:"target_profiles"`
-}
