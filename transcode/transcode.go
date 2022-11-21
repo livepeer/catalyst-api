@@ -7,10 +7,12 @@ import (
 	"path"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/metrics"
 )
 
 type TranscodeSegmentRequest struct {
@@ -166,11 +168,20 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	return outputs, nil
 }
 
-func transcodeSegment(segment segmentInfo, streamName, manifestID string, transcodeRequest TranscodeSegmentRequest, transcodeProfiles []clients.EncodedProfile, targetOSURL *url.URL, transcodedStats []*RenditionStats) error {
+func transcodeSegment(
+	segment segmentInfo, streamName, manifestID string,
+	transcodeRequest TranscodeSegmentRequest,
+	transcodeProfiles []clients.EncodedProfile,
+	targetOSURL *url.URL,
+	transcodedStats []*RenditionStats,
+) error {
 	rc, err := clients.DownloadOSURL(segment.Input.URL)
 	if err != nil {
 		return fmt.Errorf("failed to download source segment %q: %s", segment.Input, err)
 	}
+
+	start := time.Now()
+
 	var tr clients.TranscodeResult
 	// If an AccessToken is provided via the request for transcode, then use remote Broadcasters.
 	// Otherwise, use the local harcoded Broadcaster.
@@ -191,6 +202,10 @@ func transcodeSegment(segment segmentInfo, streamName, manifestID string, transc
 			return fmt.Errorf("failed to run TranscodeSegment: %s", err)
 		}
 	}
+
+	duration := time.Since(start)
+	metrics.Metrics.TranscodeSegmentDuration.Observe(duration.Seconds())
+
 	for _, transcodedSegment := range tr.Renditions {
 		renditionIndex := getProfileIndex(transcodeProfiles, transcodedSegment.Name)
 		if renditionIndex == -1 {

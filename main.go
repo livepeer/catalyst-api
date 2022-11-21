@@ -7,6 +7,7 @@ import (
 	"github.com/livepeer/catalyst-api/api"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
 )
 
@@ -16,6 +17,7 @@ func main() {
 	mistHttpPort := flag.Int("mist-http-port", 8080, "Port to listen on")
 	apiToken := flag.String("api-token", "IAmAuthorized", "Auth header value for API access")
 	mistJson := flag.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
+	promPort := flag.Int("prom-port", 2112, "Prometheus metrics port")
 	flag.StringVar(&config.RecordingCallback, "recording", "http://recording.livepeer.com/recording/status", "Callback URL for recording start&stop events")
 	flag.Parse()
 
@@ -26,6 +28,10 @@ func main() {
 
 	// Kick off the callback client, to send job update messages on a regular interval
 	_ = clients.DefaultCallbackClient.Start()
+
+	go func() {
+		log.Fatal(metrics.ListenAndServe(*promPort))
+	}()
 
 	if err := api.ListenAndServe(*port, *mistPort, *mistHttpPort, *apiToken); err != nil {
 		log.Fatal(err)

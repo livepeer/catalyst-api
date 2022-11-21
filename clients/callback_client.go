@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/metrics"
 )
 
 const MAX_TIME_WITHOUT_UPDATE = 30 * time.Minute
@@ -29,6 +30,7 @@ func NewPeriodicCallbackClient(callbackInterval time.Duration) *PeriodicCallback
 	client.RetryMax = 2                          // Retry a maximum of this+1 times
 	client.RetryWaitMin = 200 * time.Millisecond // Wait at least this long between retries
 	client.RetryWaitMax = 1 * time.Second        // Wait at most this long between retries (exponential backoff)
+	client.CheckRetry = metrics.HttpRetryHook
 	client.HTTPClient = &http.Client{
 		Timeout: 5 * time.Second, // Give up on requests that take more than this long
 	}
@@ -189,7 +191,7 @@ func (pcc *PeriodicCallbackClient) doWithRetries(r *http.Request) error {
 	// TODO: Replace with a proper shared Secret, probably coming from the initial request
 	r.Header.Set("Authorization", "Bearer IAmAuthorized")
 
-	resp, err := pcc.httpClient.Do(r)
+	resp, err := metrics.MonitorRequest(metrics.Metrics.TranscodingStatusUpdate, pcc.httpClient, r)
 	if err != nil {
 		return fmt.Errorf("failed to send callback to %q. Error: %s", r.URL.String(), err)
 	}
