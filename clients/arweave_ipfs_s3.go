@@ -10,9 +10,9 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 )
 
-var arweaveHTTPClient = newArweaveHTTPClient()
+var arweaveIPFSHTTPClient = newArweaveIPFSHTTPClient()
 
-func newArweaveHTTPClient() *http.Client {
+func newArweaveIPFSHTTPClient() *http.Client {
 	client := retryablehttp.NewClient()
 	client.RetryMax = 2                          // Retry a maximum of this+1 times
 	client.RetryWaitMin = 200 * time.Millisecond // Wait at least this long between retries
@@ -27,24 +27,24 @@ func newArweaveHTTPClient() *http.Client {
 }
 
 func CopyArweaveToS3(arweaveURL, s3URL string) error {
-	resp, err := arweaveHTTPClient.Get(arweaveURL)
+	resp, err := arweaveIPFSHTTPClient.Get(arweaveURL)
 	if err != nil {
-		return fmt.Errorf("error fetching Arweave URL: %s", err)
+		return fmt.Errorf("error fetching Arweave or IPFS URL: %s", err)
 	}
 
 	err = UploadToOSURL(s3URL, "", resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to copy Arweave URL to S3: %s", err)
+		return fmt.Errorf("failed to copy Arweave or IPFS URL to S3: %s", err)
 	}
 
 	return nil
 }
 
-func IsArweaveURL(arweaveURL string) bool {
-	u, err := url.Parse(arweaveURL)
+func IsArweaveOrIPFSURL(arweaveOrIPFSURL string) bool {
+	u, err := url.Parse(arweaveOrIPFSURL)
 	if err != nil {
 		return false
 	}
 
-	return strings.Contains(u.Host, "arweave")
+	return strings.Contains(u.Host, "arweave") || strings.Contains(u.Host, "w3s.link") || strings.Contains(u.Path, "ipfs")
 }
