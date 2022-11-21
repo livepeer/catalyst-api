@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
@@ -67,8 +68,17 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 		}
 	}()
 
+	// Let Studio know that we've almost finished the Segmenting phase
+	if err := clients.DefaultCallbackClient.SendTranscodeStatus(callbackUrl, clients.TranscodeStatusPreparing, 0.9); err != nil {
+		log.LogError(requestID, "Failed to send transcode status callback", err)
+	}
+
+	// HACK: Wait a little bit to give the segmenting time to finish uploading.
+	// Proper fix comes with a new Mist trigger to notify us that uploads are also complete
+	time.Sleep(5 * time.Second)
+
 	// Let Studio know that we've finished the Segmenting phase
-	if err := clients.DefaultCallbackClient.SendTranscodeStatus(callbackUrl, clients.TranscodeStatusPreparingCompleted, 1); err != nil {
+	if err := clients.DefaultCallbackClient.SendTranscodeStatus(callbackUrl, clients.TranscodeStatusPreparingCompleted, 0.1); err != nil {
 		log.LogError(requestID, "Failed to send transcode status callback", err)
 	}
 
