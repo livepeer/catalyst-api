@@ -37,7 +37,7 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 
 		triggerName := req.Header.Get("X-Trigger")
 		log.LogNoRequestID(
-			"msg", "Received Mist Trigger",
+			"Received Mist Trigger",
 			"trigger_name", triggerName,
 			"payload", string(payload),
 		)
