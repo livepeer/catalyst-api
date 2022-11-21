@@ -7,7 +7,7 @@ import (
 )
 
 func TestItCanParseAValidRecordingEndPayload(t *testing.T) {
-	var payload = "1\n2\n3\n4\n5\n6\n7\n8\n9\n10"
+	var payload = "1\n2\n3\n4\n5\n6\n7\n8\n18446744073709551615\n18446744073709551615"
 	p, err := ParseRecordingEndPayload(payload)
 	require.NoError(t, err)
 	require.Equal(t, p.StreamName, "1")
@@ -18,8 +18,8 @@ func TestItCanParseAValidRecordingEndPayload(t *testing.T) {
 	require.Equal(t, p.ConnectionStartTimeUnix, 6)
 	require.Equal(t, p.ConnectionEndTimeUnix, 7)
 	require.Equal(t, p.StreamMediaDurationMillis, int64(8))
-	require.Equal(t, p.FirstMediaTimestampMillis, int64(9))
-	require.Equal(t, p.LastMediaTimestampMillis, int64(10))
+	require.Equal(t, p.FirstMediaTimestampMillis.String(), "18446744073709551615")
+	require.Equal(t, p.LastMediaTimestampMillis.String(), "18446744073709551615")
 }
 
 func TestItFailsToParseAnInvalidRecordingEndPayload(t *testing.T) {

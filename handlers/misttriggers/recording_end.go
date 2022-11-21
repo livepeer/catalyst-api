@@ -3,6 +3,7 @@ package misttriggers
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
@@ -180,8 +181,8 @@ type RecordingEndPayload struct {
 	ConnectionStartTimeUnix   int
 	ConnectionEndTimeUnix     int
 	StreamMediaDurationMillis int64
-	FirstMediaTimestampMillis int64
-	LastMediaTimestampMillis  int64
+	FirstMediaTimestampMillis big.Int
+	LastMediaTimestampMillis  big.Int
 }
 
 func ParseRecordingEndPayload(payload string) (RecordingEndPayload, error) {
@@ -215,13 +216,13 @@ func ParseRecordingEndPayload(payload string) (RecordingEndPayload, error) {
 		return RecordingEndPayload{}, fmt.Errorf("error parsing line %d of RECORDING_END payload as an int. Line contents: %s. Error: %s", 7, lines[7], err)
 	}
 
-	FirstMediaTimestampMillis, err := strconv.ParseInt(lines[8], 10, 64)
-	if err != nil {
+	var FirstMediaTimestampMillis big.Int
+	if _, ok := FirstMediaTimestampMillis.SetString(lines[8], 10); !ok {
 		return RecordingEndPayload{}, fmt.Errorf("error parsing line %d of RECORDING_END payload as an int. Line contents: %s. Error: %s", 8, lines[8], err)
 	}
 
-	LastMediaTimestampMillis, err := strconv.ParseInt(lines[9], 10, 64)
-	if err != nil {
+	var LastMediaTimestampMillis big.Int
+	if _, ok := LastMediaTimestampMillis.SetString(lines[9], 10); !ok {
 		return RecordingEndPayload{}, fmt.Errorf("error parsing line %d of RECORDING_END payload as an int. Line contents: %s. Error: %s", 9, lines[9], err)
 	}
 
