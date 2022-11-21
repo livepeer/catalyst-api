@@ -161,7 +161,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	output := clients.OutputVideo{Type: "object_store", Manifest: manifestManifestURL}
 	for _, rendition := range transcodedStats {
-		output.Videos = append(output.Videos, clients.OutputVideoFile{Location: rendition.ManifestLocation})
+		output.Videos = append(output.Videos, clients.OutputVideoFile{Location: rendition.ManifestLocation, SizeBytes: int(rendition.Bytes)})
 	}
 	outputs = []clients.OutputVideo{output}
 	// Return outputs for .dtsh file creation
