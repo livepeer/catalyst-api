@@ -10,14 +10,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestItCanRecogniseArweaveURLs(t *testing.T) {
-	require.False(t, IsArweaveURL("http://google.com"))                                              // Some random URL
-	require.False(t, IsArweaveURL("https://twitter.com/search?q=arweave"))                           // Checking we don't match any URL with 'arweave' in
-	require.True(t, IsArweaveURL("https://arweave.net/jL-YU1yUcZ5aWPku6dcjwLnoS-E0qs2QPzVXIA7Hfz0")) // Legit HTTPS Arweave URL
-	require.True(t, IsArweaveURL("http://arweave.net/jL-YU1yUcZ5aWPku6dcjwLnoS-E0qs2QPzVXIA7Hfz0"))  // Legit HTTP Arweave URL
+func TestItCanRecogniseArweaveOrIPFSURLs(t *testing.T) {
+	require.False(t, IsArweaveOrIPFSURL("http://google.com"))                                                                // Some random URL
+	require.False(t, IsArweaveOrIPFSURL("https://twitter.com/search?q=arweave"))                                             // Checking we don't match any URL with 'arweave' in
+	require.True(t, IsArweaveOrIPFSURL("https://arweave.net/jL-YU1yUcZ5aWPku6dcjwLnoS-E0qs2QPzVXIA7Hfz0"))                   // Legit HTTPS Arweave URL
+	require.True(t, IsArweaveOrIPFSURL("https://w3s.link/ipfs/bafkreiasibks3ncaz4tbcedhqgwqoaxvipluqv5bhwboq2yny63omyll5i")) // Legit HTTPS IPFS URL
 }
 
-func TestItCanCopyAnArweaveHTTPFileToS3(t *testing.T) {
+func TestItCanCopyAnArweaveOrIPFSHTTPFileToS3(t *testing.T) {
 	outputDir, err := os.MkdirTemp(os.TempDir(), "TestItCanCopyAnArweaveHTTPFileToS3-*")
 	require.NoError(t, err)
 

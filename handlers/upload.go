@@ -143,7 +143,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 
 			// Arweave URLs don't support HTTP Range requests and so Mist can't natively handle them for segmenting
 			// This workaround copies the file from Arweave to S3 and then tells Mist to use the S3 URL
-			if clients.IsArweaveURL(uploadVODRequest.Url) {
+			if clients.IsArweaveOrIPFSURL(uploadVODRequest.Url) {
 				newSourceOutputPath := path.Join(targetDirPath, "source", "arweave-source.mp4")
 				newSourceOutputPathURL, err := url.Parse(newSourceOutputPath)
 				if err != nil {
