@@ -33,6 +33,7 @@ import (
 func (d *MistCallbackHandlersCollection) TriggerRecordingEnd(w http.ResponseWriter, req *http.Request, payload []byte) {
 	p, err := ParseRecordingEndPayload(string(payload))
 	if err != nil {
+		log.LogNoRequestID("Error parsing RECORDING_END payload", "error", err, "payload", string(payload))
 		errors.WriteHTTPBadRequest(w, "Error parsing RECORDING_END payload", err)
 		return
 	}
@@ -44,6 +45,7 @@ func (d *MistCallbackHandlersCollection) TriggerRecordingEnd(w http.ResponseWrit
 		d.triggerRecordingEndSegmenting(w, p)
 	default:
 		// Not related to API logic
+		log.LogNoRequestID("Received RECORDING_END trigger for non-VOD stream", "stream_name", p.StreamName)
 	}
 }
 
@@ -78,7 +80,7 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 	time.Sleep(5 * time.Second)
 
 	// Let Studio know that we've finished the Segmenting phase
-	if err := clients.DefaultCallbackClient.SendTranscodeStatus(callbackUrl, clients.TranscodeStatusPreparingCompleted, 0.1); err != nil {
+	if err := clients.DefaultCallbackClient.SendTranscodeStatus(callbackUrl, clients.TranscodeStatusPreparingCompleted, 1); err != nil {
 		log.LogError(requestID, "Failed to send transcode status callback", err)
 	}
 
