@@ -101,7 +101,7 @@ func TestItFailsAfterMaxReadsReached(t *testing.T) {
 	_, err = DownloadOSURL(f.Name())
 
 	require.Error(t, err)
-	require.Equal(t, 3, retries)
+	require.Equal(t, 16, retries)
 }
 
 func TestItRetriesSavingData(t *testing.T) {

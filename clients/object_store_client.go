@@ -11,7 +11,8 @@ import (
 	"github.com/livepeer/go-tools/drivers"
 )
 
-var backOff = newBackOffExecutor()
+var exponentialBackOff = newExponentialBackOffExecutor()
+var constantBackOff = newConstantBackOffExecutor()
 
 func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 	storageDriver, err := drivers.ParseOSURL(osURL, true)
@@ -37,7 +38,7 @@ func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 	})
 
 	start := time.Now()
-	err = backoff.Retry(readOperation, backoff.WithMaxRetries(backOff, 2))
+	err = backoff.Retry(readOperation, backoff.WithMaxRetries(constantBackOff, 15))
 	if err != nil {
 		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(url, "read").Inc()
 		return nil, fmt.Errorf("failed to read from OS URL %q: %s", osURL, err)
@@ -73,7 +74,7 @@ func UploadToOSURL(osURL, filename string, data io.Reader) error {
 	})
 
 	start := time.Now()
-	err = backoff.Retry(writeOperation, backoff.WithMaxRetries(backOff, 2))
+	err = backoff.Retry(writeOperation, backoff.WithMaxRetries(exponentialBackOff, 2))
 	if err != nil {
 		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(url, "write").Inc()
 		return fmt.Errorf("failed to write file %q to OS URL %q: %s", filename, osURL, err)
@@ -87,12 +88,16 @@ func UploadToOSURL(osURL, filename string, data io.Reader) error {
 	return nil
 }
 
-func newBackOffExecutor() *backoff.ExponentialBackOff {
+func newExponentialBackOffExecutor() *backoff.ExponentialBackOff {
 	backOff := backoff.NewExponentialBackOff()
 	backOff.InitialInterval = 200 * time.Millisecond
 	backOff.MaxInterval = 1 * time.Second
 
 	return backOff
+}
+
+func newConstantBackOffExecutor() *backoff.ConstantBackOff {
+	return backoff.NewConstantBackOff(1 * time.Second)
 }
 
 var makeOperation = func(fn func() error) func() error {
