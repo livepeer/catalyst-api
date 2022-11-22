@@ -160,15 +160,17 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 				log.LogError(transcodeRequest.RequestID, "Failed to send TranscodeStatusCompleted callback", err, "url", transcodeRequest.CallbackURL)
 			}
 		}()
-
-		// prepare .dtsh headers for all rendition playlists
-		for _, output := range outputs {
-			if err := d.MistClient.CreateDTSH(output.Manifest); err != nil {
-				// should not block the ingestion flow or make it fail on error.
-				log.LogError(requestID, "CreateDTSH() for rendition failed", err, "destination", output.Manifest)
+		// TODO: CreateDTSH is hardcoded to call MistInMP4 - the call below requires a call to MistInHLS instead.
+		//	 Update this logic later as it's required for Mist playback.
+		/*
+			// prepare .dtsh headers for all rendition playlists
+			for _, output := range outputs {
+				if err := d.MistClient.CreateDTSH(output.Manifest); err != nil {
+					// should not block the ingestion flow or make it fail on error.
+					log.LogError(requestID, "CreateDTSH() for rendition failed", err, "destination", output.Manifest)
+				}
 			}
-		}
-
+		*/
 	}()
 }
 
