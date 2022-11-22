@@ -176,7 +176,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			})
 
 			if err := clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, clients.TranscodeStatusPreparing, 0); err != nil {
-				errors.WriteHTTPInternalServerError(w, "Cannot send transcode status", err)
+				log.LogError(requestID, "Cannot send transcode status", err)
 			}
 
 			// Attempt an out-of-band call to generate the dtsh headers using MistIn*
@@ -190,7 +190,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			}
 
 			if err := clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, clients.TranscodeStatusPreparing, 0.1); err != nil {
-				errors.WriteHTTPInternalServerError(w, "Cannot send transcode status", err)
+				log.LogError(requestID, "Cannot send transcode status", err)
 			}
 
 			log.Log(requestID, "Beginning segmenting")
@@ -201,7 +201,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			}
 
 			if err := clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, clients.TranscodeStatusPreparing, 0.2); err != nil {
-				errors.WriteHTTPInternalServerError(w, "Cannot send transcode status", err)
+				log.LogError(requestID, "Cannot send transcode status", err)
 			}
 		}()
 

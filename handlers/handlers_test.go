@@ -414,7 +414,7 @@ func TestWrongContentTypeVODUploadHandler(t *testing.T) {
 	router.POST("/api/vod", catalystApiHandlers.UploadVOD())
 	router.ServeHTTP(rr, req)
 
-	require.Equal(rr.Result().StatusCode, 415)
+	require.Equal(415, rr.Result().StatusCode)
 	require.JSONEq(rr.Body.String(), `{"error": "Requires application/json content type", "error_detail":""}`)
 }
 
