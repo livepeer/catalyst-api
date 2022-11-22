@@ -183,7 +183,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			var dtshStartTime = time.Now()
 			dstDir, _ := filepath.Split(targetSegmentedOutputURL.String())
 			dtshFileName := filepath.Base(uploadVODRequest.Url)
-			if err := d.MistClient.CreateDTSH(uploadVODRequest.Url, dstDir+dtshFileName); err != nil {
+			if err := d.MistClient.CreateDTSH(requestID, uploadVODRequest.Url, dstDir+dtshFileName); err != nil {
 				log.LogError(requestID, "Failed to create DTSH", err, "destination", uploadVODRequest.Url)
 			} else {
 				log.Log(requestID, "Generated DTSH File", "dtsh_generation_duration", time.Since(dtshStartTime).String())

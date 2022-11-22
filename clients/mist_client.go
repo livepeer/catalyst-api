@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/subprocess"
 )
 
@@ -23,7 +24,7 @@ type MistAPIClient interface {
 	AddTrigger(streamName, triggerName string) error
 	DeleteTrigger(streamName, triggerName string) error
 	GetStreamInfo(streamName string) (MistStreamInfo, error)
-	CreateDTSH(source, destination string) error
+	CreateDTSH(requestID, source, destination string) error
 }
 
 type MistClient struct {
@@ -101,7 +102,7 @@ func (mc *MistClient) DeleteStream(streamName string) error {
 	return wrapErr(validateDeleteStream(mc.sendCommand(c)), streamName)
 }
 
-func (mc *MistClient) CreateDTSH(source, destination string) error {
+func (mc *MistClient) CreateDTSH(requestID, source, destination string) error {
 	srcURL, err := url.Parse(source)
 	if err != nil {
 		return err
@@ -116,7 +117,7 @@ func (mc *MistClient) CreateDTSH(source, destination string) error {
 	if err = subprocess.LogOutputs(headerPrepare); err != nil {
 		return err
 	}
-	fmt.Println("Starting dtsh header generation via: ", headerPrepare.String())
+	log.Log(requestID, "Starting dtsh header generation", "cmd", headerPrepare.String())
 
 	if err = headerPrepare.Start(); err != nil {
 		return err

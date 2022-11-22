@@ -256,18 +256,18 @@ func TestItCanGenerateDTSH(t *testing.T) {
 	config.PathMistDir = dir
 	destination := "unused"
 
-	err := mc.CreateDTSH("invalid://user:abc{DEf1=lp@example.com:5432/db?sslmode=require", "invalid://foo:bar")
+	err := mc.CreateDTSH("example-request-id", "invalid://user:abc{DEf1=lp@example.com:5432/db?sslmode=require", "invalid://foo:bar")
 	require.Error(t, err)
 	require.IsType(t, &url.Error{}, err)
 
-	err = mc.CreateDTSH(destination, destination)
+	err = mc.CreateDTSH("example-request-id", destination, destination)
 	require.Error(t, err)
 	require.IsType(t, &fs.PathError{}, err)
 
 	script := path.Join(dir, "MistInMP4")
 	_ = os.WriteFile(script, []byte("#!/bin/sh\necho livepeer\n"), 0744)
 
-	err = mc.CreateDTSH(destination, destination)
+	err = mc.CreateDTSH("example-request-id", destination, destination)
 	require.NoError(t, err)
 	time.Sleep(50 * time.Millisecond)
 }
