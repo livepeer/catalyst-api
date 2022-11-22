@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/subprocess"
 )
 
@@ -23,7 +24,7 @@ type MistAPIClient interface {
 	AddTrigger(streamName, triggerName string) error
 	DeleteTrigger(streamName, triggerName string) error
 	GetStreamInfo(streamName string) (MistStreamInfo, error)
-	CreateDTSH(destination string) error
+	CreateDTSH(requestID, source, destination string) error
 }
 
 type MistClient struct {
@@ -101,17 +102,22 @@ func (mc *MistClient) DeleteStream(streamName string) error {
 	return wrapErr(validateDeleteStream(mc.sendCommand(c)), streamName)
 }
 
-func (mc *MistClient) CreateDTSH(destination string) error {
-	url, err := url.Parse(destination)
+func (mc *MistClient) CreateDTSH(requestID, source, destination string) error {
+	srcURL, err := url.Parse(source)
 	if err != nil {
 		return err
 	}
-	url.RawQuery = ""
-	url.Fragment = ""
-	headerPrepare := exec.Command(path.Join(config.PathMistDir, "MistInMP4"), "-H", url.String(), "-g", "5")
+	srcURL.RawQuery = ""
+	srcURL.Fragment = ""
+	dstURL, err := url.Parse(destination)
+	if err != nil {
+		return err
+	}
+	headerPrepare := exec.Command(path.Join(config.PathMistDir, "MistInMP4"), "-H", srcURL.String(), "-F", dstURL.String(), "-g", "5")
 	if err = subprocess.LogOutputs(headerPrepare); err != nil {
 		return err
 	}
+	log.Log(requestID, "Starting dtsh header generation", "cmd", headerPrepare.String())
 
 	if err = headerPrepare.Start(); err != nil {
 		return err

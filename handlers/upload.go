@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -180,7 +181,9 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 
 			// Attempt an out-of-band call to generate the dtsh headers using MistIn*
 			var dtshStartTime = time.Now()
-			if err := d.MistClient.CreateDTSH(uploadVODRequest.Url); err != nil {
+			dstDir, _ := filepath.Split(targetSegmentedOutputURL.String())
+			dtshFileName := filepath.Base(uploadVODRequest.Url)
+			if err := d.MistClient.CreateDTSH(requestID, uploadVODRequest.Url, dstDir+dtshFileName); err != nil {
 				log.LogError(requestID, "Failed to create DTSH", err, "destination", uploadVODRequest.Url)
 			} else {
 				log.Log(requestID, "Generated DTSH File", "dtsh_generation_duration", time.Since(dtshStartTime).String())

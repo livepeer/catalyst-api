@@ -63,6 +63,6 @@ func (s StubMistClient) DeleteTrigger(streamName, triggerName string) error {
 	return nil
 }
 
-func (s StubMistClient) CreateDTSH(destination string) error {
+func (s StubMistClient) CreateDTSH(requestID, source, destination string) error {
 	return nil
 }
