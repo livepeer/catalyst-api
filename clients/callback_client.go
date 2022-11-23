@@ -4,21 +4,27 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/log"
 )
 
-type CallbackClient struct {
-	httpClient *http.Client
+const MAX_TIME_WITHOUT_UPDATE = 30 * time.Minute
+
+var DefaultCallbackClient = NewPeriodicCallbackClient(15 * time.Second)
+
+type PeriodicCallbackClient struct {
+	requestIDToLatestMessage map[string]TranscodeStatusMessage
+	mapLock                  sync.RWMutex
+	httpClient               *http.Client
+	callbackInterval         time.Duration
 }
 
-var DefaultCallbackClient = NewCallbackClient()
-
-func NewCallbackClient() CallbackClient {
+func NewPeriodicCallbackClient(callbackInterval time.Duration) *PeriodicCallbackClient {
 	client := retryablehttp.NewClient()
 	client.RetryMax = 2                          // Retry a maximum of this+1 times
 	client.RetryWaitMin = 200 * time.Millisecond // Wait at least this long between retries
@@ -27,16 +33,163 @@ func NewCallbackClient() CallbackClient {
 		Timeout: 5 * time.Second, // Give up on requests that take more than this long
 	}
 
-	return CallbackClient{
-		httpClient: client.StandardClient(),
+	return &PeriodicCallbackClient{
+		httpClient:               client.StandardClient(),
+		callbackInterval:         callbackInterval,
+		requestIDToLatestMessage: map[string]TranscodeStatusMessage{},
+		mapLock:                  sync.RWMutex{},
 	}
 }
 
-func (c CallbackClient) DoWithRetries(r *http.Request) error {
+// Start looping through all active jobs, sending a callback for the latest status of each
+// and then pausing for a set amount of time
+func (pcc *PeriodicCallbackClient) Start() *PeriodicCallbackClient {
+	go func() {
+		for {
+			recoverer(pcc.SendCallbacks)
+			time.Sleep(pcc.callbackInterval)
+		}
+	}()
+	return pcc
+}
+
+func recoverer(f func()) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.LogNoRequestID("panic in callback goroutine, recovering", "err", err)
+			go recoverer(f)
+		}
+	}()
+	f()
+}
+
+// Sends a Transcode Status message to the Client (initially just Studio)
+// The status strings will be useful for debugging where in the workflow we got to, but everything
+// in Studio will be driven off the overall "Completion Ratio".
+// This method will accept the completion ratio of the current stage and will translate that into the overall ratio
+func (pcc *PeriodicCallbackClient) SendTranscodeStatus(url, requestID string, status TranscodeStatus, currentStageCompletionRatio float64) {
+	tsm := TranscodeStatusMessage{
+		URL:             url,
+		RequestID:       requestID,
+		CompletionRatio: OverallCompletionRatio(status, currentStageCompletionRatio),
+		Status:          status.String(),
+		Timestamp:       config.Clock.GetTimestampUTC(),
+	}
+
+	pcc.statusCallback(tsm)
+}
+
+func (pcc *PeriodicCallbackClient) SendRecordingEvent(event *RecordingEvent) {
+	go func() {
+		j, err := json.Marshal(event)
+		if err != nil {
+			log.LogNoRequestID("failed to marshal recording event callback JSON", "err", err)
+			return
+		}
+
+		r, err := http.NewRequest(http.MethodPost, config.RecordingCallback, bytes.NewReader(j))
+		if err != nil {
+			log.LogNoRequestID("failed to create recording event callback request", "err", err)
+			return
+		}
+
+		err = pcc.doWithRetries(r)
+		if err != nil {
+			log.LogNoRequestID("failed to send recording event callback", "err", err)
+			return
+		}
+	}()
+}
+
+func (pcc *PeriodicCallbackClient) SendTranscodeStatusError(url, requestID, errorMsg string) {
+	tsm := TranscodeStatusMessage{
+		URL:       url,
+		RequestID: requestID,
+		Error:     errorMsg,
+		Status:    TranscodeStatusError.String(),
+		Timestamp: config.Clock.GetTimestampUTC(),
+	}
+
+	pcc.statusCallback(tsm)
+}
+
+// Separate method as this requires a much richer message than the other status callbacks
+func (pcc *PeriodicCallbackClient) SendTranscodeStatusCompleted(url, requestID string, iv InputVideo, ov []OutputVideo) {
+	tsm := TranscodeStatusMessage{
+		URL:             url,
+		CompletionRatio: OverallCompletionRatio(TranscodeStatusCompleted, 1),
+		RequestID:       requestID,
+		Status:          TranscodeStatusCompleted.String(),
+		Timestamp:       config.Clock.GetTimestampUTC(),
+		Type:            "video", // Assume everything is a video for now
+		InputVideo:      iv,
+		Outputs:         ov,
+	}
+
+	pcc.statusCallback(tsm)
+}
+
+// Update with a status message
+func (pcc *PeriodicCallbackClient) statusCallback(tsm TranscodeStatusMessage) {
+	pcc.mapLock.Lock()
+	defer pcc.mapLock.Unlock()
+
+	pcc.requestIDToLatestMessage[tsm.RequestID] = tsm
+}
+
+// Loop over all active jobs, sending a (non-blocking) HTTP callback for each
+func (pcc *PeriodicCallbackClient) SendCallbacks() {
+	pcc.mapLock.Lock()
+	defer pcc.mapLock.Unlock()
+
+	log.LogNoRequestID(fmt.Sprintf("Sending %d callbacks", len(pcc.requestIDToLatestMessage)))
+	for _, tsm := range pcc.requestIDToLatestMessage {
+		// Check timestamp and give up on the job if we haven't received an update for a long time
+		cutoff := int64(config.Clock.GetTimestampUTC() - MAX_TIME_WITHOUT_UPDATE.Milliseconds())
+		if tsm.Timestamp < cutoff {
+			delete(pcc.requestIDToLatestMessage, tsm.RequestID)
+			log.Log(
+				tsm.RequestID,
+				"timed out waiting for callback updates",
+				"last_timestamp", tsm.Timestamp,
+				"cutoff_timestamp", cutoff)
+			continue
+		}
+
+		// Do the JSON marshalling and HTTP call in a goroutine to avoid blocking the loop
+		go func(tsm TranscodeStatusMessage) {
+			j, err := json.Marshal(tsm)
+			if err != nil {
+				log.LogError(tsm.RequestID, "failed to marshal callback JSON", err)
+				return
+			}
+
+			r, err := http.NewRequest(http.MethodPost, tsm.URL, bytes.NewReader(j))
+			if err != nil {
+				log.LogError(tsm.RequestID, "failed to create callback HTTP request", err)
+				return
+			}
+
+			err = pcc.doWithRetries(r)
+			if err != nil {
+				log.LogError(tsm.RequestID, "failed to send callback", err)
+				return
+			}
+		}(tsm)
+
+		// Error is a terminal state, so remove the job from the list after sending the callback
+		if tsm.Status == TranscodeStatusError.String() || tsm.Status == TranscodeStatusCompleted.String() {
+			log.Log(tsm.RequestID, "Removing job from active list")
+			delete(pcc.requestIDToLatestMessage, tsm.RequestID)
+		}
+	}
+}
+
+func (pcc *PeriodicCallbackClient) doWithRetries(r *http.Request) error {
 	// TODO: Replace with a proper shared Secret, probably coming from the initial request
 	r.Header.Set("Authorization", "Bearer IAmAuthorized")
 
-	resp, err := c.httpClient.Do(r)
+	resp, err := pcc.httpClient.Do(r)
 	if err != nil {
 		return fmt.Errorf("failed to send callback to %q. Error: %s", r.URL.String(), err)
 	}
@@ -47,93 +200,6 @@ func (c CallbackClient) DoWithRetries(r *http.Request) error {
 	}
 
 	return nil
-}
-
-func (c CallbackClient) SendRecordingEvent(event *RecordingEvent) {
-	eventJson, err := json.Marshal(event)
-	if err != nil {
-		log.Printf("SendRecordingStarted json marshal %v", err)
-		return
-	}
-	req, err := http.NewRequest(http.MethodPost, config.RecordingCallback, bytes.NewReader(eventJson))
-	if err != nil {
-		log.Printf("SendRecordingStarted http.NewRequest %v", err)
-		return
-	}
-	if err := c.DoWithRetries(req); err != nil {
-		log.Printf("SendRecordingStarted callback %v", err)
-	}
-}
-
-// Sends a Transcode Status message to the Client (initially just Studio)
-// The status strings will be useful for debugging where in the workflow we got to, but everything
-// in Studio will be driven off the overall "Completion Ratio".
-// This method will accept the completion ratio of the current stage and will translate that into the overall ratio
-func (c CallbackClient) SendTranscodeStatus(url string, status TranscodeStatus, currentStageCompletionRatio float64) error {
-	tsm := TranscodeStatusMessage{
-		CompletionRatio: OverallCompletionRatio(status, currentStageCompletionRatio),
-		Status:          status.String(),
-		Timestamp:       config.Clock.GetTimestampUTC(),
-	}
-
-	j, err := json.Marshal(tsm)
-	if err != nil {
-		return err
-	}
-
-	r, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(j))
-	if err != nil {
-		return err
-	}
-
-	return c.DoWithRetries(r)
-}
-
-func (c CallbackClient) SendTranscodeStatusError(callbackURL, errorMsg string) error {
-	tsm := TranscodeStatusMessage{
-		Error:     errorMsg,
-		Status:    TranscodeStatusError.String(),
-		Timestamp: config.Clock.GetTimestampUTC(),
-	}
-
-	j, err := json.Marshal(tsm)
-	if err != nil {
-		return err
-	}
-
-	r, err := http.NewRequest(http.MethodPost, callbackURL, bytes.NewReader(j))
-	if err != nil {
-		return err
-	}
-
-	return c.DoWithRetries(r)
-}
-
-// Separate method as this requires a much richer message than the other status callbacks
-func (c CallbackClient) SendTranscodeStatusCompleted(url string, iv InputVideo, ov []OutputVideo) error {
-	tsm := TranscodeStatusCompletedMessage{
-		TranscodeStatusMessage: TranscodeStatusMessage{
-			CompletionRatio: OverallCompletionRatio(TranscodeStatusCompleted, 1),
-			Status:          TranscodeStatusCompleted.String(),
-			Timestamp:       config.Clock.GetTimestampUTC(),
-		},
-		Type:       "video", // Assume everything is a video for now
-		InputVideo: iv,
-		Outputs:    ov,
-	}
-
-	j, err := json.Marshal(tsm)
-	if err != nil {
-		return err
-	}
-
-	r, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(j))
-	if err != nil {
-		return err
-	}
-
-	return c.DoWithRetries(r)
-
 }
 
 // Calculate the overall completion ratio based on the completion ratio of the current stage.
@@ -168,117 +234,4 @@ func OverallCompletionRatio(status TranscodeStatus, currentStageCompletionRatio 
 
 func scaleProgress(progress, start, end float64) float64 {
 	return start + progress*(end-start)
-}
-
-// An enum of potential statuses a Transcode job can have
-
-type TranscodeStatus int
-
-const (
-	TranscodeStatusPreparing TranscodeStatus = iota
-	TranscodeStatusPreparingCompleted
-	TranscodeStatusTranscoding
-	TranscodeStatusCompleted
-	TranscodeStatusError
-)
-
-func (ts TranscodeStatus) String() string {
-	switch ts {
-	case TranscodeStatusPreparing:
-		return "preparing"
-	case TranscodeStatusPreparingCompleted:
-		return "preparing-completed"
-	case TranscodeStatusTranscoding:
-		return "transcoding"
-	case TranscodeStatusCompleted:
-		return "success"
-	case TranscodeStatusError:
-		return "error"
-	}
-	return "unknown"
-}
-
-// The various status messages we can send
-
-type RecordingEvent struct {
-	Event       string `json:"event"`
-	StreamName  string `json:"stream_name"`
-	RecordingId string `json:"recording_id"`
-	Hostname    string `json:"host_name"`
-	Timestamp   int64  `json:"timestamp"`
-	Success     *bool  `json:"success,omitempty"`
-}
-
-type TranscodeStatusMessage struct {
-	CompletionRatio float64 `json:"completion_ratio"` // No omitempty or we lose this for 0% completion case
-	Error           string  `json:"error,omitempty"`
-	Unretriable     bool    `json:"unretriable,omitempty"`
-	Status          string  `json:"status"`
-	Timestamp       int64   `json:"timestamp"`
-}
-
-type VideoTrack struct {
-	Width       int64   `json:"width,omitempty"`
-	Height      int64   `json:"height,omitempty"`
-	PixelFormat string  `json:"pixel_format,omitempty"`
-	FPS         float64 `json:"fps,omitempty"`
-}
-
-type AudioTrack struct {
-	Channels   int `json:"channels,omitempty"`
-	SampleRate int `json:"sample_rate,omitempty"`
-	SampleBits int `json:"sample_bits,omitempty"`
-}
-
-type InputTrack struct {
-	Type         string  `json:"type"`
-	Codec        string  `json:"codec"`
-	Bitrate      int64   `json:"bitrate"`
-	DurationSec  float64 `json:"duration"`
-	SizeBytes    int64   `json:"size"`
-	StartTimeSec float64 `json:"start_time"`
-
-	// Fields only used if this is a Video Track
-	VideoTrack
-
-	// Fields only used if this is an Audio Track
-	AudioTrack
-}
-
-type InputVideo struct {
-	Format    string       `json:"format"`
-	Tracks    []InputTrack `json:"tracks"`
-	Duration  float64      `json:"duration"`
-	SizeBytes int          `json:"size"`
-}
-
-type OutputVideoFile struct {
-	Type      string `json:"type"`
-	SizeBytes int    `json:"size"`
-	Location  string `json:"location"`
-}
-
-type OutputVideo struct {
-	Type     string            `json:"type"`
-	Manifest string            `json:"manifest"`
-	Videos   []OutputVideoFile `json:"videos"`
-}
-
-type TranscodeStatusCompletedMessage struct {
-	TranscodeStatusMessage
-	Type       string        `json:"type"`
-	InputVideo InputVideo    `json:"video_spec"`
-	Outputs    []OutputVideo `json:"outputs"`
-}
-
-// Finds the video track from the list of input video tracks
-// If multiple video tracks present, returns the first one
-// If no video tracks present, returns an error
-func (i InputVideo) GetVideoTrack() (InputTrack, error) {
-	for _, t := range i.Tracks {
-		if t.Type == "video" {
-			return t, nil
-		}
-	}
-	return InputTrack{}, fmt.Errorf("no video tracks found")
 }

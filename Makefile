@@ -32,7 +32,7 @@ run:
 
 .PHONY: test
 test:
-	go test ./...
+	go test -race ./...
 
 .PHONY: tidy
 tidy:

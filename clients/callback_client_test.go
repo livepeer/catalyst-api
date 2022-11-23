@@ -1,34 +1,36 @@
 package clients
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
-	"github.com/livepeer/catalyst-api/config"
-	"github.com/livepeer/catalyst-api/mokeypatching"
 	"github.com/stretchr/testify/require"
 )
 
 func TestItRetriesOnFailedCallbacks(t *testing.T) {
-	patch_cleanup := changeDefaultClock(t, config.FixedTimestampGenerator{Timestamp: 123456789})
-	defer patch_cleanup()
-
 	// Counter for the number of retries we've done
-	var tries int
+	var tries int64
 
 	// Set up a dummy server to receive the callbacks
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check that we got the callback we're expecting
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
-		require.JSONEq(t, `{"completion_ratio":1, "status":"success", "timestamp": 123456789}`, string(body))
+
+		// Check we got a valid callback message of the type we'd expect
+		var actualMsg TranscodeStatusMessage
+		require.NoError(t, json.Unmarshal(body, &actualMsg))
+		require.Equal(t, "success", actualMsg.Status)
 
 		// Return HTTP error codes the first two times
-		tries += 1
-		if tries <= 2 {
+		atomic.AddInt64(&tries, 1)
+		if atomic.LoadInt64(&tries) <= 2 {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -38,60 +40,76 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 	}))
 	defer svr.Close()
 
-	// Send the callback and confirm the number of times we retried
-	client := NewCallbackClient()
-	require.NoError(t, client.SendTranscodeStatus(svr.URL, TranscodeStatusCompleted, 1))
-	require.Equal(t, 3, tries, "Expected the client to retry on failed callbacks")
+	// Create a client that sends heartbeats very irregularly, to let us assert things about a single iteration of the callback
+	client := NewPeriodicCallbackClient(100 * time.Hour)
+
+	// Send the status in, but it shouldn't get sent yet because we haven't started the client
+	client.SendTranscodeStatus(svr.URL, "example-request-id", TranscodeStatusCompleted, 1)
+
+	// Start the client and wait for an iteration of the loop
+	client.Start()
+	time.Sleep(1 * time.Second)
+
+	require.Equal(t, int64(3), atomic.LoadInt64(&tries), "Expected the client to retry on failed callbacks")
 }
 
-func TestItEventuallyStopsRetrying(t *testing.T) {
-	patch_cleanup := changeDefaultClock(t, config.FixedTimestampGenerator{Timestamp: 123456789})
-	defer patch_cleanup()
-
+func TestItSendsPeriodicHeartbeats(t *testing.T) {
 	// Counter for the number of retries we've done
-	var tries int
+	var tries int64
 
 	// Set up a dummy server to receive the callbacks
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check that we got the callback we're expecting
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
-		require.JSONEq(t, `{"completion_ratio":1, "status":"success", "timestamp": 123456789}`, string(body))
 
-		tries += 1
+		// Check we got a valid callback message of the type we'd expect
+		var actualMsg TranscodeStatusMessage
+		require.NoError(t, json.Unmarshal(body, &actualMsg))
+		require.Equal(t, "success", actualMsg.Status)
+
+		atomic.AddInt64(&tries, 1)
 
 		// Return an error code
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer svr.Close()
-
-	// Send the callback and confirm the number of times we retried
-	client := NewCallbackClient()
-	err := client.SendTranscodeStatus(svr.URL, TranscodeStatusCompleted, 1)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to send callback")
-	require.Contains(t, err.Error(), "giving up after 3 attempt(s)")
-	require.Equal(t, 3, tries, "Expected the client to retry on failed callbacks")
-}
-
-func TestTranscodeStatusErrorNotifcation(t *testing.T) {
-	patch_cleanup := changeDefaultClock(t, config.FixedTimestampGenerator{Timestamp: 123456789})
-	defer patch_cleanup()
-
-	// Set up a dummy server to receive the callbacks
-	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Check that we got the callback we're expecting
-		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
-		require.JSONEq(t, `{"completion_ratio": 0, "error": "something went wrong", "status":"error", "timestamp": 123456789}`, string(body))
-
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer svr.Close()
 
 	// Send the callback and confirm the number of times we retried
-	client := NewCallbackClient()
-	require.NoError(t, client.SendTranscodeStatusError(svr.URL, "something went wrong"))
+	client := NewPeriodicCallbackClient(100 * time.Millisecond).Start()
+	client.SendTranscodeStatus(svr.URL, "example-request-id", TranscodeStatusCompleted, 1)
+
+	time.Sleep(400 * time.Millisecond)
+
+	require.Equal(t, int64(1), atomic.LoadInt64(&tries), "Expected the client to have sent 1 status within the timeframe")
+}
+
+func TestTranscodeStatusErrorNotifcation(t *testing.T) {
+	// Set up a dummy server to receive the callbacks
+	var requestCount int64
+	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check that we got the callback we're expecting
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+
+		// Check we got a valid callback message of the type we'd expect
+		var actualMsg TranscodeStatusMessage
+		require.NoError(t, json.Unmarshal(body, &actualMsg))
+		require.Equal(t, "error", actualMsg.Status)
+		require.Equal(t, "something went wrong", actualMsg.Error)
+
+		atomic.AddInt64(&requestCount, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer svr.Close()
+
+	// Send the callback and confirm the number of times we retried
+	client := NewPeriodicCallbackClient(100 * time.Millisecond).Start()
+	client.SendTranscodeStatusError(svr.URL, "example-request-id", "something went wrong")
+
+	time.Sleep(200 * time.Millisecond)
+
+	require.Equal(t, int64(1), atomic.LoadInt64(&requestCount))
 }
 
 func TestItCalculatesTheOverallCompletionRatioCorrectly(t *testing.T) {
@@ -109,16 +127,5 @@ func TestItCalculatesTheOverallCompletionRatioCorrectly(t *testing.T) {
 		t.Run(fmt.Sprintf("%f in %s", tc.completionRatio, tc.status), func(t *testing.T) {
 			require.Equal(t, tc.expectedOverallCompletionRatio, OverallCompletionRatio(tc.status, tc.completionRatio))
 		})
-	}
-}
-
-func changeDefaultClock(t *testing.T, generator config.TimestampGenerator) func() {
-	mokeypatching.MonkeypatchingMutex.Lock()
-	originalValue := config.Clock
-	config.Clock = generator
-	return func() {
-		// Restore original value
-		config.Clock = originalValue
-		mokeypatching.MonkeypatchingMutex.Unlock()
 	}
 }

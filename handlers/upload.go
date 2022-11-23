@@ -148,18 +148,14 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 				newSourceOutputPath := path.Join(targetDirPath, "source", "arweave-source.mp4")
 				newSourceOutputPathURL, err := url.Parse(newSourceOutputPath)
 				if err != nil {
-					if err := clients.DefaultCallbackClient.SendTranscodeStatusError(uploadVODRequest.CallbackUrl, "Cannot parse newSourceOutputPath"); err != nil {
-						log.LogError(requestID, "failed to send error callback", err)
-					}
+					clients.DefaultCallbackClient.SendTranscodeStatusError(uploadVODRequest.CallbackUrl, requestID, "Cannot parse newSourceOutputPath")
 					return
 				}
 				newSourceURL := targetURL.ResolveReference(newSourceOutputPathURL)
 				log.AddContext(requestID, "new_source_url", newSourceURL.String())
 
 				if err := clients.CopyArweaveToS3(uploadVODRequest.Url, newSourceURL.String()); err != nil {
-					if err := clients.DefaultCallbackClient.SendTranscodeStatusError(uploadVODRequest.CallbackUrl, "Invalid Arweave URL"); err != nil {
-						log.LogError(requestID, "failed to send error callback", err)
-					}
+					clients.DefaultCallbackClient.SendTranscodeStatusError(uploadVODRequest.CallbackUrl, requestID, "Invalid Arweave URL")
 					return
 				}
 				uploadVODRequest.Url = newSourceURL.String()
@@ -175,9 +171,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 				Profiles:        uploadVODRequest.Profiles,
 			})
 
-			if err := clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, clients.TranscodeStatusPreparing, 0); err != nil {
-				log.LogError(requestID, "Cannot send transcode status", err)
-			}
+			clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, requestID, clients.TranscodeStatusPreparing, 0)
 
 			// Attempt an out-of-band call to generate the dtsh headers using MistIn*
 			var dtshStartTime = time.Now()
@@ -189,9 +183,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 				log.Log(requestID, "Generated DTSH File", "dtsh_generation_duration", time.Since(dtshStartTime).String())
 			}
 
-			if err := clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, clients.TranscodeStatusPreparing, 0.1); err != nil {
-				log.LogError(requestID, "Cannot send transcode status", err)
-			}
+			clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, requestID, clients.TranscodeStatusPreparing, 0.1)
 
 			log.Log(requestID, "Beginning segmenting")
 			// Tell Mist to do the segmenting. Upon completion / error, Mist will call Triggers to notify us.
@@ -200,9 +192,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 				return
 			}
 
-			if err := clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, clients.TranscodeStatusPreparing, 0.2); err != nil {
-				log.LogError(requestID, "Cannot send transcode status", err)
-			}
+			clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, requestID, clients.TranscodeStatusPreparing, 0.2)
 		}()
 
 		respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})
