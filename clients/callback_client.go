@@ -45,13 +45,22 @@ func NewPeriodicCallbackClient(callbackInterval time.Duration) *PeriodicCallback
 // and then pausing for a set amount of time
 func (pcc *PeriodicCallbackClient) Start() *PeriodicCallbackClient {
 	go func() {
-		// TODO: Recover from failure
 		for {
-			pcc.sendCallbacks()
+			recoverer(pcc.sendCallbacks)
 			time.Sleep(pcc.callbackInterval)
 		}
 	}()
 	return pcc
+}
+
+func recoverer(f func()) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.LogNoRequestID("panic in callback goroutine, recovering", "err", err)
+			go recoverer(f)
+		}
+	}()
+	f()
 }
 
 // Sends a Transcode Status message to the Client (initially just Studio)
