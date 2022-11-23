@@ -6,20 +6,16 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/livepeer/catalyst-api/config"
-	"github.com/livepeer/catalyst-api/mokeypatching"
 	"github.com/stretchr/testify/require"
 )
 
 func TestItRetriesOnFailedCallbacks(t *testing.T) {
-	patch_cleanup := changeDefaultClock(t, config.FixedTimestampGenerator{Timestamp: 123456789})
-	defer patch_cleanup()
-
 	// Counter for the number of retries we've done
-	var tries int
+	var tries int64
 
 	// Set up a dummy server to receive the callbacks
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -33,8 +29,8 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 		require.Equal(t, "success", actualMsg.Status)
 
 		// Return HTTP error codes the first two times
-		tries += 1
-		if tries <= 2 {
+		atomic.AddInt64(&tries, 1)
+		if atomic.LoadInt64(&tries) <= 2 {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -54,15 +50,12 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 	client.Start()
 	time.Sleep(1 * time.Second)
 
-	require.Equal(t, 3, tries, "Expected the client to retry on failed callbacks")
+	require.Equal(t, int64(3), atomic.LoadInt64(&tries), "Expected the client to retry on failed callbacks")
 }
 
 func TestItSendsPeriodicHeartbeats(t *testing.T) {
-	patch_cleanup := changeDefaultClock(t, config.FixedTimestampGenerator{Timestamp: 123456789})
-	defer patch_cleanup()
-
 	// Counter for the number of retries we've done
-	var tries int
+	var tries int64
 
 	// Set up a dummy server to receive the callbacks
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -75,7 +68,7 @@ func TestItSendsPeriodicHeartbeats(t *testing.T) {
 		require.NoError(t, json.Unmarshal(body, &actualMsg))
 		require.Equal(t, "success", actualMsg.Status)
 
-		tries += 1
+		atomic.AddInt64(&tries, 1)
 
 		// Return an error code
 		w.WriteHeader(http.StatusOK)
@@ -88,16 +81,13 @@ func TestItSendsPeriodicHeartbeats(t *testing.T) {
 
 	time.Sleep(400 * time.Millisecond)
 
-	require.Less(t, 1, tries, "Expected the client to have sent at least 2 statuses within the timeframe")
-	require.Greater(t, 6, tries, "Expected the client to have backed off between heartbeats")
+	require.Less(t, int64(1), atomic.LoadInt64(&tries), "Expected the client to have sent at least 2 statuses within the timeframe")
+	require.Greater(t, int64(6), atomic.LoadInt64(&tries), "Expected the client to have backed off between heartbeats")
 }
 
 func TestTranscodeStatusErrorNotifcation(t *testing.T) {
-	patch_cleanup := changeDefaultClock(t, config.FixedTimestampGenerator{Timestamp: 123456789})
-	defer patch_cleanup()
-
 	// Set up a dummy server to receive the callbacks
-	var requestCount = 0
+	var requestCount int64
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check that we got the callback we're expecting
 		body, err := io.ReadAll(r.Body)
@@ -109,7 +99,7 @@ func TestTranscodeStatusErrorNotifcation(t *testing.T) {
 		require.Equal(t, "error", actualMsg.Status)
 		require.Equal(t, "something went wrong", actualMsg.Error)
 
-		requestCount++
+		atomic.AddInt64(&requestCount, 1)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer svr.Close()
@@ -120,7 +110,7 @@ func TestTranscodeStatusErrorNotifcation(t *testing.T) {
 
 	time.Sleep(200 * time.Millisecond)
 
-	require.Equal(t, 1, requestCount)
+	require.Equal(t, int64(1), atomic.LoadInt64(&requestCount))
 }
 
 func TestItCalculatesTheOverallCompletionRatioCorrectly(t *testing.T) {
@@ -138,16 +128,5 @@ func TestItCalculatesTheOverallCompletionRatioCorrectly(t *testing.T) {
 		t.Run(fmt.Sprintf("%f in %s", tc.completionRatio, tc.status), func(t *testing.T) {
 			require.Equal(t, tc.expectedOverallCompletionRatio, OverallCompletionRatio(tc.status, tc.completionRatio))
 		})
-	}
-}
-
-func changeDefaultClock(t *testing.T, generator config.TimestampGenerator) func() {
-	mokeypatching.MonkeypatchingMutex.Lock()
-	originalValue := config.Clock
-	config.Clock = generator
-	return func() {
-		// Restore original value
-		config.Clock = originalValue
-		mokeypatching.MonkeypatchingMutex.Unlock()
 	}
 }

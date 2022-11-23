@@ -75,7 +75,10 @@ func TestItCanTranscode(t *testing.T) {
 
 	// Set up a server to receive callbacks and store them in an array for future verification
 	var callbacks []map[string]interface{}
+	var callbacksLock = sync.Mutex{}
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callbacksLock.Lock()
+		defer callbacksLock.Unlock()
 		// Check that we got the callback we're expecting
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
@@ -151,6 +154,8 @@ low-bitrate/index.m3u8
 	time.Sleep(100 * time.Millisecond)
 
 	// Check we received periodic progress callbacks
+	callbacksLock.Lock()
+	defer callbacksLock.Unlock()
 	require.Equal(t, 1, len(callbacks))
 	require.Equal(t, 0.9, callbacks[0]["completion_ratio"])
 
