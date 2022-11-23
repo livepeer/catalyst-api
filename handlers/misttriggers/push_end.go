@@ -78,7 +78,7 @@ func (d *MistCallbackHandlersCollection) RecordingPushEnd(w http.ResponseWriter,
 		log.LogNoRequestID("RecordingPushEnd extract uuid failed %v", err)
 		return
 	}
-	// go clients.DefaultCallbackClient.SendRecordingEvent(event)
+	clients.DefaultCallbackClient.SendRecordingEvent(event)
 }
 
 func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter, req *http.Request, p PushEndPayload) {

@@ -45,6 +45,7 @@ func NewPeriodicCallbackClient(callbackInterval time.Duration) *PeriodicCallback
 // and then pausing for a set amount of time
 func (pcc *PeriodicCallbackClient) Start() *PeriodicCallbackClient {
 	go func() {
+		// TODO: Recover from failure
 		for {
 			pcc.sendCallbacks()
 			time.Sleep(pcc.callbackInterval)
@@ -61,12 +62,34 @@ func (pcc *PeriodicCallbackClient) SendTranscodeStatus(url, requestID string, st
 	tsm := TranscodeStatusMessage{
 		URL:             url,
 		RequestID:       requestID,
-		CompletionRatio: overallCompletionRatio(status, currentStageCompletionRatio),
+		CompletionRatio: OverallCompletionRatio(status, currentStageCompletionRatio),
 		Status:          status.String(),
 		Timestamp:       config.Clock.GetTimestampUTC(),
 	}
 
 	pcc.statusCallback(tsm)
+}
+
+func (pcc *PeriodicCallbackClient) SendRecordingEvent(event *RecordingEvent) {
+	go func() {
+		j, err := json.Marshal(event)
+		if err != nil {
+			log.LogNoRequestID("failed to marshal recording event callback JSON", "err", err)
+			return
+		}
+
+		r, err := http.NewRequest(http.MethodPost, config.RecordingCallback, bytes.NewReader(j))
+		if err != nil {
+			log.LogNoRequestID("failed to create recording event callback request", "err", err)
+			return
+		}
+
+		err = pcc.doWithRetries(r)
+		if err != nil {
+			log.LogNoRequestID("failed to send recording event callback", "err", err)
+			return
+		}
+	}()
 }
 
 func (pcc *PeriodicCallbackClient) SendTranscodeStatusError(url, requestID, errorMsg string) {
@@ -86,7 +109,7 @@ func (pcc *PeriodicCallbackClient) SendTranscodeStatusCompleted(url, requestID s
 	tsm := TranscodeStatusCompletedMessage{
 		TranscodeStatusMessage: TranscodeStatusMessage{
 			URL:             url,
-			CompletionRatio: overallCompletionRatio(TranscodeStatusCompleted, 1),
+			CompletionRatio: OverallCompletionRatio(TranscodeStatusCompleted, 1),
 			Status:          TranscodeStatusCompleted.String(),
 			Timestamp:       config.Clock.GetTimestampUTC(),
 		},
@@ -197,7 +220,7 @@ func (pcc *PeriodicCallbackClient) doWithRetries(r *http.Request) error {
 // Calculate the overall completion ratio based on the completion ratio of the current stage.
 // The weighting will need to be tweaked as we understand better the relative time spent in the
 // segmenting vs. transcoding stages.
-func overallCompletionRatio(status TranscodeStatus, currentStageCompletionRatio float64) float64 {
+func OverallCompletionRatio(status TranscodeStatus, currentStageCompletionRatio float64) float64 {
 	// Sanity check the inputs are within the 0-1 bounds
 	if currentStageCompletionRatio < 0 {
 		currentStageCompletionRatio = 0

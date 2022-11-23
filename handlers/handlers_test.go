@@ -129,6 +129,11 @@ func TestSegmentBodyFormat(t *testing.T) {
 }
 
 func TestVODHandlerProfiles(t *testing.T) {
+	// Set up out own callback client so that we can ensure it just fires once
+	oldCallbackClient := clients.DefaultCallbackClient
+	defer func() { clients.DefaultCallbackClient = oldCallbackClient }()
+	clients.DefaultCallbackClient = clients.NewPeriodicCallbackClient(100 * time.Minute)
+
 	// Create temporary manifest + segment files on the local filesystem
 	inputUrl, outputUrl := createTempManifests(t)
 
@@ -226,6 +231,10 @@ func TestVODHandlerProfiles(t *testing.T) {
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 	require.Equal(t, http.StatusOK, rr.Result().StatusCode)
+
+	// Wait for the request to run its course, then fire callbacks
+	time.Sleep(time.Second)
+	clients.DefaultCallbackClient.Start()
 
 	// Waiting for SendTranscodeStatus(TranscodeStatusPreparing, 0.2)
 	segmentingDeadline, segmentingCancelCtx := context.WithTimeout(context.Background(), 10*time.Second)

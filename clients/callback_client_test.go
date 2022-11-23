@@ -136,7 +136,7 @@ func TestItCalculatesTheOverallCompletionRatioCorrectly(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%f in %s", tc.completionRatio, tc.status), func(t *testing.T) {
-			require.Equal(t, tc.expectedOverallCompletionRatio, overallCompletionRatio(tc.status, tc.completionRatio))
+			require.Equal(t, tc.expectedOverallCompletionRatio, OverallCompletionRatio(tc.status, tc.completionRatio))
 		})
 	}
 }
