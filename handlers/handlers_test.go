@@ -18,11 +18,11 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/mokeypatching"
+	"github.com/livepeer/catalyst-api/pipeline"
 	"github.com/livepeer/catalyst-api/transcode"
 	"github.com/livepeer/go-tools/drivers"
 	"github.com/stretchr/testify/require"
@@ -114,7 +114,7 @@ func TestSegmentBodyFormat(t *testing.T) {
 		}`),
 	}
 
-	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: clients.StubMistClient{}}
+	catalystApiHandlers := CatalystAPIHandlersCollection{VODEngine: pipeline.NewStubCoordinator()}
 	router := httprouter.New()
 
 	router.POST("/api/transcode/file", catalystApiHandlers.TranscodeSegment())
@@ -196,18 +196,13 @@ func TestVODHandlerProfiles(t *testing.T) {
 	}))
 	defer callbackServer.Close()
 
-	// Mist client
-	mc := clients.StubMistClient{}
-
-	// Clear internal state, leftovers from other tests
-	internalState := cache.DefaultStreamCache.Segmenting.UnittestIntrospection()
-	for k := range *internalState {
-		delete(*internalState, k)
-	}
+	// Workflow engine
+	vodEngine := pipeline.NewStubCoordinator()
+	internalState := vodEngine.Jobs.UnittestIntrospection()
 
 	// Setup handlers to test
-	mistCallbackHandlers := &misttriggers.MistCallbackHandlersCollection{MistClient: mc}
-	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: mc}
+	mistCallbackHandlers := &misttriggers.MistCallbackHandlersCollection{VODEngine: vodEngine}
+	catalystApiHandlers := CatalystAPIHandlersCollection{VODEngine: vodEngine}
 	var jsonData = fmt.Sprintf(`{
 		"url": "%s",
 		"callback_url": "%s",
@@ -276,7 +271,7 @@ waitsegmenting:
 	require.Equal(t, http.StatusOK, rr.Result().StatusCode, "trigger handler failed")
 
 	// Check we received proper callback events
-	time.Sleep(5 * time.Second)
+	time.Sleep(10 * time.Second)
 	clients.DefaultCallbackClient.SendCallbacks()
 	deadline, cancelCtx := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelCtx()
@@ -299,7 +294,7 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer callbackServer.Close()
 
-	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: clients.StubMistClient{}}
+	catalystApiHandlers := CatalystAPIHandlersCollection{VODEngine: pipeline.NewStubCoordinator()}
 	var jsonData = `{
 		"url": "http://localhost/input",
 		"callback_url": "CALLBACK_URL",
@@ -340,7 +335,7 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 func TestInvalidPayloadVODUploadHandler(t *testing.T) {
 	require := require.New(t)
 
-	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: clients.StubMistClient{}}
+	catalystApiHandlers := CatalystAPIHandlersCollection{VODEngine: pipeline.NewStubCoordinator()}
 	badRequests := [][]byte{
 		// missing url
 		[]byte(`{
@@ -405,7 +400,7 @@ func TestInvalidPayloadVODUploadHandler(t *testing.T) {
 func TestWrongContentTypeVODUploadHandler(t *testing.T) {
 	require := require.New(t)
 
-	catalystApiHandlers := CatalystAPIHandlersCollection{MistClient: clients.StubMistClient{}}
+	catalystApiHandlers := CatalystAPIHandlersCollection{VODEngine: pipeline.NewStubCoordinator()}
 	var jsonData = []byte(`{
 		"url": "http://localhost/input",
 		"callback_url": "http://localhost/callback",

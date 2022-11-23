@@ -114,8 +114,8 @@ func TestItCanTranscode(t *testing.T) {
 	// Check we don't get an error downloading or parsing it
 	outputs, err := RunTranscodeProcess(
 		TranscodeSegmentRequest{
-			CallbackURL: callbackServer.URL,
-			UploadURL:   manifestFile.Name(),
+			CallbackURL:       callbackServer.URL,
+			SourceManifestURL: manifestFile.Name(),
 		},
 		"streamName",
 		clients.InputVideo{

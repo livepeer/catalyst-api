@@ -16,14 +16,14 @@ import (
 )
 
 type TranscodeSegmentRequest struct {
-	SourceFile      string                   `json:"source_location"`
-	CallbackURL     string                   `json:"callback_url"`
-	UploadURL       string                   `json:"upload_url"`
-	StreamKey       string                   `json:"streamKey"`
-	AccessToken     string                   `json:"accessToken"`
-	TranscodeAPIUrl string                   `json:"transcodeAPIUrl"`
-	Profiles        []clients.EncodedProfile `json:"profiles"`
-	Detection       struct {
+	SourceFile        string                   `json:"source_location"`
+	CallbackURL       string                   `json:"callback_url"`
+	SourceManifestURL string                   `json:"source_manifest_url"`
+	StreamKey         string                   `json:"streamKey"`
+	AccessToken       string                   `json:"accessToken"`
+	TranscodeAPIUrl   string                   `json:"transcodeAPIUrl"`
+	Profiles          []clients.EncodedProfile `json:"profiles"`
+	Detection         struct {
 		Freq                uint `json:"freq"`
 		SampleRate          uint `json:"sampleRate"`
 		SceneClassification []struct {
@@ -84,13 +84,13 @@ func init() {
 }
 
 func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo clients.InputVideo) ([]clients.OutputVideo, error) {
-	log.AddContext(transcodeRequest.RequestID, "source", transcodeRequest.SourceFile, "target", transcodeRequest.UploadURL, "stream_name", streamName)
+	log.AddContext(transcodeRequest.RequestID, "source", transcodeRequest.SourceFile, "source_manifest", transcodeRequest.SourceManifestURL, "stream_name", streamName)
 	log.Log(transcodeRequest.RequestID, "RunTranscodeProcess (v2) Beginning")
 
 	outputs := []clients.OutputVideo{}
 
 	// Parse the manifest destination of the segmented output specified in the request
-	segmentedOutputManifestURL, err := url.Parse(transcodeRequest.UploadURL)
+	segmentedOutputManifestURL, err := url.Parse(transcodeRequest.SourceManifestURL)
 	if err != nil {
 		return outputs, fmt.Errorf("failed to parse transcodeRequest.UploadURL: %s", err)
 	}
@@ -105,7 +105,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	targetTranscodedRenditionOutputURL := segmentedOutputManifestURL.ResolveReference(tout)
 
 	// Grab some useful parameters to be used later from the TranscodeSegmentRequest
-	sourceManifestOSURL := transcodeRequest.UploadURL
+	sourceManifestOSURL := transcodeRequest.SourceManifestURL
 	// transcodeProfiles are desired constraints for transcoding process
 	transcodeProfiles := transcodeRequest.Profiles
 

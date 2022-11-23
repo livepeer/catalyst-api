@@ -8,17 +8,15 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
+	"github.com/livepeer/catalyst-api/pipeline"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -128,7 +126,6 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			return
 		}
 
-		targetDirPath := path.Dir(targetURL.Path)
 		targetManifestFilename := path.Base(targetURL.String())
 		targetExtension := path.Ext(targetManifestFilename)
 		if targetExtension != ".m3u8" {
@@ -137,78 +134,26 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			return
 		}
 
-		targetSegmentedOutputPath := path.Join(targetDirPath, "source", targetManifestFilename)
-		sout, err := url.Parse(targetSegmentedOutputPath)
+		targetSegmentedOutputURL, err := pipeline.InSameDirectory(targetURL, "source", targetManifestFilename)
 		if err != nil {
-			errors.WriteHTTPInternalServerError(w, "Cannot parse targetSegmentedOutputPath", err)
+			errors.WriteHTTPInternalServerError(w, "Cannot create targetSegmentedOutputURL", err)
 			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusInternalServerError)).Inc()
 			return
 		}
+		log.AddContext(requestID, "segmented_url", targetSegmentedOutputURL.String())
 
 		// Once we're happy with the request, do the rest of the Segmenting stage asynchronously to allow us to
 		// from the API call and free up the HTTP connection
-		go func() {
-			targetSegmentedOutputURL := targetURL.ResolveReference(sout)
-			log.AddContext(requestID, "segmented_url", targetSegmentedOutputURL.String())
-
-			streamName := config.SegmentingStreamName(requestID)
-			log.AddContext(requestID, "stream_name", streamName)
-
-			// Kick off the callback mechanism and let the caller know we've started processing
-			clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, requestID, clients.TranscodeStatusPreparing, 0)
-
-			// Arweave URLs don't support HTTP Range requests and so Mist can't natively handle them for segmenting
-			// This workaround copies the file from Arweave to S3 and then tells Mist to use the S3 URL
-			if clients.IsArweaveOrIPFSURL(uploadVODRequest.Url) {
-				newSourceOutputPath := path.Join(targetDirPath, "source", "arweave-source.mp4")
-				newSourceOutputPathURL, err := url.Parse(newSourceOutputPath)
-				if err != nil {
-					clients.DefaultCallbackClient.SendTranscodeStatusError(uploadVODRequest.CallbackUrl, requestID, "Cannot parse newSourceOutputPath")
-					return
-				}
-				newSourceURL := targetURL.ResolveReference(newSourceOutputPathURL)
-				log.AddContext(requestID, "new_source_url", newSourceURL.String())
-
-				if err := clients.CopyArweaveToS3(uploadVODRequest.Url, newSourceURL.String()); err != nil {
-					clients.DefaultCallbackClient.SendTranscodeStatusError(uploadVODRequest.CallbackUrl, requestID, "Invalid Arweave URL")
-					return
-				}
-				uploadVODRequest.Url = newSourceURL.String()
-				clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, requestID, clients.TranscodeStatusPreparing, 0.1)
-			}
-
-			cache.DefaultStreamCache.Segmenting.Store(streamName, cache.StreamInfo{
-				SourceFile:      uploadVODRequest.Url,
-				CallbackURL:     uploadVODRequest.CallbackUrl,
-				UploadURL:       targetSegmentedOutputURL.String(),
-				AccessToken:     uploadVODRequest.AccessToken,
-				TranscodeAPIUrl: uploadVODRequest.TranscodeAPIUrl,
-				RequestID:       requestID,
-				Profiles:        uploadVODRequest.Profiles,
-			})
-
-			// Attempt an out-of-band call to generate the dtsh headers using MistIn*
-			var dtshStartTime = time.Now()
-			dstDir, _ := filepath.Split(targetSegmentedOutputURL.String())
-			dtshFileName := filepath.Base(uploadVODRequest.Url)
-			if err := d.MistClient.CreateDTSH(requestID, uploadVODRequest.Url, dstDir+dtshFileName); err != nil {
-				log.LogError(requestID, "Failed to create DTSH", err, "destination", uploadVODRequest.Url)
-			} else {
-				log.Log(requestID, "Generated DTSH File", "dtsh_generation_duration", time.Since(dtshStartTime).String())
-			}
-
-			clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, requestID, clients.TranscodeStatusPreparing, 0.2)
-
-			log.Log(requestID, "Beginning segmenting")
-			// Tell Mist to do the segmenting. Upon completion / error, Mist will call Triggers to notify us.
-			if err := d.processUploadVOD(streamName, uploadVODRequest.Url, targetSegmentedOutputURL.String()); err != nil {
-				log.LogError(requestID, "Cannot process upload VOD request", err)
-				m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusInternalServerError)).Inc()
-				return
-			}
-
-			clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, requestID, clients.TranscodeStatusPreparing, 0.3)
-		}()
+		d.VODEngine.CreateUploadJob(pipeline.UploadJobPayload{
+			SourceFile:          uploadVODRequest.Url,
+			CallbackURL:         uploadVODRequest.CallbackUrl,
+			TargetURL:           targetURL,
+			SegmentingTargetURL: targetSegmentedOutputURL.String(),
+			AccessToken:         uploadVODRequest.AccessToken,
+			TranscodeAPIUrl:     uploadVODRequest.TranscodeAPIUrl,
+			RequestID:           requestID,
+			Profiles:            uploadVODRequest.Profiles,
+		})
 
 		respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})
 		if err != nil {
@@ -227,18 +172,6 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 
 		m.UploadVODSuccessCount.Inc()
 	}
-}
-
-func (d *CatalystAPIHandlersCollection) processUploadVOD(streamName, sourceURL, targetURL string) error {
-	sourceURL = "mp4:" + sourceURL
-	if err := d.MistClient.AddStream(streamName, sourceURL); err != nil {
-		return err
-	}
-	if err := d.MistClient.PushStart(streamName, targetURL); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 const SCHEME_IPFS = "ipfs"

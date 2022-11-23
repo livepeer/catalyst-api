@@ -12,10 +12,11 @@ type ClientMetrics struct {
 }
 
 type CatalystAPIMetrics struct {
-	UploadVODRequestCount    prometheus.Counter
-	UploadVODSuccessCount    prometheus.Counter
-	UploadVODFailureCount    *prometheus.CounterVec
-	TranscodeSegmentDuration prometheus.Histogram
+	UploadVODRequestCount         prometheus.Counter
+	UploadVODSuccessCount         prometheus.Counter
+	UploadVODFailureCount         *prometheus.CounterVec
+	UploadVODPipelineFailureCount prometheus.Counter
+	TranscodeSegmentDuration      prometheus.Histogram
 
 	TranscodingStatusUpdate ClientMetrics
 	BroadcasterClient       ClientMetrics
@@ -38,6 +39,10 @@ func NewMetrics() *CatalystAPIMetrics {
 			Name: "upload_vod_failure_count",
 			Help: "The total number of failed requests to /api/vod",
 		}, []string{"status_code"}),
+		UploadVODPipelineFailureCount: promauto.NewCounter(prometheus.CounterOpts{
+			Name: "upload_vod_pipeline_failure_count",
+			Help: "The total number of failed pipeline runs for /api/vod",
+		}),
 		TranscodeSegmentDuration: promauto.NewHistogram(prometheus.HistogramOpts{
 			Name:    "transcode_segment_duration",
 			Help:    "Time taken to transcode a segment",
