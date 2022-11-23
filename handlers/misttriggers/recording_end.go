@@ -72,18 +72,14 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 	}()
 
 	// Let Studio know that we've almost finished the Segmenting phase
-	if err := clients.DefaultCallbackClient.SendTranscodeStatus(callbackUrl, clients.TranscodeStatusPreparing, 0.9); err != nil {
-		log.LogError(requestID, "Failed to send transcode status callback", err)
-	}
+	clients.DefaultCallbackClient.SendTranscodeStatus(callbackUrl, requestID, clients.TranscodeStatusPreparing, 0.9)
 
 	// HACK: Wait a little bit to give the segmenting time to finish uploading.
 	// Proper fix comes with a new Mist trigger to notify us that uploads are also complete
 	time.Sleep(5 * time.Second)
 
 	// Let Studio know that we've finished the Segmenting phase
-	if err := clients.DefaultCallbackClient.SendTranscodeStatus(callbackUrl, clients.TranscodeStatusPreparingCompleted, 1); err != nil {
-		log.LogError(requestID, "Failed to send transcode status callback", err)
-	}
+	clients.DefaultCallbackClient.SendTranscodeStatus(callbackUrl, requestID, clients.TranscodeStatusPreparingCompleted, 1)
 
 	// Get the source stream's detailed track info before kicking off transcode
 	// Mist currently returns the "booting" error even after successfully segmenting MOV files
@@ -147,19 +143,14 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 		if err != nil {
 			log.LogError(requestID, "RunTranscodeProcess returned an error", err)
 
-			if err := clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, "Transcoding Failed: "+err.Error()); err != nil {
-				log.LogError(requestID, "Failed to send Error callback", err)
-			}
+			clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, requestID, "Transcoding Failed: "+err.Error())
 			return
 		}
 
-		defer func() {
-			// Send the success callback
-			err = clients.DefaultCallbackClient.SendTranscodeStatusCompleted(transcodeRequest.CallbackURL, inputInfo, outputs)
-			if err != nil {
-				log.LogError(transcodeRequest.RequestID, "Failed to send TranscodeStatusCompleted callback", err, "url", transcodeRequest.CallbackURL)
-			}
-		}()
+		// defer func() {
+		// Send the success callback after the DTSH creation logic
+		clients.DefaultCallbackClient.SendTranscodeStatusCompleted(transcodeRequest.CallbackURL, requestID, inputInfo, outputs)
+		// }()
 		// TODO: CreateDTSH is hardcoded to call MistInMP4 - the call below requires a call to MistInHLS instead.
 		//	 Update this logic later as it's required for Mist playback.
 		/*

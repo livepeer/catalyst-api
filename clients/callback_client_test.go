@@ -1,11 +1,13 @@
 package clients
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/mokeypatching"
@@ -24,7 +26,11 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 		// Check that we got the callback we're expecting
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
-		require.JSONEq(t, `{"completion_ratio":1, "status":"success", "timestamp": 123456789}`, string(body))
+
+		// Check we got a valid callback message of the type we'd expect
+		var actualMsg TranscodeStatusMessage
+		require.NoError(t, json.Unmarshal(body, &actualMsg))
+		require.Equal(t, "success", actualMsg.Status)
 
 		// Return HTTP error codes the first two times
 		tries += 1
@@ -38,13 +44,20 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 	}))
 	defer svr.Close()
 
-	// Send the callback and confirm the number of times we retried
-	client := NewCallbackClient()
-	require.NoError(t, client.SendTranscodeStatus(svr.URL, TranscodeStatusCompleted, 1))
+	// Create a client that sends heartbeats very irregularly, to let us assert things about a single iteration of the callback
+	client := NewPeriodicCallbackClient(100 * time.Hour)
+
+	// Send the status in, but it shouldn't get sent yet because we haven't started the client
+	client.SendTranscodeStatus(svr.URL, "example-request-id", TranscodeStatusCompleted, 1)
+
+	// Start the client and wait for an iteration of the loop
+	client.Start()
+	time.Sleep(1 * time.Second)
+
 	require.Equal(t, 3, tries, "Expected the client to retry on failed callbacks")
 }
 
-func TestItEventuallyStopsRetrying(t *testing.T) {
+func TestItSendsPeriodicHeartbeats(t *testing.T) {
 	patch_cleanup := changeDefaultClock(t, config.FixedTimestampGenerator{Timestamp: 123456789})
 	defer patch_cleanup()
 
@@ -56,22 +69,27 @@ func TestItEventuallyStopsRetrying(t *testing.T) {
 		// Check that we got the callback we're expecting
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
-		require.JSONEq(t, `{"completion_ratio":1, "status":"success", "timestamp": 123456789}`, string(body))
+
+		// Check we got a valid callback message of the type we'd expect
+		var actualMsg TranscodeStatusMessage
+		require.NoError(t, json.Unmarshal(body, &actualMsg))
+		require.Equal(t, "success", actualMsg.Status)
 
 		tries += 1
 
 		// Return an error code
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusOK)
 	}))
 	defer svr.Close()
 
 	// Send the callback and confirm the number of times we retried
-	client := NewCallbackClient()
-	err := client.SendTranscodeStatus(svr.URL, TranscodeStatusCompleted, 1)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to send callback")
-	require.Contains(t, err.Error(), "giving up after 3 attempt(s)")
-	require.Equal(t, 3, tries, "Expected the client to retry on failed callbacks")
+	client := NewPeriodicCallbackClient(100 * time.Millisecond).Start()
+	client.SendTranscodeStatus(svr.URL, "example-request-id", TranscodeStatusCompleted, 1)
+
+	time.Sleep(400 * time.Millisecond)
+
+	require.Less(t, 1, tries, "Expected the client to have sent at least 2 statuses within the timeframe")
+	require.Greater(t, 6, tries, "Expected the client to have backed off between heartbeats")
 }
 
 func TestTranscodeStatusErrorNotifcation(t *testing.T) {
@@ -79,19 +97,30 @@ func TestTranscodeStatusErrorNotifcation(t *testing.T) {
 	defer patch_cleanup()
 
 	// Set up a dummy server to receive the callbacks
+	var requestCount = 0
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check that we got the callback we're expecting
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
-		require.JSONEq(t, `{"completion_ratio": 0, "error": "something went wrong", "status":"error", "timestamp": 123456789}`, string(body))
 
+		// Check we got a valid callback message of the type we'd expect
+		var actualMsg TranscodeStatusMessage
+		require.NoError(t, json.Unmarshal(body, &actualMsg))
+		require.Equal(t, "error", actualMsg.Status)
+		require.Equal(t, "something went wrong", actualMsg.Error)
+
+		requestCount++
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer svr.Close()
 
 	// Send the callback and confirm the number of times we retried
-	client := NewCallbackClient()
-	require.NoError(t, client.SendTranscodeStatusError(svr.URL, "something went wrong"))
+	client := NewPeriodicCallbackClient(100 * time.Millisecond).Start()
+	client.SendTranscodeStatusError(svr.URL, "example-request-id", "something went wrong")
+
+	time.Sleep(200 * time.Millisecond)
+
+	require.Equal(t, 1, requestCount)
 }
 
 func TestItCalculatesTheOverallCompletionRatioCorrectly(t *testing.T) {
@@ -107,7 +136,7 @@ func TestItCalculatesTheOverallCompletionRatioCorrectly(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%f in %s", tc.completionRatio, tc.status), func(t *testing.T) {
-			require.Equal(t, tc.expectedOverallCompletionRatio, OverallCompletionRatio(tc.status, tc.completionRatio))
+			require.Equal(t, tc.expectedOverallCompletionRatio, overallCompletionRatio(tc.status, tc.completionRatio))
 		})
 	}
 }

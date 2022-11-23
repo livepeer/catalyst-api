@@ -39,8 +39,11 @@ func (c StubBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumbe
 }
 
 func TestItCanTranscode(t *testing.T) {
+	oldCallbackClient := clients.DefaultCallbackClient
+	defer func() { clients.DefaultCallbackClient = oldCallbackClient }()
+	clients.DefaultCallbackClient = clients.NewPeriodicCallbackClient(100 * time.Minute)
+
 	dir := os.TempDir()
-	fmt.Println("TestItCanTranscode running using Temp Dir:", dir)
 
 	// Create 2 layers of subdirectories to ensure runs of the test don't interfere with each other
 	// and that it simulates the production layout
@@ -141,10 +144,15 @@ low-bitrate/index.m3u8
 	require.Greater(t, len(masterManifestBytes), 0)
 	require.Equal(t, expectedMasterManifest, string(masterManifestBytes))
 
-	// Check we received a progress callback for each segment
-	require.Equal(t, 2, len(callbacks))
-	require.Equal(t, 0.65, callbacks[0]["completion_ratio"])
-	require.Equal(t, 0.9, callbacks[1]["completion_ratio"])
+	// Start the callback client, to let it run for one iteration
+	clients.DefaultCallbackClient.Start()
+
+	// Wait for the callbacks to arrive
+	time.Sleep(100 * time.Millisecond)
+
+	// Check we received periodic progress callbacks
+	require.Equal(t, 1, len(callbacks))
+	require.Equal(t, 0.9, callbacks[0]["completion_ratio"])
 
 	// Check we received a final Transcode Completed callback
 	require.Equal(t, 1, len(outputs))

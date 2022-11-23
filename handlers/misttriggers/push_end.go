@@ -78,7 +78,7 @@ func (d *MistCallbackHandlersCollection) RecordingPushEnd(w http.ResponseWriter,
 		log.LogNoRequestID("RecordingPushEnd extract uuid failed %v", err)
 		return
 	}
-	go clients.DefaultCallbackClient.SendRecordingEvent(event)
+	// go clients.DefaultCallbackClient.SendRecordingEvent(event)
 }
 
 func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter, req *http.Request, p PushEndPayload) {
@@ -92,7 +92,7 @@ func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter
 
 	// TODO: Find a better way to determine if the push status failed or not (i.e. segmenting step was successful)
 	if strings.Contains(p.Last10LogLines, "FAIL") {
-		_ = clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, "Segmenting Failed: "+p.PushStatus)
+		clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, requestID, "Segmenting Failed: "+p.PushStatus)
 		log.Log(requestID, "Segmenting Failed. PUSH_END trigger for stream "+p.StreamName+" was "+p.PushStatus)
 		return
 	}

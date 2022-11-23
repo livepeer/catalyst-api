@@ -141,9 +141,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		if jobs.IsRunning() {
 			// Sending callback only if we are still running
 			var completedRatio = calculateCompletedRatio(jobs.GetTotalCount(), jobs.GetCompletedCount()+1)
-			if err = clients.DefaultCallbackClient.SendTranscodeStatus(transcodeRequest.CallbackURL, clients.TranscodeStatusTranscoding, completedRatio); err != nil {
-				log.LogError(transcodeRequest.RequestID, "failed to send transcode status callback", err, "url", transcodeRequest.CallbackURL)
-			}
+			clients.DefaultCallbackClient.SendTranscodeStatus(transcodeRequest.CallbackURL, transcodeRequest.RequestID, clients.TranscodeStatusTranscoding, completedRatio)
 		}
 		return nil
 	})
