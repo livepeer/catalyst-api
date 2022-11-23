@@ -118,6 +118,7 @@ func (pcc *PeriodicCallbackClient) SendTranscodeStatusCompleted(url, requestID s
 	tsm := TranscodeStatusMessage{
 		URL:             url,
 		CompletionRatio: OverallCompletionRatio(TranscodeStatusCompleted, 1),
+		RequestID:       requestID,
 		Status:          TranscodeStatusCompleted.String(),
 		Timestamp:       config.Clock.GetTimestampUTC(),
 		Type:            "video", // Assume everything is a video for now
@@ -177,7 +178,8 @@ func (pcc *PeriodicCallbackClient) SendCallbacks() {
 		}(tsm)
 
 		// Error is a terminal state, so remove the job from the list after sending the callback
-		if tsm.Status == TranscodeStatusError.String() || tsm.CompletionRatio == 1 {
+		if tsm.Status == TranscodeStatusError.String() || tsm.Status == TranscodeStatusCompleted.String() {
+			log.Log(tsm.RequestID, "Removing job from active list")
 			delete(pcc.requestIDToLatestMessage, tsm.RequestID)
 		}
 	}
