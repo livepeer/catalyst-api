@@ -51,6 +51,11 @@ type TranscodeStatusMessage struct {
 	Unretriable     bool    `json:"unretriable,omitempty"`
 	Status          string  `json:"status"`
 	Timestamp       int64   `json:"timestamp"`
+
+	// Only used for the "Completed" status message
+	Type       string        `json:"type"`
+	InputVideo InputVideo    `json:"video_spec"`
+	Outputs    []OutputVideo `json:"outputs"`
 }
 
 type VideoTrack struct {
@@ -98,13 +103,6 @@ type OutputVideo struct {
 	Type     string            `json:"type"`
 	Manifest string            `json:"manifest"`
 	Videos   []OutputVideoFile `json:"videos"`
-}
-
-type TranscodeStatusCompletedMessage struct {
-	TranscodeStatusMessage
-	Type       string        `json:"type"`
-	InputVideo InputVideo    `json:"video_spec"`
-	Outputs    []OutputVideo `json:"outputs"`
 }
 
 // Finds the video track from the list of input video tracks

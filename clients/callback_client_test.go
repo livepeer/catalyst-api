@@ -81,8 +81,7 @@ func TestItSendsPeriodicHeartbeats(t *testing.T) {
 
 	time.Sleep(400 * time.Millisecond)
 
-	require.Less(t, int64(1), atomic.LoadInt64(&tries), "Expected the client to have sent at least 2 statuses within the timeframe")
-	require.Greater(t, int64(6), atomic.LoadInt64(&tries), "Expected the client to have backed off between heartbeats")
+	require.Equal(t, int64(1), atomic.LoadInt64(&tries), "Expected the client to have sent 1 status within the timeframe")
 }
 
 func TestTranscodeStatusErrorNotifcation(t *testing.T) {

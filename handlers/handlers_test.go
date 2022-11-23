@@ -185,11 +185,11 @@ func TestVODHandlerProfiles(t *testing.T) {
 	defer patch_cleanup()
 
 	// Start callback server to record reported events
-	callbacks := make(chan *clients.TranscodeStatusCompletedMessage, 100)
+	callbacks := make(chan *clients.TranscodeStatusMessage, 100)
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		payload, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
-		message := clients.TranscodeStatusCompletedMessage{}
+		message := clients.TranscodeStatusMessage{}
 		err = json.Unmarshal(payload, &message)
 		require.NoError(t, err)
 		callbacks <- &message
@@ -234,7 +234,7 @@ func TestVODHandlerProfiles(t *testing.T) {
 
 	// Wait for the request to run its course, then fire callbacks
 	time.Sleep(time.Second)
-	clients.DefaultCallbackClient.Start()
+	clients.DefaultCallbackClient.SendCallbacks()
 
 	// Waiting for SendTranscodeStatus(TranscodeStatusPreparing, 0.2)
 	segmentingDeadline, segmentingCancelCtx := context.WithTimeout(context.Background(), 10*time.Second)
@@ -276,6 +276,8 @@ waitsegmenting:
 	require.Equal(t, http.StatusOK, rr.Result().StatusCode, "trigger handler failed")
 
 	// Check we received proper callback events
+	time.Sleep(5 * time.Second)
+	clients.DefaultCallbackClient.SendCallbacks()
 	deadline, cancelCtx := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelCtx()
 	for {

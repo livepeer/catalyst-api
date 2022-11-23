@@ -46,7 +46,7 @@ func NewPeriodicCallbackClient(callbackInterval time.Duration) *PeriodicCallback
 func (pcc *PeriodicCallbackClient) Start() *PeriodicCallbackClient {
 	go func() {
 		for {
-			recoverer(pcc.sendCallbacks)
+			recoverer(pcc.SendCallbacks)
 			time.Sleep(pcc.callbackInterval)
 		}
 	}()
@@ -115,43 +115,17 @@ func (pcc *PeriodicCallbackClient) SendTranscodeStatusError(url, requestID, erro
 
 // Separate method as this requires a much richer message than the other status callbacks
 func (pcc *PeriodicCallbackClient) SendTranscodeStatusCompleted(url, requestID string, iv InputVideo, ov []OutputVideo) {
-	tsm := TranscodeStatusCompletedMessage{
-		TranscodeStatusMessage: TranscodeStatusMessage{
-			URL:             url,
-			CompletionRatio: OverallCompletionRatio(TranscodeStatusCompleted, 1),
-			Status:          TranscodeStatusCompleted.String(),
-			Timestamp:       config.Clock.GetTimestampUTC(),
-		},
-		Type:       "video", // Assume everything is a video for now
-		InputVideo: iv,
-		Outputs:    ov,
+	tsm := TranscodeStatusMessage{
+		URL:             url,
+		CompletionRatio: OverallCompletionRatio(TranscodeStatusCompleted, 1),
+		Status:          TranscodeStatusCompleted.String(),
+		Timestamp:       config.Clock.GetTimestampUTC(),
+		Type:            "video", // Assume everything is a video for now
+		InputVideo:      iv,
+		Outputs:         ov,
 	}
 
-	pcc.mapLock.Lock()
-	defer pcc.mapLock.Unlock()
-
-	// This is a terminal state, so make sure we stop sending updates
-	defer delete(pcc.requestIDToLatestMessage, tsm.RequestID)
-
-	go func() {
-		j, err := json.Marshal(tsm)
-		if err != nil {
-			log.LogError(tsm.RequestID, "failed to marshal callback JSON", err)
-			return
-		}
-
-		r, err := http.NewRequest(http.MethodPost, tsm.URL, bytes.NewReader(j))
-		if err != nil {
-			log.LogError(tsm.RequestID, "failed to create callback HTTP request", err)
-			return
-		}
-
-		err = pcc.doWithRetries(r)
-		if err != nil {
-			log.LogError(tsm.RequestID, "failed to send callback", err)
-			return
-		}
-	}()
+	pcc.statusCallback(tsm)
 }
 
 // Update with a status message
@@ -163,7 +137,7 @@ func (pcc *PeriodicCallbackClient) statusCallback(tsm TranscodeStatusMessage) {
 }
 
 // Loop over all active jobs, sending a (non-blocking) HTTP callback for each
-func (pcc *PeriodicCallbackClient) sendCallbacks() {
+func (pcc *PeriodicCallbackClient) SendCallbacks() {
 	pcc.mapLock.Lock()
 	defer pcc.mapLock.Unlock()
 
@@ -203,7 +177,7 @@ func (pcc *PeriodicCallbackClient) sendCallbacks() {
 		}(tsm)
 
 		// Error is a terminal state, so remove the job from the list after sending the callback
-		if tsm.Status == TranscodeStatusError.String() {
+		if tsm.Status == TranscodeStatusError.String() || tsm.CompletionRatio == 1 {
 			delete(pcc.requestIDToLatestMessage, tsm.RequestID)
 		}
 	}
