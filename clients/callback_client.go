@@ -15,7 +15,7 @@ import (
 
 const MAX_TIME_WITHOUT_UPDATE = 30 * time.Minute
 
-var DefaultCallbackClient = NewPeriodicCallbackClient(10 * time.Second)
+var DefaultCallbackClient = NewPeriodicCallbackClient(15 * time.Second)
 
 type PeriodicCallbackClient struct {
 	requestIDToLatestMessage map[string]TranscodeStatusMessage
