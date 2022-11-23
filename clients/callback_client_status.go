@@ -53,9 +53,9 @@ type TranscodeStatusMessage struct {
 	Timestamp       int64   `json:"timestamp"`
 
 	// Only used for the "Completed" status message
-	Type       string        `json:"type"`
-	InputVideo InputVideo    `json:"video_spec"`
-	Outputs    []OutputVideo `json:"outputs"`
+	Type       string        `json:"type,omitempty"`
+	InputVideo InputVideo    `json:"video_spec,omitempty"`
+	Outputs    []OutputVideo `json:"outputs,omitempty"`
 }
 
 type VideoTrack struct {
