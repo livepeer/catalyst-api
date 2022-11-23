@@ -44,13 +44,18 @@ type RecordingEvent struct {
 }
 
 type TranscodeStatusMessage struct {
-	RequestID       string
-	URL             string
+	// Internal fields, not included in the message we send
+	RequestID string `json:"-"`
+	URL       string `json:"-"`
+
+	// Fields included in all status messages
 	CompletionRatio float64 `json:"completion_ratio"` // No omitempty or we lose this for 0% completion case
-	Error           string  `json:"error,omitempty"`
-	Unretriable     bool    `json:"unretriable,omitempty"`
 	Status          string  `json:"status"`
 	Timestamp       int64   `json:"timestamp"`
+
+	// Only used for the "Error" status message
+	Error       string `json:"error,omitempty"`
+	Unretriable bool   `json:"unretriable,omitempty"`
 
 	// Only used for the "Completed" status message
 	Type       string        `json:"type,omitempty"`
@@ -87,10 +92,10 @@ type InputTrack struct {
 }
 
 type InputVideo struct {
-	Format    string       `json:"format"`
-	Tracks    []InputTrack `json:"tracks"`
-	Duration  float64      `json:"duration"`
-	SizeBytes int          `json:"size"`
+	Format    string       `json:"format,omitempty"`
+	Tracks    []InputTrack `json:"tracks,omitempty"`
+	Duration  float64      `json:"duration,omitempty"`
+	SizeBytes int          `json:"size,omitempty"`
 }
 
 type OutputVideoFile struct {
