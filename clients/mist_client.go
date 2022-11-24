@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os/exec"
 	"path"
@@ -15,6 +16,8 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/subprocess"
+
+	"github.com/livepeer/catalyst-api/metrics"
 )
 
 type MistAPIClient interface {
@@ -198,7 +201,12 @@ func (mc *MistClient) sendCommand(command interface{}) (string, error) {
 		return "", err
 	}
 	payload := payloadFor(c)
-	resp, err := mistRetryableClient.Post(mc.ApiUrl, "application/json", bytes.NewBuffer([]byte(payload)))
+	req, err := http.NewRequest(http.MethodPost, mc.ApiUrl, bytes.NewBuffer([]byte(payload)))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Add("Content-Type", "application/json")
+	resp, err := metrics.MonitorRequest(metrics.Metrics.MistClient, mistRetryableClient, req)
 	if err != nil {
 		return "", err
 	}
@@ -225,7 +233,12 @@ func payloadFor(command string) string {
 func (mc *MistClient) sendHttpRequest(streamName string) (string, error) {
 	jsonStreamInfoUrl := mc.HttpReqUrl + "/json_" + streamName + ".js"
 
-	resp, err := mistRetryableClient.Get(jsonStreamInfoUrl)
+	req, err := http.NewRequest(http.MethodGet, jsonStreamInfoUrl, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Add("Content-Type", "application/json")
+	resp, err := metrics.MonitorRequest(metrics.Metrics.MistClient, mistRetryableClient, req)
 	if err != nil {
 		return "", err
 	}

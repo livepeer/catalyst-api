@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -22,6 +23,10 @@ func (s *StepContext) CreateGetRequest(endpoint string) error {
 func (s *StepContext) CreatePostRequest(endpoint, payload string) error {
 	if payload == "a valid upload vod request" {
 		payload = s.getDefaultUploadRequestPayload()
+	}
+
+	if payload == "an invalid upload vod request" {
+		payload = "{}"
 	}
 
 	r, err := http.NewRequest(http.MethodPost, s.BaseURL+endpoint, strings.NewReader(payload))
@@ -120,4 +125,39 @@ func (s *StepContext) CheckHTTPResponseBody(expectedBody string) error {
 
 func (s *StepContext) SetRequestPayload(payload string) {
 	s.pendingRequestPayload = payload
+}
+
+func (s *StepContext) CheckRecordedMetrics(metricsType string) error {
+	var url = "http://localhost:2112/metrics"
+
+	res, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+
+	if metricsType == "failure" {
+		r := regexp.MustCompile(`\nupload_vod_failure_count 1\n`)
+		if !r.Match(body) {
+			return fmt.Errorf("not a valid upload_vod_failure_count")
+		}
+	}
+
+	if metricsType == "successful" {
+		r := regexp.MustCompile(`\nupload_vod_success_count 1\n`)
+		if !r.Match(body) {
+			return fmt.Errorf("not a valid upload_vod_success_count")
+		}
+	}
+
+	r := regexp.MustCompile(`\nupload_vod_request_count 1\n`)
+	if !r.Match(body) {
+		return fmt.Errorf("not a valid upload_vod_request_count metric")
+	}
+
+	return nil
 }

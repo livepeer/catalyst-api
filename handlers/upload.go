@@ -18,6 +18,7 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -65,24 +66,31 @@ func HasContentType(r *http.Request, mimetype string) bool {
 
 func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 	schema := inputSchemasCompiled["UploadVOD"]
+	m := metrics.Metrics
 
 	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+		m.UploadVODRequestCount.Inc()
 		var uploadVODRequest UploadVODRequest
 
 		if !HasContentType(req, "application/json") {
 			errors.WriteHTTPUnsupportedMediaType(w, "Requires application/json content type", nil)
+			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusBadRequest)).Inc()
 			return
 		} else if payload, err := io.ReadAll(req.Body); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot read payload", err)
+			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusInternalServerError)).Inc()
 			return
 		} else if result, err := schema.Validate(gojsonschema.NewBytesLoader(payload)); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot validate payload", err)
+			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusInternalServerError)).Inc()
 			return
 		} else if !result.Valid() {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("%s", result.Errors()))
+			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusBadRequest)).Inc()
 			return
 		} else if err := json.Unmarshal(payload, &uploadVODRequest); err != nil {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusBadRequest)).Inc()
 			return
 		}
 
@@ -107,6 +115,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		}
 		if tURL == "" {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("no source segment URL in request"))
+			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusBadRequest)).Inc()
 			return
 		}
 
@@ -115,6 +124,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		targetURL, err := url.Parse(tURL)
 		if err != nil {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file should end in .m3u8 extension"))
+			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusBadRequest)).Inc()
 			return
 		}
 
@@ -123,6 +133,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		targetExtension := path.Ext(targetManifestFilename)
 		if targetExtension != ".m3u8" {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file should end in .m3u8 extension"))
+			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusBadRequest)).Inc()
 			return
 		}
 
@@ -130,6 +141,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		sout, err := url.Parse(targetSegmentedOutputPath)
 		if err != nil {
 			errors.WriteHTTPInternalServerError(w, "Cannot parse targetSegmentedOutputPath", err)
+			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusInternalServerError)).Inc()
 			return
 		}
 
@@ -189,6 +201,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			// Tell Mist to do the segmenting. Upon completion / error, Mist will call Triggers to notify us.
 			if err := d.processUploadVOD(streamName, uploadVODRequest.Url, targetSegmentedOutputURL.String()); err != nil {
 				log.LogError(requestID, "Cannot process upload VOD request", err)
+				m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusInternalServerError)).Inc()
 				return
 			}
 
@@ -198,13 +211,19 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 		respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})
 		if err != nil {
 			log.LogError(requestID, "Failed to build a /upload HTTP API response", err)
+			errors.WriteHTTPInternalServerError(w, "Failed marshaling response", err)
+			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusInternalServerError)).Inc()
 			return
 		}
 
 		if _, err := w.Write(respBytes); err != nil {
 			log.LogError(requestID, "Failed to write a /upload HTTP API response", err)
+			errors.WriteHTTPInternalServerError(w, "Failed writing response", err)
+			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusInternalServerError)).Inc()
 			return
 		}
+
+		m.UploadVODSuccessCount.Inc()
 	}
 }
 

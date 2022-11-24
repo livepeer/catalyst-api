@@ -12,6 +12,7 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/metrics"
 )
 
 type RemoteBroadcasterClient struct {
@@ -78,7 +79,7 @@ func findBroadcaster(c Credentials) (BroadcasterList, error) {
 		return BroadcasterList{}, fmt.Errorf("NewRequest GET for url %s: %v", requestURL, err)
 	}
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.AccessToken))
-	res, err := broadcaserRetryableClient.Do(req)
+	res, err := metrics.MonitorRequest(metrics.Metrics.BroadcasterClient, broadcaserRetryableClient, req)
 	if err != nil {
 		return BroadcasterList{}, fmt.Errorf("http do(%s): %v", requestURL, err)
 	}
@@ -118,7 +119,7 @@ func CreateStream(c Credentials, streamName string, profiles []EncodedProfile) (
 	}
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.AccessToken))
 	req.Header.Add("Content-Type", "application/json")
-	res, err := broadcaserRetryableClient.Do(req)
+	res, err := metrics.MonitorRequest(metrics.Metrics.BroadcasterClient, broadcaserRetryableClient, req)
 	if err != nil {
 		return "", fmt.Errorf("http do(%s): %v", requestURL, err)
 	}
@@ -150,7 +151,7 @@ func ReleaseManifestID(c Credentials, manifestId string) error {
 	}
 
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", c.AccessToken))
-	res, err := apiRetryableClient.Do(req)
+	res, err := metrics.MonitorRequest(metrics.Metrics.BroadcasterClient, apiRetryableClient, req)
 	if err != nil {
 		return fmt.Errorf("Releasing Manifest ID failed. URL: %s, manifestID: %s, err: %s", requestURL, manifestId, err)
 	}
@@ -171,13 +172,14 @@ func pickRandomBroadcaster(list BroadcasterList) (url.URL, error) {
 	return *result, nil
 }
 
-func newRetryableClient(http *http.Client) *http.Client {
+func newRetryableClient(httpClient *http.Client) *http.Client {
 	client := retryablehttp.NewClient()
 	client.RetryMax = 2
 	client.RetryWaitMin = 200 * time.Millisecond
 	client.RetryWaitMax = 1 * time.Second
-	if http != nil {
-		client.HTTPClient = http
+	client.CheckRetry = metrics.HttpRetryHook
+	if httpClient != nil {
+		client.HTTPClient = httpClient
 	}
 
 	return client.StandardClient()
