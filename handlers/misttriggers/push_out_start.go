@@ -54,6 +54,6 @@ func (d *MistCallbackHandlersCollection) RecordingPushOutStart(w http.ResponseWr
 	}
 	// Add uuid after stream name
 	pushUrl.Path = strings.Replace(pushUrl.Path, "$stream", "$stream/"+event.RecordingId, 1)
-	clients.DefaultCallbackClient.SendRecordingEvent(event)
+	clients.SendRecordingEventCallback(event)
 	return pushUrl.String()
 }

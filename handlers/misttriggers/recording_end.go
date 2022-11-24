@@ -39,7 +39,7 @@ func (d *MistCallbackHandlersCollection) TriggerRecordingEnd(w http.ResponseWrit
 	case Transcoding:
 		// TODO
 	case Segmenting:
-		d.VODEngine.HandleRecordingEndTrigger(pipeline.RecordingEndPayload{
+		d.VODEngine.TriggerRecordingEnd(pipeline.RecordingEndPayload{
 			StreamName:                p.StreamName,
 			StreamMediaDurationMillis: p.StreamMediaDurationMillis,
 			WrittenBytes:              p.WrittenBytes,

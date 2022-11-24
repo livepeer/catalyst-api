@@ -30,8 +30,10 @@ type TranscodeSegmentRequest struct {
 			Name string `json:"name"`
 		} `json:"sceneClassification"`
 	} `json:"detection"`
-	SourceStreamInfo clients.MistStreamInfo
-	RequestID        string
+
+	SourceStreamInfo clients.MistStreamInfo               `json:"-"`
+	RequestID        string                               `json:"-"`
+	ReportStatus     func(clients.TranscodeStatusMessage) `json:"-"`
 }
 
 const (
@@ -140,10 +142,10 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		if err != nil {
 			return err
 		}
-		if jobs.IsRunning() {
+		if jobs.IsRunning() && transcodeRequest.ReportStatus != nil {
 			// Sending callback only if we are still running
 			var completedRatio = calculateCompletedRatio(jobs.GetTotalCount(), jobs.GetCompletedCount()+1)
-			clients.DefaultCallbackClient.SendTranscodeStatus(transcodeRequest.CallbackURL, transcodeRequest.RequestID, clients.TranscodeStatusTranscoding, completedRatio)
+			transcodeRequest.ReportStatus(clients.NewTranscodeStatusProgress(transcodeRequest.CallbackURL, transcodeRequest.RequestID, clients.TranscodeStatusTranscoding, completedRatio))
 		}
 		return nil
 	})

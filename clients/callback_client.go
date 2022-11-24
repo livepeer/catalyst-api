@@ -16,7 +16,14 @@ import (
 
 const MAX_TIME_WITHOUT_UPDATE = 30 * time.Minute
 
-var DefaultCallbackClient = NewPeriodicCallbackClient(15 * time.Second)
+// The default client is only used for the recording event. This is to avoid
+// misusing the singleton client to send transcode status updates, which should
+// be sent through the JobInfo.ReportStatus function instead.
+var recordingCallbackClient = NewPeriodicCallbackClient(15 * time.Second)
+
+func SendRecordingEventCallback(event *RecordingEvent) {
+	recordingCallbackClient.SendRecordingEvent(event)
+}
 
 type PeriodicCallbackClient struct {
 	requestIDToLatestMessage map[string]TranscodeStatusMessage
@@ -69,17 +76,10 @@ func recoverer(f func()) {
 // Sends a Transcode Status message to the Client (initially just Studio)
 // The status strings will be useful for debugging where in the workflow we got to, but everything
 // in Studio will be driven off the overall "Completion Ratio".
-// This method will accept the completion ratio of the current stage and will translate that into the overall ratio
-func (pcc *PeriodicCallbackClient) SendTranscodeStatus(url, requestID string, status TranscodeStatus, currentStageCompletionRatio float64) {
-	tsm := TranscodeStatusMessage{
-		URL:             url,
-		RequestID:       requestID,
-		CompletionRatio: OverallCompletionRatio(status, currentStageCompletionRatio),
-		Status:          status.String(),
-		Timestamp:       config.Clock.GetTimestampUTC(),
-	}
-
-	pcc.statusCallback(tsm)
+func (pcc *PeriodicCallbackClient) SendTranscodeStatus(tsm TranscodeStatusMessage) {
+	pcc.mapLock.Lock()
+	defer pcc.mapLock.Unlock()
+	pcc.requestIDToLatestMessage[tsm.RequestID] = tsm
 }
 
 func (pcc *PeriodicCallbackClient) SendRecordingEvent(event *RecordingEvent) {
@@ -102,42 +102,6 @@ func (pcc *PeriodicCallbackClient) SendRecordingEvent(event *RecordingEvent) {
 			return
 		}
 	}()
-}
-
-func (pcc *PeriodicCallbackClient) SendTranscodeStatusError(url, requestID, errorMsg string) {
-	tsm := TranscodeStatusMessage{
-		URL:       url,
-		RequestID: requestID,
-		Error:     errorMsg,
-		Status:    TranscodeStatusError.String(),
-		Timestamp: config.Clock.GetTimestampUTC(),
-	}
-
-	pcc.statusCallback(tsm)
-}
-
-// Separate method as this requires a much richer message than the other status callbacks
-func (pcc *PeriodicCallbackClient) SendTranscodeStatusCompleted(url, requestID string, iv InputVideo, ov []OutputVideo) {
-	tsm := TranscodeStatusMessage{
-		URL:             url,
-		CompletionRatio: OverallCompletionRatio(TranscodeStatusCompleted, 1),
-		RequestID:       requestID,
-		Status:          TranscodeStatusCompleted.String(),
-		Timestamp:       config.Clock.GetTimestampUTC(),
-		Type:            "video", // Assume everything is a video for now
-		InputVideo:      iv,
-		Outputs:         ov,
-	}
-
-	pcc.statusCallback(tsm)
-}
-
-// Update with a status message
-func (pcc *PeriodicCallbackClient) statusCallback(tsm TranscodeStatusMessage) {
-	pcc.mapLock.Lock()
-	defer pcc.mapLock.Unlock()
-
-	pcc.requestIDToLatestMessage[tsm.RequestID] = tsm
 }
 
 // Loop over all active jobs, sending a (non-blocking) HTTP callback for each
@@ -180,8 +144,8 @@ func (pcc *PeriodicCallbackClient) SendCallbacks() {
 			}
 		}(tsm)
 
-		// Error is a terminal state, so remove the job from the list after sending the callback
-		if tsm.Status == TranscodeStatusError.String() || tsm.Status == TranscodeStatusCompleted.String() {
+		// Error is a terminal state so remove the job from the list after sending the callback
+		if tsm.IsTerminal() {
 			log.Log(tsm.RequestID, "Removing job from active list")
 			delete(pcc.requestIDToLatestMessage, tsm.RequestID)
 		}
@@ -203,38 +167,4 @@ func (pcc *PeriodicCallbackClient) doWithRetries(r *http.Request) error {
 	}
 
 	return nil
-}
-
-// Calculate the overall completion ratio based on the completion ratio of the current stage.
-// The weighting will need to be tweaked as we understand better the relative time spent in the
-// segmenting vs. transcoding stages.
-func OverallCompletionRatio(status TranscodeStatus, currentStageCompletionRatio float64) float64 {
-	// Sanity check the inputs are within the 0-1 bounds
-	if currentStageCompletionRatio < 0 {
-		currentStageCompletionRatio = 0
-	}
-	if currentStageCompletionRatio > 1 {
-		currentStageCompletionRatio = 1
-	}
-
-	// These are at the end of stages, so should always be 100% complete
-	if status == TranscodeStatusPreparingCompleted || status == TranscodeStatusCompleted {
-		currentStageCompletionRatio = 1
-	}
-
-	switch status {
-	case TranscodeStatusPreparing, TranscodeStatusPreparingCompleted:
-		return scaleProgress(currentStageCompletionRatio, 0, 0.4)
-	case TranscodeStatusTranscoding:
-		return scaleProgress(currentStageCompletionRatio, 0.4, 0.9)
-	case TranscodeStatusCompleted:
-		return scaleProgress(currentStageCompletionRatio, 0.9, 1)
-	}
-
-	// Either unhandled or an error
-	return -1
-}
-
-func scaleProgress(progress, start, end float64) float64 {
-	return start + progress*(end-start)
 }

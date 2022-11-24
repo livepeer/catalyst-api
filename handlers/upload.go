@@ -144,7 +144,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 
 		// Once we're happy with the request, do the rest of the Segmenting stage asynchronously to allow us to
 		// from the API call and free up the HTTP connection
-		d.VODEngine.CreateUploadJob(pipeline.UploadJobPayload{
+		d.VODEngine.StartUploadJob(pipeline.UploadJobPayload{
 			SourceFile:          uploadVODRequest.Url,
 			CallbackURL:         uploadVODRequest.CallbackUrl,
 			TargetURL:           targetURL,

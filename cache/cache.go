@@ -2,8 +2,6 @@ package cache
 
 import (
 	"sync"
-
-	"github.com/livepeer/catalyst-api/log"
 )
 
 type Cache[T interface{}] struct {
@@ -17,11 +15,10 @@ func New[T interface{}]() *Cache[T] {
 	}
 }
 
-func (c *Cache[T]) Remove(requestID, streamName string) {
+func (c *Cache[T]) Remove(streamName string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	delete(c.cache, streamName)
-	log.Log(requestID, "Deleting from Segmenting Cache", "stream_name", streamName)
 }
 
 func (c *Cache[T]) Get(streamName string) T {
@@ -39,7 +36,6 @@ func (c *Cache[T]) Store(streamName string, value T) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	c.cache[streamName] = value
-	// log.Log(streamInfo.RequestID, "Writing to Segmenting Cache", "stream_name", streamName)
 }
 
 func (c *Cache[T]) UnittestIntrospection() *map[string]T {

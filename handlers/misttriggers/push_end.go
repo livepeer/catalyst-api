@@ -56,7 +56,7 @@ func (d *MistCallbackHandlersCollection) TriggerPushEnd(w http.ResponseWriter, r
 
 	switch streamNameToPipeline(p.StreamName) {
 	case Segmenting:
-		d.VODEngine.HandlePushEndTrigger(pipeline.PushEndPayload{
+		d.VODEngine.TriggerPushEnd(pipeline.PushEndPayload{
 			StreamName:     p.StreamName,
 			PushStatus:     p.PushStatus,
 			Last10LogLines: p.Last10LogLines,
@@ -82,7 +82,7 @@ func (d *MistCallbackHandlersCollection) RecordingPushEnd(w http.ResponseWriter,
 		log.LogNoRequestID("RecordingPushEnd extract uuid failed %v", err)
 		return
 	}
-	clients.DefaultCallbackClient.SendRecordingEvent(event)
+	clients.SendRecordingEventCallback(event)
 }
 
 func uuidFromPushUrl(uri string) (string, error) {
