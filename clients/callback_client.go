@@ -48,8 +48,10 @@ func NewPeriodicCallbackClient(callbackInterval time.Duration) *PeriodicCallback
 func (pcc *PeriodicCallbackClient) Start() *PeriodicCallbackClient {
 	go func() {
 		for {
-			recoverer(pcc.SendCallbacks)
-			time.Sleep(pcc.callbackInterval)
+			recoverer(func() {
+				time.Sleep(pcc.callbackInterval)
+				pcc.SendCallbacks()
+			})
 		}
 	}()
 	return pcc
@@ -59,7 +61,6 @@ func recoverer(f func()) {
 	defer func() {
 		if err := recover(); err != nil {
 			log.LogNoRequestID("panic in callback goroutine, recovering", "err", err)
-			go recoverer(f)
 		}
 	}()
 	f()
