@@ -59,7 +59,6 @@ func recoverer(f func()) {
 	defer func() {
 		if err := recover(); err != nil {
 			log.LogNoRequestID("panic in callback goroutine, recovering", "err", err)
-			go recoverer(f)
 		}
 	}()
 	f()
