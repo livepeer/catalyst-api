@@ -18,11 +18,11 @@ type mist struct {
 	MistClient clients.MistAPIClient
 }
 
-func (m *mist) HandleStartUploadJob(job *JobInfo, p UploadJobPayload) error {
+func (m *mist) HandleStartUploadJob(job *JobInfo) error {
 	// Arweave URLs don't support HTTP Range requests and so Mist can't natively handle them for segmenting
 	// This workaround copies the file from Arweave to S3 and then tells Mist to use the S3 URL
 	if clients.IsArweaveOrIPFSURL(job.SourceFile) {
-		newSourceURL, err := InSameDirectory(p.TargetURL, "source", "arweave-source.mp4")
+		newSourceURL, err := InSameDirectory(job.TargetURL, "source", "arweave-source.mp4")
 		if err != nil {
 			return fmt.Errorf("cannot create location for arweave source copy: %w", err)
 		}

@@ -24,7 +24,7 @@ func ListenAndServe(apiPort, mistPort, mistHttpPort int, apiToken string) error 
 
 	// Kick off the callback client, to send job update messages on a regular interval
 	statusClient := clients.NewPeriodicCallbackClient(15 * time.Second).Start()
-	vodEngine := pipeline.NewCoordinator(mc, statusClient)
+	vodEngine := pipeline.NewCoordinator(pipeline.StrategyCatalystDominance, mc, statusClient)
 
 	listen := fmt.Sprintf("0.0.0.0:%d", apiPort)
 	router := NewCatalystAPIRouter(vodEngine, apiToken)

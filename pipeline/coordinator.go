@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 	"sync"
 	"time"
 
@@ -12,6 +13,15 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
+)
+
+type Strategy int
+
+const (
+	StrategyCatalystDominance Strategy = iota
+	StrategyBackgroundMediaConvert
+	StrategyBackgroundMist
+	StrategyFallbackMediaConvert
 )
 
 type UploadJobPayload struct {
@@ -50,7 +60,7 @@ type JobInfo struct {
 }
 
 type Handler interface {
-	HandleStartUploadJob(job *JobInfo, p UploadJobPayload) error
+	HandleStartUploadJob(job *JobInfo) error
 	HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) error
 	HandlePushEndTrigger(job *JobInfo, p PushEndPayload) error
 }
@@ -61,11 +71,13 @@ type Coordinator interface {
 	TriggerPushEnd(p PushEndPayload)
 }
 
-func NewCoordinator(mistClient clients.MistAPIClient, statusClient *clients.PeriodicCallbackClient) Coordinator {
+func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient, statusClient *clients.PeriodicCallbackClient) Coordinator {
 	return &coord{
-		mistPipeline: &mist{mistClient},
-		statusClient: statusClient,
-		Jobs:         cache.New[*JobInfo](),
+		strategy:         strategy,
+		statusClient:     statusClient,
+		pipeMist:         &mist{mistClient},
+		pipeMediaConvert: &mediaconvert{},
+		Jobs:             cache.New[*JobInfo](),
 	}
 }
 
@@ -73,24 +85,57 @@ func NewStubCoordinator(statusClient *clients.PeriodicCallbackClient) *coord {
 	if statusClient == nil {
 		statusClient = clients.NewPeriodicCallbackClient(100 * time.Minute)
 	}
-	return NewCoordinator(clients.StubMistClient{}, statusClient).(*coord)
+	return NewCoordinator(StrategyCatalystDominance, clients.StubMistClient{}, statusClient).(*coord)
 }
 
 type coord struct {
-	mistPipeline *mist
+	strategy     Strategy
 	statusClient *clients.PeriodicCallbackClient
+
+	pipeMist         *mist
+	pipeMediaConvert *mediaconvert
 
 	Jobs *cache.Cache[*JobInfo]
 }
 
 func (c *coord) StartUploadJob(p UploadJobPayload) {
-	requestID, streamName := p.RequestID, config.SegmentingStreamName(p.RequestID)
+	switch c.strategy {
+	case StrategyCatalystDominance:
+		c.startOneUploadJob(p, c.pipeMist, true)
+	case StrategyBackgroundMediaConvert:
+		c.startOneUploadJob(p, c.pipeMist, true)
+		c.startOneUploadJob(p, c.pipeMediaConvert, false)
+	case StrategyBackgroundMist:
+		c.startOneUploadJob(p, c.pipeMediaConvert, true)
+		c.startOneUploadJob(p, c.pipeMist, false)
+	case StrategyFallbackMediaConvert:
+		// nolint:errcheck
+		go recovered(func() error {
+			// TODO: Also need to filter the error callback from the first pipeline so
+			// we can silently do the MediaConvert flow underneath.
+			success := <-c.startOneUploadJob(p, c.pipeMist, true)
+			if !success {
+				c.startOneUploadJob(p, c.pipeMediaConvert, true)
+			}
+			return nil
+		})
+	}
+}
+
+func (c *coord) startOneUploadJob(p UploadJobPayload, handler Handler, foreground bool) <-chan bool {
+	requestID, innerStatusClient := p.RequestID, c.statusClient
+	if !foreground {
+		requestID = fmt.Sprintf("bg_%s", requestID)
+		innerStatusClient = nil
+	}
+	streamName := config.SegmentingStreamName(requestID)
 	log.AddContext(requestID, "stream_name", streamName)
+	result := make(chan bool, 1)
 	si := &JobInfo{
 		UploadJobPayload: p,
 		StreamName:       streamName,
-		ReportStatus:     c.transcodeStatusReporter(c.statusClient, requestID, streamName),
-		handler:          c.mistPipeline,
+		ReportStatus:     c.transcodeStatusReporter(innerStatusClient, requestID, streamName, result),
+		handler:          handler,
 	}
 	si.ReportStatus(clients.NewTranscodeStatusProgress(si.CallbackURL, requestID, clients.TranscodeStatusPreparing, 0))
 
@@ -98,8 +143,9 @@ func (c *coord) StartUploadJob(p UploadJobPayload) {
 	log.Log(si.RequestID, "Wrote to jobs cache")
 
 	go callbackWrapped(si, func() error {
-		return si.handler.HandleStartUploadJob(si, p)
+		return si.handler.HandleStartUploadJob(si)
 	})
+	return result
 }
 
 func (c *coord) TriggerRecordingEnd(p RecordingEndPayload) {
@@ -124,7 +170,7 @@ func (c *coord) TriggerPushEnd(p PushEndPayload) {
 	})
 }
 
-func (c *coord) transcodeStatusReporter(statusClient *clients.PeriodicCallbackClient, requestID, streamName string) TranscodeStatusReporter {
+func (c *coord) transcodeStatusReporter(statusClient *clients.PeriodicCallbackClient, requestID, streamName string, result chan<- bool) TranscodeStatusReporter {
 	return func(tsm clients.TranscodeStatusMessage) {
 		if statusClient != nil {
 			statusClient.SendTranscodeStatus(tsm)
@@ -138,8 +184,14 @@ func (c *coord) transcodeStatusReporter(statusClient *clients.PeriodicCallbackCl
 
 			// Automatically delete jobs after terminal status updates
 			if tsm.IsTerminal() {
+				defer close(result)
+
 				c.Jobs.Remove(streamName)
 				log.Log(requestID, "Deleted from Jobs Cache")
+
+				success := tsm.Status == clients.TranscodeStatusCompleted.String()
+				metrics.Metrics.UploadVODPipelineResults.WithLabelValues(strconv.FormatBool(success)).Inc()
+				result <- success
 			}
 			return nil
 		})
@@ -152,7 +204,6 @@ func callbackWrapped(job *JobInfo, f func() error) {
 	err := recovered(f)
 	if err != nil {
 		job.ReportStatus(clients.NewTranscodeStatusError(job.CallbackURL, job.RequestID, err.Error()))
-		metrics.Metrics.UploadVODPipelineFailureCount.Inc()
 	}
 }
 
