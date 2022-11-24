@@ -86,6 +86,7 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 	streamInfo, err := d.MistClient.GetStreamInfo(p.StreamName)
 	if err != nil {
 		log.LogError(requestID, "Failed to get stream info", err)
+		clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, requestID, "Failed to get stream info")
 		return
 	}
 
@@ -98,6 +99,7 @@ func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.Re
 	}
 	if math.Abs(float64(inputVideoLengthMillis-p.StreamMediaDurationMillis)) > 500 {
 		log.Log(requestID, "Input video duration does not match segmented video duration", "input_duration_ms", inputVideoLengthMillis, "segmented_duration_ms", p.StreamMediaDurationMillis)
+		clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, requestID, "Input video duration does not match segmented video duration")
 		return
 	}
 
