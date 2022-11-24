@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/go-tools/drivers"
 )
@@ -38,7 +39,7 @@ func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 	})
 
 	start := time.Now()
-	err = backoff.Retry(readOperation, backoff.WithMaxRetries(constantBackOff, 15))
+	err = backoff.Retry(readOperation, backoff.WithMaxRetries(constantBackOff, config.DownloadOSURLRetries))
 	if err != nil {
 		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(url, "read").Inc()
 		return nil, fmt.Errorf("failed to read from OS URL %q: %s", osURL, err)

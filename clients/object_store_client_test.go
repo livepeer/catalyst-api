@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -79,8 +80,15 @@ func TestItRetriesReadingData(t *testing.T) {
 }
 
 func TestItFailsAfterMaxReadsReached(t *testing.T) {
-	var retries = 0
+	var retries uint64 = 0
 	var original = makeOperation
+
+	var originalRetries = config.DownloadOSURLRetries
+	config.DownloadOSURLRetries = 3
+	defer func() {
+		config.DownloadOSURLRetries = originalRetries
+	}()
+
 	makeOperation = func(fn func() error) func() error {
 		return func() error {
 			retries++
@@ -101,7 +109,7 @@ func TestItFailsAfterMaxReadsReached(t *testing.T) {
 	_, err = DownloadOSURL(f.Name())
 
 	require.Error(t, err)
-	require.Equal(t, 16, retries)
+	require.Equal(t, config.DownloadOSURLRetries+1, retries)
 }
 
 func TestItRetriesSavingData(t *testing.T) {
