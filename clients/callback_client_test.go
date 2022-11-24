@@ -46,8 +46,8 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 	// Send the status in, but it shouldn't get sent yet because we haven't started the client
 	client.SendTranscodeStatus(svr.URL, "example-request-id", TranscodeStatusCompleted, 1)
 
-	// Start the client and wait for an iteration of the loop
-	client.Start()
+	// Trigger the callback client to send any pending callbacks
+	client.SendCallbacks()
 	time.Sleep(1 * time.Second)
 
 	require.Equal(t, int64(3), atomic.LoadInt64(&tries), "Expected the client to retry on failed callbacks")

@@ -148,7 +148,7 @@ low-bitrate/index.m3u8
 	require.Equal(t, expectedMasterManifest, string(masterManifestBytes))
 
 	// Start the callback client, to let it run for one iteration
-	clients.DefaultCallbackClient.Start()
+	clients.DefaultCallbackClient.SendCallbacks()
 
 	// Wait for the callbacks to arrive
 	time.Sleep(100 * time.Millisecond)

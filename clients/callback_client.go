@@ -47,8 +47,8 @@ func (pcc *PeriodicCallbackClient) Start() *PeriodicCallbackClient {
 	go func() {
 		for {
 			recoverer(func() {
-				pcc.SendCallbacks()
 				time.Sleep(pcc.callbackInterval)
+				pcc.SendCallbacks()
 			})
 		}
 	}()
