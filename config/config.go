@@ -26,4 +26,4 @@ var TranscodingParallelJobs int = 2
 
 var TranscodingParallelSleep time.Duration = 713 * time.Millisecond
 
-var DownloadOSURLRetries uint64 = 15
+var DownloadOSURLRetries uint64 = 10
