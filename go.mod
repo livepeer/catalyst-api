@@ -10,7 +10,7 @@ require (
 	github.com/livepeer/go-tools v0.0.0-20221115155924-5c5eee72e093
 	github.com/livepeer/livepeer-data v0.5.2
 	github.com/minio/madmin-go v1.7.5
-	github.com/prometheus/client_golang v1.13.0
+	github.com/prometheus/client_golang v1.14.0
 	github.com/stretchr/testify v1.8.0
 	github.com/xeipuuv/gojsonschema v1.2.0
 	sigs.k8s.io/yaml v1.3.0
