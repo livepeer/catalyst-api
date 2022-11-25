@@ -244,7 +244,7 @@ waitsegmenting:
 		select {
 		case message := <-callbacks:
 			// 0.2 is final progress reported for TranscodeStatusPreparing from UploadVOD()
-			if message.Status == "preparing" && message.CompletionRatio == clients.OverallCompletionRatio(clients.TranscodeStatusPreparing, 0.2) {
+			if message.Status == "preparing" && message.CompletionRatio == clients.OverallCompletionRatio(clients.TranscodeStatusPreparing, 0.3) {
 				break waitsegmenting
 			}
 			// Fail on any error in callbacks

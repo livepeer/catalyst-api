@@ -154,6 +154,9 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			streamName := config.SegmentingStreamName(requestID)
 			log.AddContext(requestID, "stream_name", streamName)
 
+			// Kick off the callback mechanism and let the caller know we've started processing
+			clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, requestID, clients.TranscodeStatusPreparing, 0)
+
 			// Arweave URLs don't support HTTP Range requests and so Mist can't natively handle them for segmenting
 			// This workaround copies the file from Arweave to S3 and then tells Mist to use the S3 URL
 			if clients.IsArweaveOrIPFSURL(uploadVODRequest.Url) {
@@ -171,6 +174,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 					return
 				}
 				uploadVODRequest.Url = newSourceURL.String()
+				clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, requestID, clients.TranscodeStatusPreparing, 0.1)
 			}
 
 			cache.DefaultStreamCache.Segmenting.Store(streamName, cache.StreamInfo{
@@ -183,8 +187,6 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 				Profiles:        uploadVODRequest.Profiles,
 			})
 
-			clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, requestID, clients.TranscodeStatusPreparing, 0)
-
 			// Attempt an out-of-band call to generate the dtsh headers using MistIn*
 			var dtshStartTime = time.Now()
 			dstDir, _ := filepath.Split(targetSegmentedOutputURL.String())
@@ -195,7 +197,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 				log.Log(requestID, "Generated DTSH File", "dtsh_generation_duration", time.Since(dtshStartTime).String())
 			}
 
-			clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, requestID, clients.TranscodeStatusPreparing, 0.1)
+			clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, requestID, clients.TranscodeStatusPreparing, 0.2)
 
 			log.Log(requestID, "Beginning segmenting")
 			// Tell Mist to do the segmenting. Upon completion / error, Mist will call Triggers to notify us.
@@ -205,7 +207,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 				return
 			}
 
-			clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, requestID, clients.TranscodeStatusPreparing, 0.2)
+			clients.DefaultCallbackClient.SendTranscodeStatus(uploadVODRequest.CallbackUrl, requestID, clients.TranscodeStatusPreparing, 0.3)
 		}()
 
 		respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})
