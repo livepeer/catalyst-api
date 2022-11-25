@@ -15,15 +15,23 @@ import (
 	"github.com/livepeer/catalyst-api/metrics"
 )
 
+// Strategy indicates how the pipelines should be coordinated. Mainly changes
+// which pipelines to execute, in what order, and which ones go in background.
+// Background pipelines are only logged and are not reported back to the client.
 type Strategy int
 
 const (
+	// Only execute the Catalyst (Mist) pipeline.
 	StrategyCatalystDominance Strategy = iota
+	// Execute the Mist pipeline in foreground and MediaConvert in background.
 	StrategyBackgroundMediaConvert
+	// Execute the MediaConvert pipeline in foreground and Mist in background.
 	StrategyBackgroundMist
+	// Execute the Mist pipeline fist and fallback to MediaConvert on errors.
 	StrategyFallbackMediaConvert
 )
 
+// UploadJobPayload is the required payload to start an upload job.
 type UploadJobPayload struct {
 	SourceFile            string
 	CallbackURL           string
@@ -36,20 +44,24 @@ type UploadJobPayload struct {
 	Profiles              []clients.EncodedProfile
 }
 
+// RecordingEndPayload is the required payload from a recording end trigger.
 type RecordingEndPayload struct {
 	StreamName                string
 	StreamMediaDurationMillis int64
 	WrittenBytes              int
 }
 
+// PushsEndPayload is the required payload from a push end trigger.
 type PushEndPayload struct {
 	StreamName     string
 	PushStatus     string
 	Last10LogLines string
 }
 
+// TranscodeStatusReporter represents a function to report status on the job.
 type TranscodeStatusReporter func(clients.TranscodeStatusMessage)
 
+// JobInfo represents the state of a single upload job.
 type JobInfo struct {
 	mu sync.Mutex
 	UploadJobPayload
@@ -59,15 +71,38 @@ type JobInfo struct {
 	handler Handler
 }
 
+// Handler represents a single pipeline handler to be plugged to the coordinator
+// general job management logic.
+//
+// Implementers of the interface only need to worry about the logic they want to
+// execute, already receiving the *JobInfo as an argument and running in a
+// locked context on that object.
+//
+// Hence there is also the restriction that only one of these functions may
+// execute concurrently. All functions run in a goroutine, so they can block as
+// much as needed and they should not leave background jobs running after
+// returning.
 type Handler interface {
+	// Handle start job request. This may start async processes like on mist an
+	// wait for triggers or do the full job synchronously on exeution.
 	HandleStartUploadJob(job *JobInfo) error
+	// Handle the recording_end trigger in case a mist stream is created (only
+	// used for segmenting today).
 	HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) error
+	// Handle the push_end trigger in case a mist stream is created (only used for
+	// segmenting today).
 	HandlePushEndTrigger(job *JobInfo, p PushEndPayload) error
 }
 
+// Coordinator is the main interface to handle the pipelines. It should be
+// called directly from the API handlers and never blocks on execution but
+// rather schedules some routines in background.
 type Coordinator interface {
+	// Starts a new upload job.
 	StartUploadJob(p UploadJobPayload)
+	// Handle RECORDING_END trigger from mist.
 	TriggerRecordingEnd(p RecordingEndPayload)
+	// Handle PUSH_END trigger from mist.
 	TriggerPushEnd(p PushEndPayload)
 }
 
@@ -98,6 +133,8 @@ type coord struct {
 	Jobs *cache.Cache[*JobInfo]
 }
 
+// This has the main logic regarding the pipeline strategy. It starts jobs and
+// handles processing the response and triggering a fallback if appropriate.
 func (c *coord) StartUploadJob(p UploadJobPayload) {
 	switch c.strategy {
 	case StrategyCatalystDominance:
@@ -122,27 +159,33 @@ func (c *coord) StartUploadJob(p UploadJobPayload) {
 	}
 }
 
+// Starts a single upload job with specified pipeline Handler. If the job is
+// running in background (foreground=false) then:
+//   - the job will have a different requestID
+//   - no transcode status updates will be reported to the caller, only logged
+//   - TODO: the output will go to a different location than the real job
 func (c *coord) startOneUploadJob(p UploadJobPayload, handler Handler, foreground bool) <-chan bool {
-	requestID, innerStatusClient := p.RequestID, c.statusClient
+	statusClient := c.statusClient
 	if !foreground {
-		requestID = fmt.Sprintf("bg_%s", requestID)
-		innerStatusClient = nil
+		p.RequestID = fmt.Sprintf("bg_%s", p.RequestID)
+		statusClient = nil
+		// TODO: change the output path as well
 	}
-	streamName := config.SegmentingStreamName(requestID)
-	log.AddContext(requestID, "stream_name", streamName)
+	streamName := config.SegmentingStreamName(p.RequestID)
+	log.AddContext(p.RequestID, "stream_name", streamName)
 	result := make(chan bool, 1)
 	si := &JobInfo{
 		UploadJobPayload: p,
 		StreamName:       streamName,
-		ReportStatus:     c.transcodeStatusReporter(innerStatusClient, requestID, streamName, result),
+		ReportStatus:     c.transcodeStatusReporter(statusClient, p.RequestID, streamName, result),
 		handler:          handler,
 	}
-	si.ReportStatus(clients.NewTranscodeStatusProgress(si.CallbackURL, requestID, clients.TranscodeStatusPreparing, 0))
+	si.ReportStatus(clients.NewTranscodeStatusProgress(si.CallbackURL, si.RequestID, clients.TranscodeStatusPreparing, 0))
 
 	c.Jobs.Store(streamName, si)
 	log.Log(si.RequestID, "Wrote to jobs cache")
 
-	go callbackWrapped(si, func() error {
+	runHandlerAsync(si, func() error {
 		return si.handler.HandleStartUploadJob(si)
 	})
 	return result
@@ -154,7 +197,7 @@ func (c *coord) TriggerRecordingEnd(p RecordingEndPayload) {
 		log.Log(si.RequestID, "RECORDING_END trigger invoked for unknown stream")
 		return
 	}
-	go callbackWrapped(si, func() error {
+	runHandlerAsync(si, func() error {
 		return si.handler.HandleRecordingEndTrigger(si, p)
 	})
 }
@@ -165,11 +208,18 @@ func (c *coord) TriggerPushEnd(p PushEndPayload) {
 		log.Log(si.RequestID, "PUSH_END trigger invoked for unknown stream", "streamName", p.StreamName)
 		return
 	}
-	go callbackWrapped(si, func() error {
+	runHandlerAsync(si, func() error {
 		return si.handler.HandlePushEndTrigger(si, p)
 	})
 }
 
+// transcodeStatusReporter that wraps the callback client into a function with
+// some additional logic required on the coordinator. Especifically:
+//   - Allows using it as a fake reporter, which doesn't acctually call any
+//     callbacks and only logs the request.
+//   - Logs every status update sent
+//   - Handles terminal status updates and removes the job from the cache, as
+//     well as sending the result back on a channel (&close it after sending).
 func (c *coord) transcodeStatusReporter(statusClient *clients.PeriodicCallbackClient, requestID, streamName string, result chan<- bool) TranscodeStatusReporter {
 	return func(tsm clients.TranscodeStatusMessage) {
 		if statusClient != nil {
@@ -198,13 +248,19 @@ func (c *coord) transcodeStatusReporter(statusClient *clients.PeriodicCallbackCl
 	}
 }
 
-func callbackWrapped(job *JobInfo, f func() error) {
-	job.mu.Lock()
-	defer job.mu.Unlock()
-	err := recovered(f)
-	if err != nil {
-		job.ReportStatus(clients.NewTranscodeStatusError(job.CallbackURL, job.RequestID, err.Error()))
-	}
+// runHandlerAsync starts a background go-routine to run the handler function
+// safely. It locks on the JobInfo object to allow safe mutations inside the
+// handler. It also handles panics and errors, turning them into a transcode
+// status update with an error result.
+func runHandlerAsync(job *JobInfo, handler func() error) {
+	go func() {
+		job.mu.Lock()
+		defer job.mu.Unlock()
+		err := recovered(handler)
+		if err != nil {
+			job.ReportStatus(clients.NewTranscodeStatusError(job.CallbackURL, job.RequestID, err.Error()))
+		}
+	}()
 }
 
 func recovered(f func() error) (err error) {
