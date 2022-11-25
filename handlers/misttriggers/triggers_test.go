@@ -31,7 +31,7 @@ func TestPipelineId(t *testing.T) {
 
 func TestRecordingStart(t *testing.T) {
 	testStartTime := time.Now().UnixMilli()
-	mistCallbackHandlers := &MistCallbackHandlersCollection{VODEngine: pipeline.NewStubCoordinator(nil)}
+	mistCallbackHandlers := &MistCallbackHandlersCollection{VODEngine: pipeline.NewStubCoordinator()}
 	callbackHappened := make(chan bool, 10)
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		payload, err := io.ReadAll(r.Body)
@@ -73,7 +73,7 @@ func TestRecordingStart(t *testing.T) {
 
 func TestRecordingCompleted(t *testing.T) {
 	testStartTime := time.Now().UnixMilli()
-	mistCallbackHandlers := &MistCallbackHandlersCollection{VODEngine: pipeline.NewStubCoordinator(nil)}
+	mistCallbackHandlers := &MistCallbackHandlersCollection{VODEngine: pipeline.NewStubCoordinator()}
 	callbackHappened := make(chan bool, 10)
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		payload, err := io.ReadAll(r.Body)

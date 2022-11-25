@@ -114,7 +114,7 @@ func TestSegmentBodyFormat(t *testing.T) {
 		}`),
 	}
 
-	catalystApiHandlers := CatalystAPIHandlersCollection{VODEngine: pipeline.NewStubCoordinator(nil)}
+	catalystApiHandlers := CatalystAPIHandlersCollection{VODEngine: pipeline.NewStubCoordinator()}
 	router := httprouter.New()
 
 	router.POST("/api/transcode/file", catalystApiHandlers.TranscodeSegment())
@@ -194,7 +194,7 @@ func TestVODHandlerProfiles(t *testing.T) {
 	// Set up out own callback client so that we can ensure it just fires once
 	statusClient := clients.NewPeriodicCallbackClient(100 * time.Minute)
 	// Workflow engine
-	vodEngine := pipeline.NewStubCoordinator(statusClient)
+	vodEngine := pipeline.NewStubCoordinatorOpts(statusClient.SendTranscodeStatus, nil, nil)
 	internalState := vodEngine.Jobs.UnittestIntrospection()
 
 	// Setup handlers to test
@@ -291,7 +291,7 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer callbackServer.Close()
 
-	catalystApiHandlers := CatalystAPIHandlersCollection{VODEngine: pipeline.NewStubCoordinator(nil)}
+	catalystApiHandlers := CatalystAPIHandlersCollection{VODEngine: pipeline.NewStubCoordinator()}
 	var jsonData = `{
 		"url": "http://localhost/input",
 		"callback_url": "CALLBACK_URL",
@@ -332,7 +332,7 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 func TestInvalidPayloadVODUploadHandler(t *testing.T) {
 	require := require.New(t)
 
-	catalystApiHandlers := CatalystAPIHandlersCollection{VODEngine: pipeline.NewStubCoordinator(nil)}
+	catalystApiHandlers := CatalystAPIHandlersCollection{VODEngine: pipeline.NewStubCoordinator()}
 	badRequests := [][]byte{
 		// missing url
 		[]byte(`{
@@ -397,7 +397,7 @@ func TestInvalidPayloadVODUploadHandler(t *testing.T) {
 func TestWrongContentTypeVODUploadHandler(t *testing.T) {
 	require := require.New(t)
 
-	catalystApiHandlers := CatalystAPIHandlersCollection{VODEngine: pipeline.NewStubCoordinator(nil)}
+	catalystApiHandlers := CatalystAPIHandlersCollection{VODEngine: pipeline.NewStubCoordinator()}
 	var jsonData = []byte(`{
 		"url": "http://localhost/input",
 		"callback_url": "http://localhost/callback",

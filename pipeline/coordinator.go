@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
@@ -106,7 +105,7 @@ type Coordinator interface {
 	TriggerPushEnd(p PushEndPayload)
 }
 
-func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient, statusClient *clients.PeriodicCallbackClient) Coordinator {
+func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient, statusClient TranscodeStatusReporter) Coordinator {
 	return &coord{
 		strategy:         strategy,
 		statusClient:     statusClient,
@@ -116,19 +115,34 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient, statusC
 	}
 }
 
-func NewStubCoordinator(statusClient *clients.PeriodicCallbackClient) *coord {
+func NewStubCoordinator() *coord {
+	return NewStubCoordinatorOpts(nil, nil, nil)
+}
+
+func NewStubCoordinatorOpts(statusClient TranscodeStatusReporter, pipeMist, pipeMediaConvert Handler) *coord {
 	if statusClient == nil {
-		statusClient = clients.NewPeriodicCallbackClient(100 * time.Minute)
+		statusClient = func(tsm clients.TranscodeStatusMessage) {}
 	}
-	return NewCoordinator(StrategyCatalystDominance, clients.StubMistClient{}, statusClient).(*coord)
+	if pipeMist == nil {
+		pipeMist = &mist{clients.StubMistClient{}}
+	}
+	if pipeMediaConvert == nil {
+		pipeMediaConvert = &mediaconvert{}
+	}
+	return &coord{
+		strategy:         StrategyCatalystDominance,
+		statusClient:     statusClient,
+		pipeMist:         pipeMist,
+		pipeMediaConvert: pipeMediaConvert,
+		Jobs:             cache.New[*JobInfo](),
+	}
 }
 
 type coord struct {
 	strategy     Strategy
-	statusClient *clients.PeriodicCallbackClient
+	statusClient TranscodeStatusReporter
 
-	pipeMist         *mist
-	pipeMediaConvert *mediaconvert
+	pipeMist, pipeMediaConvert Handler
 
 	Jobs *cache.Cache[*JobInfo]
 }
@@ -220,10 +234,10 @@ func (c *coord) TriggerPushEnd(p PushEndPayload) {
 //   - Logs every status update sent
 //   - Handles terminal status updates and removes the job from the cache, as
 //     well as sending the result back on a channel (&close it after sending).
-func (c *coord) transcodeStatusReporter(statusClient *clients.PeriodicCallbackClient, requestID, streamName string, result chan<- bool) TranscodeStatusReporter {
+func (c *coord) transcodeStatusReporter(sendStatus TranscodeStatusReporter, requestID, streamName string, result chan<- bool) TranscodeStatusReporter {
 	return func(tsm clients.TranscodeStatusMessage) {
-		if statusClient != nil {
-			statusClient.SendTranscodeStatus(tsm)
+		if sendStatus != nil {
+			sendStatus(tsm)
 		}
 		// nolint:errcheck
 		go recovered(func() error {
