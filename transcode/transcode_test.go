@@ -101,11 +101,11 @@ func TestItCanTranscode(t *testing.T) {
 			Renditions: []*clients.RenditionSegment{
 				{
 					Name:      "low-bitrate",
-					MediaData: []byte("pretend media data"),
+					MediaData: make([]byte, 512*1024),
 				},
 				{
 					Name:      strconv.FormatInt(int64(sourceVideoTrack.Height), 10) + "p0",
-					MediaData: []byte("pretend high-def media data"),
+					MediaData: make([]byte, 3*1024*1024),
 				},
 			},
 		},
@@ -135,9 +135,9 @@ func TestItCanTranscode(t *testing.T) {
 	// Confirm the master manifest was created and that it looks like a manifest
 	var expectedMasterManifest = `#EXTM3U
 #EXT-X-VERSION:3
-#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=27,RESOLUTION=2020x2020,NAME="0-2020p0"
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=3195660,RESOLUTION=2020x2020,NAME="0-2020p0"
 2020p0/index.m3u8
-#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=18,RESOLUTION=2020x2020,NAME="1-low-bitrate"
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=532610,RESOLUTION=2020x2020,NAME="1-low-bitrate"
 low-bitrate/index.m3u8
 `
 
