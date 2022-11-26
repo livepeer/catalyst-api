@@ -194,7 +194,7 @@ func TestVODHandlerProfiles(t *testing.T) {
 	// Set up out own callback client so that we can ensure it just fires once
 	statusClient := clients.NewPeriodicCallbackClient(100 * time.Minute)
 	// Workflow engine
-	vodEngine := pipeline.NewStubCoordinatorOpts(statusClient.SendTranscodeStatus, nil, nil)
+	vodEngine := pipeline.NewStubCoordinatorOpts(0, statusClient.SendTranscodeStatus, nil, nil)
 	internalState := vodEngine.Jobs.UnittestIntrospection()
 
 	// Setup handlers to test

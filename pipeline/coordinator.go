@@ -20,8 +20,10 @@ import (
 type Strategy int
 
 const (
+	// Zero value
+	StrategyInvalid Strategy = iota
 	// Only execute the Catalyst (Mist) pipeline.
-	StrategyCatalystDominance Strategy = iota
+	StrategyCatalystDominance
 	// Execute the Mist pipeline in foreground and MediaConvert in background.
 	StrategyBackgroundMediaConvert
 	// Execute the MediaConvert pipeline in foreground and Mist in background.
@@ -93,10 +95,13 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient, statusC
 }
 
 func NewStubCoordinator() *coord {
-	return NewStubCoordinatorOpts(nil, nil, nil)
+	return NewStubCoordinatorOpts(StrategyCatalystDominance, nil, nil, nil)
 }
 
-func NewStubCoordinatorOpts(statusClient TranscodeStatusReporter, pipeMist, pipeMediaConvert Handler) *coord {
+func NewStubCoordinatorOpts(strategy Strategy, statusClient TranscodeStatusReporter, pipeMist, pipeMediaConvert Handler) *coord {
+	if strategy == StrategyInvalid {
+		strategy = StrategyCatalystDominance
+	}
 	if statusClient == nil {
 		statusClient = func(tsm clients.TranscodeStatusMessage) {}
 	}
@@ -107,7 +112,7 @@ func NewStubCoordinatorOpts(statusClient TranscodeStatusReporter, pipeMist, pipe
 		pipeMediaConvert = &mediaconvert{}
 	}
 	return &coord{
-		strategy:         StrategyCatalystDominance,
+		strategy:         strategy,
 		statusClient:     statusClient,
 		pipeMist:         pipeMist,
 		pipeMediaConvert: pipeMediaConvert,
@@ -185,7 +190,7 @@ func (c *coord) startOneUploadJob(p UploadJobPayload, handler Handler, foregroun
 func (c *coord) TriggerRecordingEnd(p RecordingEndPayload) {
 	si := c.Jobs.Get(p.StreamName)
 	if si == nil {
-		log.Log(si.RequestID, "RECORDING_END trigger invoked for unknown stream")
+		log.LogNoRequestID("RECORDING_END trigger invoked for unknown stream", "stream_name", p.StreamName)
 		return
 	}
 	runHandlerAsync(si, func() error {
@@ -257,8 +262,8 @@ func runHandlerAsync(job *JobInfo, handler func() error) {
 func recovered(f func() error) (err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
-			log.LogNoRequestID("panic in callback goroutine, recovering", "err", rec)
-			err = fmt.Errorf("panic in callback goroutine: %v", rec)
+			log.LogNoRequestID("panic in pipeline handler background goroutine, recovering", "err", rec)
+			err = fmt.Errorf("panic in pipeline handler: %v", rec)
 		}
 	}()
 	return f()
