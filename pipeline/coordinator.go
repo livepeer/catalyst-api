@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -59,17 +58,20 @@ type PushEndPayload struct {
 	Last10LogLines string
 }
 
-// TranscodeStatusReporter represents a function to report status on the job.
-type TranscodeStatusReporter func(clients.TranscodeStatusMessage)
-
 // JobInfo represents the state of a single upload job.
 type JobInfo struct {
 	mu sync.Mutex
 	UploadJobPayload
-	StreamName   string
-	ReportStatus TranscodeStatusReporter
+	StreamName string
 
-	handler Handler
+	handler      Handler
+	statusClient clients.TranscodeStatusClient
+	result       chan bool
+}
+
+func (j *JobInfo) ReportProgress(stage clients.TranscodeStatus, completionRatio float64) {
+	tsm := clients.NewTranscodeStatusProgress(j.CallbackURL, j.RequestID, stage, completionRatio)
+	j.statusClient.SendTranscodeStatus(tsm)
 }
 
 // Coordinator is the main interface to handle the pipelines. It should be
@@ -84,7 +86,7 @@ type Coordinator interface {
 	TriggerPushEnd(p PushEndPayload)
 }
 
-func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient, statusClient TranscodeStatusReporter) Coordinator {
+func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient, statusClient clients.TranscodeStatusClient) Coordinator {
 	return &coord{
 		strategy:         strategy,
 		statusClient:     statusClient,
@@ -98,12 +100,12 @@ func NewStubCoordinator() *coord {
 	return NewStubCoordinatorOpts(StrategyCatalystDominance, nil, nil, nil)
 }
 
-func NewStubCoordinatorOpts(strategy Strategy, statusClient TranscodeStatusReporter, pipeMist, pipeMediaConvert Handler) *coord {
+func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeMist, pipeMediaConvert Handler) *coord {
 	if strategy == StrategyInvalid {
 		strategy = StrategyCatalystDominance
 	}
 	if statusClient == nil {
-		statusClient = func(tsm clients.TranscodeStatusMessage) {}
+		statusClient = clients.TranscodeStatusFunc(func(tsm clients.TranscodeStatusMessage) {})
 	}
 	if pipeMist == nil {
 		pipeMist = &mist{clients.StubMistClient{}}
@@ -122,7 +124,7 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient TranscodeStatusRepor
 
 type coord struct {
 	strategy     Strategy
-	statusClient TranscodeStatusReporter
+	statusClient clients.TranscodeStatusClient
 
 	pipeMist, pipeMediaConvert Handler
 
@@ -142,15 +144,14 @@ func (c *coord) StartUploadJob(p UploadJobPayload) {
 		c.startOneUploadJob(p, c.pipeMediaConvert, true)
 		c.startOneUploadJob(p, c.pipeMist, false)
 	case StrategyFallbackMediaConvert:
-		// nolint:errcheck
-		go recovered(func() error {
+		go recovered(func() (t bool, e error) {
 			// TODO: Also need to filter the error callback from the first pipeline so
 			// we can silently do the MediaConvert flow underneath.
 			success := <-c.startOneUploadJob(p, c.pipeMist, true)
 			if !success {
 				c.startOneUploadJob(p, c.pipeMediaConvert, true)
 			}
-			return nil
+			return
 		})
 	}
 }
@@ -161,30 +162,30 @@ func (c *coord) StartUploadJob(p UploadJobPayload) {
 //   - no transcode status updates will be reported to the caller, only logged
 //   - TODO: the output will go to a different location than the real job
 func (c *coord) startOneUploadJob(p UploadJobPayload, handler Handler, foreground bool) <-chan bool {
-	statusClient := c.statusClient
 	if !foreground {
 		p.RequestID = fmt.Sprintf("bg_%s", p.RequestID)
-		statusClient = nil
+		p.CallbackURL = ""
 		// TODO: change the output path as well
 	}
 	streamName := config.SegmentingStreamName(p.RequestID)
 	log.AddContext(p.RequestID, "stream_name", streamName)
-	result := make(chan bool, 1)
+
 	si := &JobInfo{
 		UploadJobPayload: p,
 		StreamName:       streamName,
-		ReportStatus:     c.transcodeStatusReporter(statusClient, p.RequestID, streamName, result),
+		statusClient:     c.statusClient,
 		handler:          handler,
+		result:           make(chan bool, 1),
 	}
-	si.ReportStatus(clients.NewTranscodeStatusProgress(si.CallbackURL, si.RequestID, clients.TranscodeStatusPreparing, 0))
+	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 
 	c.Jobs.Store(streamName, si)
 	log.Log(si.RequestID, "Wrote to jobs cache")
 
-	runHandlerAsync(si, func() error {
+	c.runHandlerAsync(si, func() (*HandlerOutput, error) {
 		return si.handler.HandleStartUploadJob(si)
 	})
-	return result
+	return si.result
 }
 
 func (c *coord) TriggerRecordingEnd(p RecordingEndPayload) {
@@ -193,7 +194,7 @@ func (c *coord) TriggerRecordingEnd(p RecordingEndPayload) {
 		log.LogNoRequestID("RECORDING_END trigger invoked for unknown stream", "stream_name", p.StreamName)
 		return
 	}
-	runHandlerAsync(si, func() error {
+	c.runHandlerAsync(si, func() (*HandlerOutput, error) {
 		return si.handler.HandleRecordingEndTrigger(si, p)
 	})
 }
@@ -204,62 +205,49 @@ func (c *coord) TriggerPushEnd(p PushEndPayload) {
 		log.Log(si.RequestID, "PUSH_END trigger invoked for unknown stream", "streamName", p.StreamName)
 		return
 	}
-	runHandlerAsync(si, func() error {
+	c.runHandlerAsync(si, func() (*HandlerOutput, error) {
 		return si.handler.HandlePushEndTrigger(si, p)
 	})
-}
-
-// transcodeStatusReporter that wraps the callback client into a function with
-// some additional logic required on the coordinator. Especifically:
-//   - Allows using it as a fake reporter, which doesn't acctually call any
-//     callbacks and only logs the request.
-//   - Logs every status update sent
-//   - Handles terminal status updates and removes the job from the cache, as
-//     well as sending the result back on a channel (&close it after sending).
-func (c *coord) transcodeStatusReporter(sendStatus TranscodeStatusReporter, requestID, streamName string, result chan<- bool) TranscodeStatusReporter {
-	return func(tsm clients.TranscodeStatusMessage) {
-		if sendStatus != nil {
-			sendStatus(tsm)
-		}
-		// nolint:errcheck
-		go recovered(func() error {
-			rawStatus, _ := json.Marshal(tsm)
-			log.Log(requestID, "Pipeline coordinator status update",
-				"timestamp", tsm.Timestamp, "status", tsm.Status, "completion_ratio", tsm.CompletionRatio,
-				"error", tsm.Error, "raw", string(rawStatus))
-
-			// Automatically delete jobs after terminal status updates
-			if tsm.IsTerminal() {
-				defer close(result)
-
-				c.Jobs.Remove(streamName)
-				log.Log(requestID, "Deleted from Jobs Cache")
-
-				success := tsm.Status == clients.TranscodeStatusCompleted.String()
-				metrics.Metrics.UploadVODPipelineResults.WithLabelValues(strconv.FormatBool(success)).Inc()
-				result <- success
-			}
-			return nil
-		})
-	}
 }
 
 // runHandlerAsync starts a background go-routine to run the handler function
 // safely. It locks on the JobInfo object to allow safe mutations inside the
 // handler. It also handles panics and errors, turning them into a transcode
 // status update with an error result.
-func runHandlerAsync(job *JobInfo, handler func() error) {
-	go func() {
+func (c *coord) runHandlerAsync(job *JobInfo, handler func() (*HandlerOutput, error)) {
+	go recovered(func() (t bool, e error) {
 		job.mu.Lock()
 		defer job.mu.Unlock()
-		err := recovered(handler)
-		if err != nil {
-			job.ReportStatus(clients.NewTranscodeStatusError(job.CallbackURL, job.RequestID, err.Error()))
+
+		out, err := recovered(handler)
+		if err != nil || !out.Continue {
+			c.finishJob(job, out, err)
 		}
-	}()
+		// dummy
+		return
+	})
 }
 
-func recovered(f func() error) (err error) {
+func (c *coord) finishJob(job *JobInfo, out *HandlerOutput, err error) {
+	defer close(job.result)
+	var tsm clients.TranscodeStatusMessage
+	if err != nil {
+		tsm = clients.NewTranscodeStatusError(job.CallbackURL, job.RequestID, err.Error())
+	} else {
+		tsm = clients.NewTranscodeStatusCompleted(job.CallbackURL, job.RequestID, out.Result.InputVideo, out.Result.Outputs)
+	}
+	job.statusClient.SendTranscodeStatus(tsm)
+
+	// Automatically delete jobs after an error or result
+	c.Jobs.Remove(job.StreamName)
+	log.Log(job.RequestID, "Deleted from Jobs Cache")
+
+	success := err == nil
+	metrics.Metrics.UploadVODPipelineResults.WithLabelValues(strconv.FormatBool(success)).Inc()
+	job.result <- success
+}
+
+func recovered[T any](f func() (T, error)) (t T, err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			log.LogNoRequestID("panic in pipeline handler background goroutine, recovering", "err", rec)

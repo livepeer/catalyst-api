@@ -113,7 +113,9 @@ func TestItCanTranscode(t *testing.T) {
 		TranscodeSegmentRequest{
 			CallbackURL:       callbackServer.URL,
 			SourceManifestURL: manifestFile.Name(),
-			ReportStatus:      statusClient.SendTranscodeStatus,
+			ReportProgress: func(stage clients.TranscodeStatus, completionRatio float64) {
+				statusClient.SendTranscodeStatus(clients.NewTranscodeStatusProgress(callbackServer.URL, "", stage, completionRatio))
+			},
 		},
 		"streamName",
 		clients.InputVideo{

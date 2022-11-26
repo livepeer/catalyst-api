@@ -25,6 +25,16 @@ func SendRecordingEventCallback(event *RecordingEvent) {
 	recordingCallbackClient.SendRecordingEvent(event)
 }
 
+type TranscodeStatusClient interface {
+	SendTranscodeStatus(tsm TranscodeStatusMessage)
+}
+
+type TranscodeStatusFunc func(tsm TranscodeStatusMessage)
+
+func (f TranscodeStatusFunc) SendTranscodeStatus(tsm TranscodeStatusMessage) {
+	f(tsm)
+}
+
 type PeriodicCallbackClient struct {
 	requestIDToLatestMessage map[string]TranscodeStatusMessage
 	mapLock                  sync.RWMutex
@@ -77,9 +87,16 @@ func recoverer(f func()) {
 // The status strings will be useful for debugging where in the workflow we got to, but everything
 // in Studio will be driven off the overall "Completion Ratio".
 func (pcc *PeriodicCallbackClient) SendTranscodeStatus(tsm TranscodeStatusMessage) {
-	pcc.mapLock.Lock()
-	defer pcc.mapLock.Unlock()
-	pcc.requestIDToLatestMessage[tsm.RequestID] = tsm
+	if tsm.URL != "" {
+		pcc.mapLock.Lock()
+		pcc.requestIDToLatestMessage[tsm.RequestID] = tsm
+		pcc.mapLock.Unlock()
+	}
+
+	rawStatus, _ := json.Marshal(tsm)
+	log.Log(tsm.RequestID, "Updated transcode status",
+		"timestamp", tsm.Timestamp, "status", tsm.Status, "completion_ratio", tsm.CompletionRatio,
+		"error", tsm.Error, "raw", string(rawStatus))
 }
 
 func (pcc *PeriodicCallbackClient) SendRecordingEvent(event *RecordingEvent) {
