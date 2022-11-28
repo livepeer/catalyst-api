@@ -274,7 +274,7 @@ func getPlaybackProfiles(iv clients.InputVideo) ([]clients.EncodedProfile, error
 }
 
 func lowBitrateProfile(video clients.InputTrack) clients.EncodedProfile {
-	bitrate := video.Bitrate / 3
+	bitrate := int64(float64(video.Bitrate) * (1.0 / 2.0))
 	if bitrate < MIN_VIDEO_BITRATE && video.Bitrate > MIN_VIDEO_BITRATE {
 		bitrate = MIN_VIDEO_BITRATE
 	} else if bitrate < ABSOLUTE_MIN_VIDEO_BITRATE {
