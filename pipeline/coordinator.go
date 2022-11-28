@@ -74,20 +74,20 @@ func (j *JobInfo) ReportProgress(stage clients.TranscodeStatus, completionRatio 
 	j.statusClient.SendTranscodeStatus(tsm)
 }
 
-// Coordinator is the main interface to handle the pipelines. It should be
-// called directly from the API handlers and never blocks on execution but
-// rather schedules some routines in background.
-type Coordinator interface {
-	// Starts a new upload job.
-	StartUploadJob(p UploadJobPayload)
-	// Handle RECORDING_END trigger from mist.
-	TriggerRecordingEnd(p RecordingEndPayload)
-	// Handle PUSH_END trigger from mist.
-	TriggerPushEnd(p PushEndPayload)
+// Coordinator provides the main interface to handle the pipelines. It should be
+// called directly from the API handlers and never blocks on execution, but
+// rather schedules routines to do the actual work in background.
+type Coordinator struct {
+	strategy     Strategy
+	statusClient clients.TranscodeStatusClient
+
+	pipeMist, pipeMediaConvert Handler
+
+	Jobs *cache.Cache[*JobInfo]
 }
 
-func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient, statusClient clients.TranscodeStatusClient) Coordinator {
-	return &coord{
+func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient, statusClient clients.TranscodeStatusClient) *Coordinator {
+	return &Coordinator{
 		strategy:         strategy,
 		statusClient:     statusClient,
 		pipeMist:         &mist{mistClient},
@@ -96,11 +96,11 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient, statusC
 	}
 }
 
-func NewStubCoordinator() *coord {
+func NewStubCoordinator() *Coordinator {
 	return NewStubCoordinatorOpts(StrategyCatalystDominance, nil, nil, nil)
 }
 
-func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeMist, pipeMediaConvert Handler) *coord {
+func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeMist, pipeMediaConvert Handler) *Coordinator {
 	if strategy == StrategyInvalid {
 		strategy = StrategyCatalystDominance
 	}
@@ -113,7 +113,7 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 	if pipeMediaConvert == nil {
 		pipeMediaConvert = &mediaconvert{}
 	}
-	return &coord{
+	return &Coordinator{
 		strategy:         strategy,
 		statusClient:     statusClient,
 		pipeMist:         pipeMist,
@@ -122,18 +122,11 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 	}
 }
 
-type coord struct {
-	strategy     Strategy
-	statusClient clients.TranscodeStatusClient
-
-	pipeMist, pipeMediaConvert Handler
-
-	Jobs *cache.Cache[*JobInfo]
-}
-
+// Starts a new upload job.
+//
 // This has the main logic regarding the pipeline strategy. It starts jobs and
 // handles processing the response and triggering a fallback if appropriate.
-func (c *coord) StartUploadJob(p UploadJobPayload) {
+func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 	switch c.strategy {
 	case StrategyCatalystDominance:
 		c.startOneUploadJob(p, c.pipeMist, true)
@@ -144,6 +137,7 @@ func (c *coord) StartUploadJob(p UploadJobPayload) {
 		c.startOneUploadJob(p, c.pipeMediaConvert, true)
 		c.startOneUploadJob(p, c.pipeMist, false)
 	case StrategyFallbackMediaConvert:
+		// nolint:errcheck
 		go recovered(func() (t bool, e error) {
 			// TODO: Also need to filter the error callback from the first pipeline so
 			// we can silently do the MediaConvert flow underneath.
@@ -161,7 +155,7 @@ func (c *coord) StartUploadJob(p UploadJobPayload) {
 //   - the job will have a different requestID
 //   - no transcode status updates will be reported to the caller, only logged
 //   - TODO: the output will go to a different location than the real job
-func (c *coord) startOneUploadJob(p UploadJobPayload, handler Handler, foreground bool) <-chan bool {
+func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, foreground bool) <-chan bool {
 	if !foreground {
 		p.RequestID = fmt.Sprintf("bg_%s", p.RequestID)
 		p.CallbackURL = ""
@@ -188,7 +182,8 @@ func (c *coord) startOneUploadJob(p UploadJobPayload, handler Handler, foregroun
 	return si.result
 }
 
-func (c *coord) TriggerRecordingEnd(p RecordingEndPayload) {
+// TriggerRecordingEnd handles RECORDING_END trigger from mist.
+func (c *Coordinator) TriggerRecordingEnd(p RecordingEndPayload) {
 	si := c.Jobs.Get(p.StreamName)
 	if si == nil {
 		log.LogNoRequestID("RECORDING_END trigger invoked for unknown stream", "stream_name", p.StreamName)
@@ -199,7 +194,8 @@ func (c *coord) TriggerRecordingEnd(p RecordingEndPayload) {
 	})
 }
 
-func (c *coord) TriggerPushEnd(p PushEndPayload) {
+// TriggerPushEnd handles PUSH_END trigger from mist.
+func (c *Coordinator) TriggerPushEnd(p PushEndPayload) {
 	si := c.Jobs.Get(p.StreamName)
 	if si == nil {
 		log.Log(si.RequestID, "PUSH_END trigger invoked for unknown stream", "streamName", p.StreamName)
@@ -214,7 +210,8 @@ func (c *coord) TriggerPushEnd(p PushEndPayload) {
 // safely. It locks on the JobInfo object to allow safe mutations inside the
 // handler. It also handles panics and errors, turning them into a transcode
 // status update with an error result.
-func (c *coord) runHandlerAsync(job *JobInfo, handler func() (*HandlerOutput, error)) {
+func (c *Coordinator) runHandlerAsync(job *JobInfo, handler func() (*HandlerOutput, error)) {
+	// nolint:errcheck
 	go recovered(func() (t bool, e error) {
 		job.mu.Lock()
 		defer job.mu.Unlock()
@@ -228,7 +225,7 @@ func (c *coord) runHandlerAsync(job *JobInfo, handler func() (*HandlerOutput, er
 	})
 }
 
-func (c *coord) finishJob(job *JobInfo, out *HandlerOutput, err error) {
+func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 	defer close(job.result)
 	var tsm clients.TranscodeStatusMessage
 	if err != nil {
@@ -239,11 +236,12 @@ func (c *coord) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 	job.statusClient.SendTranscodeStatus(tsm)
 
 	// Automatically delete jobs after an error or result
-	c.Jobs.Remove(job.StreamName)
-	log.Log(job.RequestID, "Deleted from Jobs Cache")
-
 	success := err == nil
+	c.Jobs.Remove(job.StreamName)
+
+	log.Log(job.RequestID, "Finished job and deleted from job cache", "success", success)
 	metrics.Metrics.UploadVODPipelineResults.WithLabelValues(strconv.FormatBool(success)).Inc()
+
 	job.result <- success
 }
 

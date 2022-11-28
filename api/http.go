@@ -37,7 +37,7 @@ func ListenAndServe(apiPort, mistPort, mistHttpPort int, apiToken string) error 
 	return http.ListenAndServe(listen, router)
 }
 
-func NewCatalystAPIRouter(vodEngine pipeline.Coordinator, apiToken string) *httprouter.Router {
+func NewCatalystAPIRouter(vodEngine *pipeline.Coordinator, apiToken string) *httprouter.Router {
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
 	withAuth := middleware.IsAuthorized

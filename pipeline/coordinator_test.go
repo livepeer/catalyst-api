@@ -141,7 +141,7 @@ func TestCoordinatorBackgroundJobsStrategies(t *testing.T) {
 	}
 
 	doTest := func(strategy Strategy) {
-		var coord *coord
+		var coord *Coordinator
 		if strategy == StrategyBackgroundMediaConvert {
 			coord = NewStubCoordinatorOpts(strategy, callbackHandler, fgHandler, bgHandler)
 		} else if strategy == StrategyBackgroundMist {

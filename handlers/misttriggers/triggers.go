@@ -20,7 +20,7 @@ const (
 )
 
 type MistCallbackHandlersCollection struct {
-	VODEngine pipeline.Coordinator
+	VODEngine *pipeline.Coordinator
 }
 
 // Trigger dispatches request to mapped method according to trigger name
