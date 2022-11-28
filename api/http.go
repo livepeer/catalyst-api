@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/clients"
@@ -11,6 +12,7 @@ import (
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/middleware"
+	"github.com/livepeer/catalyst-api/pipeline"
 )
 
 func ListenAndServe(apiPort, mistPort, mistHttpPort int, apiToken string) error {
@@ -20,8 +22,12 @@ func ListenAndServe(apiPort, mistPort, mistHttpPort int, apiToken string) error 
 		TriggerCallback: fmt.Sprintf("http://localhost:%d/api/mist/trigger", apiPort),
 	}
 
+	// Kick off the callback client, to send job update messages on a regular interval
+	statusClient := clients.NewPeriodicCallbackClient(15 * time.Second).Start()
+	vodEngine := pipeline.NewCoordinator(pipeline.StrategyCatalystDominance, mc, statusClient)
+
 	listen := fmt.Sprintf("0.0.0.0:%d", apiPort)
-	router := NewCatalystAPIRouter(mc, apiToken)
+	router := NewCatalystAPIRouter(vodEngine, apiToken)
 
 	log.LogNoRequestID(
 		"Starting Catalyst API!",
@@ -31,13 +37,13 @@ func ListenAndServe(apiPort, mistPort, mistHttpPort int, apiToken string) error 
 	return http.ListenAndServe(listen, router)
 }
 
-func NewCatalystAPIRouter(mc *clients.MistClient, apiToken string) *httprouter.Router {
+func NewCatalystAPIRouter(vodEngine *pipeline.Coordinator, apiToken string) *httprouter.Router {
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
 	withAuth := middleware.IsAuthorized
 
-	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{MistClient: mc}
-	mistCallbackHandlers := &misttriggers.MistCallbackHandlersCollection{MistClient: mc}
+	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
+	mistCallbackHandlers := &misttriggers.MistCallbackHandlersCollection{VODEngine: vodEngine}
 
 	// Simple endpoint for healthchecks
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))

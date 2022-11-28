@@ -13,6 +13,7 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/mokeypatching"
+	"github.com/livepeer/catalyst-api/pipeline"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +31,7 @@ func TestPipelineId(t *testing.T) {
 
 func TestRecordingStart(t *testing.T) {
 	testStartTime := time.Now().UnixMilli()
-	mistCallbackHandlers := &MistCallbackHandlersCollection{MistClient: clients.StubMistClient{}}
+	mistCallbackHandlers := &MistCallbackHandlersCollection{VODEngine: pipeline.NewStubCoordinator()}
 	callbackHappened := make(chan bool, 10)
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		payload, err := io.ReadAll(r.Body)
@@ -72,7 +73,7 @@ func TestRecordingStart(t *testing.T) {
 
 func TestRecordingCompleted(t *testing.T) {
 	testStartTime := time.Now().UnixMilli()
-	mistCallbackHandlers := &MistCallbackHandlersCollection{MistClient: clients.StubMistClient{}}
+	mistCallbackHandlers := &MistCallbackHandlersCollection{VODEngine: pipeline.NewStubCoordinator()}
 	callbackHappened := make(chan bool, 10)
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		payload, err := io.ReadAll(r.Body)

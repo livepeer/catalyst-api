@@ -39,10 +39,6 @@ func (c StubBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumbe
 }
 
 func TestItCanTranscode(t *testing.T) {
-	oldCallbackClient := clients.DefaultCallbackClient
-	defer func() { clients.DefaultCallbackClient = oldCallbackClient }()
-	clients.DefaultCallbackClient = clients.NewPeriodicCallbackClient(100 * time.Minute)
-
 	dir := os.TempDir()
 
 	// Create 2 layers of subdirectories to ensure runs of the test don't interfere with each other
@@ -111,11 +107,15 @@ func TestItCanTranscode(t *testing.T) {
 		},
 	}
 
+	statusClient := clients.NewPeriodicCallbackClient(100 * time.Minute)
 	// Check we don't get an error downloading or parsing it
 	outputs, err := RunTranscodeProcess(
 		TranscodeSegmentRequest{
-			CallbackURL: callbackServer.URL,
-			UploadURL:   manifestFile.Name(),
+			CallbackURL:       callbackServer.URL,
+			SourceManifestURL: manifestFile.Name(),
+			ReportProgress: func(stage clients.TranscodeStatus, completionRatio float64) {
+				statusClient.SendTranscodeStatus(clients.NewTranscodeStatusProgress(callbackServer.URL, "", stage, completionRatio))
+			},
 		},
 		"streamName",
 		clients.InputVideo{
@@ -148,7 +148,7 @@ low-bitrate/index.m3u8
 	require.Equal(t, expectedMasterManifest, string(masterManifestBytes))
 
 	// Start the callback client, to let it run for one iteration
-	clients.DefaultCallbackClient.SendCallbacks()
+	statusClient.SendCallbacks()
 
 	// Wait for the callbacks to arrive
 	time.Sleep(100 * time.Millisecond)

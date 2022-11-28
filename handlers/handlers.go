@@ -1,9 +1,7 @@
 package handlers
 
-import (
-	"github.com/livepeer/catalyst-api/clients"
-)
+import "github.com/livepeer/catalyst-api/pipeline"
 
 type CatalystAPIHandlersCollection struct {
-	MistClient clients.MistAPIClient
+	VODEngine *pipeline.Coordinator
 }

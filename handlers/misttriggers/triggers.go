@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/pipeline"
 )
 
 const (
@@ -20,7 +20,7 @@ const (
 )
 
 type MistCallbackHandlersCollection struct {
-	MistClient clients.MistAPIClient
+	VODEngine *pipeline.Coordinator
 }
 
 // Trigger dispatches request to mapped method according to trigger name
@@ -69,7 +69,7 @@ func streamNameToPipeline(name string) PipelineId {
 	return Unrelated
 }
 
-type PipelineId = int
+type PipelineId int
 
 const (
 	Unrelated PipelineId = iota

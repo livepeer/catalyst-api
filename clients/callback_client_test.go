@@ -44,7 +44,7 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 	client := NewPeriodicCallbackClient(100 * time.Hour)
 
 	// Send the status in, but it shouldn't get sent yet because we haven't started the client
-	client.SendTranscodeStatus(svr.URL, "example-request-id", TranscodeStatusCompleted, 1)
+	client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusCompleted, 1))
 
 	// Trigger the callback client to send any pending callbacks
 	client.SendCallbacks()
@@ -77,7 +77,7 @@ func TestItSendsPeriodicHeartbeats(t *testing.T) {
 
 	// Send the callback and confirm the number of times we retried
 	client := NewPeriodicCallbackClient(100 * time.Millisecond).Start()
-	client.SendTranscodeStatus(svr.URL, "example-request-id", TranscodeStatusCompleted, 1)
+	client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusCompleted, 1))
 
 	time.Sleep(400 * time.Millisecond)
 
@@ -105,7 +105,7 @@ func TestTranscodeStatusErrorNotifcation(t *testing.T) {
 
 	// Send the callback and confirm the number of times we retried
 	client := NewPeriodicCallbackClient(100 * time.Millisecond).Start()
-	client.SendTranscodeStatusError(svr.URL, "example-request-id", "something went wrong")
+	client.SendTranscodeStatus(NewTranscodeStatusError(svr.URL, "example-request-id", "something went wrong"))
 
 	time.Sleep(200 * time.Millisecond)
 

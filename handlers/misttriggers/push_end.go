@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/pipeline"
 )
 
 type PushEndPayload struct {
@@ -56,7 +56,11 @@ func (d *MistCallbackHandlersCollection) TriggerPushEnd(w http.ResponseWriter, r
 
 	switch streamNameToPipeline(p.StreamName) {
 	case Segmenting:
-		d.SegmentingPushEnd(w, req, p)
+		d.VODEngine.TriggerPushEnd(pipeline.PushEndPayload{
+			StreamName:     p.StreamName,
+			PushStatus:     p.PushStatus,
+			Last10LogLines: p.Last10LogLines,
+		})
 	case Recording:
 		d.RecordingPushEnd(w, req, p.StreamName, p.ActualDestination, p.PushStatus)
 	default:
@@ -78,24 +82,7 @@ func (d *MistCallbackHandlersCollection) RecordingPushEnd(w http.ResponseWriter,
 		log.LogNoRequestID("RecordingPushEnd extract uuid failed %v", err)
 		return
 	}
-	clients.DefaultCallbackClient.SendRecordingEvent(event)
-}
-
-func (d *MistCallbackHandlersCollection) SegmentingPushEnd(w http.ResponseWriter, req *http.Request, p PushEndPayload) {
-	callbackUrl := cache.DefaultStreamCache.Segmenting.GetCallbackUrl(p.StreamName)
-	if callbackUrl == "" {
-		log.LogNoRequestID("PUSH_END trigger invoked for unknown stream: " + p.StreamName)
-		return
-	}
-
-	requestID := cache.DefaultStreamCache.Segmenting.GetRequestID(p.StreamName)
-
-	// TODO: Find a better way to determine if the push status failed or not (i.e. segmenting step was successful)
-	if strings.Contains(p.Last10LogLines, "FAIL") {
-		clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, requestID, "Segmenting Failed: "+p.PushStatus)
-		log.Log(requestID, "Segmenting Failed. PUSH_END trigger for stream "+p.StreamName+" was "+p.PushStatus)
-		return
-	}
+	clients.SendRecordingEventCallback(event)
 }
 
 func uuidFromPushUrl(uri string) (string, error) {

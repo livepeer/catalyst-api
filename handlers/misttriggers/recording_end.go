@@ -2,18 +2,14 @@ package misttriggers
 
 import (
 	"fmt"
-	"math"
 	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/livepeer/catalyst-api/cache"
-	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
-	"github.com/livepeer/catalyst-api/transcode"
+	"github.com/livepeer/catalyst-api/pipeline"
 )
 
 // This trigger is run whenever an output to file finishes writing, either through the pushing system (with a file target) or when ran manually.
@@ -43,128 +39,15 @@ func (d *MistCallbackHandlersCollection) TriggerRecordingEnd(w http.ResponseWrit
 	case Transcoding:
 		// TODO
 	case Segmenting:
-		d.triggerRecordingEndSegmenting(w, p)
+		d.VODEngine.TriggerRecordingEnd(pipeline.RecordingEndPayload{
+			StreamName:                p.StreamName,
+			StreamMediaDurationMillis: p.StreamMediaDurationMillis,
+			WrittenBytes:              p.WrittenBytes,
+		})
 	default:
 		// Not related to API logic
 		log.LogNoRequestID("Received RECORDING_END trigger for non-VOD stream", "stream_name", p.StreamName)
 	}
-}
-
-func (d *MistCallbackHandlersCollection) triggerRecordingEndSegmenting(w http.ResponseWriter, p RecordingEndPayload) {
-	// Grab the Request ID to enable us to log properly
-	requestID := cache.DefaultStreamCache.Segmenting.GetRequestID(p.StreamName)
-
-	// when uploading is done, remove trigger and stream from Mist
-	defer cache.DefaultStreamCache.Segmenting.Remove(requestID, p.StreamName)
-
-	callbackUrl := cache.DefaultStreamCache.Segmenting.GetCallbackUrl(p.StreamName)
-	if callbackUrl == "" {
-		log.Log(requestID, "RECORDING_END trigger invoked for unknown stream")
-		return
-	}
-
-	// Try to clean up the trigger and stream from Mist. If these fail then we only log, since we still want to do any
-	// further cleanup stages and callbacks
-	defer func() {
-		if err := d.MistClient.DeleteStream(p.StreamName); err != nil {
-			log.LogError(requestID, "Failed to delete stream in triggerRecordingEndSegmenting", err)
-		}
-	}()
-
-	// Let Studio know that we've almost finished the Segmenting phase
-	clients.DefaultCallbackClient.SendTranscodeStatus(callbackUrl, requestID, clients.TranscodeStatusPreparing, 0.9)
-
-	// HACK: Wait a little bit to give the segmenting time to finish uploading.
-	// Proper fix comes with a new Mist trigger to notify us that uploads are also complete
-	time.Sleep(5 * time.Second)
-
-	// Let Studio know that we've finished the Segmenting phase
-	clients.DefaultCallbackClient.SendTranscodeStatus(callbackUrl, requestID, clients.TranscodeStatusPreparingCompleted, 1)
-
-	// Get the source stream's detailed track info before kicking off transcode
-	// Mist currently returns the "booting" error even after successfully segmenting MOV files
-	streamInfo, err := d.MistClient.GetStreamInfo(p.StreamName)
-	if err != nil {
-		log.LogError(requestID, "Failed to get stream info", err)
-		clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, requestID, "Failed to get stream info")
-		return
-	}
-
-	// Compare duration of source stream to the segmented stream to ensure the input file was completely segmented before attempting to transcode
-	var inputVideoLengthMillis int64
-	for track, trackInfo := range streamInfo.Meta.Tracks {
-		if strings.Contains(track, "video") {
-			inputVideoLengthMillis = trackInfo.Lastms
-		}
-	}
-	if math.Abs(float64(inputVideoLengthMillis-p.StreamMediaDurationMillis)) > 500 {
-		log.Log(requestID, "Input video duration does not match segmented video duration", "input_duration_ms", inputVideoLengthMillis, "segmented_duration_ms", p.StreamMediaDurationMillis)
-		clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, requestID, "Input video duration does not match segmented video duration")
-		return
-	}
-
-	si := cache.DefaultStreamCache.Segmenting.Get(p.StreamName)
-	transcodeRequest := transcode.TranscodeSegmentRequest{
-		SourceFile:       si.SourceFile,
-		CallbackURL:      si.CallbackURL,
-		AccessToken:      si.AccessToken,
-		TranscodeAPIUrl:  si.TranscodeAPIUrl,
-		SourceStreamInfo: streamInfo,
-		Profiles:         si.Profiles,
-		UploadURL:        si.UploadURL,
-		RequestID:        requestID,
-	}
-
-	go func() {
-		inputInfo := clients.InputVideo{
-			Format:    "mp4", // hardcoded as mist stream is in dtsc format.
-			Duration:  float64(p.StreamMediaDurationMillis) / 1000.0,
-			SizeBytes: p.WrittenBytes,
-		}
-		for _, track := range streamInfo.Meta.Tracks {
-			inputInfo.Tracks = append(inputInfo.Tracks, clients.InputTrack{
-				Type:         track.Type,
-				Codec:        track.Codec,
-				Bitrate:      int64(track.Bps * 8),
-				DurationSec:  float64(track.Lastms-track.Firstms) / 1000.0,
-				StartTimeSec: float64(track.Firstms) / 1000.0,
-				VideoTrack: clients.VideoTrack{
-					Width:  int64(track.Width),
-					Height: int64(track.Height),
-					FPS:    float64(track.Fpks) / 1000.0,
-				},
-				AudioTrack: clients.AudioTrack{
-					Channels:   track.Channels,
-					SampleRate: track.Rate,
-					SampleBits: track.Size,
-				},
-			})
-		}
-
-		outputs, err := transcode.RunTranscodeProcess(transcodeRequest, p.StreamName, inputInfo)
-		if err != nil {
-			log.LogError(requestID, "RunTranscodeProcess returned an error", err)
-
-			clients.DefaultCallbackClient.SendTranscodeStatusError(callbackUrl, requestID, "Transcoding Failed: "+err.Error())
-			return
-		}
-
-		// defer func() {
-		// Send the success callback after the DTSH creation logic
-		clients.DefaultCallbackClient.SendTranscodeStatusCompleted(transcodeRequest.CallbackURL, requestID, inputInfo, outputs)
-		// }()
-		// TODO: CreateDTSH is hardcoded to call MistInMP4 - the call below requires a call to MistInHLS instead.
-		//	 Update this logic later as it's required for Mist playback.
-		/*
-			// prepare .dtsh headers for all rendition playlists
-			for _, output := range outputs {
-				if err := d.MistClient.CreateDTSH(output.Manifest); err != nil {
-					// should not block the ingestion flow or make it fail on error.
-					log.LogError(requestID, "CreateDTSH() for rendition failed", err, "destination", output.Manifest)
-				}
-			}
-		*/
-	}()
 }
 
 type RecordingEndPayload struct {
