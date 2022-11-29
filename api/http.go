@@ -3,10 +3,8 @@ package api
 import (
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
@@ -15,17 +13,7 @@ import (
 	"github.com/livepeer/catalyst-api/pipeline"
 )
 
-func ListenAndServe(apiPort, mistPort, mistHttpPort int, apiToken string) error {
-	mc := &clients.MistClient{
-		ApiUrl:          fmt.Sprintf("http://localhost:%d/api2", mistPort),
-		HttpReqUrl:      fmt.Sprintf("http://localhost:%d", mistHttpPort),
-		TriggerCallback: fmt.Sprintf("http://localhost:%d/api/mist/trigger", apiPort),
-	}
-
-	// Kick off the callback client, to send job update messages on a regular interval
-	statusClient := clients.NewPeriodicCallbackClient(15 * time.Second).Start()
-	vodEngine := pipeline.NewCoordinator(pipeline.StrategyCatalystDominance, mc, statusClient)
-
+func ListenAndServe(apiPort int, apiToken string, vodEngine *pipeline.Coordinator) error {
 	listen := fmt.Sprintf("0.0.0.0:%d", apiPort)
 	router := NewCatalystAPIRouter(vodEngine, apiToken)
 

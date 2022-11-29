@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 )
 
@@ -21,6 +22,8 @@ var DefaultBroadcasterURL = fmt.Sprintf("http://127.0.0.1:%d", DefaultBroadcaste
 const DefaultCustomAPIUrl = "https://origin.livepeer.com/api/"
 
 var RecordingCallback string = "http://127.0.0.1:8008/recording/status"
+
+var MediaConvertS3TransferBucket *url.URL
 
 var TranscodingParallelJobs int = 2
 

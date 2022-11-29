@@ -93,14 +93,34 @@ type Coordinator struct {
 	Jobs *cache.Cache[*JobInfo]
 }
 
-func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient, statusClient clients.TranscodeStatusClient) *Coordinator {
-	return &Coordinator{
-		strategy:         strategy,
-		statusClient:     statusClient,
-		pipeMist:         &mist{mistClient},
-		pipeMediaConvert: &mediaconvert{},
-		Jobs:             cache.New[*JobInfo](),
+func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
+	extTranscoderURL string, statusClient clients.TranscodeStatusClient) (*Coordinator, error) {
+
+	var extTranscoder clients.TranscodeProvider
+	if extTranscoderURL != "" {
+		var err error
+		extTranscoder, err = clients.ParseTranscodeProviderURL(extTranscoderURL)
+		if err != nil {
+			return nil, fmt.Errorf("error creting external transcoder: %v", err)
+		}
 	}
+	if strategy != StrategyCatalystDominance && extTranscoder == nil {
+		return nil, fmt.Errorf("external transcoder is required for strategy: %v", strategy)
+	}
+
+	return &Coordinator{
+		strategy:     strategy,
+		statusClient: statusClient,
+		pipeMist:     &mist{mistClient},
+		pipeMediaConvert: &mediaconvert{
+			s3InputBucket:  config.MediaConvertS3TransferBucket.JoinPath("input"),
+			s3OutputBucket: config.MediaConvertS3TransferBucket.JoinPath("output"),
+			// TODO: refactor the mediaconvert pipeline to be just an "external provider pipeline"
+			// (will require moving copy to/from S3 to the mediaconvert provider)
+			mediaconvert: extTranscoder,
+		},
+		Jobs: cache.New[*JobInfo](),
+	}, nil
 }
 
 func NewStubCoordinator() *Coordinator {

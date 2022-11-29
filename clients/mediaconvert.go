@@ -1,7 +1,7 @@
 package clients
 
 import (
- "context"
+	"context"
 	"fmt"
 	"time"
 
@@ -11,11 +11,19 @@ import (
 	"github.com/aws/aws-sdk-go/service/mediaconvert"
 )
 
+// TODO: Real configs here. Only a placeholder for now from what I think is the
+// required stuff. There maybe more or just be different.
+type MediaConvertOptions struct {
+	/*add any other config you need like endpoint, role, queue etc*/
+	Endpoint, Region, Role       string
+	AccessKeyID, AccessKeySecret string
+}
+
 type MediaConvert struct {
 	// TODO
 }
 
-func NewMediaConvertClient( /*add any static config you need like endpoint, role, queue etc*/ ) TranscodeProvider {
+func NewMediaConvertClient(opts MediaConvertOptions) TranscodeProvider {
 	return &MediaConvert{
 		// TODO
 	}

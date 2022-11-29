@@ -16,11 +16,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var mediaConvertClient = clients.NewMediaConvertClient( /* add any args here, can hardcode for now */ )
-
 type mediaconvert struct {
 	s3InputBucket  *url.URL
 	s3OutputBucket *url.URL
+	mediaconvert   clients.TranscodeProvider
 }
 
 func (mc *mediaconvert) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
@@ -50,7 +49,7 @@ func (mc *mediaconvert) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, erro
 
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
 	defer cancel()
-	err := mediaConvertClient.Transcode(ctx, clients.TranscodeJobInput{
+	err := mc.mediaconvert.Transcode(ctx, clients.TranscodeJobInput{
 		InputFile:     inputFile,
 		HLSOutputFile: hlsOutputFile,
 	})
@@ -147,6 +146,9 @@ func copyDir(source, dest *url.URL) error {
 	for i := 0; i < 10; i++ {
 		eg.Go(func() error {
 			for f := range files {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
 				err := copyFile(source.JoinPath(f.Name).String(), dest.String(), f.Name)
 				if err != nil {
 					return err
