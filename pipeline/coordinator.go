@@ -44,6 +44,13 @@ type UploadJobPayload struct {
 	Profiles              []clients.EncodedProfile
 }
 
+// UploadJobResult is the object returned by the successful execution of an
+// upload job.
+type UploadJobResult struct {
+	InputVideo clients.InputVideo
+	Outputs    []clients.OutputVideo
+}
+
 // RecordingEndPayload is the required payload from a recording end trigger.
 type RecordingEndPayload struct {
 	StreamName                string
@@ -240,7 +247,7 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 	defer close(job.result)
 	var tsm clients.TranscodeStatusMessage
 	if err != nil {
-		tsm = clients.NewTranscodeStatusError(job.CallbackURL, job.RequestID, err.Error())
+		tsm = clients.NewTranscodeStatusError(job.CallbackURL, job.RequestID, err.Error(), IsUnretriable(err))
 	} else {
 		tsm = clients.NewTranscodeStatusCompleted(job.CallbackURL, job.RequestID, out.Result.InputVideo, out.Result.Outputs)
 	}
