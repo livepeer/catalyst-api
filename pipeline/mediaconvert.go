@@ -16,16 +16,19 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+var mediaConvertClient = clients.NewMediaConvertClient( /* add any args here, can hardcode for now */ )
+
 type mediaconvert struct {
 	s3InputBucket  *url.URL
 	s3OutputBucket *url.URL
 }
 
 func (mc *mediaconvert) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
-	if !strings.HasPrefix(job.SourceFile, "s3://") {
+	inputFile := job.SourceFile
+	if !strings.HasPrefix(inputFile, "s3://") {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
-		content, err := getFile(ctx, job.SourceFile)
+		content, err := getFile(ctx, inputFile)
 		if err != nil {
 			return nil, fmt.Errorf("error getting source file: %w", err)
 		}
@@ -36,29 +39,48 @@ func (mc *mediaconvert) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, erro
 			return nil, fmt.Errorf("error uploading source file to S3: %w", err)
 		}
 
-		job.SourceFile = mc.s3InputBucket.JoinPath(filename).String()
+		inputFile = mc.s3InputBucket.JoinPath(filename).String()
 	}
 
 	if path.Base(job.TargetURL.Path) != "index.m3u8" {
 		return nil, fmt.Errorf("target URL must be an `index.m3u8` file")
 	}
-	originalTargetURL := job.TargetURL
-	job.TargetURL = mc.s3OutputBucket.JoinPath(job.RequestID, "index")
+	// AWS MediaConvert adds the .m3u8 to the end of the output file name
+	hlsOutputFile := mc.s3OutputBucket.JoinPath(job.RequestID, "index").String()
 
-	// MediaConvert core pipeline:
-	// 1. Create job
-	// 2. Poll MediaConvert job status and update the local job status with the
-	// corresponding stages / completion ratio
-	// 3. Profit
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
+	defer cancel()
+	err := mediaConvertClient.Transcode(ctx, clients.TranscodeJobInput{
+		InputFile:     inputFile,
+		HLSOutputFile: hlsOutputFile,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("mediaconvert error: %w", err)
+	}
 
 	mcOutputBaseDir := mc.s3OutputBucket.JoinPath("..")
-	ourOutputBaseDir := originalTargetURL.JoinPath("..")
-	err := copyDir(mcOutputBaseDir, ourOutputBaseDir)
+	ourOutputBaseDir := job.TargetURL.JoinPath("..")
+	err = copyDir(mcOutputBaseDir, ourOutputBaseDir)
 	if err != nil {
 		return nil, fmt.Errorf("error copying output files: %w", err)
 	}
 
-	return nil, errors.New("stil not implemented")
+	return &HandlerOutput{
+		Result: &UploadJobResult{
+			InputVideo: clients.InputVideo{
+				// TODO: Figure out what to do here. Studio doesn't use these anyway.
+			},
+			Outputs: []clients.OutputVideo{
+				{
+					Type:     "manifest",
+					Manifest: job.TargetURL.String(),
+					Videos:   []clients.OutputVideoFile{
+						// TODO: Figure out what to do here. Studio doesn't use these anyway.
+					},
+				},
+			},
+		},
+	}, nil
 }
 
 func getFile(ctx context.Context, url string) (io.ReadCloser, error) {
