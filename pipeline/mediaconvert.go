@@ -113,20 +113,14 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 }
 
 func copyDir(source, dest *url.URL) error {
-	// TODO: Create a list OS helper in clients package
-	osDriver, err := drivers.ParseOSURL(source.String(), true)
-	if err != nil {
-		return fmt.Errorf("unexpected error parsing internal driver URL: %w", err)
-	}
-	os := osDriver.NewSession("")
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	eg, ctx := errgroup.WithContext(ctx)
+
 	files := make(chan drivers.FileInfo, 10)
 	eg.Go(func() error {
 		defer close(files)
-		page, err := os.ListFiles(ctx, "", "")
+		page, err := clients.ListOSURL(ctx, source.String())
 		if err != nil {
 			return fmt.Errorf("error listing output files: %w", err)
 		}

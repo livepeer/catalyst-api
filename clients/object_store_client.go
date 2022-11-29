@@ -89,6 +89,21 @@ func UploadToOSURL(osURL, filename string, data io.Reader, timeout time.Duration
 	return nil
 }
 
+func ListOSURL(ctx context.Context, osURL string) (drivers.PageInfo, error) {
+	osDriver, err := drivers.ParseOSURL(osURL, true)
+	if err != nil {
+		return nil, fmt.Errorf("unexpected error parsing internal driver URL: %w", err)
+	}
+	os := osDriver.NewSession("")
+
+	page, err := os.ListFiles(ctx, "", "")
+	if err != nil {
+		return nil, fmt.Errorf("error listing files: %w", err)
+	}
+
+	return page, nil
+}
+
 func newExponentialBackOffExecutor() *backoff.ExponentialBackOff {
 	backOff := backoff.NewExponentialBackOff()
 	backOff.InitialInterval = 200 * time.Millisecond
