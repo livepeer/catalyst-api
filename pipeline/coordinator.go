@@ -124,11 +124,9 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 		statusClient: statusClient,
 		pipeMist:     &mist{mistClient},
 		pipeMediaConvert: &mediaconvert{
-			s3InputBucket:  config.MediaConvertS3TransferBucket.JoinPath("input"),
-			s3OutputBucket: config.MediaConvertS3TransferBucket.JoinPath("output"),
 			// TODO: refactor the mediaconvert pipeline to be just an "external provider pipeline"
 			// (will require moving copy to/from S3 to the mediaconvert provider)
-			mediaconvert: extTranscoder,
+			mediaconvert: extTranscoder.(*clients.MediaConvert),
 		},
 		Jobs: cache.New[*JobInfo](),
 	}, nil

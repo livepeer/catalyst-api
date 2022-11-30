@@ -22,9 +22,8 @@ func main() {
 	apiToken := flag.String("api-token", "IAmAuthorized", "Auth header value for API access")
 	mistJson := flag.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
 	promPort := flag.Int("prom-port", 2112, "Prometheus metrics port")
-	externalTranscoderUrl := flag.String("external-transcoder", "", "URL for the external transcoder to be used by the pipeline coordinator. Only 1 implementation today for AWS MediaConvert which should be in the format: mediaconvert://key-id:key-secret@endpoint-host?region=aws-region&role=iam-role")
+	externalTranscoderUrl := flag.String("external-transcoder", "", "URL for the external transcoder to be used by the pipeline coordinator. Only 1 implementation today for AWS MediaConvert which should be in the format: mediaconvert://key-id:key-secret@endpoint-host?region=aws-region&role=iam-role&s3_aux_bucket=s3://bucket")
 	vodPipelineStrategy := flag.String("vod-pipeline-strategy", string(pipeline.StrategyCatalystDominance), "Which strategy to use for the VOD pipeline")
-	URLVarFlag(flag.CommandLine, &config.MediaConvertS3TransferBucket, "mediaconvert-s3-transfer-bucket", "", "S3 bucket to use for MediaConvert pipeline temporary storage of input/output files. Should be in the form s3://bucket-name(/path)?")
 	flag.StringVar(&config.RecordingCallback, "recording", "http://recording.livepeer.com/recording/status", "Callback URL for recording start&stop events")
 	flag.Parse()
 

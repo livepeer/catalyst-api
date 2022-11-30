@@ -3,6 +3,7 @@ package clients
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -17,14 +18,18 @@ type MediaConvertOptions struct {
 	/*add any other config you need like endpoint, role, queue etc*/
 	Endpoint, Region, Role       string
 	AccessKeyID, AccessKeySecret string
+	// TODO: move the aux bucket usage to this client. This is unused for now.
+	S3AuxBucket *url.URL
 }
 
 type MediaConvert struct {
+	MediaConvertOptions
 	// TODO
 }
 
 func NewMediaConvertClient(opts MediaConvertOptions) TranscodeProvider {
 	return &MediaConvert{
+		opts,
 		// TODO
 	}
 }
@@ -39,13 +44,13 @@ func (mc *MediaConvert) Transcode(ctx context.Context, input TranscodeJobInput) 
 		Region:      aws.String("us-east-1"),
 		Credentials: credentials.NewSharedCredentials("", "default"),
 	}
-	sess, err := session.NewSession(&config)
+	// TODO: Handle this error
+	sess, _ := session.NewSession(&config)
 
 	svc := mediaconvert.New(sess)
 
 	// Add endpoint to the service client
 	svc.Endpoint = "https://vasjpylpa.mediaconvert.us-east-1.amazonaws.com"
-
 
 	job, err := svc.CreateJob(&mediaconvert.CreateJobInput{
 		Settings: &mediaconvert.JobSettings{
@@ -55,8 +60,8 @@ func (mc *MediaConvert) Transcode(ctx context.Context, input TranscodeJobInput) 
 						"Audio Selector 1": {
 							DefaultSelection: aws.String("DEFAULT"),
 						},
-					}, 
-					FileInput:      aws.String(input.InputFile), 
+					},
+					FileInput:      aws.String(input.InputFile),
 					TimecodeSource: aws.String("ZEROBASED"),
 					VideoSelector:  &mediaconvert.VideoSelector{},
 				},
@@ -123,8 +128,6 @@ func (mc *MediaConvert) Transcode(ctx context.Context, input TranscodeJobInput) 
 		},
 	})
 
-
-
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -149,7 +152,3 @@ func (mc *MediaConvert) Transcode(ctx context.Context, input TranscodeJobInput) 
 	}
 	return nil
 }
-
-
-
-

@@ -36,7 +36,7 @@ func TestCoordinatorDoesNotBlock(t *testing.T) {
 			return nil, errors.New("test error")
 		},
 	}
-	coord := NewStubCoordinatorOpts(0, callbackHandler, blockHandler, blockHandler)
+	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler)
 	coord.StartUploadJob(testJob)
 	time.Sleep(1 * time.Second)
 
@@ -70,7 +70,7 @@ func TestCoordinatorPropagatesJobInfoChanges(t *testing.T) {
 			return ContinuePipeline, nil
 		},
 	}
-	coord := NewStubCoordinatorOpts(0, nil, blockHandler, blockHandler)
+	coord := NewStubCoordinatorOpts("", nil, blockHandler, blockHandler)
 
 	coord.StartUploadJob(testJob)
 	time.Sleep(100 * time.Millisecond)
@@ -94,7 +94,7 @@ func TestCoordinatorResistsPanics(t *testing.T) {
 			panic("oh no!")
 		},
 	}
-	coord := NewStubCoordinatorOpts(0, callbackHandler, blockHandler, blockHandler)
+	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler)
 
 	coord.StartUploadJob(testJob)
 
@@ -147,7 +147,7 @@ func TestCoordinatorBackgroundJobsStrategies(t *testing.T) {
 		} else if strategy == StrategyBackgroundMist {
 			coord = NewStubCoordinatorOpts(strategy, callbackHandler, bgHandler, fgHandler)
 		} else {
-			t.Fatalf("Unexpected strategy: %d", strategy)
+			t.Fatalf("Unexpected strategy: %s", strategy)
 		}
 
 		coord.StartUploadJob(testJob)

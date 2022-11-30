@@ -17,12 +17,20 @@ import (
 )
 
 type mediaconvert struct {
-	s3InputBucket  *url.URL
-	s3OutputBucket *url.URL
-	mediaconvert   clients.TranscodeProvider
+	mediaconvert *clients.MediaConvert
 }
 
 func (mc *mediaconvert) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
+	if path.Base(job.TargetURL.Path) != "index.m3u8" {
+		return nil, fmt.Errorf("target URL must be an `index.m3u8` file")
+	}
+	targetDir := path.Dir(job.TargetURL.Path)
+
+	inputDir := mc.mediaconvert.S3AuxBucket.JoinPath("input", targetDir)
+	outputDir := mc.mediaconvert.S3AuxBucket.JoinPath("output", targetDir)
+	// AWS MediaConvert adds the .m3u8 to the end of the output file name
+	hlsOutputFile := outputDir.JoinPath("index")
+
 	inputFile := job.SourceFile
 	if !strings.HasPrefix(inputFile, "s3://") {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -32,32 +40,24 @@ func (mc *mediaconvert) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, erro
 			return nil, fmt.Errorf("error getting source file: %w", err)
 		}
 
-		filename := "input_" + job.RequestID
-		err = clients.UploadToOSURL(mc.s3InputBucket.String(), filename, content)
+		inputFile = inputDir.JoinPath("video").String()
+		err = clients.UploadToOSURL(inputFile, "", content)
 		if err != nil {
 			return nil, fmt.Errorf("error uploading source file to S3: %w", err)
 		}
-
-		inputFile = mc.s3InputBucket.JoinPath(filename).String()
 	}
-
-	if path.Base(job.TargetURL.Path) != "index.m3u8" {
-		return nil, fmt.Errorf("target URL must be an `index.m3u8` file")
-	}
-	// AWS MediaConvert adds the .m3u8 to the end of the output file name
-	hlsOutputFile := mc.s3OutputBucket.JoinPath(job.RequestID, "index").String()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
 	defer cancel()
 	err := mc.mediaconvert.Transcode(ctx, clients.TranscodeJobInput{
 		InputFile:     inputFile,
-		HLSOutputFile: hlsOutputFile,
+		HLSOutputFile: hlsOutputFile.String(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("mediaconvert error: %w", err)
 	}
 
-	mcOutputBaseDir := mc.s3OutputBucket.JoinPath("..")
+	mcOutputBaseDir := hlsOutputFile.JoinPath("..")
 	ourOutputBaseDir := job.TargetURL.JoinPath("..")
 	err = copyDir(mcOutputBaseDir, ourOutputBaseDir)
 	if err != nil {
