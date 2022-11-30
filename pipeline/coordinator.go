@@ -23,6 +23,8 @@ const (
 	StrategyInvalid Strategy = iota
 	// Only execute the Catalyst (Mist) pipeline.
 	StrategyCatalystDominance
+	// Only execute the MediaConvert pipeline
+	StrategyMediaConvertDominance
 	// Execute the Mist pipeline in foreground and MediaConvert in background.
 	StrategyBackgroundMediaConvert
 	// Execute the MediaConvert pipeline in foreground and Mist in background.
@@ -130,6 +132,8 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 	switch c.strategy {
 	case StrategyCatalystDominance:
 		c.startOneUploadJob(p, c.pipeMist, true)
+	case StrategyMediaConvertDominance:
+		c.startOneUploadJob(p, c.pipeMediaConvert, true)
 	case StrategyBackgroundMediaConvert:
 		c.startOneUploadJob(p, c.pipeMist, true)
 		c.startOneUploadJob(p, c.pipeMediaConvert, false)
