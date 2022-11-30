@@ -14,7 +14,7 @@ const MAX_JOBS_IN_FLIGHT = 5
 
 func HasCapacity(vodEngine *pipeline.Coordinator, next httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-		if vodEngine.Jobs.Size() >= MAX_JOBS_IN_FLIGHT {
+		if vodEngine.InFlightMistPipelineJobs() >= MAX_JOBS_IN_FLIGHT {
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		}

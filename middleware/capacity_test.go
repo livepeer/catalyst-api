@@ -39,8 +39,10 @@ func TestItErrorsWhenNoCapacityAvailable(t *testing.T) {
 
 	// Create a lot of in-flight jobs
 	coordinator := pipeline.NewStubCoordinator()
-	for x := 0; x < 11; x++ {
-		coordinator.Jobs.Store(fmt.Sprintf("request-%d", x), &pipeline.JobInfo{})
+	for x := 0; x < 5; x++ {
+		coordinator.StartUploadJob(pipeline.UploadJobPayload{
+			RequestID: fmt.Sprintf("request-%d", x),
+		})
 	}
 
 	// Set up the HTTP handler

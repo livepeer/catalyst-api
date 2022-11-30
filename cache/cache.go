@@ -15,12 +15,6 @@ func New[T interface{}]() *Cache[T] {
 	}
 }
 
-func (c *Cache[T]) Size() int {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-	return len(c.cache)
-}
-
 func (c *Cache[T]) Remove(streamName string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -36,6 +30,16 @@ func (c *Cache[T]) Get(streamName string) T {
 	}
 	var zero T
 	return zero
+}
+
+func (c *Cache[T]) GetKeys() []string {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	keys := make([]string, 0, len(c.cache))
+	for k := range c.cache {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 func (c *Cache[T]) Store(streamName string, value T) {

@@ -206,6 +206,17 @@ func (c *Coordinator) TriggerPushEnd(p PushEndPayload) {
 	})
 }
 
+func (c *Coordinator) InFlightMistPipelineJobs() int {
+	keys := c.Jobs.GetKeys()
+	count := 0
+	for _, k := range keys {
+		if c.Jobs.Get(k).handler == c.pipeMist {
+			count++
+		}
+	}
+	return count
+}
+
 // runHandlerAsync starts a background go-routine to run the handler function
 // safely. It locks on the JobInfo object to allow safe mutations inside the
 // handler. It also handles panics and errors, turning them into a transcode
