@@ -194,6 +194,10 @@ func (c *Coordinator) TriggerRecordingEnd(p RecordingEndPayload) {
 	})
 }
 
+func (c *Coordinator) NumJobsInFlight() {
+
+}
+
 // TriggerPushEnd handles PUSH_END trigger from mist.
 func (c *Coordinator) TriggerPushEnd(p PushEndPayload) {
 	si := c.Jobs.Get(p.StreamName)

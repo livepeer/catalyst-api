@@ -6,13 +6,19 @@ import (
 
 type Cache[T interface{}] struct {
 	cache map[string]T
-	mutex sync.Mutex
+	mutex sync.RWMutex
 }
 
 func New[T interface{}]() *Cache[T] {
 	return &Cache[T]{
 		cache: make(map[string]T),
 	}
+}
+
+func (c *Cache[T]) Size() int {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	return len(c.cache)
 }
 
 func (c *Cache[T]) Remove(streamName string) {
@@ -22,8 +28,8 @@ func (c *Cache[T]) Remove(streamName string) {
 }
 
 func (c *Cache[T]) Get(streamName string) T {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 	info, ok := c.cache[streamName]
 	if ok {
 		return info

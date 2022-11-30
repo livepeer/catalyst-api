@@ -41,6 +41,7 @@ func NewCatalystAPIRouter(vodEngine *pipeline.Coordinator, apiToken string) *htt
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
 	withAuth := middleware.IsAuthorized
+	withCapacityChecking := middleware.HasCapacity
 
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
 	mistCallbackHandlers := &misttriggers.MistCallbackHandlersCollection{VODEngine: vodEngine}
@@ -49,8 +50,29 @@ func NewCatalystAPIRouter(vodEngine *pipeline.Coordinator, apiToken string) *htt
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 
 	// Public Catalyst API
-	router.POST("/api/vod", withLogging(withAuth(apiToken, catalystApiHandlers.UploadVOD())))
-	router.POST("/api/transcode/file", withLogging(withAuth(apiToken, catalystApiHandlers.TranscodeSegment())))
+	router.POST("/api/vod",
+		withLogging(
+			withAuth(
+				apiToken,
+				withCapacityChecking(
+					vodEngine,
+					catalystApiHandlers.UploadVOD(),
+				),
+			),
+		),
+	)
+
+	router.POST("/api/transcode/file",
+		withLogging(
+			withAuth(
+				apiToken,
+				withCapacityChecking(
+					vodEngine,
+					catalystApiHandlers.TranscodeSegment(),
+				),
+			),
+		),
+	)
 
 	// Endpoint to receive "Triggers" (callbacks) from Mist
 	router.POST("/api/mist/trigger", withLogging(mistCallbackHandlers.Trigger()))
