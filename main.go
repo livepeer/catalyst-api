@@ -23,6 +23,7 @@ func main() {
 	mistJson := flag.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
 	promPort := flag.Int("prom-port", 2112, "Prometheus metrics port")
 	externalTranscoderUrl := flag.String("external-transcoder", "", "URL for the external transcoder to be used by the pipeline coordinator. Only 1 implementation today for AWS MediaConvert which should be in the format: mediaconvert://key-id:key-secret@endpoint-host?region=aws-region&role=iam-role")
+	vodPipelineStrategy := flag.String("vod-pipeline-strategy", string(pipeline.StrategyCatalystDominance), "Which strategy to use for the VOD pipeline")
 	URLVarFlag(flag.CommandLine, &config.MediaConvertS3TransferBucket, "mediaconvert-s3-transfer-bucket", "", "S3 bucket to use for MediaConvert pipeline temporary storage of input/output files. Should be in the form s3://bucket-name(/path)?")
 	flag.StringVar(&config.RecordingCallback, "recording", "http://recording.livepeer.com/recording/status", "Callback URL for recording start&stop events")
 	flag.Parse()
@@ -43,7 +44,7 @@ func main() {
 	}
 	// Kick off the callback client, to send job update messages on a regular interval
 	statusClient := clients.NewPeriodicCallbackClient(15 * time.Second).Start()
-	vodEngine, err := pipeline.NewCoordinator(pipeline.StrategyCatalystDominance, mist, *externalTranscoderUrl, statusClient)
+	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(*vodPipelineStrategy), mist, *externalTranscoderUrl, statusClient)
 	if err != nil {
 		log.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 	}

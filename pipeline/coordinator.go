@@ -16,20 +16,27 @@ import (
 // Strategy indicates how the pipelines should be coordinated. Mainly changes
 // which pipelines to execute, in what order, and which ones go in background.
 // Background pipelines are only logged and are not reported back to the client.
-type Strategy int
+type Strategy string
 
 const (
-	// Zero value
-	StrategyInvalid Strategy = iota
 	// Only execute the Catalyst (Mist) pipeline.
-	StrategyCatalystDominance
+	StrategyCatalystDominance Strategy = "catalyst"
 	// Execute the Mist pipeline in foreground and MediaConvert in background.
-	StrategyBackgroundMediaConvert
+	StrategyBackgroundMediaConvert Strategy = "background_mediaconvert"
 	// Execute the MediaConvert pipeline in foreground and Mist in background.
-	StrategyBackgroundMist
+	StrategyBackgroundMist Strategy = "background_mist"
 	// Execute the Mist pipeline fist and fallback to MediaConvert on errors.
-	StrategyFallbackMediaConvert
+	StrategyFallbackMediaConvert Strategy = "fallback_mediaconvert"
 )
+
+func (s Strategy) IsValid() bool {
+	switch s {
+	case StrategyCatalystDominance, StrategyBackgroundMediaConvert, StrategyBackgroundMist, StrategyFallbackMediaConvert:
+		return true
+	default:
+		return false
+	}
+}
 
 // UploadJobPayload is the required payload to start an upload job.
 type UploadJobPayload struct {
@@ -96,6 +103,10 @@ type Coordinator struct {
 func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 	extTranscoderURL string, statusClient clients.TranscodeStatusClient) (*Coordinator, error) {
 
+	if !strategy.IsValid() {
+		return nil, fmt.Errorf("invalid strategy: %s", strategy)
+	}
+
 	var extTranscoder clients.TranscodeProvider
 	if extTranscoderURL != "" {
 		var err error
@@ -128,7 +139,7 @@ func NewStubCoordinator() *Coordinator {
 }
 
 func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeMist, pipeMediaConvert Handler) *Coordinator {
-	if strategy == StrategyInvalid {
+	if strategy == "" {
 		strategy = StrategyCatalystDominance
 	}
 	if statusClient == nil {
