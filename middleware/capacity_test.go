@@ -58,32 +58,3 @@ func TestItErrorsWhenNoCapacityAvailable(t *testing.T) {
 	// Confirm the handler didn't call the next middleware
 	require.False(t, nextCalled)
 }
-
-func TestNonMistJobsDontCountTowardsCapacity(t *testing.T) {
-	// Create a next handler in the middleware chain, to confirm the request was passed onwards
-	var nextCalled bool
-	next := func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-		nextCalled = true
-	}
-
-	// Create more in-flight jobs than our capacity limit, but make sure they're MediaConvert ones
-	coordinator := pipeline.NewStubCoordinatorOpts(pipeline.StrategyMediaConvertDominance, nil, nil, nil)
-	for x := 0; x < 100; x++ {
-		coordinator.StartUploadJob(pipeline.UploadJobPayload{
-			RequestID: fmt.Sprintf("request-%d", x),
-		})
-	}
-
-	// Set up the HTTP handler
-	handler := HasCapacity(coordinator, next)
-
-	// Call the handler
-	responseRecorder := httptest.NewRecorder()
-	handler(responseRecorder, nil, nil)
-
-	// Confirm we got an HTTP 429 response
-	require.Equal(t, http.StatusOK, responseRecorder.Code)
-
-	// Confirm the handler didn't call the next middleware
-	require.True(t, nextCalled)
-}
