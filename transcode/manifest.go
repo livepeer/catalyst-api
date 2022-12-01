@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/clients"
@@ -130,7 +131,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 
 		manifestFilename := "index.m3u8"
 		renditionManifestBaseURL := fmt.Sprintf("%s/%s", targetOSURL, profile.Name)
-		err = clients.UploadToOSURL(renditionManifestBaseURL, manifestFilename, strings.NewReader(renditionPlaylist.String()))
+		err = clients.UploadToOSURL(renditionManifestBaseURL, manifestFilename, strings.NewReader(renditionPlaylist.String()), 30*time.Second)
 		if err != nil {
 			return "", fmt.Errorf("failed to upload rendition playlist: %s", err)
 		}
@@ -142,7 +143,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		}
 	}
 
-	err := clients.UploadToOSURL(targetOSURL, MASTER_MANIFEST_FILENAME, strings.NewReader(masterPlaylist.String()))
+	err := clients.UploadToOSURL(targetOSURL, MASTER_MANIFEST_FILENAME, strings.NewReader(masterPlaylist.String()), 30*time.Second)
 	if err != nil {
 		return "", fmt.Errorf("failed to upload master playlist: %s", err)
 	}
