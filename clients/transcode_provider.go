@@ -6,13 +6,13 @@ import (
 	"net/url"
 )
 
-type TranscodeJobInput struct {
-	// For now these are always valid s3:// URLs for MediaConvert.
-	InputFile     string
-	HLSOutputFile string
+type TranscodeJobArgs struct {
+	// Input and output URLs for the job. Input can be any HTTP or OS URL, while
+	// output must be a OS URL.
+	InputFile, HLSOutputFile *url.URL
 	// Just for logging purposes.
 	RequestID string
-	// This function will be called every so often with the progress of the job.
+	// Function that should be called every so often with the progress of the job.
 	ReportProgress func(completionRatio float64)
 }
 
@@ -22,7 +22,7 @@ type TranscodeJobInput struct {
 // transcode unsupported files, etc) and quality assurance (compare result of
 // external vs mist pipelines).
 type TranscodeProvider interface {
-	Transcode(ctx context.Context, input TranscodeJobInput) error
+	Transcode(ctx context.Context, input TranscodeJobArgs) error
 }
 
 // ParseTranscodeProviderURL returns the correct provider for a given URL

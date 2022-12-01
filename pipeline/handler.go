@@ -42,15 +42,6 @@ type HandlerOutput struct {
 // Helper value to be returned by the handlers when continuing the pipeline async.
 var ContinuePipeline = &HandlerOutput{Continue: true}
 
-// Special wrapper for errors that should set the `Unretriable` field in the
-// error callback sent to the caller.
-type UnretriableError struct{ error }
-
-// Returns whether the given error is an unretriable error.
-func IsUnretriable(err error) bool {
-	return errors.As(err, &UnretriableError{})
-}
-
 // Used for testing
 type StubHandler struct {
 	handleStartUploadJob      func(job *JobInfo) (*HandlerOutput, error)

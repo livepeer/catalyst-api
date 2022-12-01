@@ -2,6 +2,7 @@ package errors
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -56,4 +57,17 @@ func WriteHTTPBadBodySchema(where string, w http.ResponseWriter, errors []gojson
 		sb.WriteString(" ")
 	}
 	return writeHttpError(w, sb.String(), http.StatusBadRequest, nil)
+}
+
+// Special wrapper for errors that should set the `Unretriable` field in the
+// error callback sent on VOD upload jobs.
+type UnretriableError struct{ error }
+
+func Unretriable(err error) error {
+	return UnretriableError{err}
+}
+
+// Returns whether the given error is an unretriable error.
+func IsUnretriable(err error) bool {
+	return errors.As(err, &UnretriableError{})
 }

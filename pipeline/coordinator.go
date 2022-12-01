@@ -9,6 +9,7 @@ import (
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
 )
@@ -21,17 +22,18 @@ type Strategy string
 const (
 	// Only execute the Catalyst (Mist) pipeline.
 	StrategyCatalystDominance Strategy = "catalyst"
-	// Execute the Mist pipeline in foreground and MediaConvert in background.
-	StrategyBackgroundMediaConvert Strategy = "background_mediaconvert"
-	// Execute the MediaConvert pipeline in foreground and Mist in background.
+	// Execute the Mist pipeline in foreground and the external transcoder in background.
+	StrategyBackgroundExternal Strategy = "background_external"
+	// Execute the external transcoder pipeline in foreground and Mist in background.
 	StrategyBackgroundMist Strategy = "background_mist"
-	// Execute the Mist pipeline fist and fallback to MediaConvert on errors.
-	StrategyFallbackMediaConvert Strategy = "fallback_mediaconvert"
+	// Execute the Mist pipeline first and fallback to the external transcoding
+	// provider on errors.
+	StrategyFallbackExternal Strategy = "fallback_external"
 )
 
 func (s Strategy) IsValid() bool {
 	switch s {
-	case StrategyCatalystDominance, StrategyBackgroundMediaConvert, StrategyBackgroundMist, StrategyFallbackMediaConvert:
+	case StrategyCatalystDominance, StrategyBackgroundExternal, StrategyBackgroundMist, StrategyFallbackExternal:
 		return true
 	default:
 		return false
@@ -95,7 +97,7 @@ type Coordinator struct {
 	strategy     Strategy
 	statusClient clients.TranscodeStatusClient
 
-	pipeMist, pipeMediaConvert Handler
+	pipeMist, pipeExternal Handler
 
 	Jobs *cache.Cache[*JobInfo]
 }
@@ -123,12 +125,8 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 		strategy:     strategy,
 		statusClient: statusClient,
 		pipeMist:     &mist{mistClient},
-		pipeMediaConvert: &mediaconvert{
-			// TODO: refactor the mediaconvert pipeline to be just an "external provider pipeline"
-			// (will require moving copy to/from S3 to the mediaconvert provider)
-			mediaconvert: extTranscoder.(*clients.MediaConvert),
-		},
-		Jobs: cache.New[*JobInfo](),
+		pipeExternal: &external{extTranscoder},
+		Jobs:         cache.New[*JobInfo](),
 	}, nil
 }
 
@@ -136,7 +134,7 @@ func NewStubCoordinator() *Coordinator {
 	return NewStubCoordinatorOpts(StrategyCatalystDominance, nil, nil, nil)
 }
 
-func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeMist, pipeMediaConvert Handler) *Coordinator {
+func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeMist, pipeExternal Handler) *Coordinator {
 	if strategy == "" {
 		strategy = StrategyCatalystDominance
 	}
@@ -146,15 +144,15 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 	if pipeMist == nil {
 		pipeMist = &mist{clients.StubMistClient{}}
 	}
-	if pipeMediaConvert == nil {
-		pipeMediaConvert = &mediaconvert{}
+	if pipeExternal == nil {
+		pipeExternal = &external{}
 	}
 	return &Coordinator{
-		strategy:         strategy,
-		statusClient:     statusClient,
-		pipeMist:         pipeMist,
-		pipeMediaConvert: pipeMediaConvert,
-		Jobs:             cache.New[*JobInfo](),
+		strategy:     strategy,
+		statusClient: statusClient,
+		pipeMist:     pipeMist,
+		pipeExternal: pipeExternal,
+		Jobs:         cache.New[*JobInfo](),
 	}
 }
 
@@ -166,20 +164,20 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 	switch c.strategy {
 	case StrategyCatalystDominance:
 		c.startOneUploadJob(p, c.pipeMist, true)
-	case StrategyBackgroundMediaConvert:
+	case StrategyBackgroundExternal:
 		c.startOneUploadJob(p, c.pipeMist, true)
-		c.startOneUploadJob(p, c.pipeMediaConvert, false)
+		c.startOneUploadJob(p, c.pipeExternal, false)
 	case StrategyBackgroundMist:
-		c.startOneUploadJob(p, c.pipeMediaConvert, true)
+		c.startOneUploadJob(p, c.pipeExternal, true)
 		c.startOneUploadJob(p, c.pipeMist, false)
-	case StrategyFallbackMediaConvert:
+	case StrategyFallbackExternal:
 		// nolint:errcheck
 		go recovered(func() (t bool, e error) {
 			// TODO: Also need to filter the error callback from the first pipeline so
-			// we can silently do the MediaConvert flow underneath.
+			// we can silently do the external transcoder flow underneath.
 			success := <-c.startOneUploadJob(p, c.pipeMist, true)
 			if !success {
-				c.startOneUploadJob(p, c.pipeMediaConvert, true)
+				c.startOneUploadJob(p, c.pipeExternal, true)
 			}
 			return
 		})
@@ -276,7 +274,7 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 	defer close(job.result)
 	var tsm clients.TranscodeStatusMessage
 	if err != nil {
-		tsm = clients.NewTranscodeStatusError(job.CallbackURL, job.RequestID, err.Error(), IsUnretriable(err))
+		tsm = clients.NewTranscodeStatusError(job.CallbackURL, job.RequestID, err.Error(), errors.IsUnretriable(err))
 	} else {
 		tsm = clients.NewTranscodeStatusCompleted(job.CallbackURL, job.RequestID, out.Result.InputVideo, out.Result.Outputs)
 	}
