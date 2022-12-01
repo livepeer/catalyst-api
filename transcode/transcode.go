@@ -219,7 +219,7 @@ func transcodeSegment(
 			return fmt.Errorf("error building rendition segment URL %q: %s", targetRenditionURL, err)
 		}
 
-		err = clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData))
+		err = clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), time.Minute)
 		if err != nil {
 			return fmt.Errorf("failed to upload master playlist: %s", err)
 		}

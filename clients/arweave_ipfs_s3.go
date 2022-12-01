@@ -10,6 +10,8 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 )
 
+const MAX_COPY_DURATION = 20 * time.Minute
+
 var arweaveIPFSHTTPClient = newArweaveIPFSHTTPClient()
 
 func newArweaveIPFSHTTPClient() *http.Client {
@@ -20,7 +22,7 @@ func newArweaveIPFSHTTPClient() *http.Client {
 	client.HTTPClient = &http.Client{
 		// Give up on requests that take more than this long - the file is probably too big for us to process locally if it takes this long
 		// or something else has gone wrong and the request is hanging
-		Timeout: 10 * time.Minute,
+		Timeout: MAX_COPY_DURATION,
 	}
 
 	return client.StandardClient()
@@ -32,7 +34,7 @@ func CopyArweaveToS3(arweaveURL, s3URL string) error {
 		return fmt.Errorf("error fetching Arweave or IPFS URL: %s", err)
 	}
 
-	err = UploadToOSURL(s3URL, "", resp.Body)
+	err = UploadToOSURL(s3URL, "", resp.Body, MAX_COPY_DURATION)
 	if err != nil {
 		return fmt.Errorf("failed to copy Arweave or IPFS URL to S3: %s", err)
 	}

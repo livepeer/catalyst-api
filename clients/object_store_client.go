@@ -53,7 +53,7 @@ func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 	return fileInfoReader.Body, nil
 }
 
-func UploadToOSURL(osURL, filename string, data io.Reader) error {
+func UploadToOSURL(osURL, filename string, data io.Reader, timeout time.Duration) error {
 	storageDriver, err := drivers.ParseOSURL(osURL, true)
 	if err != nil {
 		return fmt.Errorf("failed to parse OS URL %q: %s", osURL, err)
@@ -70,7 +70,7 @@ func UploadToOSURL(osURL, filename string, data io.Reader) error {
 		} else {
 			url = info.S3Info.Host
 		}
-		_, err := sess.SaveData(context.Background(), filename, data, nil, 30*time.Second)
+		_, err := sess.SaveData(context.Background(), filename, data, nil, timeout)
 		return err
 	})
 
