@@ -42,7 +42,7 @@ func (mc *mediaconvert) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, erro
 		}
 
 		mcInputFileUrl := inputDir.JoinPath("video")
-		err = clients.UploadToOSURL(mcInputFileUrl.String(), "", content)
+		err = clients.UploadToOSURL(mcInputFileUrl.String(), "", content, 3*time.Minute)
 		if err != nil {
 			return nil, fmt.Errorf("error uploading source file to S3: %w", err)
 		}
@@ -171,7 +171,7 @@ func copyFile(sourceOsURL, destBaseURL, filename string) error {
 	}
 	defer content.Close()
 
-	err = clients.UploadToOSURL(destBaseURL, filename, content)
+	err = clients.UploadToOSURL(destBaseURL, filename, content, 1*time.Minute)
 	if err != nil {
 		return fmt.Errorf("error uploading final output file %q: %w", filename, err)
 	}
