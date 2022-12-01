@@ -30,27 +30,30 @@ func (mc *mediaconvert) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, erro
 	outputDir := mc.mediaconvert.S3AuxBucket.JoinPath("output", targetDir)
 	// AWS MediaConvert adds the .m3u8 to the end of the output file name
 	hlsOutputFile := outputDir.JoinPath("index")
+	hlsOutputFile.User = nil
 
-	inputFile := job.SourceFile
-	if !strings.HasPrefix(inputFile, "s3://") {
+	mcInputFile := job.SourceFile
+	if !strings.HasPrefix(mcInputFile, "s3://") {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
-		content, err := getFile(ctx, inputFile)
+		content, err := getFile(ctx, mcInputFile)
 		if err != nil {
 			return nil, fmt.Errorf("error getting source file: %w", err)
 		}
 
-		inputFile = inputDir.JoinPath("video").String()
-		err = clients.UploadToOSURL(inputFile, "", content)
+		mcInputFileUrl := inputDir.JoinPath("video")
+		err = clients.UploadToOSURL(mcInputFileUrl.String(), "", content)
 		if err != nil {
 			return nil, fmt.Errorf("error uploading source file to S3: %w", err)
 		}
+		mcInputFileUrl.User = nil
+		mcInputFile = mcInputFileUrl.String()
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
 	defer cancel()
 	err := mc.mediaconvert.Transcode(ctx, clients.TranscodeJobInput{
-		InputFile:     inputFile,
+		InputFile:     mcInputFile,
 		HLSOutputFile: hlsOutputFile.String(),
 	})
 	if err != nil {

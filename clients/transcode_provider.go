@@ -7,13 +7,20 @@ import (
 )
 
 type TranscodeJobInput struct {
-	// For now you can assume these are valid s3:// URLs for MediaConvert
+	// For now these are always valid s3:// URLs for MediaConvert.
 	InputFile     string
 	HLSOutputFile string
-	// Call this function on the polling loop for the status of the job
+	// Just for logging purposes.
+	RequestID string
+	// This function will be called every so often with the progress of the job.
 	ReportProgress func(completionRatio float64)
 }
 
+// TranscodProviders is the interface to an external video processing service
+// that can be used instead of the Mist+Livepeer Network pipeline. It's used for
+// several reason, including reliability (e.g. fallback on error, use to
+// transcode unsupported files, etc) and quality assurance (compare result of
+// external vs mist pipelines).
 type TranscodeProvider interface {
 	Transcode(ctx context.Context, input TranscodeJobInput) error
 }
@@ -57,7 +64,7 @@ func ParseTranscodeProviderURL(input string) (TranscodeProvider, error) {
 			AccessKeyID:     accessKeyId,
 			AccessKeySecret: accessKeySecret,
 			S3AuxBucket:     s3AuxBucket,
-		}), nil
+		})
 	}
 	return nil, fmt.Errorf("unrecognized OS scheme: %s", u.Scheme)
 }
