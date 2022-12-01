@@ -7,7 +7,7 @@ on:
       - main
 
 jobs:
-  test:
+  unit-test:
     name: Test the catalyst-api project
     runs-on: ubuntu-20.04
     steps:
@@ -37,7 +37,7 @@ jobs:
           git diff --exit-code
 
       - name: Run tests with coverage
-        run: go test ./... --short --race --covermode=atomic --coverprofile=coverage.out
+        run: go test $(go list ./... | grep -v /test) --short --race --covermode=atomic --coverprofile=coverage.out
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3
@@ -45,3 +45,29 @@ jobs:
           files: ./coverage.out
           name: ${{ github.event.repository.name }}
           verbose: true
+  cucumber-test:
+    name: Cucumber tests
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          # Check https://github.com/livepeer/go-livepeer/pull/1891
+          # for ref value discussion
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up go
+        id: go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Install go modules
+        if: steps.go.outputs.cache-hit != 'true'
+        run: go mod download
+      - name: Run cucumber tests
+        run: |
+          go test -v test/cucumber_test.go
