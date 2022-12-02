@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -20,19 +21,30 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const pollDelay = 10 * time.Second
+const (
+	pollDelay = 10 * time.Second
+	// https://docs.aws.amazon.com/mediaconvert/latest/ug/mediaconvert_error_codes.html
+	errCodeJobDoesNotRequireAcceleration = 1042
+)
+
+var ErrJobDoesNotRequireAcceleration = errors.New("job does not require acceleration")
 
 type MediaConvertOptions struct {
 	Endpoint, Region, Role       string
 	AccessKeyID, AccessKeySecret string
 	// Bucket that will be used for direct input/output files from MediaConvert.
 	// The actual input/output files will be copied to/from this bucket.
+	//
+	// This should be a regular s3:// URL with only the bucket name (and/or sub
+	// path) and the OS URL will be created internally from it using the same
+	// region and credentials above.
 	S3AuxBucket *url.URL
 }
 
 type MediaConvert struct {
-	opts   MediaConvertOptions
-	client *mediaconvert.MediaConvert
+	opts                MediaConvertOptions
+	client              *mediaconvert.MediaConvert
+	osTransferBucketURL *url.URL
 }
 
 func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) {
@@ -44,9 +56,15 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 	if err != nil {
 		return nil, fmt.Errorf("error creating AWS session: %w", err)
 	}
+	osTransferBucket := &url.URL{
+		Scheme: "s3",
+		User:   url.UserPassword(opts.AccessKeyID, opts.AccessKeySecret),
+		Host:   opts.Region, // weird but compatible with drivers.ParseOSURL
+		Path:   path.Join(opts.S3AuxBucket.Host, opts.S3AuxBucket.Path),
+	}
 
 	client := mediaconvert.New(sess)
-	return &MediaConvert{opts, client}, nil
+	return &MediaConvert{opts, client, osTransferBucket}, nil
 }
 
 // This does the whole transcode job, including the moving of the input file to
@@ -59,34 +77,33 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	if path.Base(args.HLSOutputFile.Path) != "index.m3u8" {
 		return fmt.Errorf("target URL must be an `index.m3u8` file, found %s", args.HLSOutputFile)
 	}
-	targetDir := path.Dir(args.HLSOutputFile.Path)
+	targetDir := getTargetDir(args.HLSOutputFile)
 
-	s3InputDir := mc.opts.S3AuxBucket.JoinPath("input", targetDir)
-	s3OutputDir := mc.opts.S3AuxBucket.JoinPath("output", targetDir)
+	mcInputRelPath := path.Join("input", targetDir, "video")
+	// AWS MediaConvert adds the .m3u8 to the end of the output file name
+	mcOutputRelPath := path.Join("output", targetDir, "index")
 
-	mcArgs := args
-	if mcArgs.InputFile.Scheme != "s3" {
-		mcArgs.InputFile = s3InputDir.JoinPath("video")
-		err := copyFile(ctx, args.InputFile.String(), mcArgs.InputFile.String(), "")
-		if err != nil {
-			return fmt.Errorf("error copying input file to S3: %w", err)
-		}
+	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", mc.opts.S3AuxBucket.JoinPath(mcInputRelPath))
+	err := copyFile(ctx, args.InputFile.String(), mc.osTransferBucketURL.String(), mcInputRelPath)
+	if err != nil {
+		return fmt.Errorf("error copying input file to S3: %w", err)
 	}
 
-	// AWS MediaConvert adds the .m3u8 to the end of the output file name
-	mcArgs.HLSOutputFile = s3OutputDir.JoinPath("index")
-	// Input/Output URLs that we send to AWS should not have any creds
-	mcArgs.InputFile.User = nil
-	mcArgs.HLSOutputFile.User = nil
-
-	if err := mc.coreAwsTranscode(ctx, mcArgs); err != nil {
+	mcArgs := args
+	mcArgs.InputFile = mc.opts.S3AuxBucket.JoinPath(mcInputRelPath)
+	mcArgs.HLSOutputFile = mc.opts.S3AuxBucket.JoinPath(mcOutputRelPath)
+	err = mc.coreAwsTranscode(ctx, mcArgs, true)
+	if err == ErrJobDoesNotRequireAcceleration {
+		err = mc.coreAwsTranscode(ctx, mcArgs, false)
+	}
+	if err != nil {
 		return err
 	}
 
-	mcOutputBaseDir := mcArgs.HLSOutputFile.JoinPath("..")
+	mcOutputBaseDir := mc.osTransferBucketURL.JoinPath(mcOutputRelPath, "..")
 	ourOutputBaseDir := args.HLSOutputFile.JoinPath("..")
-	err := copyDir(mcOutputBaseDir, ourOutputBaseDir)
-	if err != nil {
+	log.Log(args.RequestID, "Copying output files from S3", "source", mcOutputBaseDir, ourOutputBaseDir)
+	if err := copyDir(mcOutputBaseDir, ourOutputBaseDir); err != nil {
 		return fmt.Errorf("error copying output files: %w", err)
 	}
 	return nil
@@ -94,8 +111,9 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 
 // This is the function that does the core AWS workflow for transcoding a file.
 // It expects args to be directly compatible with AWS (i.e. S3-only files).
-func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobArgs) error {
-	payload := createJobPayload(args.InputFile.String(), args.HLSOutputFile.String(), mc.opts.Role)
+func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobArgs, accelerated bool) error {
+	log.Log(args.RequestID, "Creating AWS MediaConvert job", "input", args.InputFile, "output", args.HLSOutputFile, "accelerated", accelerated)
+	payload := createJobPayload(args.InputFile.String(), args.HLSOutputFile.String(), mc.opts.Role, accelerated)
 	job, err := mc.client.CreateJob(payload)
 	if err != nil {
 		return fmt.Errorf("error creting mediaconvert job: %w", err)
@@ -129,11 +147,15 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 				args.ReportProgress(progress)
 			}
 		case mediaconvert.JobStatusComplete:
+			args.ReportProgress(1)
 			log.Log(args.RequestID, "Mediaconvert job completed successfully")
 			return nil
 		case mediaconvert.JobStatusError:
 			errMsg := aws.StringValue(job.Job.ErrorMessage)
 			log.Log(args.RequestID, "Mediaconvert job failed", "error", errMsg)
+			if aws.Int64Value(job.Job.ErrorCode) == errCodeJobDoesNotRequireAcceleration {
+				return ErrJobDoesNotRequireAcceleration
+			}
 			return fmt.Errorf("job failed: %s", errMsg)
 		case mediaconvert.JobStatusCanceled:
 			log.Log(args.RequestID, "Mediaconvert job unexpectedly canceled")
@@ -142,7 +164,14 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 	}
 }
 
-func createJobPayload(inputFile, hlsOutputFile, role string) *mediaconvert.CreateJobInput {
+func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *mediaconvert.CreateJobInput {
+	var acceleration *mediaconvert.AccelerationSettings
+	if accelerated {
+		acceleration = &mediaconvert.AccelerationSettings{
+			Mode: aws.String("ENABLED"),
+		}
+	}
+
 	return &mediaconvert.CreateJobInput{
 		Settings: &mediaconvert.JobSettings{
 			Inputs: []*mediaconvert.Input{
@@ -212,10 +241,8 @@ func createJobPayload(inputFile, hlsOutputFile, role string) *mediaconvert.Creat
 				Source: aws.String("ZEROBASED"),
 			},
 		},
-		Role: aws.String(role),
-		AccelerationSettings: &mediaconvert.AccelerationSettings{
-			Mode: aws.String("ENABLED"),
-		},
+		Role:                 aws.String(role),
+		AccelerationSettings: acceleration,
 	}
 }
 
@@ -253,13 +280,13 @@ func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename string) er
 	defer cancel()
 	content, err := getFile(ctx, sourceURL)
 	if err != nil {
-		return fmt.Errorf("error reading mediaconvert output file %q: %w", filename, err)
+		return fmt.Errorf("download error: %w", err)
 	}
 	defer content.Close()
 
 	err = UploadToOSURL(destOSBaseURL, filename, content, 1*time.Minute)
 	if err != nil {
-		return fmt.Errorf("error uploading final output file %q: %w", filename, err)
+		return fmt.Errorf("upload error: %w", err)
 	}
 	return nil
 }
@@ -269,17 +296,17 @@ func copyDir(source, dest *url.URL) error {
 	defer cancel()
 	eg, ctx := errgroup.WithContext(ctx)
 
-	files := make(chan drivers.FileInfo, 10)
+	files := make(chan string, 10)
 	eg.Go(func() error {
 		defer close(files)
 		page, err := ListOSURL(ctx, source.String())
 		if err != nil {
-			return fmt.Errorf("error listing output files: %w", err)
+			return fmt.Errorf("error listing files: %w", err)
 		}
 		for {
 			for _, f := range page.Files() {
 				select {
-				case files <- f:
+				case files <- trimBaseDir(source.String(), f.Name):
 				case <-ctx.Done():
 					return ctx.Err()
 				}
@@ -290,7 +317,7 @@ func copyDir(source, dest *url.URL) error {
 			}
 			page, err = page.NextPage()
 			if err != nil {
-				return fmt.Errorf("error fetching files next page: %w", err)
+				return fmt.Errorf("error fetching next page: %w", err)
 			}
 		}
 		return nil
@@ -298,11 +325,11 @@ func copyDir(source, dest *url.URL) error {
 
 	for i := 0; i < 10; i++ {
 		eg.Go(func() error {
-			for f := range files {
+			for file := range files {
 				if err := ctx.Err(); err != nil {
 					return err
 				}
-				err := copyFile(ctx, source.JoinPath(f.Name).String(), dest.String(), f.Name)
+				err := copyFile(ctx, source.JoinPath(file).String(), dest.String(), file)
 				if err != nil {
 					return err
 				}
@@ -312,4 +339,43 @@ func copyDir(source, dest *url.URL) error {
 	}
 
 	return eg.Wait()
+}
+
+// The List function from object stores return the full path of the files
+// instead of the path relative to the current client prefix (which comes in the
+// URL path after the bucket).
+//
+// This function will remove the base path from the file path returned by the
+// OS, or in other words it transforms the absolute path of the file into a
+// relative path based on the provided OS path.
+func trimBaseDir(osPath, filePath string) string {
+	filePath = path.Clean(filePath)
+	// We can't just TrimPrefix in this case because there can be other stuff in
+	// the OS path before the actual base dir. So we look for the prefix of the
+	// file path which is a suffix of the OS path (the "base dir")
+	baseDir := filePath
+	for !strings.HasSuffix(osPath, baseDir) {
+		baseDir = path.Dir(baseDir)
+		if baseDir == "/" || baseDir == "." || baseDir == "" {
+			return filePath
+		}
+	}
+	return strings.TrimPrefix(filePath, baseDir)
+}
+
+// Returns the directory where the files will be stored given an OS URL
+func getTargetDir(url *url.URL) string {
+	// remove the file name
+	dir := path.Dir(url.Path)
+	if url.Scheme == "s3" || strings.HasPrefix(url.Scheme, "s3+") {
+		dir = strings.TrimLeft(dir, "/")
+		split := strings.SplitN(dir, "/", 2)
+		if len(split) == 2 {
+			dir = split[1]
+		} else {
+			// only bucket name and file in URL
+			dir = ""
+		}
+	}
+	return dir
 }
