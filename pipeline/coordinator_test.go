@@ -219,14 +219,7 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 	external := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			externalCalls <- job
-
-			// Check that progress is still reported
 			job.ReportProgress(clients.TranscodeStatusPreparing, 0.2)
-			msg := requireReceive(t, callbacks, 1*time.Second)
-			require.NotZero(msg.URL)
-			require.Equal("123", msg.RequestID)
-			require.Equal(clients.TranscodeStatusPreparing.String(), msg.Status)
-
 			return testHandlerResult, nil
 		},
 	}
@@ -257,6 +250,13 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 	meconJob := requireReceive(t, externalCalls, 1*time.Second)
 	require.Equal("123", meconJob.RequestID)
 	require.Equal(mistJob.StreamName, meconJob.StreamName)
+
+	// Check that the progress reported in the fallback handler is still reported
+	msg = requireReceive(t, callbacks, 1*time.Second)
+	require.NotZero(msg.URL)
+	require.Equal("123", msg.RequestID)
+	require.Equal(clients.TranscodeStatusPreparing.String(), msg.Status)
+	require.Equal(clients.OverallCompletionRatio(clients.TranscodeStatusPreparing, 0.2), msg.CompletionRatio)
 
 	msg = requireReceive(t, callbacks, 1*time.Second)
 	require.Equal("123", msg.RequestID)
