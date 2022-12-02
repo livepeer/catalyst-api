@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -27,12 +28,17 @@ type MediaConvertOptions struct {
 	AccessKeyID, AccessKeySecret string
 	// Bucket that will be used for direct input/output files from MediaConvert.
 	// The actual input/output files will be copied to/from this bucket.
+	//
+	// This should be a regular s3:// URL with only the bucket name (and/or sub
+	// path) and the OS URL will be created internally from it using the same
+	// region and credentials above.
 	S3AuxBucket *url.URL
 }
 
 type MediaConvert struct {
-	opts   MediaConvertOptions
-	client *mediaconvert.MediaConvert
+	opts                MediaConvertOptions
+	client              *mediaconvert.MediaConvert
+	osTransferBucketURL *url.URL
 }
 
 func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) {
@@ -44,9 +50,15 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 	if err != nil {
 		return nil, fmt.Errorf("error creating AWS session: %w", err)
 	}
+	osTransferBucket := &url.URL{
+		Scheme: "s3",
+		User:   url.UserPassword(opts.AccessKeyID, opts.AccessKeySecret),
+		Host:   opts.Region, // weird but compatible with drivers.ParseOSURL
+		Path:   path.Join(opts.S3AuxBucket.Host, opts.S3AuxBucket.Path),
+	}
 
 	client := mediaconvert.New(sess)
-	return &MediaConvert{opts, client}, nil
+	return &MediaConvert{opts, client, osTransferBucket}, nil
 }
 
 // This does the whole transcode job, including the moving of the input file to
@@ -59,34 +71,29 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	if path.Base(args.HLSOutputFile.Path) != "index.m3u8" {
 		return fmt.Errorf("target URL must be an `index.m3u8` file, found %s", args.HLSOutputFile)
 	}
-	targetDir := path.Dir(args.HLSOutputFile.Path)
+	targetDir := getTargetDir(args.HLSOutputFile)
 
-	s3InputDir := mc.opts.S3AuxBucket.JoinPath("input", targetDir)
-	s3OutputDir := mc.opts.S3AuxBucket.JoinPath("output", targetDir)
+	mcInputRelPath := path.Join("input", targetDir, "video")
+	// AWS MediaConvert adds the .m3u8 to the end of the output file name
+	mcOutputRelPath := path.Join("output", targetDir, "index")
 
-	mcArgs := args
-	if mcArgs.InputFile.Scheme != "s3" {
-		mcArgs.InputFile = s3InputDir.JoinPath("video")
-		err := copyFile(ctx, args.InputFile.String(), mcArgs.InputFile.String(), "")
-		if err != nil {
-			return fmt.Errorf("error copying input file to S3: %w", err)
-		}
+	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", mc.opts.S3AuxBucket.JoinPath(mcInputRelPath))
+	err := copyFile(ctx, args.InputFile.String(), mc.osTransferBucketURL.String(), mcInputRelPath)
+	if err != nil {
+		return fmt.Errorf("error copying input file to S3: %w", err)
 	}
 
-	// AWS MediaConvert adds the .m3u8 to the end of the output file name
-	mcArgs.HLSOutputFile = s3OutputDir.JoinPath("index")
-	// Input/Output URLs that we send to AWS should not have any creds
-	mcArgs.InputFile.User = nil
-	mcArgs.HLSOutputFile.User = nil
-
+	mcArgs := args
+	mcArgs.InputFile = mc.opts.S3AuxBucket.JoinPath(mcInputRelPath)
+	mcArgs.HLSOutputFile = mc.opts.S3AuxBucket.JoinPath(mcOutputRelPath)
 	if err := mc.coreAwsTranscode(ctx, mcArgs); err != nil {
 		return err
 	}
 
-	mcOutputBaseDir := mcArgs.HLSOutputFile.JoinPath("..")
+	mcOutputBaseDir := mc.osTransferBucketURL.JoinPath(mcOutputRelPath, "..")
 	ourOutputBaseDir := args.HLSOutputFile.JoinPath("..")
-	err := copyDir(mcOutputBaseDir, ourOutputBaseDir)
-	if err != nil {
+	log.Log(args.RequestID, "Copying output files from S3", "source", mcOutputBaseDir, ourOutputBaseDir)
+	if err := copyDir(mcOutputBaseDir, ourOutputBaseDir); err != nil {
 		return fmt.Errorf("error copying output files: %w", err)
 	}
 	return nil
@@ -253,13 +260,13 @@ func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename string) er
 	defer cancel()
 	content, err := getFile(ctx, sourceURL)
 	if err != nil {
-		return fmt.Errorf("error reading mediaconvert output file %q: %w", filename, err)
+		return fmt.Errorf("download error: %w", err)
 	}
 	defer content.Close()
 
 	err = UploadToOSURL(destOSBaseURL, filename, content, 1*time.Minute)
 	if err != nil {
-		return fmt.Errorf("error uploading final output file %q: %w", filename, err)
+		return fmt.Errorf("upload error: %w", err)
 	}
 	return nil
 }
@@ -274,7 +281,7 @@ func copyDir(source, dest *url.URL) error {
 		defer close(files)
 		page, err := ListOSURL(ctx, source.String())
 		if err != nil {
-			return fmt.Errorf("error listing output files: %w", err)
+			return fmt.Errorf("error listing files: %w", err)
 		}
 		for {
 			for _, f := range page.Files() {
@@ -290,7 +297,7 @@ func copyDir(source, dest *url.URL) error {
 			}
 			page, err = page.NextPage()
 			if err != nil {
-				return fmt.Errorf("error fetching files next page: %w", err)
+				return fmt.Errorf("error fetching next page: %w", err)
 			}
 		}
 		return nil
@@ -312,4 +319,21 @@ func copyDir(source, dest *url.URL) error {
 	}
 
 	return eg.Wait()
+}
+
+// Returns the directory where the files will be stored given an OS URL
+func getTargetDir(url *url.URL) string {
+	// remove the file name
+	dir := path.Dir(url.Path)
+	if url.Scheme == "s3" || strings.HasPrefix(url.Scheme, "s3+") {
+		dir = strings.TrimLeft(dir, "/")
+		split := strings.SplitN(dir, "/", 2)
+		if len(split) == 2 {
+			dir = split[1]
+		} else {
+			// only bucket name and file in URL
+			dir = ""
+		}
+	}
+	return dir
 }

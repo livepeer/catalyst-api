@@ -55,7 +55,6 @@ func ParseTranscodeProviderURL(input string) (TranscodeProvider, error) {
 		if err != nil || s3AuxBucket.Scheme != "s3" {
 			return nil, fmt.Errorf("invalid s3_aux_bucket %s: %w", s3AuxBucketStr, err)
 		}
-		s3AuxBucket.User = u.User
 
 		return NewMediaConvertClient(MediaConvertOptions{
 			Endpoint:        endpoint,
