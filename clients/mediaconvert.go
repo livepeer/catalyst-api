@@ -54,9 +54,14 @@ type MediaConvertOptions struct {
 	S3AuxBucket *url.URL
 }
 
+type AWSMediaConvertClient interface {
+	CreateJob(*mediaconvert.CreateJobInput) (*mediaconvert.CreateJobOutput, error)
+	GetJob(*mediaconvert.GetJobInput) (*mediaconvert.GetJobOutput, error)
+}
+
 type MediaConvert struct {
 	opts                MediaConvertOptions
-	client              *mediaconvert.MediaConvert
+	client              AWSMediaConvertClient
 	osTransferBucketURL *url.URL
 }
 
