@@ -3,6 +3,7 @@ package pipeline
 import (
 	"fmt"
 	"net/url"
+	"path"
 	"strconv"
 	"sync"
 
@@ -188,12 +189,19 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 // running in background (foreground=false) then:
 //   - the job will have a different requestID
 //   - no transcode status updates will be reported to the caller, only logged
-//   - TODO: the output will go to a different location than the real job
+//   - the output will go to a different location than the real job
 func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, foreground bool) <-chan bool {
+	handlerName := "mist"
+	if handler == c.pipeExternal {
+		handlerName = "external"
+	}
+	log.AddContext("handler", handlerName)
+
 	if !foreground {
 		p.RequestID = fmt.Sprintf("bg_%s", p.RequestID)
+		p.TargetURL = p.TargetURL.JoinPath("..", handlerName, path.Base(p.TargetURL.Path))
+		// this will prevent the callbacks for this job from actually being sent
 		p.CallbackURL = ""
-		// TODO: change the output path as well
 	}
 	streamName := config.SegmentingStreamName(p.RequestID)
 	log.AddContext(p.RequestID, "stream_name", streamName)
