@@ -21,7 +21,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const pollDelay = 10 * time.Second
+const (
+	pollDelay = 10 * time.Second
+	// https://docs.aws.amazon.com/mediaconvert/latest/ug/mediaconvert_error_codes.html
+	errCodeJobDoesNotRequireAcceleration = 1042
+)
+
+var ErrJobDoesNotRequireAcceleration = errors.New("job does not require acceleration")
 
 type MediaConvertOptions struct {
 	Endpoint, Region, Role       string
@@ -86,7 +92,11 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	mcArgs := args
 	mcArgs.InputFile = mc.opts.S3AuxBucket.JoinPath(mcInputRelPath)
 	mcArgs.HLSOutputFile = mc.opts.S3AuxBucket.JoinPath(mcOutputRelPath)
-	if err := mc.coreAwsTranscode(ctx, mcArgs); err != nil {
+	err = mc.coreAwsTranscode(ctx, mcArgs, true)
+	if err == ErrJobDoesNotRequireAcceleration {
+		err = mc.coreAwsTranscode(ctx, mcArgs, false)
+	}
+	if err != nil {
 		return err
 	}
 
@@ -101,8 +111,8 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 
 // This is the function that does the core AWS workflow for transcoding a file.
 // It expects args to be directly compatible with AWS (i.e. S3-only files).
-func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobArgs) error {
-	payload := createJobPayload(args.InputFile.String(), args.HLSOutputFile.String(), mc.opts.Role)
+func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobArgs, accelerated bool) error {
+	payload := createJobPayload(args.InputFile.String(), args.HLSOutputFile.String(), mc.opts.Role, accelerated)
 	job, err := mc.client.CreateJob(payload)
 	if err != nil {
 		return fmt.Errorf("error creting mediaconvert job: %w", err)
@@ -141,6 +151,9 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 		case mediaconvert.JobStatusError:
 			errMsg := aws.StringValue(job.Job.ErrorMessage)
 			log.Log(args.RequestID, "Mediaconvert job failed", "error", errMsg)
+			if aws.Int64Value(job.Job.ErrorCode) == errCodeJobDoesNotRequireAcceleration {
+				return ErrJobDoesNotRequireAcceleration
+			}
 			return fmt.Errorf("job failed: %s", errMsg)
 		case mediaconvert.JobStatusCanceled:
 			log.Log(args.RequestID, "Mediaconvert job unexpectedly canceled")
@@ -149,7 +162,14 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 	}
 }
 
-func createJobPayload(inputFile, hlsOutputFile, role string) *mediaconvert.CreateJobInput {
+func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *mediaconvert.CreateJobInput {
+	var acceleration *mediaconvert.AccelerationSettings
+	if accelerated {
+		acceleration = &mediaconvert.AccelerationSettings{
+			Mode: aws.String("ENABLED"),
+		}
+	}
+
 	return &mediaconvert.CreateJobInput{
 		Settings: &mediaconvert.JobSettings{
 			Inputs: []*mediaconvert.Input{
@@ -219,10 +239,8 @@ func createJobPayload(inputFile, hlsOutputFile, role string) *mediaconvert.Creat
 				Source: aws.String("ZEROBASED"),
 			},
 		},
-		Role: aws.String(role),
-		AccelerationSettings: &mediaconvert.AccelerationSettings{
-			Mode: aws.String("ENABLED"),
-		},
+		Role:                 aws.String(role),
+		AccelerationSettings: acceleration,
 	}
 }
 
