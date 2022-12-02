@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"errors"
+	"net/url"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ var (
 	testJob = UploadJobPayload{
 		RequestID:   "123",
 		SourceFile:  "source-file",
+		TargetURL:   &url.URL{Scheme: "s3+https", Host: "storage.google.com", Path: "/bucket/key"},
 		CallbackURL: "http://localhost:3000/dummy",
 	}
 )
@@ -28,7 +30,7 @@ func TestCoordinatorDoesNotBlock(t *testing.T) {
 	callbackHandler, callbacks := callbacksRecorder()
 	barrier := make(chan struct{})
 	var running atomic.Bool
-	blockHandler := StubHandler{
+	blockHandler := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			running.Store(true)
 			defer running.Store(false)
@@ -57,7 +59,7 @@ func TestCoordinatorPropagatesJobInfoChanges(t *testing.T) {
 
 	barrier := make(chan struct{})
 	done := make(chan struct{}, 1)
-	blockHandler := StubHandler{
+	blockHandler := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			require.Equal("source-file", job.SourceFile)
 			<-barrier
@@ -89,7 +91,7 @@ func TestCoordinatorResistsPanics(t *testing.T) {
 	require := require.New(t)
 
 	callbackHandler, callbacks := callbacksRecorder()
-	blockHandler := StubHandler{
+	blockHandler := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			panic("oh no!")
 		},
@@ -128,7 +130,7 @@ func TestCoordinatorBackgroundJobsStrategies(t *testing.T) {
 	callbackHandler, callbacks := callbacksRecorder()
 	fgHandler, foregroundCalls := recordingHandler(nil)
 	backgroundCalls := make(chan *JobInfo, 10)
-	bgHandler := StubHandler{
+	bgHandler := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			backgroundCalls <- job
 			// Test that background job is really hidden: status callbacks are not reported (empty URL)
@@ -214,7 +216,7 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 	callbackHandler, callbacks := callbacksRecorder()
 	mist, mistCalls := recordingHandler(errors.New("mist error"))
 	externalCalls := make(chan *JobInfo, 10)
-	external := StubHandler{
+	external := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			externalCalls <- job
 
@@ -267,7 +269,7 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 }
 
 func allFailingHandler(t *testing.T) Handler {
-	return StubHandler{
+	return &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			require.Fail(t, "Unexpected handleStartUploadJob")
 			panic("unreachable")
@@ -297,7 +299,7 @@ func callbacksRecorder() (clients.TranscodeStatusClient, <-chan clients.Transcod
 
 func recordingHandler(err error) (Handler, <-chan *JobInfo) {
 	jobs := make(chan *JobInfo, 10)
-	handler := StubHandler{
+	handler := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			jobs <- job
 			if err != nil {
