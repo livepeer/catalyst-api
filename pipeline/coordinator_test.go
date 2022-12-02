@@ -236,12 +236,6 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 	mistJob := requireReceive(t, mistCalls, 1*time.Second)
 	require.Equal("123", mistJob.RequestID)
 
-	// TODO: This should actually not be received but filtered transparently.
-	// Final caller should receive only one terminal status update (error or success).
-	msg = requireReceive(t, callbacks, 1*time.Second)
-	require.Equal("123", msg.RequestID)
-	require.Equal(clients.TranscodeStatusError.String(), msg.Status)
-
 	// External provider pipeline will trigger the initial preparing trigger as well
 	msg = requireReceive(t, callbacks, 1*time.Second)
 	require.Equal("123", msg.RequestID)

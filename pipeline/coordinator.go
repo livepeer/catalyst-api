@@ -82,6 +82,7 @@ type JobInfo struct {
 	StreamName string
 
 	handler      Handler
+	hasFallback  bool
 	statusClient clients.TranscodeStatusClient
 	result       chan bool
 }
@@ -164,21 +165,19 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 	switch c.strategy {
 	case StrategyCatalystDominance:
-		c.startOneUploadJob(p, c.pipeMist, true)
+		c.startOneUploadJob(p, c.pipeMist, true, false)
 	case StrategyBackgroundExternal:
-		c.startOneUploadJob(p, c.pipeMist, true)
-		c.startOneUploadJob(p, c.pipeExternal, false)
+		c.startOneUploadJob(p, c.pipeMist, true, false)
+		c.startOneUploadJob(p, c.pipeExternal, false, false)
 	case StrategyBackgroundMist:
-		c.startOneUploadJob(p, c.pipeExternal, true)
-		c.startOneUploadJob(p, c.pipeMist, false)
+		c.startOneUploadJob(p, c.pipeExternal, true, false)
+		c.startOneUploadJob(p, c.pipeMist, false, false)
 	case StrategyFallbackExternal:
 		// nolint:errcheck
 		go recovered(func() (t bool, e error) {
-			// TODO: Also need to filter the error callback from the first pipeline so
-			// we can silently do the external transcoder flow underneath.
-			success := <-c.startOneUploadJob(p, c.pipeMist, true)
+			success := <-c.startOneUploadJob(p, c.pipeMist, true, true)
 			if !success {
-				c.startOneUploadJob(p, c.pipeExternal, true)
+				c.startOneUploadJob(p, c.pipeExternal, true, false)
 			}
 			return
 		})
@@ -190,7 +189,11 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 //   - the job will have a different requestID
 //   - no transcode status updates will be reported to the caller, only logged
 //   - the output will go to a different location than the real job
-func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, foreground bool) <-chan bool {
+//
+// The `hasFallback` argument means the caller has a special logic to handle
+// failures (today this means re-running the job in another pipeline). If it's
+// set to true, error callbacks from this job will not be sent.
+func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, foreground, hasFallback bool) <-chan bool {
 	handlerName := "mist"
 	if handler == c.pipeExternal {
 		handlerName = "external"
@@ -209,8 +212,9 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 	si := &JobInfo{
 		UploadJobPayload: p,
 		StreamName:       streamName,
-		statusClient:     c.statusClient,
 		handler:          handler,
+		hasFallback:      hasFallback,
+		statusClient:     c.statusClient,
 		result:           make(chan bool, 1),
 	}
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
@@ -282,7 +286,12 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 	defer close(job.result)
 	var tsm clients.TranscodeStatusMessage
 	if err != nil {
-		tsm = clients.NewTranscodeStatusError(job.CallbackURL, job.RequestID, err.Error(), errors.IsUnretriable(err))
+		callbackURL := job.CallbackURL
+		if job.hasFallback {
+			// an empty url will skip actually sending the callback. we still want the log tho
+			callbackURL = ""
+		}
+		tsm = clients.NewTranscodeStatusError(callbackURL, job.RequestID, err.Error(), errors.IsUnretriable(err))
 	} else {
 		tsm = clients.NewTranscodeStatusCompleted(job.CallbackURL, job.RequestID, out.Result.InputVideo, out.Result.Outputs)
 	}
