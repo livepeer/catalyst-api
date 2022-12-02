@@ -37,8 +37,8 @@ func main() {
 	}()
 
 	mist := &clients.MistClient{
-		ApiUrl:          fmt.Sprintf("http://localhost:%d/api2", mistPort),
-		HttpReqUrl:      fmt.Sprintf("http://localhost:%d", mistHttpPort),
+		ApiUrl:          fmt.Sprintf("http://localhost:%d/api2", *mistPort),
+		HttpReqUrl:      fmt.Sprintf("http://localhost:%d", *mistHttpPort),
 		TriggerCallback: fmt.Sprintf("http://localhost:%d/api/mist/trigger", *port),
 	}
 	// Kick off the callback client, to send job update messages on a regular interval
