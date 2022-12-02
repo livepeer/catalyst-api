@@ -105,7 +105,7 @@ func TestTranscodeStatusErrorNotifcation(t *testing.T) {
 
 	// Send the callback and confirm the number of times we retried
 	client := NewPeriodicCallbackClient(100 * time.Millisecond).Start()
-	client.SendTranscodeStatus(NewTranscodeStatusError(svr.URL, "example-request-id", "something went wrong"))
+	client.SendTranscodeStatus(NewTranscodeStatusError(svr.URL, "example-request-id", "something went wrong", false))
 
 	time.Sleep(200 * time.Millisecond)
 

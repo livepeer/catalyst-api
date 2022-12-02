@@ -126,7 +126,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			return
 		}
 
-		targetManifestFilename := path.Base(targetURL.String())
+		targetManifestFilename := path.Base(targetURL.Path)
 		targetExtension := path.Ext(targetManifestFilename)
 		if targetExtension != ".m3u8" {
 			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file should end in .m3u8 extension"))

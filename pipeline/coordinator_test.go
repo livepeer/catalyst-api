@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"errors"
+	"net/url"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ var (
 	testJob = UploadJobPayload{
 		RequestID:   "123",
 		SourceFile:  "source-file",
+		TargetURL:   &url.URL{Scheme: "s3+https", Host: "storage.google.com", Path: "/bucket/key"},
 		CallbackURL: "http://localhost:3000/dummy",
 	}
 )
@@ -28,7 +30,7 @@ func TestCoordinatorDoesNotBlock(t *testing.T) {
 	callbackHandler, callbacks := callbacksRecorder()
 	barrier := make(chan struct{})
 	var running atomic.Bool
-	blockHandler := StubHandler{
+	blockHandler := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			running.Store(true)
 			defer running.Store(false)
@@ -36,7 +38,7 @@ func TestCoordinatorDoesNotBlock(t *testing.T) {
 			return nil, errors.New("test error")
 		},
 	}
-	coord := NewStubCoordinatorOpts(0, callbackHandler, blockHandler, blockHandler)
+	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler)
 	coord.StartUploadJob(testJob)
 	time.Sleep(1 * time.Second)
 
@@ -57,7 +59,7 @@ func TestCoordinatorPropagatesJobInfoChanges(t *testing.T) {
 
 	barrier := make(chan struct{})
 	done := make(chan struct{}, 1)
-	blockHandler := StubHandler{
+	blockHandler := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			require.Equal("source-file", job.SourceFile)
 			<-barrier
@@ -70,7 +72,7 @@ func TestCoordinatorPropagatesJobInfoChanges(t *testing.T) {
 			return ContinuePipeline, nil
 		},
 	}
-	coord := NewStubCoordinatorOpts(0, nil, blockHandler, blockHandler)
+	coord := NewStubCoordinatorOpts("", nil, blockHandler, blockHandler)
 
 	coord.StartUploadJob(testJob)
 	time.Sleep(100 * time.Millisecond)
@@ -89,12 +91,12 @@ func TestCoordinatorResistsPanics(t *testing.T) {
 	require := require.New(t)
 
 	callbackHandler, callbacks := callbacksRecorder()
-	blockHandler := StubHandler{
+	blockHandler := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			panic("oh no!")
 		},
 	}
-	coord := NewStubCoordinatorOpts(0, callbackHandler, blockHandler, blockHandler)
+	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler)
 
 	coord.StartUploadJob(testJob)
 
@@ -110,8 +112,8 @@ func TestCoordinatorCatalystDominance(t *testing.T) {
 	require := require.New(t)
 
 	mist, calls := recordingHandler(nil)
-	mediaConvert := allFailingHandler(t)
-	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, nil, mist, mediaConvert)
+	external := allFailingHandler(t)
+	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, nil, mist, external)
 
 	coord.StartUploadJob(testJob)
 
@@ -128,7 +130,7 @@ func TestCoordinatorBackgroundJobsStrategies(t *testing.T) {
 	callbackHandler, callbacks := callbacksRecorder()
 	fgHandler, foregroundCalls := recordingHandler(nil)
 	backgroundCalls := make(chan *JobInfo, 10)
-	bgHandler := StubHandler{
+	bgHandler := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			backgroundCalls <- job
 			// Test that background job is really hidden: status callbacks are not reported (empty URL)
@@ -142,12 +144,12 @@ func TestCoordinatorBackgroundJobsStrategies(t *testing.T) {
 
 	doTest := func(strategy Strategy) {
 		var coord *Coordinator
-		if strategy == StrategyBackgroundMediaConvert {
+		if strategy == StrategyBackgroundExternal {
 			coord = NewStubCoordinatorOpts(strategy, callbackHandler, fgHandler, bgHandler)
 		} else if strategy == StrategyBackgroundMist {
 			coord = NewStubCoordinatorOpts(strategy, callbackHandler, bgHandler, fgHandler)
 		} else {
-			t.Fatalf("Unexpected strategy: %d", strategy)
+			t.Fatalf("Unexpected strategy: %s", strategy)
 		}
 
 		coord.StartUploadJob(testJob)
@@ -174,7 +176,7 @@ func TestCoordinatorBackgroundJobsStrategies(t *testing.T) {
 		require.Zero(len(callbacks))
 	}
 
-	doTest(StrategyBackgroundMediaConvert)
+	doTest(StrategyBackgroundExternal)
 	doTest(StrategyBackgroundMist)
 }
 
@@ -183,11 +185,12 @@ func TestCoordinatorFallbackStrategySuccess(t *testing.T) {
 
 	callbackHandler, callbacks := callbacksRecorder()
 	mist, mistCalls := recordingHandler(nil)
-	mediaConvert, mediaConvertCalls := recordingHandler(nil)
+	external, externalCalls := recordingHandler(nil)
 
-	coord := NewStubCoordinatorOpts(StrategyFallbackMediaConvert, callbackHandler, mist, mediaConvert)
+	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, mist, external)
 
-	// Start a job that will complete successfully on mist, which should not trigger mediaconvert
+	// Start a job that will complete successfully on mist, which should not
+	// trigger the external pipeline
 	coord.StartUploadJob(testJob)
 
 	msg := requireReceive(t, callbacks, 1*time.Second)
@@ -203,8 +206,8 @@ func TestCoordinatorFallbackStrategySuccess(t *testing.T) {
 	time.Sleep(1 * time.Second)
 	require.Zero(len(mistCalls))
 	require.Zero(len(callbacks))
-	// nothing should have happened on the mediaconvert flow
-	require.Zero(len(mediaConvertCalls))
+	// nothing should have happened on the external flow
+	require.Zero(len(externalCalls))
 }
 
 func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
@@ -212,25 +215,18 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 
 	callbackHandler, callbacks := callbacksRecorder()
 	mist, mistCalls := recordingHandler(errors.New("mist error"))
-	mediaConvertCalls := make(chan *JobInfo, 10)
-	mediaConvert := StubHandler{
+	externalCalls := make(chan *JobInfo, 10)
+	external := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
-			mediaConvertCalls <- job
-
-			// Check that progress is still reported
+			externalCalls <- job
 			job.ReportProgress(clients.TranscodeStatusPreparing, 0.2)
-			msg := requireReceive(t, callbacks, 1*time.Second)
-			require.NotZero(msg.URL)
-			require.Equal("123", msg.RequestID)
-			require.Equal(clients.TranscodeStatusPreparing.String(), msg.Status)
-
 			return testHandlerResult, nil
 		},
 	}
 
-	coord := NewStubCoordinatorOpts(StrategyFallbackMediaConvert, callbackHandler, mist, mediaConvert)
+	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, mist, external)
 
-	// Start a job which mist will fail and only then call mediaconvert
+	// Start a job which mist will fail and only then call the external one
 	coord.StartUploadJob(testJob)
 
 	msg := requireReceive(t, callbacks, 1*time.Second)
@@ -240,20 +236,21 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 	mistJob := requireReceive(t, mistCalls, 1*time.Second)
 	require.Equal("123", mistJob.RequestID)
 
-	// TODO: This should actually not be received but filtered transparently.
-	// Final caller should receive only one terminal status update (error or success).
-	msg = requireReceive(t, callbacks, 1*time.Second)
-	require.Equal("123", msg.RequestID)
-	require.Equal(clients.TranscodeStatusError.String(), msg.Status)
-
-	// Mediaconvert pipeline will trigger the initial preparing trigger as well
+	// External provider pipeline will trigger the initial preparing trigger as well
 	msg = requireReceive(t, callbacks, 1*time.Second)
 	require.Equal("123", msg.RequestID)
 	require.Equal(clients.TranscodeStatusPreparing.String(), msg.Status)
 
-	meconJob := requireReceive(t, mediaConvertCalls, 1*time.Second)
+	meconJob := requireReceive(t, externalCalls, 1*time.Second)
 	require.Equal("123", meconJob.RequestID)
 	require.Equal(mistJob.StreamName, meconJob.StreamName)
+
+	// Check that the progress reported in the fallback handler is still reported
+	msg = requireReceive(t, callbacks, 1*time.Second)
+	require.NotZero(msg.URL)
+	require.Equal("123", msg.RequestID)
+	require.Equal(clients.TranscodeStatusPreparing.String(), msg.Status)
+	require.Equal(clients.OverallCompletionRatio(clients.TranscodeStatusPreparing, 0.2), msg.CompletionRatio)
 
 	msg = requireReceive(t, callbacks, 1*time.Second)
 	require.Equal("123", msg.RequestID)
@@ -261,12 +258,12 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 	require.Zero(len(mistCalls))
-	require.Zero(len(mediaConvertCalls))
+	require.Zero(len(externalCalls))
 	require.Zero(len(callbacks))
 }
 
 func allFailingHandler(t *testing.T) Handler {
-	return StubHandler{
+	return &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			require.Fail(t, "Unexpected handleStartUploadJob")
 			panic("unreachable")
@@ -296,7 +293,7 @@ func callbacksRecorder() (clients.TranscodeStatusClient, <-chan clients.Transcod
 
 func recordingHandler(err error) (Handler, <-chan *JobInfo) {
 	jobs := make(chan *JobInfo, 10)
-	handler := StubHandler{
+	handler := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			jobs <- job
 			if err != nil {

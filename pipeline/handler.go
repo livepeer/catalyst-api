@@ -2,8 +2,6 @@ package pipeline
 
 import (
 	"errors"
-
-	"github.com/livepeer/catalyst-api/clients"
 )
 
 // Handler represents a single pipeline handler to be plugged to the coordinator
@@ -44,11 +42,6 @@ type HandlerOutput struct {
 // Helper value to be returned by the handlers when continuing the pipeline async.
 var ContinuePipeline = &HandlerOutput{Continue: true}
 
-type UploadJobResult struct {
-	InputVideo clients.InputVideo
-	Outputs    []clients.OutputVideo
-}
-
 // Used for testing
 type StubHandler struct {
 	handleStartUploadJob      func(job *JobInfo) (*HandlerOutput, error)
@@ -58,21 +51,21 @@ type StubHandler struct {
 
 var _ Handler = (*StubHandler)(nil)
 
-func (h StubHandler) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
+func (h *StubHandler) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	if h.handleStartUploadJob == nil {
 		return nil, errors.New("not implemented")
 	}
 	return h.handleStartUploadJob(job)
 }
 
-func (h StubHandler) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*HandlerOutput, error) {
+func (h *StubHandler) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*HandlerOutput, error) {
 	if h.handleRecordingEndTrigger == nil {
 		return nil, errors.New("not implemented")
 	}
 	return h.handleRecordingEndTrigger(job, p)
 }
 
-func (h StubHandler) HandlePushEndTrigger(job *JobInfo, p PushEndPayload) (*HandlerOutput, error) {
+func (h *StubHandler) HandlePushEndTrigger(job *JobInfo, p PushEndPayload) (*HandlerOutput, error) {
 	if h.handlePushEndTrigger == nil {
 		return nil, errors.New("not implemented")
 	}

@@ -123,13 +123,14 @@ func NewTranscodeStatusProgress(url, requestID string, status TranscodeStatus, c
 	}
 }
 
-func NewTranscodeStatusError(url, requestID, errorMsg string) TranscodeStatusMessage {
+func NewTranscodeStatusError(url, requestID, errorMsg string, unretriable bool) TranscodeStatusMessage {
 	return TranscodeStatusMessage{
-		URL:       url,
-		RequestID: requestID,
-		Error:     errorMsg,
-		Status:    TranscodeStatusError.String(),
-		Timestamp: config.Clock.GetTimestampUTC(),
+		URL:         url,
+		RequestID:   requestID,
+		Error:       errorMsg,
+		Unretriable: unretriable,
+		Status:      TranscodeStatusError.String(),
+		Timestamp:   config.Clock.GetTimestampUTC(),
 	}
 }
 
