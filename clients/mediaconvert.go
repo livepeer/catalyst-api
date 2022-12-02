@@ -112,6 +112,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 // This is the function that does the core AWS workflow for transcoding a file.
 // It expects args to be directly compatible with AWS (i.e. S3-only files).
 func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobArgs, accelerated bool) error {
+	log.Log(args.RequestID, "Creating AWS MediaConvert job", "input", args.InputFile, "output", args.HLSOutputFile, "accelerated", accelerated)
 	payload := createJobPayload(args.InputFile.String(), args.HLSOutputFile.String(), mc.opts.Role, accelerated)
 	job, err := mc.client.CreateJob(payload)
 	if err != nil {
@@ -146,6 +147,7 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 				args.ReportProgress(progress)
 			}
 		case mediaconvert.JobStatusComplete:
+			args.ReportProgress(1)
 			log.Log(args.RequestID, "Mediaconvert job completed successfully")
 			return nil
 		case mediaconvert.JobStatusError:
@@ -294,7 +296,7 @@ func copyDir(source, dest *url.URL) error {
 	defer cancel()
 	eg, ctx := errgroup.WithContext(ctx)
 
-	files := make(chan drivers.FileInfo, 10)
+	files := make(chan string, 10)
 	eg.Go(func() error {
 		defer close(files)
 		page, err := ListOSURL(ctx, source.String())
@@ -304,7 +306,7 @@ func copyDir(source, dest *url.URL) error {
 		for {
 			for _, f := range page.Files() {
 				select {
-				case files <- f:
+				case files <- trimBaseDir(source.String(), f.Name):
 				case <-ctx.Done():
 					return ctx.Err()
 				}
@@ -323,11 +325,11 @@ func copyDir(source, dest *url.URL) error {
 
 	for i := 0; i < 10; i++ {
 		eg.Go(func() error {
-			for f := range files {
+			for file := range files {
 				if err := ctx.Err(); err != nil {
 					return err
 				}
-				err := copyFile(ctx, source.JoinPath(f.Name).String(), dest.String(), f.Name)
+				err := copyFile(ctx, source.JoinPath(file).String(), dest.String(), file)
 				if err != nil {
 					return err
 				}
@@ -337,6 +339,28 @@ func copyDir(source, dest *url.URL) error {
 	}
 
 	return eg.Wait()
+}
+
+// The List function from object stores return the full path of the files
+// instead of the path relative to the current client prefix (which comes in the
+// URL path after the bucket).
+//
+// This function will remove the base path from the file path returned by the
+// OS, or in other words it transforms the absolute path of the file into a
+// relative path based on the provided OS path.
+func trimBaseDir(osPath, filePath string) string {
+	filePath = path.Clean(filePath)
+	// We can't just TrimPrefix in this case because there can be other stuff in
+	// the OS path before the actual base dir. So we look for the prefix of the
+	// file path which is a suffix of the OS path (the "base dir")
+	baseDir := filePath
+	for !strings.HasSuffix(osPath, baseDir) {
+		baseDir = path.Dir(baseDir)
+		if baseDir == "/" || baseDir == "." || baseDir == "" {
+			return filePath
+		}
+	}
+	return strings.TrimPrefix(filePath, baseDir)
 }
 
 // Returns the directory where the files will be stored given an OS URL
