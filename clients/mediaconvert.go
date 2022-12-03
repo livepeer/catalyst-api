@@ -186,7 +186,9 @@ func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *
 					},
 					FileInput:      aws.String(inputFile),
 					TimecodeSource: aws.String("ZEROBASED"),
-					VideoSelector:  &mediaconvert.VideoSelector{},
+					VideoSelector: &mediaconvert.VideoSelector{
+						Rotate: aws.String(mediaconvert.InputRotateAuto),
+					},
 				},
 			},
 			OutputGroups: []*mediaconvert.OutputGroup{
