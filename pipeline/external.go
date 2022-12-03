@@ -41,7 +41,7 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 			},
 			Outputs: []clients.OutputVideo{
 				{
-					Type:     "manifest",
+					Type:     "object_store",
 					Manifest: job.TargetURL.String(),
 					Videos:   []clients.OutputVideoFile{
 						// TODO: Figure out what to do here. Studio doesn't use these anyway.
