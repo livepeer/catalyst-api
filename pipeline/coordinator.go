@@ -46,7 +46,6 @@ type UploadJobPayload struct {
 	SourceFile            string
 	CallbackURL           string
 	TargetURL             *url.URL
-	SegmentingTargetURL   string
 	AccessToken           string
 	TranscodeAPIUrl       string
 	HardcodedBroadcasters string
@@ -80,6 +79,8 @@ type JobInfo struct {
 	mu sync.Mutex
 	UploadJobPayload
 	StreamName string
+	// this is only set&used internally in the mist pipeline
+	SegmentingTargetURL string
 
 	handler      Handler
 	hasFallback  bool
