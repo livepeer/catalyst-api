@@ -19,6 +19,19 @@ type mist struct {
 }
 
 func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
+	targetManifestFilename := path.Base(job.TargetURL.Path)
+	targetExtension := path.Ext(targetManifestFilename)
+	if targetExtension != ".m3u8" {
+		return nil, fmt.Errorf("target output file should have .m3u8 extension, found %q", targetExtension)
+	}
+
+	segmentingTargetURL, err := InSameDirectory(job.TargetURL, "source", targetManifestFilename)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create targetSegmentedOutputURL: %w", err)
+	}
+	job.SegmentingTargetURL = segmentingTargetURL.String()
+	log.AddContext(job.RequestID, "segmented_url", job.SegmentingTargetURL)
+
 	// Arweave URLs don't support HTTP Range requests and so Mist can't natively handle them for segmenting
 	// This workaround copies the file from Arweave to S3 and then tells Mist to use the S3 URL
 	if clients.IsArweaveOrIPFSURL(job.SourceFile) {

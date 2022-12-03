@@ -7,7 +7,6 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
-	"path"
 	"strings"
 
 	"github.com/julienschmidt/httprouter"
@@ -126,33 +125,16 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			return
 		}
 
-		targetManifestFilename := path.Base(targetURL.Path)
-		targetExtension := path.Ext(targetManifestFilename)
-		if targetExtension != ".m3u8" {
-			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file should end in .m3u8 extension"))
-			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusBadRequest)).Inc()
-			return
-		}
-
-		targetSegmentedOutputURL, err := pipeline.InSameDirectory(targetURL, "source", targetManifestFilename)
-		if err != nil {
-			errors.WriteHTTPInternalServerError(w, "Cannot create targetSegmentedOutputURL", err)
-			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusInternalServerError)).Inc()
-			return
-		}
-		log.AddContext(requestID, "segmented_url", targetSegmentedOutputURL.String())
-
 		// Once we're happy with the request, do the rest of the Segmenting stage asynchronously to allow us to
 		// from the API call and free up the HTTP connection
 		d.VODEngine.StartUploadJob(pipeline.UploadJobPayload{
-			SourceFile:          uploadVODRequest.Url,
-			CallbackURL:         uploadVODRequest.CallbackUrl,
-			TargetURL:           targetURL,
-			SegmentingTargetURL: targetSegmentedOutputURL.String(),
-			AccessToken:         uploadVODRequest.AccessToken,
-			TranscodeAPIUrl:     uploadVODRequest.TranscodeAPIUrl,
-			RequestID:           requestID,
-			Profiles:            uploadVODRequest.Profiles,
+			SourceFile:      uploadVODRequest.Url,
+			CallbackURL:     uploadVODRequest.CallbackUrl,
+			TargetURL:       targetURL,
+			AccessToken:     uploadVODRequest.AccessToken,
+			TranscodeAPIUrl: uploadVODRequest.TranscodeAPIUrl,
+			RequestID:       requestID,
+			Profiles:        uploadVODRequest.Profiles,
 		})
 
 		respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})
