@@ -61,12 +61,12 @@ func ParseTranscodeProviderURL(input string) (TranscodeProvider, error) {
 		}
 
 		return NewMediaConvertClient(MediaConvertOptions{
-			Endpoint:        endpoint,
-			Region:          region,
-			Role:            role,
-			AccessKeyID:     accessKeyId,
-			AccessKeySecret: accessKeySecret,
-			S3AuxBucket:     s3AuxBucket,
+			Endpoint:         endpoint,
+			Region:           region,
+			Role:             role,
+			AccessKeyID:      accessKeyId,
+			AccessKeySecret:  accessKeySecret,
+			S3TransferBucket: s3AuxBucket,
 		})
 	}
 	return nil, fmt.Errorf("unrecognized OS scheme: %s", u.Scheme)

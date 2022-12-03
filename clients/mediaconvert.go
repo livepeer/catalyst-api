@@ -51,7 +51,7 @@ type MediaConvertOptions struct {
 	// This should be a regular s3:// URL with only the bucket name (and/or sub
 	// path) and the OS URL will be created internally from it using the same
 	// region and credentials above.
-	S3AuxBucket *url.URL
+	S3TransferBucket *url.URL
 }
 
 type AWSMediaConvertClient interface {
@@ -60,9 +60,9 @@ type AWSMediaConvertClient interface {
 }
 
 type MediaConvert struct {
-	opts                MediaConvertOptions
-	client              AWSMediaConvertClient
-	osTransferBucketURL *url.URL
+	role                                  string
+	s3TransferBucket, osTransferBucketURL *url.URL
+	client                                AWSMediaConvertClient
 }
 
 func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) {
@@ -78,11 +78,11 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 		Scheme: "s3",
 		User:   url.UserPassword(opts.AccessKeyID, opts.AccessKeySecret),
 		Host:   opts.Region, // weird but compatible with drivers.ParseOSURL
-		Path:   path.Join(opts.S3AuxBucket.Host, opts.S3AuxBucket.Path),
+		Path:   path.Join(opts.S3TransferBucket.Host, opts.S3TransferBucket.Path),
 	}
 
 	client := mediaconvert.New(sess)
-	return &MediaConvert{opts, client, osTransferBucket}, nil
+	return &MediaConvert{opts.Role, opts.S3TransferBucket, osTransferBucket, client}, nil
 }
 
 // This does the whole transcode job, including the moving of the input file to
@@ -102,7 +102,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	mcOutputRelPath := path.Join("output", targetDir, "index")
 	var srcInputFile *url.URL
 
-	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", mc.opts.S3AuxBucket.JoinPath(mcInputRelPath), "filename", mcInputRelPath)
+	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", mc.s3TransferBucket.JoinPath(mcInputRelPath), "filename", mcInputRelPath)
 	size, err := copyFile(ctx, args.InputFile.String(), mc.osTransferBucketURL.String(), mcInputRelPath)
 	if err != nil {
 		log.Log(args.RequestID, "error copying input file to S3", "bytes", size, "err", fmt.Sprintf("%s", err))
@@ -111,13 +111,13 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 		srcInputFile = args.InputFile
 	} else {
 		log.Log(args.RequestID, "Successfully copied", size, "bytes to S3")
-		srcInputFile = mc.opts.S3AuxBucket.JoinPath(mcInputRelPath)
+		srcInputFile = mc.s3TransferBucket.JoinPath(mcInputRelPath)
 	}
 
 	args.CollectSourceSize(size)
 	mcArgs := args
 	mcArgs.InputFile = srcInputFile
-	mcArgs.HLSOutputFile = mc.opts.S3AuxBucket.JoinPath(mcOutputRelPath)
+	mcArgs.HLSOutputFile = mc.s3TransferBucket.JoinPath(mcOutputRelPath)
 
 	err = mc.coreAwsTranscode(ctx, mcArgs, true)
 	if err == ErrJobAcceleration {
@@ -140,7 +140,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 // It expects args to be directly compatible with AWS (i.e. S3-only files).
 func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobArgs, accelerated bool) error {
 	log.Log(args.RequestID, "Creating AWS MediaConvert job", "input", args.InputFile, "output", args.HLSOutputFile, "accelerated", accelerated)
-	payload := createJobPayload(args.InputFile.String(), args.HLSOutputFile.String(), mc.opts.Role, accelerated)
+	payload := createJobPayload(args.InputFile.String(), args.HLSOutputFile.String(), mc.role, accelerated)
 	job, err := mc.client.CreateJob(payload)
 	if err != nil {
 		return fmt.Errorf("error creting mediaconvert job: %w", err)
