@@ -21,13 +21,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const (
-	pollDelay = 10 * time.Second
-	// https://docs.aws.amazon.com/mediaconvert/latest/ug/mediaconvert_error_codes.html
-	errCodeAccelerationSettings          = 1041
-	errCodeJobDoesNotRequireAcceleration = 1042
-)
+const pollDelay = 10 * time.Second
 
+// https://docs.aws.amazon.com/mediaconvert/latest/ug/mediaconvert_error_codes.html
+var errCodesAcceleration = []int64{
+	1041, // Acceleration Settings Error
+	1042, // Job Doesn't Require Enough Processing Power for Accelerated Transcoding
+	1043, // Secret Undocumented Error. Returned for this error msg: "Your input files aren't compatible with accelerated transcoding for the following reasons: [You can't use accelerated transcoding with input files that have empty edit lists as in this input: [0].] Disable accelerated transcoding and resubmit your job."
+}
 var ErrJobAcceleration = errors.New("job should not have acceleration")
 
 type MediaConvertOptions struct {
@@ -155,7 +156,7 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 			errMsg := aws.StringValue(job.Job.ErrorMessage)
 			code := aws.Int64Value(job.Job.ErrorCode)
 			log.Log(args.RequestID, "Mediaconvert job failed", "error", errMsg, "code", code)
-			if code == errCodeJobDoesNotRequireAcceleration || code == errCodeAccelerationSettings {
+			if contains(code, errCodesAcceleration) {
 				return ErrJobAcceleration
 			}
 			return fmt.Errorf("job failed: %s", errMsg)
@@ -380,4 +381,13 @@ func getTargetDir(url *url.URL) string {
 		}
 	}
 	return dir
+}
+
+func contains[T comparable](v T, list []T) bool {
+	for _, elm := range list {
+		if elm == v {
+			return true
+		}
+	}
+	return false
 }
