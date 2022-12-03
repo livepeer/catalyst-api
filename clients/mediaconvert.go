@@ -24,10 +24,11 @@ import (
 const (
 	pollDelay = 10 * time.Second
 	// https://docs.aws.amazon.com/mediaconvert/latest/ug/mediaconvert_error_codes.html
+	errCodeAccelerationSettings          = 1041
 	errCodeJobDoesNotRequireAcceleration = 1042
 )
 
-var ErrJobDoesNotRequireAcceleration = errors.New("job does not require acceleration")
+var ErrJobAcceleration = errors.New("job should not have acceleration")
 
 type MediaConvertOptions struct {
 	Endpoint, Region, Role       string
@@ -93,7 +94,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	mcArgs.InputFile = mc.opts.S3AuxBucket.JoinPath(mcInputRelPath)
 	mcArgs.HLSOutputFile = mc.opts.S3AuxBucket.JoinPath(mcOutputRelPath)
 	err = mc.coreAwsTranscode(ctx, mcArgs, true)
-	if err == ErrJobDoesNotRequireAcceleration {
+	if err == ErrJobAcceleration {
 		err = mc.coreAwsTranscode(ctx, mcArgs, false)
 	}
 	if err != nil {
@@ -152,9 +153,10 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 			return nil
 		case mediaconvert.JobStatusError:
 			errMsg := aws.StringValue(job.Job.ErrorMessage)
-			log.Log(args.RequestID, "Mediaconvert job failed", "error", errMsg)
-			if aws.Int64Value(job.Job.ErrorCode) == errCodeJobDoesNotRequireAcceleration {
-				return ErrJobDoesNotRequireAcceleration
+			code := aws.Int64Value(job.Job.ErrorCode)
+			log.Log(args.RequestID, "Mediaconvert job failed", "error", errMsg, "code", code)
+			if code == errCodeJobDoesNotRequireAcceleration || code == errCodeAccelerationSettings {
+				return ErrJobAcceleration
 			}
 			return fmt.Errorf("job failed: %s", errMsg)
 		case mediaconvert.JobStatusCanceled:
