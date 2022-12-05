@@ -301,7 +301,9 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 	c.Jobs.Remove(job.StreamName)
 
 	log.Log(job.RequestID, "Finished job and deleted from job cache", "success", success)
-	metrics.Metrics.UploadVODPipelineResults.WithLabelValues(strconv.FormatBool(success)).Inc()
+	metrics.Metrics.UploadVODPipelineDurationSec.
+		WithLabelValues(job.handler.Name(), strconv.FormatBool(success)).
+		Observe(float64(time.Since(job.startTime)) / float64(time.Second))
 
 	job.result <- success
 }
