@@ -14,6 +14,10 @@ type external struct {
 	transcoder clients.TranscodeProvider
 }
 
+func (m *external) Name() string {
+	return "external"
+}
+
 func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	sourceFileUrl, err := url.Parse(job.SourceFile)
 	if err != nil {

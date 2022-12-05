@@ -197,20 +197,15 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 // failures (today this means re-running the job in another pipeline). If it's
 // set to true, error callbacks from this job will not be sent.
 func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, foreground, hasFallback bool) <-chan bool {
-	handlerName := "mist"
-	if handler == c.pipeExternal {
-		handlerName = "external"
-	}
-	log.AddContext("handler", handlerName)
-
 	if !foreground {
 		p.RequestID = fmt.Sprintf("bg_%s", p.RequestID)
-		p.TargetURL = p.TargetURL.JoinPath("..", handlerName, path.Base(p.TargetURL.Path))
+		p.TargetURL = p.TargetURL.JoinPath("..", handler.Name(), path.Base(p.TargetURL.Path))
 		// this will prevent the callbacks for this job from actually being sent
 		p.CallbackURL = ""
 	}
 	streamName := config.SegmentingStreamName(p.RequestID)
 	log.AddContext(p.RequestID, "stream_name", streamName)
+	log.AddContext(p.RequestID, "handler", handler.Name())
 
 	si := &JobInfo{
 		UploadJobPayload: p,
