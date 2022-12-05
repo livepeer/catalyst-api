@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"context"
 	"errors"
 )
 
@@ -50,6 +51,15 @@ type StubHandler struct {
 	handleStartUploadJob      func(job *JobInfo) (*HandlerOutput, error)
 	handleRecordingEndTrigger func(job *JobInfo, p RecordingEndPayload) (*HandlerOutput, error)
 	handlePushEndTrigger      func(job *JobInfo, p PushEndPayload) (*HandlerOutput, error)
+}
+
+func NewBlockingStubHandler() (blockedHandler *StubHandler, release func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	handle := func(job *JobInfo) (*HandlerOutput, error) {
+		<-ctx.Done()
+		return nil, errors.New("unblocked but i have no idea what i'm doing")
+	}
+	return &StubHandler{handleStartUploadJob: handle}, cancel
 }
 
 var _ Handler = (*StubHandler)(nil)
