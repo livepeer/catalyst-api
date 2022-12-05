@@ -6,6 +6,7 @@ import (
 	"path"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
@@ -85,6 +86,7 @@ type JobInfo struct {
 	handler      Handler
 	hasFallback  bool
 	statusClient clients.TranscodeStatusClient
+	startTime    time.Time
 	result       chan bool
 }
 
@@ -216,6 +218,7 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		handler:          handler,
 		hasFallback:      hasFallback,
 		statusClient:     c.statusClient,
+		startTime:        time.Now(),
 		result:           make(chan bool, 1),
 	}
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
