@@ -206,7 +206,7 @@ func transcodeSegment(
 	}
 
 	duration := time.Since(start)
-	metrics.Metrics.TranscodeSegmentDuration.Observe(duration.Seconds())
+	metrics.Metrics.TranscodeSegmentDurationSec.Observe(duration.Seconds())
 
 	for _, transcodedSegment := range tr.Renditions {
 		renditionIndex := getProfileIndex(transcodeProfiles, transcodedSegment.Name)

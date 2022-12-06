@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"context"
 	"errors"
 )
 
@@ -16,6 +17,8 @@ import (
 // much as needed and they should not leave background jobs running after
 // returning.
 type Handler interface {
+	// Name of the handler, used for logging and metrics.
+	Name() string
 	// Handle start job request. This may start async processes like on mist an
 	// wait for triggers or do the full job synchronously on exeution.
 	HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error)
@@ -44,12 +47,29 @@ var ContinuePipeline = &HandlerOutput{Continue: true}
 
 // Used for testing
 type StubHandler struct {
+	name                      string
 	handleStartUploadJob      func(job *JobInfo) (*HandlerOutput, error)
 	handleRecordingEndTrigger func(job *JobInfo, p RecordingEndPayload) (*HandlerOutput, error)
 	handlePushEndTrigger      func(job *JobInfo, p PushEndPayload) (*HandlerOutput, error)
 }
 
+func NewBlockingStubHandler() (blockedHandler *StubHandler, release func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	handle := func(job *JobInfo) (*HandlerOutput, error) {
+		<-ctx.Done()
+		return nil, errors.New("unblocked but i have no idea what i'm doing")
+	}
+	return &StubHandler{handleStartUploadJob: handle}, cancel
+}
+
 var _ Handler = (*StubHandler)(nil)
+
+func (s *StubHandler) Name() string {
+	if s.name == "" {
+		return "stub"
+	}
+	return s.name
+}
 
 func (h *StubHandler) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	if h.handleStartUploadJob == nil {

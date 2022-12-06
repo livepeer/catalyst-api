@@ -6,6 +6,7 @@ import (
 	"path"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
@@ -85,6 +86,7 @@ type JobInfo struct {
 	handler      Handler
 	hasFallback  bool
 	statusClient clients.TranscodeStatusClient
+	startTime    time.Time
 	result       chan bool
 }
 
@@ -195,20 +197,15 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 // failures (today this means re-running the job in another pipeline). If it's
 // set to true, error callbacks from this job will not be sent.
 func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, foreground, hasFallback bool) <-chan bool {
-	handlerName := "mist"
-	if handler == c.pipeExternal {
-		handlerName = "external"
-	}
-	log.AddContext("handler", handlerName)
-
 	if !foreground {
 		p.RequestID = fmt.Sprintf("bg_%s", p.RequestID)
-		p.TargetURL = p.TargetURL.JoinPath("..", handlerName, path.Base(p.TargetURL.Path))
+		p.TargetURL = p.TargetURL.JoinPath("..", handler.Name(), path.Base(p.TargetURL.Path))
 		// this will prevent the callbacks for this job from actually being sent
 		p.CallbackURL = ""
 	}
 	streamName := config.SegmentingStreamName(p.RequestID)
 	log.AddContext(p.RequestID, "stream_name", streamName)
+	log.AddContext(p.RequestID, "handler", handler.Name())
 
 	si := &JobInfo{
 		UploadJobPayload: p,
@@ -216,6 +213,7 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		handler:          handler,
 		hasFallback:      hasFallback,
 		statusClient:     c.statusClient,
+		startTime:        time.Now(),
 		result:           make(chan bool, 1),
 	}
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
@@ -303,7 +301,9 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 	c.Jobs.Remove(job.StreamName)
 
 	log.Log(job.RequestID, "Finished job and deleted from job cache", "success", success)
-	metrics.Metrics.UploadVODPipelineResults.WithLabelValues(strconv.FormatBool(success)).Inc()
+	metrics.Metrics.UploadVODPipelineDurationSec.
+		WithLabelValues(job.handler.Name(), strconv.FormatBool(success)).
+		Observe(time.Since(job.startTime).Seconds())
 
 	job.result <- success
 }

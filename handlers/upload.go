@@ -7,7 +7,9 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/clients"
@@ -67,93 +69,88 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 
 	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 		m.UploadVODRequestCount.Inc()
-		var uploadVODRequest UploadVODRequest
 
-		if !HasContentType(req, "application/json") {
-			errors.WriteHTTPUnsupportedMediaType(w, "Requires application/json content type", nil)
-			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusBadRequest)).Inc()
-			return
-		} else if payload, err := io.ReadAll(req.Body); err != nil {
-			errors.WriteHTTPInternalServerError(w, "Cannot read payload", err)
-			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusInternalServerError)).Inc()
-			return
-		} else if result, err := schema.Validate(gojsonschema.NewBytesLoader(payload)); err != nil {
-			errors.WriteHTTPInternalServerError(w, "Cannot validate payload", err)
-			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusInternalServerError)).Inc()
-			return
-		} else if !result.Valid() {
-			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("%s", result.Errors()))
-			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusBadRequest)).Inc()
-			return
-		} else if err := json.Unmarshal(payload, &uploadVODRequest); err != nil {
-			errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
-			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusBadRequest)).Inc()
-			return
+		startTime := time.Now()
+		success, apiError := d.handleUploadVOD(w, req, schema)
+
+		status := http.StatusOK
+		if !success {
+			status = apiError.Status
 		}
-
-		// Generate a Request ID that will be used throughout all logging
-		var requestID = config.RandomTrailer(8)
-		log.AddContext(requestID, "source", uploadVODRequest.Url)
-
-		httpURL, err := dStorageToHTTP(uploadVODRequest.Url)
-		if err != nil {
-			errors.WriteHTTPBadRequest(w, "error in applyInputGateway()", err)
-			return
-		}
-		uploadVODRequest.Url = httpURL
-
-		// find source segment URL
-		var tURL string
-		for _, o := range uploadVODRequest.OutputLocations {
-			if o.Outputs.SourceSegments {
-				tURL = o.URL
-				break
-			}
-		}
-		if tURL == "" {
-			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("no source segment URL in request"))
-			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusBadRequest)).Inc()
-			return
-		}
-
-		// Create a separate subdirectory for the source segments
-		// Use the output directory specified in request as the output directory of transcoded renditions
-		targetURL, err := url.Parse(tURL)
-		if err != nil {
-			errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file should end in .m3u8 extension"))
-			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusBadRequest)).Inc()
-			return
-		}
-
-		// Once we're happy with the request, do the rest of the Segmenting stage asynchronously to allow us to
-		// from the API call and free up the HTTP connection
-		d.VODEngine.StartUploadJob(pipeline.UploadJobPayload{
-			SourceFile:      uploadVODRequest.Url,
-			CallbackURL:     uploadVODRequest.CallbackUrl,
-			TargetURL:       targetURL,
-			AccessToken:     uploadVODRequest.AccessToken,
-			TranscodeAPIUrl: uploadVODRequest.TranscodeAPIUrl,
-			RequestID:       requestID,
-			Profiles:        uploadVODRequest.Profiles,
-		})
-
-		respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})
-		if err != nil {
-			log.LogError(requestID, "Failed to build a /upload HTTP API response", err)
-			errors.WriteHTTPInternalServerError(w, "Failed marshaling response", err)
-			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusInternalServerError)).Inc()
-			return
-		}
-
-		if _, err := w.Write(respBytes); err != nil {
-			log.LogError(requestID, "Failed to write a /upload HTTP API response", err)
-			errors.WriteHTTPInternalServerError(w, "Failed writing response", err)
-			m.UploadVODFailureCount.WithLabelValues(fmt.Sprint(http.StatusInternalServerError)).Inc()
-			return
-		}
-
-		m.UploadVODSuccessCount.Inc()
+		m.UploadVODRequestDurationSec.
+			WithLabelValues(strconv.FormatBool(success), fmt.Sprint(status)).
+			Observe(time.Since(startTime).Seconds())
 	}
+}
+
+func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, req *http.Request, schema *gojsonschema.Schema) (bool, errors.APIError) {
+	var uploadVODRequest UploadVODRequest
+
+	if !HasContentType(req, "application/json") {
+		return false, errors.WriteHTTPUnsupportedMediaType(w, "Requires application/json content type", nil)
+	} else if payload, err := io.ReadAll(req.Body); err != nil {
+		return false, errors.WriteHTTPInternalServerError(w, "Cannot read payload", err)
+	} else if result, err := schema.Validate(gojsonschema.NewBytesLoader(payload)); err != nil {
+		return false, errors.WriteHTTPInternalServerError(w, "Cannot validate payload", err)
+	} else if !result.Valid() {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("%s", result.Errors()))
+	} else if err := json.Unmarshal(payload, &uploadVODRequest); err != nil {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+	}
+
+	// Generate a Request ID that will be used throughout all logging
+	var requestID = config.RandomTrailer(8)
+	log.AddContext(requestID, "source", uploadVODRequest.Url)
+
+	httpURL, err := dStorageToHTTP(uploadVODRequest.Url)
+	if err != nil {
+		return false, errors.WriteHTTPBadRequest(w, "error in applyInputGateway()", err)
+	}
+	uploadVODRequest.Url = httpURL
+
+	// find source segment URL
+	var tURL string
+	for _, o := range uploadVODRequest.OutputLocations {
+		if o.Outputs.SourceSegments {
+			tURL = o.URL
+			break
+		}
+	}
+	if tURL == "" {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("no source segment URL in request"))
+	}
+
+	// Create a separate subdirectory for the source segments
+	// Use the output directory specified in request as the output directory of transcoded renditions
+	targetURL, err := url.Parse(tURL)
+	if err != nil {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file should end in .m3u8 extension"))
+	}
+
+	// Once we're happy with the request, do the rest of the Segmenting stage asynchronously to allow us to
+	// from the API call and free up the HTTP connection
+	d.VODEngine.StartUploadJob(pipeline.UploadJobPayload{
+		SourceFile:      uploadVODRequest.Url,
+		CallbackURL:     uploadVODRequest.CallbackUrl,
+		TargetURL:       targetURL,
+		AccessToken:     uploadVODRequest.AccessToken,
+		TranscodeAPIUrl: uploadVODRequest.TranscodeAPIUrl,
+		RequestID:       requestID,
+		Profiles:        uploadVODRequest.Profiles,
+	})
+
+	respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})
+	if err != nil {
+		log.LogError(requestID, "Failed to build a /upload HTTP API response", err)
+		return false, errors.WriteHTTPInternalServerError(w, "Failed marshaling response", err)
+	}
+
+	if _, err := w.Write(respBytes); err != nil {
+		log.LogError(requestID, "Failed to write a /upload HTTP API response", err)
+		return false, errors.WriteHTTPInternalServerError(w, "Failed writing response", err)
+	}
+
+	return true, errors.APIError{}
 }
 
 const SCHEME_IPFS = "ipfs"

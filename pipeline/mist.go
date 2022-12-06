@@ -18,6 +18,10 @@ type mist struct {
 	MistClient clients.MistAPIClient
 }
 
+func (m *mist) Name() string {
+	return "mist"
+}
+
 func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	targetManifestFilename := path.Base(job.TargetURL.Path)
 	targetExtension := path.Ext(targetManifestFilename)

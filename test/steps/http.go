@@ -141,16 +141,16 @@ func (s *StepContext) CheckRecordedMetrics(metricsType string) error {
 	}
 
 	if metricsType == "failure" {
-		r := regexp.MustCompile(`\nupload_vod_failure_count 1\n`)
+		r := regexp.MustCompile(`\nupload_vod_request_duration_seconds_count{status_code="500",success="false"} 1\n`)
 		if !r.Match(body) {
-			return fmt.Errorf("not a valid upload_vod_failure_count")
+			return fmt.Errorf("not a valid failure upload_vod_request_duration_seconds_count")
 		}
 	}
 
 	if metricsType == "successful" {
-		r := regexp.MustCompile(`\nupload_vod_success_count 1\n`)
+		r := regexp.MustCompile(`\nupload_vod_request_duration_seconds_count{status_code="200",success="true"} 1\n`)
 		if !r.Match(body) {
-			return fmt.Errorf("not a valid upload_vod_success_count")
+			return fmt.Errorf("not a valid success upload_vod_request_duration_seconds: %q", body)
 		}
 	}
 

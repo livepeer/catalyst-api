@@ -10,13 +10,13 @@ import (
 	"github.com/xeipuuv/gojsonschema"
 )
 
-type apiError struct {
+type APIError struct {
 	Msg    string `json:"message"`
 	Status int    `json:"status"`
 	Err    error  `json:"-"`
 }
 
-func writeHttpError(w http.ResponseWriter, msg string, status int, err error) apiError {
+func writeHttpError(w http.ResponseWriter, msg string, status int, err error) APIError {
 	w.WriteHeader(status)
 
 	var errorDetail string
@@ -27,27 +27,27 @@ func writeHttpError(w http.ResponseWriter, msg string, status int, err error) ap
 	if err := json.NewEncoder(w).Encode(map[string]string{"error": msg, "error_detail": errorDetail}); err != nil {
 		log.LogNoRequestID("error writing HTTP error", "http_error_msg", msg, "error", err)
 	}
-	return apiError{msg, status, err}
+	return APIError{msg, status, err}
 }
 
 // HTTP Errors
-func WriteHTTPUnauthorized(w http.ResponseWriter, msg string, err error) apiError {
+func WriteHTTPUnauthorized(w http.ResponseWriter, msg string, err error) APIError {
 	return writeHttpError(w, msg, http.StatusUnauthorized, err)
 }
 
-func WriteHTTPBadRequest(w http.ResponseWriter, msg string, err error) apiError {
+func WriteHTTPBadRequest(w http.ResponseWriter, msg string, err error) APIError {
 	return writeHttpError(w, msg, http.StatusBadRequest, err)
 }
 
-func WriteHTTPUnsupportedMediaType(w http.ResponseWriter, msg string, err error) apiError {
+func WriteHTTPUnsupportedMediaType(w http.ResponseWriter, msg string, err error) APIError {
 	return writeHttpError(w, msg, http.StatusUnsupportedMediaType, err)
 }
 
-func WriteHTTPInternalServerError(w http.ResponseWriter, msg string, err error) apiError {
+func WriteHTTPInternalServerError(w http.ResponseWriter, msg string, err error) APIError {
 	return writeHttpError(w, msg, http.StatusInternalServerError, err)
 }
 
-func WriteHTTPBadBodySchema(where string, w http.ResponseWriter, errors []gojsonschema.ResultError) apiError {
+func WriteHTTPBadBodySchema(where string, w http.ResponseWriter, errors []gojsonschema.ResultError) APIError {
 	sb := strings.Builder{}
 	sb.WriteString("Body validation error in ")
 	sb.WriteString(where)

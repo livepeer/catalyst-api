@@ -37,8 +37,11 @@ func TestItErrorsWhenNoCapacityAvailable(t *testing.T) {
 		nextCalled = true
 	}
 
+	pipeMist, release := pipeline.NewBlockingStubHandler()
+	defer release()
+	coordinator := pipeline.NewStubCoordinatorOpts(pipeline.StrategyCatalystDominance, nil, pipeMist, nil)
+
 	// Create a lot of in-flight jobs
-	coordinator := pipeline.NewStubCoordinator()
 	for x := 0; x < 5; x++ {
 		coordinator.StartUploadJob(pipeline.UploadJobPayload{
 			RequestID: fmt.Sprintf("request-%d", x),

@@ -12,11 +12,10 @@ type ClientMetrics struct {
 }
 
 type CatalystAPIMetrics struct {
-	UploadVODRequestCount    prometheus.Counter
-	UploadVODSuccessCount    prometheus.Counter
-	UploadVODFailureCount    *prometheus.CounterVec
-	UploadVODPipelineResults *prometheus.CounterVec
-	TranscodeSegmentDuration prometheus.Histogram
+	UploadVODRequestCount        prometheus.Counter
+	UploadVODRequestDurationSec  *prometheus.SummaryVec
+	UploadVODPipelineDurationSec *prometheus.SummaryVec
+	TranscodeSegmentDurationSec  prometheus.Histogram
 
 	TranscodingStatusUpdate ClientMetrics
 	BroadcasterClient       ClientMetrics
@@ -31,20 +30,16 @@ func NewMetrics() *CatalystAPIMetrics {
 			Name: "upload_vod_request_count",
 			Help: "The total number of requests to /api/vod",
 		}),
-		UploadVODSuccessCount: promauto.NewCounter(prometheus.CounterOpts{
-			Name: "upload_vod_success_count",
-			Help: "The total number of successful requests to /api/vod",
-		}),
-		UploadVODFailureCount: promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "upload_vod_failure_count",
-			Help: "The total number of failed requests to /api/vod",
-		}, []string{"status_code"}),
-		UploadVODPipelineResults: promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "upload_vod_pipeline_results",
-			Help: "The total number pipeline runs results for /api/vod with a boolean field indicating success",
-		}, []string{"success"}),
-		TranscodeSegmentDuration: promauto.NewHistogram(prometheus.HistogramOpts{
-			Name:    "transcode_segment_duration",
+		UploadVODRequestDurationSec: promauto.NewSummaryVec(prometheus.SummaryOpts{
+			Name: "upload_vod_request_duration_seconds",
+			Help: "The latency of the requests made to /api/vod in seconds broken up by success and status code",
+		}, []string{"success", "status_code"}),
+		UploadVODPipelineDurationSec: promauto.NewSummaryVec(prometheus.SummaryOpts{
+			Name: "upload_vod_pipeline_duration_seconds",
+			Help: "The time that the VOD pipelines take to run, broken up by handler and success",
+		}, []string{"handler", "success"}),
+		TranscodeSegmentDurationSec: promauto.NewHistogram(prometheus.HistogramOpts{
+			Name:    "transcode_segment_duration_seconds",
 			Help:    "Time taken to transcode a segment",
 			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
 		}),
