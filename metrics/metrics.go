@@ -13,8 +13,7 @@ type ClientMetrics struct {
 
 type CatalystAPIMetrics struct {
 	UploadVODRequestCount        prometheus.Counter
-	UploadVODSuccessCount        prometheus.Counter
-	UploadVODFailureCount        *prometheus.CounterVec
+	UploadVODRequestDurationSec  *prometheus.SummaryVec
 	UploadVODPipelineDurationSec *prometheus.SummaryVec
 	TranscodeSegmentDuration     prometheus.Histogram
 
@@ -31,14 +30,10 @@ func NewMetrics() *CatalystAPIMetrics {
 			Name: "upload_vod_request_count",
 			Help: "The total number of requests to /api/vod",
 		}),
-		UploadVODSuccessCount: promauto.NewCounter(prometheus.CounterOpts{
-			Name: "upload_vod_success_count",
-			Help: "The total number of successful requests to /api/vod",
-		}),
-		UploadVODFailureCount: promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "upload_vod_failure_count",
-			Help: "The total number of failed requests to /api/vod",
-		}, []string{"status_code"}),
+		UploadVODRequestDurationSec: promauto.NewSummaryVec(prometheus.SummaryOpts{
+			Name: "upload_vod_request_duration_seconds",
+			Help: "The latency of the requests made to /api/vod in seconds broken up by success and status code",
+		}, []string{"success", "status_code"}),
 		UploadVODPipelineDurationSec: promauto.NewSummaryVec(prometheus.SummaryOpts{
 			Name: "upload_vod_pipeline_duration_sec",
 			Help: "The time that the VOD pipelines take to run, broken up by handler and success",
