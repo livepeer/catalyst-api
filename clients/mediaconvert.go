@@ -186,7 +186,9 @@ func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *
 					},
 					FileInput:      aws.String(inputFile),
 					TimecodeSource: aws.String("ZEROBASED"),
-					VideoSelector:  &mediaconvert.VideoSelector{},
+					VideoSelector: &mediaconvert.VideoSelector{
+						Rotate: aws.String(mediaconvert.InputRotateAuto),
+					},
 				},
 			},
 			OutputGroups: []*mediaconvert.OutputGroup{
@@ -236,6 +238,7 @@ func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *
 					AutomatedEncodingSettings: &mediaconvert.AutomatedEncodingSettings{
 						AbrSettings: &mediaconvert.AutomatedAbrSettings{
 							MaxAbrBitrate: aws.Int64(8000000),
+							MaxRenditions: aws.Int64(3),
 						},
 					},
 				},
