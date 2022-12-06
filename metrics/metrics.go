@@ -15,7 +15,7 @@ type CatalystAPIMetrics struct {
 	UploadVODRequestCount        prometheus.Counter
 	UploadVODRequestDurationSec  *prometheus.SummaryVec
 	UploadVODPipelineDurationSec *prometheus.SummaryVec
-	TranscodeSegmentDuration     prometheus.Histogram
+	TranscodeSegmentDurationSec  prometheus.Histogram
 
 	TranscodingStatusUpdate ClientMetrics
 	BroadcasterClient       ClientMetrics
@@ -35,11 +35,11 @@ func NewMetrics() *CatalystAPIMetrics {
 			Help: "The latency of the requests made to /api/vod in seconds broken up by success and status code",
 		}, []string{"success", "status_code"}),
 		UploadVODPipelineDurationSec: promauto.NewSummaryVec(prometheus.SummaryOpts{
-			Name: "upload_vod_pipeline_duration_sec",
+			Name: "upload_vod_pipeline_duration_seconds",
 			Help: "The time that the VOD pipelines take to run, broken up by handler and success",
 		}, []string{"handler", "success"}),
-		TranscodeSegmentDuration: promauto.NewHistogram(prometheus.HistogramOpts{
-			Name:    "transcode_segment_duration",
+		TranscodeSegmentDurationSec: promauto.NewHistogram(prometheus.HistogramOpts{
+			Name:    "transcode_segment_duration_seconds",
 			Help:    "Time taken to transcode a segment",
 			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
 		}),
