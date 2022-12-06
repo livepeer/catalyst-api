@@ -238,6 +238,7 @@ func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *
 					AutomatedEncodingSettings: &mediaconvert.AutomatedEncodingSettings{
 						AbrSettings: &mediaconvert.AutomatedAbrSettings{
 							MaxAbrBitrate: aws.Int64(8000000),
+							MaxRenditions: aws.Int64(3),
 						},
 					},
 				},
