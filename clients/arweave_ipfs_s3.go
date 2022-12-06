@@ -33,6 +33,7 @@ func CopyArweaveToS3(arweaveURL, s3URL string) error {
 	if err != nil {
 		return fmt.Errorf("error fetching Arweave or IPFS URL: %s", err)
 	}
+	defer resp.Body.Close()
 
 	err = UploadToOSURL(s3URL, "", resp.Body, MAX_COPY_DURATION)
 	if err != nil {
