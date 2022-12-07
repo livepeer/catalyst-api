@@ -52,6 +52,7 @@ type UploadJobPayload struct {
 	HardcodedBroadcasters string
 	RequestID             string
 	Profiles              []clients.EncodedProfile
+	PipelineStrategy      Strategy
 }
 
 // UploadJobResult is the object returned by the successful execution of an
@@ -166,7 +167,11 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 // This has the main logic regarding the pipeline strategy. It starts jobs and
 // handles processing the response and triggering a fallback if appropriate.
 func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
-	switch c.strategy {
+	strategy := c.strategy
+	if p.PipelineStrategy.IsValid() {
+		strategy = p.PipelineStrategy
+	}
+	switch strategy {
 	case StrategyCatalystDominance:
 		c.startOneUploadJob(p, c.pipeMist, true, false)
 	case StrategyBackgroundExternal:
