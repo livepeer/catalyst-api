@@ -38,7 +38,7 @@ type UploadVODRequest struct {
 	TranscodeAPIUrl string `json:"transcodeAPIUrl"`
 	// Forwarded to transcoding stage:
 	Profiles         []clients.EncodedProfile `json:"profiles"`
-	PipelineStrategy pipeline.Strategy        `json:"pipelineStrategy"`
+	PipelineStrategy pipeline.Strategy        `json:"pipeline_strategy"`
 }
 
 type UploadVODResponse struct {

@@ -12,7 +12,7 @@ properties:
     type: "string"
   hardcodedBroadcasters:
     type: "string"
-  pipelineStrategy:
+  pipeline_strategy:
     type: string
     description:
       Force to use a specific strategy in the Catalyst pipeline. If not
