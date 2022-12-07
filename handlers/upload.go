@@ -37,7 +37,8 @@ type UploadVODRequest struct {
 	AccessToken     string `json:"accessToken"`
 	TranscodeAPIUrl string `json:"transcodeAPIUrl"`
 	// Forwarded to transcoding stage:
-	Profiles []clients.EncodedProfile `json:"profiles"`
+	Profiles         []clients.EncodedProfile `json:"profiles"`
+	PipelineStrategy pipeline.Strategy        `json:"pipelineStrategy"`
 }
 
 type UploadVODResponse struct {
@@ -126,17 +127,21 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	if err != nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file should end in .m3u8 extension"))
 	}
+	if !uploadVODRequest.PipelineStrategy.IsValid() {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("invalid value provided for pipeline strategy: %q", uploadVODRequest.PipelineStrategy))
+	}
 
 	// Once we're happy with the request, do the rest of the Segmenting stage asynchronously to allow us to
 	// from the API call and free up the HTTP connection
 	d.VODEngine.StartUploadJob(pipeline.UploadJobPayload{
-		SourceFile:      uploadVODRequest.Url,
-		CallbackURL:     uploadVODRequest.CallbackUrl,
-		TargetURL:       targetURL,
-		AccessToken:     uploadVODRequest.AccessToken,
-		TranscodeAPIUrl: uploadVODRequest.TranscodeAPIUrl,
-		RequestID:       requestID,
-		Profiles:        uploadVODRequest.Profiles,
+		SourceFile:       uploadVODRequest.Url,
+		CallbackURL:      uploadVODRequest.CallbackUrl,
+		TargetURL:        targetURL,
+		AccessToken:      uploadVODRequest.AccessToken,
+		TranscodeAPIUrl:  uploadVODRequest.TranscodeAPIUrl,
+		RequestID:        requestID,
+		Profiles:         uploadVODRequest.Profiles,
+		PipelineStrategy: uploadVODRequest.PipelineStrategy,
 	})
 
 	respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})
