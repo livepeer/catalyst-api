@@ -262,6 +262,31 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 	require.Zero(len(callbacks))
 }
 
+func TestAllowsOverridingStrategyOnRequest(t *testing.T) {
+	require := require.New(t)
+
+	mist, mistCalls := recordingHandler(errors.New("mist error"))
+	external, externalCalls := recordingHandler(nil)
+
+	// create coordinator with strategy catalyst dominance (external should never be called)
+	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, nil, mist, external)
+
+	// Override the strategy to background mist, which will call the external provider *and* the mist provider
+	p := testJob
+	p.PipelineStrategy = StrategyBackgroundMist
+	coord.StartUploadJob(p)
+
+	// Check that it was really called
+	meconJob := requireReceive(t, externalCalls, 1*time.Second)
+	require.Equal("123", meconJob.RequestID)
+	require.Equal("catalyst_vod_123", meconJob.StreamName)
+
+	// Sanity check that mist also ran (in background)
+	mistJob := requireReceive(t, mistCalls, 1*time.Second)
+	require.Equal("bg_"+meconJob.RequestID, mistJob.RequestID)
+	require.Equal("catalyst_vod_bg_"+meconJob.RequestID, mistJob.StreamName)
+}
+
 func allFailingHandler(t *testing.T) Handler {
 	return &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
