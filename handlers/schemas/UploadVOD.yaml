@@ -21,6 +21,7 @@ properties:
       testing.
     enum:
       - catalyst
+      - external
       - background_external
       - background_mist
       - fallback_external
