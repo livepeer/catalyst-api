@@ -24,6 +24,8 @@ type Strategy string
 const (
 	// Only execute the Catalyst (Mist) pipeline.
 	StrategyCatalystDominance Strategy = "catalyst"
+	// Only execute the external pipeline.
+	StrategyExternalDominance Strategy = "external"
 	// Execute the Mist pipeline in foreground and the external transcoder in background.
 	StrategyBackgroundExternal Strategy = "background_external"
 	// Execute the external transcoder pipeline in foreground and Mist in background.
@@ -35,7 +37,7 @@ const (
 
 func (s Strategy) IsValid() bool {
 	switch s {
-	case StrategyCatalystDominance, StrategyBackgroundExternal, StrategyBackgroundMist, StrategyFallbackExternal:
+	case StrategyCatalystDominance, StrategyExternalDominance, StrategyBackgroundExternal, StrategyBackgroundMist, StrategyFallbackExternal:
 		return true
 	default:
 		return false
@@ -174,6 +176,8 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 	switch strategy {
 	case StrategyCatalystDominance:
 		c.startOneUploadJob(p, c.pipeMist, true, false)
+	case StrategyExternalDominance:
+		c.startOneUploadJob(p, c.pipeExternal, true, false)
 	case StrategyBackgroundExternal:
 		c.startOneUploadJob(p, c.pipeMist, true, false)
 		c.startOneUploadJob(p, c.pipeExternal, false, false)
