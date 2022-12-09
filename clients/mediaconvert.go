@@ -22,6 +22,7 @@ import (
 )
 
 const pollDelay = 10 * time.Second
+const rateLimitedPollDelay = 15 * time.Second
 
 // https://docs.aws.amazon.com/mediaconvert/latest/ug/mediaconvert_error_codes.html
 var errCodesAcceleration = []int64{
@@ -137,6 +138,14 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 		}
 		job, err := mc.client.GetJob(&mediaconvert.GetJobInput{Id: jobID})
 		if err != nil {
+			// If we got rate limited then try again, but start polling on a longer interval
+			if _, ok := err.(*mediaconvert.TooManyRequestsException); ok {
+				log.Log(args.RequestID, "Received mediaconvert TooManyRequestsException. Switching polling to longer interval")
+				ticker.Reset(rateLimitedPollDelay)
+				continue
+			}
+
+			// For any other errors, fail and let the higher level task retrying logic handle it
 			return fmt.Errorf("error getting job status: %w", err)
 		}
 
