@@ -140,7 +140,7 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 		if err != nil {
 			// If we got rate limited then try again, but start polling on a longer interval
 			if _, ok := err.(*mediaconvert.TooManyRequestsException); ok {
-				log.Log(args.RequestID, "Received TooManyRequestsException. Switching polling to longer interval")
+				log.Log(args.RequestID, "Received mediaconvert TooManyRequestsException. Switching polling to longer interval")
 				ticker.Reset(rateLimitedPollDelay)
 				continue
 			}
