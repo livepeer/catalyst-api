@@ -51,3 +51,11 @@ func IsArweaveOrIPFSURL(arweaveOrIPFSURL string) bool {
 
 	return strings.Contains(u.Host, "arweave") || strings.Contains(u.Host, "w3s.link") || strings.Contains(u.Path, "ipfs")
 }
+
+func GetArweaveHeaders(arweaveURL string) (http.Header, error) {
+	resp, err := arweaveIPFSHTTPClient.Head(arweaveURL)
+	if err != nil {
+		return nil, fmt.Errorf("head request failed for Arweave/IPFS: %w", err)
+	}
+	return resp.Header, nil
+}
