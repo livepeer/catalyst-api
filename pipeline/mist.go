@@ -166,7 +166,26 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 		})
 	}
 
-	outputs, err := transcode.RunTranscodeProcess(transcodeRequest, p.StreamName, inputInfo)
+	// this is the only info available about codecs, we take the first track but there may be a better way to represent the codecs
+	job.sourceCodecVideo = inputInfo.Tracks[0].Codec
+
+	job.state = "transcoding"
+	job.sourceBytes = int64(p.WrittenBytes)
+	job.sourceDurationMs = p.StreamMediaDurationMillis
+
+	sourceManifest, err := transcode.DownloadRenditionManifest(transcodeRequest.SourceManifestURL)
+	if err != nil {
+		return nil, fmt.Errorf("error downloading source manifest: %s", err)
+	}
+
+	job.sourceSegments = len(sourceManifest.Segments)
+
+	job.transcodedSegments = 0
+	segmentsCounter := func() {
+		job.transcodedSegments++
+	}
+
+	outputs, err := transcode.RunTranscodeProcess(transcodeRequest, p.StreamName, inputInfo, segmentsCounter)
 	if err != nil {
 		log.LogError(requestID, "RunTranscodeProcess returned an error", err)
 		return nil, fmt.Errorf("transcoding failed: %w", err)

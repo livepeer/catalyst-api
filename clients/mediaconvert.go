@@ -92,6 +92,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 		return fmt.Errorf("error copying input file to S3: %w", err)
 	}
 
+	args.CollectSourceSize(size)
 	mcArgs := args
 	mcArgs.InputFile = mc.opts.S3AuxBucket.JoinPath(mcInputRelPath)
 	mcArgs.HLSOutputFile = mc.opts.S3AuxBucket.JoinPath(mcOutputRelPath)
@@ -106,7 +107,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	mcOutputBaseDir := mc.osTransferBucketURL.JoinPath(mcOutputRelPath, "..")
 	ourOutputBaseDir := args.HLSOutputFile.JoinPath("..")
 	log.Log(args.RequestID, "Copying output files from S3", "source", mcOutputBaseDir, ourOutputBaseDir)
-	if err := copyDir(mcOutputBaseDir, ourOutputBaseDir); err != nil {
+	if err := copyDir(mcOutputBaseDir, ourOutputBaseDir, args); err != nil {
 		return fmt.Errorf("error copying output files: %w", err)
 	}
 	return nil
@@ -290,23 +291,43 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
-func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename string) error {
+func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename string) (*int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	content, err := getFile(ctx, sourceURL)
 	if err != nil {
-		return fmt.Errorf("download error: %w", err)
+		return nil, fmt.Errorf("download error: %w", err)
 	}
 	defer content.Close()
 
 	err = UploadToOSURL(destOSBaseURL, filename, content, 1*time.Minute)
 	if err != nil {
-		return fmt.Errorf("upload error: %w", err)
+		return nil, fmt.Errorf("upload error: %w", err)
 	}
-	return nil
+
+	// reread and early close session to uploaded file to OS
+	// as follow-up, make
+	storageDriver, err := drivers.ParseOSURL(destOSBaseURL, true)
+	if err != nil {
+		return nil, err
+	}
+	sess := storageDriver.NewSession("")
+	info, err := sess.ReadData(context.Background(), filename)
+	if err != nil {
+		return nil, err
+	}
+
+	defer info.Body.Close()
+	defer sess.EndSession()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return info.FileInfo.Size, nil
 }
 
-func copyDir(source, dest *url.URL) error {
+func copyDir(source, dest *url.URL, args TranscodeJobArgs) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	eg, ctx := errgroup.WithContext(ctx)
@@ -344,7 +365,8 @@ func copyDir(source, dest *url.URL) error {
 				if err := ctx.Err(); err != nil {
 					return err
 				}
-				err := copyFile(ctx, source.JoinPath(file).String(), dest.String(), file)
+				_, err := copyFile(ctx, source.JoinPath(file).String(), dest.String(), file)
+				args.CollectTranscodedSegment()
 				if err != nil {
 					return err
 				}

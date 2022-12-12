@@ -129,6 +129,7 @@ func TestItCanTranscode(t *testing.T) {
 				},
 			},
 		},
+		func() {},
 	)
 	require.NoError(t, err)
 

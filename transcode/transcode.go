@@ -85,7 +85,7 @@ func init() {
 	LocalBroadcasterClient = b
 }
 
-func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo clients.InputVideo) ([]clients.OutputVideo, error) {
+func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo clients.InputVideo, segmentsCounter func()) ([]clients.OutputVideo, error) {
 	log.AddContext(transcodeRequest.RequestID, "source", transcodeRequest.SourceFile, "source_manifest", transcodeRequest.SourceManifestURL, "stream_name", streamName)
 	log.Log(transcodeRequest.RequestID, "RunTranscodeProcess (v2) Beginning")
 
@@ -139,6 +139,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	var jobs *ParallelTranscoding
 	jobs = NewParallelTranscoding(sourceSegmentURLs, func(segment segmentInfo) error {
 		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, targetTranscodedRenditionOutputURL, transcodedStats)
+		segmentsCounter()
 		if err != nil {
 			return err
 		}

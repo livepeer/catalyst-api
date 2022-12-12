@@ -11,17 +11,29 @@ type ClientMetrics struct {
 	RequestDuration *prometheus.HistogramVec
 }
 
+type VODPipelineMetrics struct {
+	Count              *prometheus.CounterVec
+	Duration           *prometheus.SummaryVec
+	SourceSegments     *prometheus.SummaryVec
+	TranscodedSegments *prometheus.SummaryVec
+	SourceBytes        *prometheus.SummaryVec
+	SourceDuration     *prometheus.SummaryVec
+}
+
 type CatalystAPIMetrics struct {
-	UploadVODRequestCount        prometheus.Counter
-	UploadVODRequestDurationSec  *prometheus.SummaryVec
-	UploadVODPipelineDurationSec *prometheus.SummaryVec
-	TranscodeSegmentDurationSec  prometheus.Histogram
+	UploadVODRequestCount       prometheus.Counter
+	UploadVODRequestDurationSec *prometheus.SummaryVec
+	TranscodeSegmentDurationSec prometheus.Histogram
 
 	TranscodingStatusUpdate ClientMetrics
 	BroadcasterClient       ClientMetrics
 	MistClient              ClientMetrics
 	ObjectStoreClient       ClientMetrics
+
+	VODPipelineMetrics VODPipelineMetrics
 }
+
+var vodLabels = []string{"source_codec_video", "source_codec_audio", "pipeline", "catalyst_region", "num_profiles", "stage"}
 
 func NewMetrics() *CatalystAPIMetrics {
 	m := &CatalystAPIMetrics{
@@ -34,10 +46,6 @@ func NewMetrics() *CatalystAPIMetrics {
 			Name: "upload_vod_request_duration_seconds",
 			Help: "The latency of the requests made to /api/vod in seconds broken up by success and status code",
 		}, []string{"success", "status_code"}),
-		UploadVODPipelineDurationSec: promauto.NewSummaryVec(prometheus.SummaryOpts{
-			Name: "upload_vod_pipeline_duration_seconds",
-			Help: "The time that the VOD pipelines take to run, broken up by handler and success",
-		}, []string{"handler", "success"}),
 		TranscodeSegmentDurationSec: promauto.NewHistogram(prometheus.HistogramOpts{
 			Name:    "transcode_segment_duration_seconds",
 			Help:    "Time taken to transcode a segment",
@@ -93,6 +101,7 @@ func NewMetrics() *CatalystAPIMetrics {
 				Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
 			}, []string{"host"}),
 		},
+
 		ObjectStoreClient: ClientMetrics{
 			RetryCount: promauto.NewGaugeVec(prometheus.GaugeOpts{
 				Name: "object_store_retry_count",
@@ -107,6 +116,33 @@ func NewMetrics() *CatalystAPIMetrics {
 				Help:    "Time taken to send transcoding status updates",
 				Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
 			}, []string{"host", "operation"}),
+		},
+
+		VODPipelineMetrics: VODPipelineMetrics{
+			Count: promauto.NewCounterVec(prometheus.CounterOpts{
+				Name: "vod_count",
+				Help: "Number of VOD pipeline started",
+			}, vodLabels),
+			Duration: promauto.NewSummaryVec(prometheus.SummaryOpts{
+				Name: "vod_duration",
+				Help: "Time taken till the VOD job is completed",
+			}, vodLabels),
+			SourceSegments: promauto.NewSummaryVec(prometheus.SummaryOpts{
+				Name: "vod_source_segments",
+				Help: "Number of segments of the source asset",
+			}, vodLabels),
+			TranscodedSegments: promauto.NewSummaryVec(prometheus.SummaryOpts{
+				Name: "vod_transcoded_segments",
+				Help: "Number of segments of rendition asset",
+			}, vodLabels),
+			SourceBytes: promauto.NewSummaryVec(prometheus.SummaryOpts{
+				Name: "vod_source_bytes",
+				Help: "Size of the source asset",
+			}, vodLabels),
+			SourceDuration: promauto.NewSummaryVec(prometheus.SummaryOpts{
+				Name: "vod_source_duration",
+				Help: "Duration of the source asset",
+			}, vodLabels),
 		},
 	}
 
