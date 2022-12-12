@@ -219,7 +219,7 @@ func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *
 									H264Settings: &mediaconvert.H264Settings{
 										RateControlMode:    aws.String("QVBR"),
 										SceneChangeDetect:  aws.String("TRANSITION_DETECTION"),
-										QualityTuningLevel: aws.String("MULTI_PASS_HQ"),
+										QualityTuningLevel: aws.String("SINGLE_PASS_HQ"),
 										FramerateControl:   aws.String("INITIALIZE_FROM_SOURCE"),
 									}}},
 							AudioDescriptions: []*mediaconvert.AudioDescription{
