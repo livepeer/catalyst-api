@@ -16,7 +16,7 @@ type TranscodeJobArgs struct {
 	ReportProgress func(completionRatio float64)
 
 	// Collect size of an asset
-	CollectSourceSize        func(size *int64)
+	CollectSourceSize        func(size int64)
 	CollectTranscodedSegment func()
 }
 

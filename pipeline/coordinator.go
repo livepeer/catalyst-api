@@ -240,7 +240,7 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		numProfiles:        len(p.Profiles),
 		state:              "segmenting",
 		transcodedSegments: 0,
-		catalystRegion:     os.Getenv("REGION"),
+		catalystRegion:     os.Getenv("MY_REGION"),
 	}
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 
@@ -352,9 +352,9 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 		WithLabelValues(labels...).
 		Observe(float64(job.sourceDurationMs))
 
-	metrics.Metrics.VODPipelineMetrics.SourceSegments.
+	metrics.Metrics.VODPipelineMetrics.TranscodedSegments.
 		WithLabelValues(labels...).
-		Observe(float64(job.sourceSegments))
+		Observe(float64(job.transcodedSegments))
 
 	job.result <- success
 }

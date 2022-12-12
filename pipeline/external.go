@@ -33,8 +33,8 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		ReportProgress: func(progress float64) {
 			job.ReportProgress(clients.TranscodeStatusTranscoding, progress)
 		},
-		CollectSourceSize: func(size *int64) {
-			job.sourceBytes = *size
+		CollectSourceSize: func(size int64) {
+			job.sourceBytes = size
 		},
 		CollectTranscodedSegment: func() {
 			job.transcodedSegments++

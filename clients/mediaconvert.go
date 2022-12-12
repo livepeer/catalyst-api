@@ -291,40 +291,41 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
-func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename string) (*int64, error) {
+func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename string) (int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	content, err := getFile(ctx, sourceURL)
+	writtenBytes := ByteAccumulatorWriter{count: 0}
+	c, err := getFile(ctx, sourceURL)
 	if err != nil {
-		return nil, fmt.Errorf("download error: %w", err)
+		return writtenBytes.count, fmt.Errorf("download error: %w", err)
 	}
-	defer content.Close()
+	defer c.Close()
+
+	content := io.TeeReader(c, &writtenBytes)
 
 	err = UploadToOSURL(destOSBaseURL, filename, content, 1*time.Minute)
 	if err != nil {
-		return nil, fmt.Errorf("upload error: %w", err)
+		return writtenBytes.count, fmt.Errorf("upload error: %w", err)
 	}
 
-	// reread and early close session to uploaded file to OS
-	// as follow-up, make
 	storageDriver, err := drivers.ParseOSURL(destOSBaseURL, true)
 	if err != nil {
-		return nil, err
+		return writtenBytes.count, err
 	}
 	sess := storageDriver.NewSession("")
 	info, err := sess.ReadData(context.Background(), filename)
 	if err != nil {
-		return nil, err
+		return writtenBytes.count, err
 	}
 
 	defer info.Body.Close()
 	defer sess.EndSession()
 
 	if err != nil {
-		return nil, err
+		return writtenBytes.count, err
 	}
 
-	return info.FileInfo.Size, nil
+	return writtenBytes.count, nil
 }
 
 func copyDir(source, dest *url.URL, args TranscodeJobArgs) error {
@@ -424,4 +425,16 @@ func contains[T comparable](v T, list []T) bool {
 		}
 	}
 	return false
+}
+
+type ByteAccumulatorWriter struct {
+	w     io.Writer
+	count int64
+}
+
+func (acc *ByteAccumulatorWriter) Write(p []byte) (int, error) {
+	n, err := acc.w.Write(p)
+	acc.count += int64(n)
+
+	return n, err
 }

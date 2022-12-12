@@ -85,16 +85,18 @@ func init() {
 	LocalBroadcasterClient = b
 }
 
-func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo clients.InputVideo, segmentsCounter func()) ([]clients.OutputVideo, error) {
+func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo clients.InputVideo) ([]clients.OutputVideo, int, error) {
 	log.AddContext(transcodeRequest.RequestID, "source", transcodeRequest.SourceFile, "source_manifest", transcodeRequest.SourceManifestURL, "stream_name", streamName)
 	log.Log(transcodeRequest.RequestID, "RunTranscodeProcess (v2) Beginning")
+
+	var segmentsCount = 0
 
 	outputs := []clients.OutputVideo{}
 
 	// Parse the manifest destination of the segmented output specified in the request
 	segmentedOutputManifestURL, err := url.Parse(transcodeRequest.SourceManifestURL)
 	if err != nil {
-		return outputs, fmt.Errorf("failed to parse transcodeRequest.UploadURL: %s", err)
+		return outputs, segmentsCount, fmt.Errorf("failed to parse transcodeRequest.UploadURL: %s", err)
 	}
 	// Go back to the root directory to set as the output for transcode renditions
 	targetTranscodedPath := path.Dir(path.Dir(segmentedOutputManifestURL.Path))
@@ -102,7 +104,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// Generate the rendition output URL (e.g. s3+https://USER:PASS@storage.googleapis.com/user/hls/)
 	tout, err := url.Parse(targetTranscodedPath)
 	if err != nil {
-		return outputs, fmt.Errorf("failed to parse targetTranscodedPath: %s", err)
+		return outputs, segmentsCount, fmt.Errorf("failed to parse targetTranscodedPath: %s", err)
 	}
 	targetTranscodedRenditionOutputURL := segmentedOutputManifestURL.ResolveReference(tout)
 
@@ -115,20 +117,20 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	if len(transcodeProfiles) == 0 {
 		transcodeProfiles, err = getPlaybackProfiles(inputInfo)
 		if err != nil {
-			return outputs, fmt.Errorf("failed to get playback profiles: %w", err)
+			return outputs, segmentsCount, fmt.Errorf("failed to get playback profiles: %w", err)
 		}
 	}
 
 	// Download the "source" manifest that contains all the segments we'll be transcoding
 	sourceManifest, err := DownloadRenditionManifest(sourceManifestOSURL)
 	if err != nil {
-		return outputs, fmt.Errorf("error downloading source manifest: %s", err)
+		return outputs, segmentsCount, fmt.Errorf("error downloading source manifest: %s", err)
 	}
 
 	// Generate the full segment URLs from the manifest
 	sourceSegmentURLs, err := GetSourceSegmentURLs(sourceManifestOSURL, sourceManifest)
 	if err != nil {
-		return outputs, fmt.Errorf("error generating source segment URLs: %s", err)
+		return outputs, segmentsCount, fmt.Errorf("error generating source segment URLs: %s", err)
 	}
 
 	// Use RequestID as part of manifestID when talking to the Broadcaster
@@ -139,7 +141,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	var jobs *ParallelTranscoding
 	jobs = NewParallelTranscoding(sourceSegmentURLs, func(segment segmentInfo) error {
 		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, targetTranscodedRenditionOutputURL, transcodedStats)
-		segmentsCounter()
+		segmentsCount++
 		if err != nil {
 			return err
 		}
@@ -153,13 +155,13 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	jobs.Start()
 	if err = jobs.Wait(); err != nil {
 		// return first error to caller
-		return outputs, err
+		return outputs, segmentsCount, err
 	}
 
 	// Build the manifests and push them to storage
 	manifestManifestURL, err := GenerateAndUploadManifests(sourceManifest, targetTranscodedRenditionOutputURL.String(), transcodedStats)
 	if err != nil {
-		return outputs, err
+		return outputs, segmentsCount, err
 	}
 
 	output := clients.OutputVideo{Type: "object_store", Manifest: manifestManifestURL}
@@ -168,7 +170,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 	outputs = []clients.OutputVideo{output}
 	// Return outputs for .dtsh file creation
-	return outputs, nil
+	return outputs, segmentsCount, nil
 }
 
 func transcodeSegment(

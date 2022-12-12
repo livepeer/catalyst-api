@@ -180,16 +180,13 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 
 	job.sourceSegments = len(sourceManifest.Segments)
 
-	job.transcodedSegments = 0
-	segmentsCounter := func() {
-		job.transcodedSegments++
-	}
-
-	outputs, err := transcode.RunTranscodeProcess(transcodeRequest, p.StreamName, inputInfo, segmentsCounter)
+	outputs, transcodedSegments, err := transcode.RunTranscodeProcess(transcodeRequest, p.StreamName, inputInfo)
 	if err != nil {
 		log.LogError(requestID, "RunTranscodeProcess returned an error", err)
 		return nil, fmt.Errorf("transcoding failed: %w", err)
 	}
+
+	job.transcodedSegments = transcodedSegments
 
 	// TODO: CreateDTSH is hardcoded to call MistInMP4 - the call below requires a call to MistInHLS instead.
 	//	 Update this logic later as it's required for Mist playback.
