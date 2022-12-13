@@ -86,7 +86,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	// AWS MediaConvert adds the .m3u8 to the end of the output file name
 	mcOutputRelPath := path.Join("output", targetDir, "index")
 
-	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", mc.opts.S3AuxBucket.JoinPath(mcInputRelPath))
+	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", mc.opts.S3AuxBucket.JoinPath(mcInputRelPath), "destOSBaseURL", mc.osTransferBucketURL.String(), "filename", mcInputRelPath)
 	err := copyFile(ctx, args.InputFile.String(), mc.osTransferBucketURL.String(), mcInputRelPath)
 	if err != nil {
 		return fmt.Errorf("error copying input file to S3: %w", err)
