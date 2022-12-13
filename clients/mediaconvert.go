@@ -275,7 +275,7 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, xerrors.Unretriable(fmt.Errorf("error creating http request: %w", err))
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultRetryableHttpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error on import request: %w", err)
 	}
