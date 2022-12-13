@@ -12,9 +12,9 @@ import (
 
 const MAX_COPY_DURATION = 20 * time.Minute
 
-var arweaveIPFSHTTPClient = newArweaveIPFSHTTPClient()
+var defaultRetryableHttpClient = newDefaultRetryableHttpClient()
 
-func newArweaveIPFSHTTPClient() *http.Client {
+func newDefaultRetryableHttpClient() *http.Client {
 	client := retryablehttp.NewClient()
 	client.RetryMax = 2                          // Retry a maximum of this+1 times
 	client.RetryWaitMin = 200 * time.Millisecond // Wait at least this long between retries
@@ -29,7 +29,7 @@ func newArweaveIPFSHTTPClient() *http.Client {
 }
 
 func CopyArweaveToS3(arweaveURL, s3URL string) error {
-	resp, err := arweaveIPFSHTTPClient.Get(arweaveURL)
+	resp, err := defaultRetryableHttpClient.Get(arweaveURL)
 	if err != nil {
 		return fmt.Errorf("error fetching Arweave or IPFS URL: %s", err)
 	}
