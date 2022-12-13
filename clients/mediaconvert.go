@@ -15,11 +15,14 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/mediaconvert"
+	"github.com/livepeer/catalyst-api/config"
 	xerrors "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/go-tools/drivers"
 	"golang.org/x/sync/errgroup"
 )
+
+const IPFS_PREFIX = "ipfs://"
 
 const pollDelay = 10 * time.Second
 const rateLimitedPollDelay = 15 * time.Second
@@ -266,8 +269,27 @@ func getFile(ctx context.Context, url string) (io.ReadCloser, error) {
 	if err == nil {
 		return DownloadOSURL(url)
 	} else {
+		if strings.HasPrefix(url, IPFS_PREFIX) {
+			cid := strings.TrimPrefix(url, IPFS_PREFIX)
+			return getFileIPFS(ctx, config.ImportIPFSGatewayURLs, cid)
+		}
 		return getFileHTTP(ctx, url)
 	}
+}
+
+// TODO(yondonfu): Refactor this logic out of this file so it can be used elsewhere
+func getFileIPFS(ctx context.Context, gateways []*url.URL, cid string) (io.ReadCloser, error) {
+	var content io.ReadCloser
+	var err error
+	for _, gateway := range gateways {
+		url := gateway.JoinPath(cid).String()
+		content, err = getFileHTTP(ctx, url)
+		if err == nil {
+			return content, nil
+		}
+	}
+
+	return nil, fmt.Errorf("failed to get file from IPFS import gateways with last error: %w", err)
 }
 
 func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
