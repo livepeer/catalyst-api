@@ -141,6 +141,9 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 		ReportProgress:    job.ReportProgress,
 	}
 
+	var audioCodec = ""
+	var videoCodec = ""
+
 	inputInfo := clients.InputVideo{
 		Format:    "mp4", // hardcoded as mist stream is in dtsc format.
 		Duration:  float64(p.StreamMediaDurationMillis) / 1000.0,
@@ -164,10 +167,24 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 				SampleBits: track.Size,
 			},
 		})
+
+		if track.Type == "video" {
+			if videoCodec != "" {
+				videoCodec = "multiple"
+			} else {
+				videoCodec = track.Codec
+			}
+		} else if track.Type == "audio" {
+			if audioCodec != "" {
+				audioCodec = "multiple"
+			} else {
+				audioCodec = track.Codec
+			}
+		}
 	}
 
-	// this is the only info available about codecs, we take the first track but there may be a better way to represent the codecs
-	job.sourceCodecVideo = inputInfo.Tracks[0].Codec
+	job.sourceCodecVideo = videoCodec
+	job.sourceCodecVideo = audioCodec
 
 	job.state = "transcoding"
 	job.sourceBytes = int64(p.WrittenBytes)

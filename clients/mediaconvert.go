@@ -87,7 +87,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	mcOutputRelPath := path.Join("output", targetDir, "index")
 
 	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", mc.opts.S3AuxBucket.JoinPath(mcInputRelPath), "destOSBaseURL", mc.osTransferBucketURL.String(), "filename", mcInputRelPath)
-	err := copyFile(ctx, args.InputFile.String(), mc.osTransferBucketURL.String(), mcInputRelPath)
+	size, err := copyFile(ctx, args.InputFile.String(), mc.osTransferBucketURL.String(), mcInputRelPath)
 	if err != nil {
 		return fmt.Errorf("error copying input file to S3: %w", err)
 	}
@@ -428,13 +428,10 @@ func contains[T comparable](v T, list []T) bool {
 }
 
 type ByteAccumulatorWriter struct {
-	w     io.Writer
 	count int64
 }
 
 func (acc *ByteAccumulatorWriter) Write(p []byte) (int, error) {
-	n, err := acc.w.Write(p)
-	acc.count += int64(n)
-
-	return n, err
+	acc.count += int64(len(p))
+	return 0, nil
 }
