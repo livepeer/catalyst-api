@@ -2,6 +2,9 @@ package pipeline
 
 import (
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"sync/atomic"
 	"testing"
@@ -9,6 +12,7 @@ import (
 
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -285,6 +289,42 @@ func TestAllowsOverridingStrategyOnRequest(t *testing.T) {
 	mistJob := requireReceive(t, mistCalls, 1*time.Second)
 	require.Equal("bg_"+meconJob.RequestID, mistJob.RequestID)
 	require.Equal("catalyst_vod_bg_"+meconJob.RequestID, mistJob.StreamName)
+}
+
+func TestPipelineCollectedMetrics(t *testing.T) {
+	require := require.New(t)
+
+	metricsServer := httptest.NewServer(promhttp.Handler())
+	defer metricsServer.Close()
+
+	mist := &StubHandler{
+		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
+			return testHandlerResult, nil
+		},
+	}
+	external := &StubHandler{
+		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
+			return testHandlerResult, nil
+		},
+	}
+
+	coord := NewStubCoordinatorOpts(StrategyBackgroundMist, nil, mist, external)
+
+	coord.StartUploadJob(testJob)
+
+	res, err := http.Get(metricsServer.URL)
+	require.NoError(err)
+
+	b, err := io.ReadAll(res.Body)
+	require.NoError(err)
+
+	body := string(b)
+
+	require.Contains(body, "# TYPE vod_count")
+	require.Contains(body, "# TYPE vod_duration")
+	require.Contains(body, "# TYPE vod_source_segments")
+	require.Contains(body, "# TYPE vod_source_bytes")
+	require.Contains(body, "# TYPE vod_source_duration")
 }
 
 func allFailingHandler(t *testing.T) Handler {

@@ -109,7 +109,7 @@ func TestItCanTranscode(t *testing.T) {
 
 	statusClient := clients.NewPeriodicCallbackClient(100 * time.Minute)
 	// Check we don't get an error downloading or parsing it
-	outputs, err := RunTranscodeProcess(
+	outputs, segmentsCount, err := RunTranscodeProcess(
 		TranscodeSegmentRequest{
 			CallbackURL:       callbackServer.URL,
 			SourceManifestURL: manifestFile.Name(),
@@ -145,6 +145,7 @@ low-bitrate/index.m3u8
 
 	require.NoError(t, err)
 	require.Greater(t, len(masterManifestBytes), 0)
+	require.Equal(t, segmentsCount, 2)
 	require.Equal(t, expectedMasterManifest, string(masterManifestBytes))
 
 	// Start the callback client, to let it run for one iteration
