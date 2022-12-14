@@ -239,8 +239,8 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		pipeline:           handler.Name(),
 		numProfiles:        len(p.Profiles),
 		state:              "segmenting",
-		catalystRegion:     os.Getenv("MY_REGION"),
 		transcodedSegments: 0,
+		catalystRegion:     os.Getenv("MY_REGION"),
 	}
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 
