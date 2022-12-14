@@ -44,7 +44,7 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 			return nil, fmt.Errorf("source was not a video: %s", job.SourceFile)
 		}
 
-		newSourceURL, err := inSameDirectory(job.TargetURL, "source", "arweave-source.mp4")
+		newSourceURL, err := inSameDirectory(job.TargetURL, "source", path.Base(job.SourceFile))
 		if err != nil {
 			return nil, fmt.Errorf("cannot create location for arweave source copy: %w", err)
 		}
