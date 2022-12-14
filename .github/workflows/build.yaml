@@ -125,6 +125,7 @@ jobs:
         with:
           project-name: ${{ github.event.repository.name }}
           platform: linux, darwin
+          commit: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Authenticate to Google Cloud
         id: auth
