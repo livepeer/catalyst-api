@@ -86,7 +86,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	// AWS MediaConvert adds the .m3u8 to the end of the output file name
 	mcOutputRelPath := path.Join("output", targetDir, "index")
 
-	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", mc.opts.S3AuxBucket.JoinPath(mcInputRelPath))
+	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", mc.opts.S3AuxBucket.JoinPath(mcInputRelPath), "destOSBaseURL", mc.osTransferBucketURL.String(), "filename", mcInputRelPath)
 	err := copyFile(ctx, args.InputFile.String(), mc.osTransferBucketURL.String(), mcInputRelPath)
 	if err != nil {
 		return fmt.Errorf("error copying input file to S3: %w", err)
@@ -219,7 +219,7 @@ func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *
 									H264Settings: &mediaconvert.H264Settings{
 										RateControlMode:    aws.String("QVBR"),
 										SceneChangeDetect:  aws.String("TRANSITION_DETECTION"),
-										QualityTuningLevel: aws.String("SINGLE_PASS_HQ"),
+										QualityTuningLevel: aws.String("MULTI_PASS_HQ"),
 										FramerateControl:   aws.String("INITIALIZE_FROM_SOURCE"),
 									}}},
 							AudioDescriptions: []*mediaconvert.AudioDescription{
@@ -275,7 +275,7 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, xerrors.Unretriable(fmt.Errorf("error creating http request: %w", err))
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultRetryableHttpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error on import request: %w", err)
 	}
