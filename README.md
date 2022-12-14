@@ -23,3 +23,4 @@ curl 'http://localhost:4949/ok'
 ```
 
 If you see a response body of `OK` then things are working and you can begin using this instance to test the API's integration with Mist and the other parts of the Catalyst system.
+
