@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 )
 
@@ -27,3 +28,5 @@ var TranscodingParallelJobs int = 2
 var TranscodingParallelSleep time.Duration = 713 * time.Millisecond
 
 var DownloadOSURLRetries uint64 = 10
+
+var ImportIPFSGatewayURLs []*url.URL = []*url.URL{}
