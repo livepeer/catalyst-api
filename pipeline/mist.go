@@ -227,7 +227,7 @@ func arweaveSourceName(urlStr string) string {
 	if err != nil {
 		return "arweave-source.mp4"
 	}
-	return path.Base(u.Path) + ".mp4"
+	return path.Base(u.Path)
 }
 
 func inSameDirectory(base *url.URL, paths ...string) (*url.URL, error) {
