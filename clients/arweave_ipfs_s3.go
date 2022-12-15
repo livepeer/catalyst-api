@@ -53,7 +53,7 @@ func IsArweaveOrIPFSURL(arweaveOrIPFSURL string) bool {
 }
 
 func GetArweaveHeaders(arweaveURL string) (http.Header, error) {
-	resp, err := arweaveIPFSHTTPClient.Head(arweaveURL)
+	resp, err := defaultRetryableHttpClient.Head(arweaveURL)
 	if err != nil {
 		return nil, fmt.Errorf("head request failed for Arweave/IPFS: %w", err)
 	}
