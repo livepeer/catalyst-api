@@ -13,7 +13,7 @@ type ClientMetrics struct {
 
 type VODPipelineMetrics struct {
 	Count              *prometheus.CounterVec
-	Duration           *prometheus.SummaryVec
+	Duration           *prometheus.HistogramVec
 	SourceSegments     *prometheus.SummaryVec
 	TranscodedSegments *prometheus.SummaryVec
 	SourceBytes        *prometheus.SummaryVec
@@ -123,7 +123,7 @@ func NewMetrics() *CatalystAPIMetrics {
 				Name: "vod_count",
 				Help: "Number of VOD pipeline started",
 			}, vodLabels),
-			Duration: promauto.NewSummaryVec(prometheus.SummaryOpts{
+			Duration: promauto.NewHistogramVec(prometheus.HistogramOpts{
 				Name: "vod_duration",
 				Help: "Time taken till the VOD job is completed",
 			}, vodLabels),
