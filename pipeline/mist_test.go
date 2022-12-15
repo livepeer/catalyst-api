@@ -15,16 +15,24 @@ func Test_inSameDirectory(t *testing.T) {
 		paths []string
 	}
 	tests := []struct {
-		name    string
-		args    args
-		want    string
-		wantErr bool
+		name string
+		args args
+		want string
 	}{
 		{
-			name:    "happy",
-			args:    args{base: "https://foo.bar/a/b/c.mp4", paths: []string{"source", "file.mp4"}},
-			want:    "",
-			wantErr: false,
+			name: "happy",
+			args: args{base: "https://foo.bar/a/b/c.mp4", paths: []string{"source", "file.mp4"}},
+			want: "https://foo.bar/a/b/source/file.mp4",
+		},
+		{
+			name: "short path",
+			args: args{base: "https://foo.bar/c.mp4", paths: []string{"file.mp4"}},
+			want: "https://foo.bar/file.mp4",
+		},
+		{
+			name: "no path",
+			args: args{base: "https://foo.bar", paths: []string{"file.mp4"}},
+			want: "https://foo.bar/file.mp4",
 		},
 	}
 	for _, tc := range tests {
@@ -33,10 +41,7 @@ func Test_inSameDirectory(t *testing.T) {
 			base, err := url.Parse(tc.args.base)
 			require.NoError(t, err)
 			got, err := inSameDirectory(base, tc.args.paths...)
-			if (err != nil) != tc.wantErr {
-				t.Errorf("inSameDirectory() error = %v, wantErr %v", err, tc.wantErr)
-				return
-			}
+			require.NoError(t, err)
 			require.Equal(t, tc.want, got.String())
 		})
 	}
