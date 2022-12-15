@@ -184,7 +184,7 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 	}
 
 	job.sourceCodecVideo = videoCodec
-	job.sourceCodecVideo = audioCodec
+	job.sourceCodecAudio = audioCodec
 
 	job.state = "transcoding"
 	job.sourceBytes = int64(p.WrittenBytes)
