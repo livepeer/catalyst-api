@@ -227,6 +227,11 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 	log.AddContext(p.RequestID, "stream_name", streamName)
 	log.AddContext(p.RequestID, "handler", handler.Name())
 
+	var pipeline = "mist"
+	if handler.Name() == "external" {
+		pipeline = "aws-mediaconvert"
+	}
+
 	si := &JobInfo{
 		UploadJobPayload: p,
 		StreamName:       streamName,
@@ -236,7 +241,7 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		startTime:        time.Now(),
 		result:           make(chan bool, 1),
 
-		pipeline:           handler.Name(),
+		pipeline:           pipeline,
 		numProfiles:        len(p.Profiles),
 		state:              "segmenting",
 		transcodedSegments: 0,
