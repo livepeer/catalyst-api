@@ -48,7 +48,11 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 			return nil, fmt.Errorf("source was not a video: %s", job.SourceFile)
 		}
 
-		newSourceURL, err := inSameDirectory(job.TargetURL, "source", arweaveSourceName(job.SourceFile))
+		sourceURL, err := url.Parse(job.SourceFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse source as URL: %w", err)
+		}
+		newSourceURL, err := inSameDirectory(job.TargetURL, "source", path.Base(sourceURL.Path))
 		if err != nil {
 			return nil, fmt.Errorf("cannot create location for arweave source copy: %w", err)
 		}
@@ -219,14 +223,6 @@ func (m *mist) HandlePushEndTrigger(job *JobInfo, p PushEndPayload) (*HandlerOut
 		return nil, fmt.Errorf("segmenting failed: %s", p.PushStatus)
 	}
 	return ContinuePipeline, nil
-}
-
-func arweaveSourceName(urlStr string) string {
-	u, err := url.Parse(urlStr)
-	if err != nil {
-		return "arweave-source.mp4"
-	}
-	return path.Base(u.Path)
 }
 
 func inSameDirectory(base *url.URL, paths ...string) (*url.URL, error) {
