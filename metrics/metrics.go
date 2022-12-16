@@ -15,7 +15,7 @@ type VODPipelineMetrics struct {
 	Count              *prometheus.CounterVec
 	Duration           *prometheus.SummaryVec
 	SourceSegments     *prometheus.SummaryVec
-	TranscodedSegments *prometheus.SummaryVec
+	TranscodedSegments *prometheus.CounterVec
 	SourceBytes        *prometheus.SummaryVec
 	SourceDuration     *prometheus.SummaryVec
 }
@@ -131,7 +131,7 @@ func NewMetrics() *CatalystAPIMetrics {
 				Name: "vod_source_segments",
 				Help: "Number of segments of the source asset",
 			}, vodLabels),
-			TranscodedSegments: promauto.NewSummaryVec(prometheus.SummaryOpts{
+			TranscodedSegments: promauto.NewCounterVec(prometheus.CounterOpts{
 				Name: "vod_transcoded_segments",
 				Help: "Number of segments of rendition asset",
 			}, vodLabels),

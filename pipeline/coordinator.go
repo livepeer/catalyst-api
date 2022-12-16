@@ -359,7 +359,7 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 
 	metrics.Metrics.VODPipelineMetrics.TranscodedSegments.
 		WithLabelValues(labels...).
-		Observe(float64(job.transcodedSegments))
+		Add(float64(job.transcodedSegments))
 
 	job.result <- success
 }
