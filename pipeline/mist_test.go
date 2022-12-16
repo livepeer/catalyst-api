@@ -52,7 +52,6 @@ func Test_isVideo(t *testing.T) {
 		name        string
 		contentType string
 		want        bool
-		err         string
 	}{
 		{
 			name:        "mp4 video",
@@ -77,7 +76,7 @@ func Test_isVideo(t *testing.T) {
 		{
 			name:        "empty content type",
 			contentType: "",
-			err:         "mime: no media type",
+			want:        true,
 		},
 	}
 	for _, tc := range tests {
@@ -89,11 +88,7 @@ func Test_isVideo(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			}))
 			defer ts.Close()
-			isVid, err := isVideo(ts.URL)
-			if err != nil {
-				require.EqualError(t, err, tc.err)
-			}
-			require.Equal(t, tc.want, isVid)
+			require.Equal(t, tc.want, isVideo("", ts.URL))
 		})
 	}
 }
