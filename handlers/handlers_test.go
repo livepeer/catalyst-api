@@ -236,7 +236,7 @@ waitsegmenting:
 		select {
 		case message := <-callbacks:
 			// 0.2 is final progress reported for TranscodeStatusPreparing from UploadVOD()
-			if message.Status == "preparing" && message.CompletionRatio == clients.OverallCompletionRatio(clients.TranscodeStatusPreparing, 0.3) {
+			if message.Status == clients.TranscodeStatusPreparing && message.CompletionRatio == clients.OverallCompletionRatio(clients.TranscodeStatusPreparing, 0.3) {
 				break waitsegmenting
 			}
 			// Fail on any error in callbacks
@@ -275,7 +275,7 @@ waitsegmenting:
 	for {
 		select {
 		case message := <-callbacks:
-			if message.Status == "success" {
+			if message.Status == clients.TranscodeStatusCompleted {
 				return
 			}
 			require.Equal(t, "", message.Error, "received error callback")

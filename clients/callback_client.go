@@ -89,8 +89,16 @@ func recoverer(f func()) {
 func (pcc *PeriodicCallbackClient) SendTranscodeStatus(tsm TranscodeStatusMessage) {
 	if tsm.URL != "" {
 		pcc.mapLock.Lock()
-		pcc.requestIDToLatestMessage[tsm.RequestID] = tsm
-		pcc.mapLock.Unlock()
+		defer pcc.mapLock.Unlock()
+
+		previousMessage, ok := pcc.requestIDToLatestMessage[tsm.RequestID]
+		previousCompletion := OverallCompletionRatio(previousMessage.Status, previousMessage.CompletionRatio)
+		newCompletion := OverallCompletionRatio(tsm.Status, tsm.CompletionRatio)
+
+		// Don't update the current message with one that represents an earlier stage
+		if !ok || tsm.IsTerminal() || newCompletion >= previousCompletion {
+			pcc.requestIDToLatestMessage[tsm.RequestID] = tsm
+		}
 	}
 
 	rawStatus, _ := json.Marshal(tsm)

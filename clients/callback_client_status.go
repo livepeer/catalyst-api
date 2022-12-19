@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/livepeer/catalyst-api/config"
@@ -34,6 +35,28 @@ func (ts TranscodeStatus) String() string {
 	return "unknown"
 }
 
+func (ts TranscodeStatus) MarshalJSON() ([]byte, error) {
+	return json.Marshal(ts.String())
+}
+
+func (ts *TranscodeStatus) UnmarshalJSON(b []byte) error {
+	switch string(b) {
+	case "\"preparing\"":
+		*ts = TranscodeStatusPreparing
+	case "\"preparing-completed\"":
+		*ts = TranscodeStatusPreparingCompleted
+	case "\"transcoding\"":
+		*ts = TranscodeStatusTranscoding
+	case "\"success\"":
+		*ts = TranscodeStatusCompleted
+	case "\"error\"":
+		*ts = TranscodeStatusError
+	default:
+		return fmt.Errorf("invalid transcode status %q", string(b))
+	}
+	return nil
+}
+
 // The various status messages we can send
 
 type RecordingEvent struct {
@@ -51,9 +74,9 @@ type TranscodeStatusMessage struct {
 	URL       string `json:"-"`
 
 	// Fields included in all status messages
-	CompletionRatio float64 `json:"completion_ratio"` // No omitempty or we lose this for 0% completion case
-	Status          string  `json:"status"`
-	Timestamp       int64   `json:"timestamp"`
+	CompletionRatio float64         `json:"completion_ratio"` // No omitempty or we lose this for 0% completion case
+	Status          TranscodeStatus `json:"status"`
+	Timestamp       int64           `json:"timestamp"`
 
 	// Only used for the "Error" status message
 	Error       string `json:"error,omitempty"`
@@ -118,7 +141,7 @@ func NewTranscodeStatusProgress(url, requestID string, status TranscodeStatus, c
 		URL:             url,
 		RequestID:       requestID,
 		CompletionRatio: OverallCompletionRatio(status, currentStageCompletionRatio),
-		Status:          status.String(),
+		Status:          status,
 		Timestamp:       config.Clock.GetTimestampUTC(),
 	}
 }
@@ -129,7 +152,7 @@ func NewTranscodeStatusError(url, requestID, errorMsg string, unretriable bool) 
 		RequestID:   requestID,
 		Error:       errorMsg,
 		Unretriable: unretriable,
-		Status:      TranscodeStatusError.String(),
+		Status:      TranscodeStatusError,
 		Timestamp:   config.Clock.GetTimestampUTC(),
 	}
 }
@@ -140,7 +163,7 @@ func NewTranscodeStatusCompleted(url, requestID string, iv InputVideo, ov []Outp
 		URL:             url,
 		CompletionRatio: OverallCompletionRatio(TranscodeStatusCompleted, 1),
 		RequestID:       requestID,
-		Status:          TranscodeStatusCompleted.String(),
+		Status:          TranscodeStatusCompleted,
 		Timestamp:       config.Clock.GetTimestampUTC(),
 		Type:            "video", // Assume everything is a video for now
 		InputVideo:      iv,
@@ -151,8 +174,8 @@ func NewTranscodeStatusCompleted(url, requestID string, iv InputVideo, ov []Outp
 // IsTerminal returns whether the given status message is a terminal state,
 // meaning no other updates will be sent for this request.
 func (tsm TranscodeStatusMessage) IsTerminal() bool {
-	return tsm.Status == TranscodeStatusError.String() ||
-		tsm.Status == TranscodeStatusCompleted.String()
+	return tsm.Status == TranscodeStatusError ||
+		tsm.Status == TranscodeStatusCompleted
 }
 
 // Finds the video track from the list of input video tracks
