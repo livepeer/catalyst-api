@@ -48,11 +48,11 @@ func TestCoordinatorDoesNotBlock(t *testing.T) {
 
 	require.True(running.Load())
 	msg := requireReceive(t, callbacks, 1*time.Second)
-	require.Equal(clients.TranscodeStatusPreparing.String(), msg.Status)
+	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 
 	close(barrier)
 	msg = requireReceive(t, callbacks, 1*time.Second)
-	require.Equal(clients.TranscodeStatusError.String(), msg.Status)
+	require.Equal(clients.TranscodeStatusError, msg.Status)
 	require.Contains(msg.Error, "test error")
 
 	require.Zero(len(callbacks))
@@ -105,10 +105,10 @@ func TestCoordinatorResistsPanics(t *testing.T) {
 	coord.StartUploadJob(testJob)
 
 	require.Equal(1, len(callbacks))
-	require.Equal(clients.TranscodeStatusPreparing.String(), (<-callbacks).Status)
+	require.Equal(clients.TranscodeStatusPreparing, (<-callbacks).Status)
 
 	msg := requireReceive(t, callbacks, 1*time.Second)
-	require.Equal(clients.TranscodeStatusError.String(), msg.Status)
+	require.Equal(clients.TranscodeStatusError, msg.Status)
 	require.Contains(msg.Error, "oh no")
 }
 
@@ -160,7 +160,7 @@ func TestCoordinatorBackgroundJobsStrategies(t *testing.T) {
 
 		msg := requireReceive(t, callbacks, 1*time.Second)
 		require.NotZero(msg.URL)
-		require.Equal(clients.TranscodeStatusPreparing.String(), msg.Status)
+		require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 
 		fgJob := requireReceive(t, foregroundCalls, 1*time.Second)
 		require.Equal("123", fgJob.RequestID)
@@ -171,7 +171,7 @@ func TestCoordinatorBackgroundJobsStrategies(t *testing.T) {
 		// Test that foreground job is the real one: status callbacks ARE reported
 		msg = requireReceive(t, callbacks, 1*time.Second)
 		require.NotZero(msg.URL)
-		require.Equal(clients.TranscodeStatusCompleted.String(), msg.Status)
+		require.Equal(clients.TranscodeStatusCompleted, msg.Status)
 		require.Equal("123", msg.RequestID)
 
 		time.Sleep(1 * time.Second)
@@ -198,14 +198,14 @@ func TestCoordinatorFallbackStrategySuccess(t *testing.T) {
 	coord.StartUploadJob(testJob)
 
 	msg := requireReceive(t, callbacks, 1*time.Second)
-	require.Equal(clients.TranscodeStatusPreparing.String(), msg.Status)
+	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 
 	mistJob := requireReceive(t, mistCalls, 1*time.Second)
 	require.Equal("123", mistJob.RequestID)
 
 	// Check successful completion of the mist event
 	msg = requireReceive(t, callbacks, 1*time.Second)
-	require.Equal(clients.TranscodeStatusCompleted.String(), msg.Status)
+	require.Equal(clients.TranscodeStatusCompleted, msg.Status)
 
 	time.Sleep(1 * time.Second)
 	require.Zero(len(mistCalls))
@@ -235,7 +235,7 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 
 	msg := requireReceive(t, callbacks, 1*time.Second)
 	require.Equal("123", msg.RequestID)
-	require.Equal(clients.TranscodeStatusPreparing.String(), msg.Status)
+	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 
 	mistJob := requireReceive(t, mistCalls, 1*time.Second)
 	require.Equal("123", mistJob.RequestID)
@@ -243,7 +243,7 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 	// External provider pipeline will trigger the initial preparing trigger as well
 	msg = requireReceive(t, callbacks, 1*time.Second)
 	require.Equal("123", msg.RequestID)
-	require.Equal(clients.TranscodeStatusPreparing.String(), msg.Status)
+	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 
 	meconJob := requireReceive(t, externalCalls, 1*time.Second)
 	require.Equal("123", meconJob.RequestID)
@@ -253,12 +253,12 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 	msg = requireReceive(t, callbacks, 1*time.Second)
 	require.NotZero(msg.URL)
 	require.Equal("123", msg.RequestID)
-	require.Equal(clients.TranscodeStatusPreparing.String(), msg.Status)
+	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 	require.Equal(clients.OverallCompletionRatio(clients.TranscodeStatusPreparing, 0.2), msg.CompletionRatio)
 
 	msg = requireReceive(t, callbacks, 1*time.Second)
 	require.Equal("123", msg.RequestID)
-	require.Equal(clients.TranscodeStatusCompleted.String(), msg.Status)
+	require.Equal(clients.TranscodeStatusCompleted, msg.Status)
 
 	time.Sleep(1 * time.Second)
 	require.Zero(len(mistCalls))
