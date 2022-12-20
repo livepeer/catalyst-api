@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"database/sql"
 	"fmt"
 	"net/url"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	_ "github.com/lib/pq"
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
@@ -362,7 +364,30 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 		WithLabelValues(labels...).
 		Add(float64(job.transcodedSegments))
 
+	postgresMetrics(job)
+
 	job.result <- success
+}
+
+func postgresMetrics(job *JobInfo) {
+	if os.Getenv("PGPASSWORD") == "" { // don't attempt writing to postgres if not configured
+		log.Log(job.RequestID, "postgres not configured")
+		return
+	}
+
+	db, err := sql.Open("postgres", "")
+	if err != nil {
+		log.LogError(job.RequestID, "error writing postgres metrics", err)
+		return
+	}
+	defer db.Close()
+
+	insertDynStmt := `insert into "vod_completed"("sourcecodecvideo", "sourcecodecaudio", "pipeline", "catalystregion", "state", "profilescount", "jobduration", "sourcesegmentcount", "transcodedsegmentcount", "sourcebytescount", "sourceduration") values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+	_, err = db.Exec(insertDynStmt, job.sourceCodecVideo, job.sourceCodecAudio, job.pipeline, job.catalystRegion, job.state, job.numProfiles, time.Since(job.startTime).Milliseconds(), job.sourceSegments, job.transcodedSegments, job.sourceBytes, float64(job.sourceDurationMs))
+	if err != nil {
+		log.LogError(job.RequestID, "error writing postgres metrics", err)
+		return
+	}
 }
 
 func recovered[T any](f func() (T, error)) (t T, err error) {
