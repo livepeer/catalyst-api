@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -367,7 +368,7 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 func recovered[T any](f func() (T, error)) (t T, err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
-			log.LogNoRequestID("panic in pipeline handler background goroutine, recovering", "err", rec)
+			log.LogNoRequestID("panic in pipeline handler background goroutine, recovering", "err", err, "trace", debug.Stack())
 			err = fmt.Errorf("panic in pipeline handler: %v", rec)
 		}
 	}()
