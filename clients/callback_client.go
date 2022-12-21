@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -77,7 +78,7 @@ func (pcc *PeriodicCallbackClient) Start() *PeriodicCallbackClient {
 func recoverer(f func()) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.LogNoRequestID("panic in callback goroutine, recovering", "err", err)
+			log.LogNoRequestID("panic in callback goroutine, recovering", "err", err, "trace", debug.Stack())
 		}
 	}()
 	f()
