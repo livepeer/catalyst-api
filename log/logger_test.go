@@ -16,6 +16,6 @@ func TestRedactURL(t *testing.T) {
 	)
 	require.Equal(t,
 		"https://lp-nyc-vod-monster.storage.googleapis.com/directUpload/12345",
-		RedactURL("https://lp-nyc-vod-monster.storage.googleapis.com/directUpload/1234"),
+		RedactURL("https://lp-nyc-vod-monster.storage.googleapis.com/directUpload/12345"),
 	)
 }
