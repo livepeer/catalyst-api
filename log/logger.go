@@ -1,6 +1,7 @@
 package log
 
 import (
+	"net/url"
 	"os"
 	"time"
 
@@ -59,4 +60,12 @@ func getLogger(requestID string) kitlog.Logger {
 func newLogger() kitlog.Logger {
 	newLogger := kitlog.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 	return kitlog.With(newLogger, "ts", kitlog.DefaultTimestampUTC)
+}
+
+func RedactURL(urlStr string) string {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return "REDACTED"
+	}
+	return u.Redacted()
 }
