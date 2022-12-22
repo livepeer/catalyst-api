@@ -3,6 +3,7 @@ package log
 import (
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-kit/log"
@@ -19,7 +20,7 @@ func init() {
 
 // Permanently add context to the logger. Any future logging for this Request ID will include this context
 func AddContext(requestID string, keyvals ...interface{}) {
-	logger := kitlog.With(getLogger(requestID), keyvals...)
+	logger := kitlog.With(getLogger(requestID), redactKeyvals(keyvals...)...)
 
 	err := loggerCache.Replace(requestID, logger, default_logger_cache_expiry)
 	if err != nil {
@@ -28,19 +29,19 @@ func AddContext(requestID string, keyvals ...interface{}) {
 }
 
 func Log(requestID string, message string, keyvals ...interface{}) {
-	_ = kitlog.With(getLogger(requestID), "msg", message).Log(keyvals...)
+	_ = kitlog.With(getLogger(requestID), "msg", message).Log(redactKeyvals(keyvals...)...)
 }
 
 // Log in situations where we don't have access to the Request ID.
 // Should be used sparingly and with as much context inserted into the message as possible
 func LogNoRequestID(message string, keyvals ...interface{}) {
-	_ = kitlog.With(newLogger(), "msg", message).Log(keyvals...)
+	_ = kitlog.With(newLogger(), "msg", message).Log(redactKeyvals(keyvals...)...)
 }
 
 func LogError(requestID string, message string, err error, keyvals ...interface{}) {
 	msgLogger := kitlog.With(getLogger(requestID), "msg", message)
 	errLogger := kitlog.With(msgLogger, "err", err.Error())
-	_ = errLogger.Log(keyvals...)
+	_ = errLogger.Log(redactKeyvals(keyvals...)...)
 }
 
 func getLogger(requestID string) kitlog.Logger {
@@ -62,8 +63,30 @@ func newLogger() kitlog.Logger {
 	return kitlog.With(newLogger, "ts", kitlog.DefaultTimestampUTC)
 }
 
-func RedactURL(urlStr string) string {
-	u, err := url.Parse(urlStr)
+func redactKeyvals(keyvals ...interface{}) []interface{} {
+	var res []interface{}
+	for i := range keyvals {
+		if i%2 == 1 {
+			k, v := keyvals[i-1], keyvals[i]
+			res = append(res, k)
+			s, ok := v.(string)
+			if ok {
+				res = append(res, RedactURL(s))
+			} else {
+				res = append(res, v)
+			}
+		}
+	}
+	return res
+}
+
+func RedactURL(str string) string {
+	strLower := strings.ToLower(str)
+	if !strings.HasPrefix(strLower, "s3+http") && !strings.HasPrefix(strLower, "http") {
+		return str
+	}
+
+	u, err := url.Parse(str)
 	if err != nil {
 		return "REDACTED"
 	}

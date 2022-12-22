@@ -101,7 +101,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 
 	// Generate a Request ID that will be used throughout all logging
 	var requestID = config.RandomTrailer(8)
-	log.AddContext(requestID, "source", log.RedactURL(uploadVODRequest.Url))
+	log.AddContext(requestID, "source", uploadVODRequest.Url)
 
 	httpURL, err := dStorageToHTTP(uploadVODRequest.Url)
 	if err != nil {
