@@ -336,7 +336,7 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 
 	log.Log(job.RequestID, "Finished job and deleted from job cache", "success", success)
 
-	var labels = []string{job.sourceCodecVideo, job.sourceCodecAudio, job.pipeline, job.catalystRegion, fmt.Sprint(job.numProfiles), job.state}
+	var labels = []string{job.sourceCodecVideo, job.sourceCodecAudio, job.pipeline, job.catalystRegion, fmt.Sprint(job.numProfiles), job.state, config.Version}
 
 	metrics.Metrics.VODPipelineMetrics.Count.
 		WithLabelValues(labels...).

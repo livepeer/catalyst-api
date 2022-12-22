@@ -18,7 +18,11 @@ var app *exec.Cmd
 
 func init() {
 	// Build the app
-	buildApp := exec.Command("go", "build", "-o", "test/app")
+	buildApp := exec.Command(
+		"go", "build",
+		"-ldflags", "-X 'github.com/livepeer/catalyst-api/config.Version=cucumber-test-version'",
+		"-o", "test/app",
+	)
 	buildApp.Dir = ".."
 	if buildErr := buildApp.Run(); buildErr != nil {
 		panic(buildErr)
