@@ -3,7 +3,7 @@ module github.com/livepeer/catalyst-api
 go 1.19
 
 require (
-	github.com/aws/aws-sdk-go v1.44.163
+	github.com/aws/aws-sdk-go v1.44.166
 	github.com/cenkalti/backoff/v4 v4.2.0
 	github.com/cucumber/godog v0.12.5
 	github.com/google/uuid v1.3.0
