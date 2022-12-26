@@ -20,7 +20,7 @@ func TestOnlyS3URLsToAWSClient(t *testing.T) {
 	require.NoError(t, err)
 
 	// use the random file name as the dir name for the transfer file
-	mcInputDir := path.Join(os.TempDir(), path.Ext(f.Name()))
+	mcInputDir := path.Join(os.TempDir(), "out", f.Name())
 	transferredFile := path.Join(mcInputDir, "input/1234/video")
 	defer os.Remove(transferredFile)
 
@@ -39,12 +39,59 @@ func TestOnlyS3URLsToAWSClient(t *testing.T) {
 	err = mc.Transcode(context.Background(), TranscodeJobArgs{
 		InputFile:     mustParseURL("file://" + f.Name()),
 		HLSOutputFile: mustParseURL("s3+https://endpoint.com/bucket/1234/index.m3u8"),
+		CollectSourceSize: func(size int64) {
+			require.Equal(t, len(exampleFileContents), int(size))
+		},
 	})
 	require.ErrorContains(t, err, "secret error")
 
 	// Check that the file was copied to the osTransferBucketURL folder
 	_, err = os.Stat(transferredFile)
 	require.NoError(t, err)
+}
+
+func TestSendsOriginalURLToS3OnCopyError(t *testing.T) {
+	mcInputDir := path.Join(os.TempDir(), "out")
+	transferredFile := path.Join(mcInputDir, "input/1234/video")
+	defer os.Remove(transferredFile)
+
+	awsStub := &stubMediaConvertClient{
+		createJob: func(input *mediaconvert.CreateJobInput) (*mediaconvert.CreateJobOutput, error) {
+			// check that the https? URL is sent to AWS client if the copy fails
+			require.Equal(t, "http://localhost:3000/not-here.mp4", *input.Settings.Inputs[0].FileInput)
+			require.Equal(t, "s3://thebucket/output/1234/index", *input.Settings.OutputGroups[0].OutputGroupSettings.HlsGroupSettings.Destination)
+			return nil, errors.New("secret error")
+		},
+	}
+	mc := &MediaConvert{
+		s3TransferBucket:    mustParseURL("s3://thebucket"),
+		osTransferBucketURL: mustParseURL("file://" + mcInputDir),
+		client:              awsStub,
+	}
+	err := mc.Transcode(context.Background(), TranscodeJobArgs{
+		// use a non existing HTTP endpoint for the file
+		InputFile:         mustParseURL("http://localhost:3000/not-here.mp4"),
+		HLSOutputFile:     mustParseURL("s3+https://endpoint.com/bucket/1234/index.m3u8"),
+		CollectSourceSize: func(size int64) {},
+	})
+	require.ErrorContains(t, err, "secret error")
+
+	// Now check that it does NOT send the original URL to S3 if it's an OS URL
+	awsStub.createJob = func(input *mediaconvert.CreateJobInput) (*mediaconvert.CreateJobOutput, error) {
+		require.Fail(t, "should not have been called")
+		return nil, errors.New("unreachable")
+	}
+	err = mc.Transcode(context.Background(), TranscodeJobArgs{
+		// use a non existing an OS URL
+		InputFile:         mustParseURL("s3+https://user:pwd@localhost:4321/bucket/no-minio-here.mp4"),
+		HLSOutputFile:     mustParseURL("s3+https://endpoint.com/bucket/1234/index.m3u8"),
+		CollectSourceSize: func(size int64) {},
+	})
+	require.ErrorContains(t, err, "download error")
+
+	// Check that no file was created to the osTransferBucketURL folder
+	_, err = os.Stat(transferredFile)
+	require.ErrorContains(t, err, "no such file")
 }
 
 func mustParseURL(str string) *url.URL {

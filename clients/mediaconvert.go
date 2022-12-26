@@ -106,9 +106,13 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	size, err := copyFile(ctx, args.InputFile.String(), mc.osTransferBucketURL.String(), mcInputRelPath)
 	if err != nil {
 		log.Log(args.RequestID, "error copying input file to S3", "bytes", size, "err", fmt.Sprintf("%s", err))
-		// If copyFile fails (e.g. file server closes connection), then attempt transcoding
-		// by directly passing the source URL to MC instead of using the S3 source URL.
-		srcInputFile = args.InputFile
+		if args.InputFile.Scheme == "http" || args.InputFile.Scheme == "https" {
+			// If copyFile fails (e.g. file server closes connection), then attempt transcoding
+			// by directly passing the source URL to MC instead of using the S3 source URL.
+			srcInputFile = args.InputFile
+		} else {
+			return err
+		}
 	} else {
 		log.Log(args.RequestID, "Successfully copied", size, "bytes to S3")
 		srcInputFile = mc.s3TransferBucket.JoinPath(mcInputRelPath)
