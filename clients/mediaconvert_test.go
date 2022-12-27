@@ -11,7 +11,6 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/mediaconvert"
-	"github.com/cenkalti/backoff/v4"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/stretchr/testify/require"
 )
@@ -243,13 +242,8 @@ func TestCopiesMediaConvertOutputToFinalLocation(t *testing.T) {
 }
 
 func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *MediaConvert, inputFile *os.File, transferDir string, cleanup func()) {
-	oldConstantBackoff, oldExponentialBackoff, oldRetries, oldPollDelay := constantBackOff, exponentialBackOff, config.DownloadOSURLRetries, pollDelay
-	constantBackOff = backoff.NewConstantBackOff(1 * time.Millisecond)
-	exponentialBackOff = backoff.NewExponentialBackOff()
-	exponentialBackOff.InitialInterval = 1 * time.Millisecond
-	exponentialBackOff.MaxInterval = 1 * time.Millisecond
-	config.DownloadOSURLRetries = 1
-	pollDelay = 1 * time.Millisecond
+	oldMaxRetryInterval, oldRetries, oldPollDelay := maxRetryInterval, config.DownloadOSURLRetries, pollDelay
+	maxRetryInterval, config.DownloadOSURLRetries, pollDelay = 1*time.Millisecond, 1, 1*time.Millisecond
 
 	var err error
 	inputFile, err = os.CreateTemp(os.TempDir(), "user-input-*")
@@ -263,7 +257,7 @@ func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *Med
 	require.NoError(t, os.MkdirAll(transferDir, 0777))
 
 	cleanup = func() {
-		constantBackOff, exponentialBackOff, config.DownloadOSURLRetries, pollDelay = oldConstantBackoff, oldExponentialBackoff, oldRetries, oldPollDelay
+		maxRetryInterval, config.DownloadOSURLRetries, pollDelay = oldMaxRetryInterval, oldRetries, oldPollDelay
 		require.NoError(t, os.Remove(inputFile.Name()))
 		require.NoError(t, os.RemoveAll(transferDir))
 	}
