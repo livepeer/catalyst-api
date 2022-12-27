@@ -208,7 +208,7 @@ func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *
 	var acceleration *mediaconvert.AccelerationSettings
 	if accelerated {
 		acceleration = &mediaconvert.AccelerationSettings{
-			Mode: aws.String("ENABLED"),
+			Mode: aws.String(mediaconvert.AccelerationModePreferred),
 		}
 	}
 
