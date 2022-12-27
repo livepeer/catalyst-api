@@ -21,7 +21,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const pollDelay = 10 * time.Second
+var pollDelay = 10 * time.Second
+
 const rateLimitedPollDelay = 15 * time.Second
 
 // https://docs.aws.amazon.com/mediaconvert/latest/ug/mediaconvert_error_codes.html
@@ -442,6 +443,8 @@ func getTargetDir(url *url.URL) string {
 			// only bucket name and file in URL
 			dir = ""
 		}
+	} else if url.Scheme == "file" {
+		dir = path.Join("/", url.Host, dir)
 	}
 	return dir
 }

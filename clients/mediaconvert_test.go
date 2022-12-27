@@ -16,6 +16,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const dummyHlsPlaylist = `
+#EXTM3U
+
+#EXTINF:10,
+0.ts
+
+#EXT-X-ENDLIST`
+
 func TestOnlyS3URLsToAWSClient(t *testing.T) {
 	require := require.New(t)
 	awsStub := &stubMediaConvertClient{
@@ -29,9 +37,6 @@ func TestOnlyS3URLsToAWSClient(t *testing.T) {
 	mc, f, transferDir, cleanup := setupTestMediaConvert(t, awsStub)
 	defer cleanup()
 
-	transferredFile := path.Join(transferDir, "input/1234/video")
-	defer os.Remove(transferredFile)
-
 	err := mc.Transcode(context.Background(), TranscodeJobArgs{
 		InputFile:     mustParseURL("file://" + f.Name()),
 		HLSOutputFile: mustParseURL("s3+https://endpoint.com/bucket/1234/index.m3u8"),
@@ -42,7 +47,7 @@ func TestOnlyS3URLsToAWSClient(t *testing.T) {
 	require.ErrorContains(err, "secret error")
 
 	// Check that the file was copied to the osTransferBucketURL folder
-	content, err := os.ReadFile(transferredFile)
+	content, err := os.ReadFile(path.Join(transferDir, "input/1234/video"))
 	require.NoError(err)
 	require.Equal(exampleFileContents, string(content))
 }
@@ -72,9 +77,8 @@ func TestReportsMediaConvertProgress(t *testing.T) {
 			}
 		},
 	}
-	mc, f, transferDir, cleanup := setupTestMediaConvert(t, awsStub)
+	mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
 	defer cleanup()
-	defer os.Remove(path.Join(transferDir, "input/1234/video"))
 
 	reportProgressCalls := 0
 	err := mc.Transcode(context.Background(), TranscodeJobArgs{
@@ -165,9 +169,8 @@ func TestRetriesOnAccelerationError(t *testing.T) {
 			}
 		},
 	}
-	mc, inputFile, transferDir, cleanup := setupTestMediaConvert(t, awsStub)
+	mc, inputFile, _, cleanup := setupTestMediaConvert(t, awsStub)
 	defer cleanup()
-	defer os.Remove(path.Join(transferDir, "input/1234/video"))
 
 	err := mc.Transcode(context.Background(), TranscodeJobArgs{
 		// use a non existing HTTP endpoint for the file
@@ -179,13 +182,74 @@ func TestRetriesOnAccelerationError(t *testing.T) {
 	require.Equal(2, createdJobs)
 }
 
+func TestCopiesMediaConvertOutputToFinalLocation(t *testing.T) {
+	require := require.New(t)
+
+	var transfOutputFile string
+	createJobCalls, getJobCalls := 0, 0
+	awsStub := &stubMediaConvertClient{
+		createJob: func(input *mediaconvert.CreateJobInput) (*mediaconvert.CreateJobOutput, error) {
+			createJobCalls++
+			return &mediaconvert.CreateJobOutput{Job: &mediaconvert.Job{Id: aws.String("10")}}, nil
+		},
+		getJob: func(input *mediaconvert.GetJobInput) (*mediaconvert.GetJobOutput, error) {
+			getJobCalls++
+			switch getJobCalls {
+			case 1:
+				return &mediaconvert.GetJobOutput{Job: &mediaconvert.Job{
+					Status:             aws.String(mediaconvert.JobStatusProgressing),
+					JobPercentComplete: aws.Int64(50),
+				}}, nil
+			case 2:
+				require.NoError(os.WriteFile(transfOutputFile, []byte(dummyHlsPlaylist), 0777))
+				require.NoError(os.WriteFile(path.Join(transfOutputFile, "../1.ts"), []byte(exampleFileContents), 0777))
+
+				return &mediaconvert.GetJobOutput{Job: &mediaconvert.Job{
+					Status: aws.String(mediaconvert.JobStatusComplete),
+				}}, nil
+			default:
+				require.Fail("unexpected call")
+				return nil, errors.New("unreachable")
+			}
+		},
+	}
+	mc, inputFile, transferDir, cleanup := setupTestMediaConvert(t, awsStub)
+	defer cleanup()
+
+	outFile := path.Join(transferDir, "../out/index.m3u8")
+	defer os.RemoveAll(path.Dir(outFile))
+	transfOutputFile = path.Join(transferDir, "output", outFile)
+	require.NoError(os.MkdirAll(path.Dir(transfOutputFile), 0777))
+
+	err := mc.Transcode(context.Background(), TranscodeJobArgs{
+		InputFile:                mustParseURL("file://" + inputFile.Name()),
+		HLSOutputFile:            mustParseURL("file:/" + outFile),
+		CollectSourceSize:        func(size int64) {},
+		ReportProgress:           func(progress float64) {},
+		CollectTranscodedSegment: func() {},
+	})
+	require.NoError(err)
+	require.Equal(1, createJobCalls)
+	require.Equal(2, getJobCalls)
+
+	// Check that the output files were copied to the osTransferBucketURL folder
+	content, err := os.ReadFile(outFile)
+	require.NoError(err)
+	require.Equal(dummyHlsPlaylist, string(content))
+
+	content, err = os.ReadFile(path.Join(outFile, "../1.ts"))
+	require.NoError(err)
+	require.Equal(exampleFileContents, string(content))
+}
+
 func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *MediaConvert, inputFile *os.File, transferDir string, cleanup func()) {
-	oldConstantBackoff, oldExponentialBackoff, oldRetries := constantBackOff, exponentialBackOff, config.DownloadOSURLRetries
+	oldConstantBackoff, oldExponentialBackoff, oldRetries, oldPollDelay := constantBackOff, exponentialBackOff, config.DownloadOSURLRetries, pollDelay
 	constantBackOff = backoff.NewConstantBackOff(1 * time.Millisecond)
 	exponentialBackOff = backoff.NewExponentialBackOff()
 	exponentialBackOff.InitialInterval = 1 * time.Millisecond
 	exponentialBackOff.MaxInterval = 1 * time.Millisecond
 	config.DownloadOSURLRetries = 1
+	pollDelay = 1 * time.Millisecond
 
 	var err error
 	inputFile, err = os.CreateTemp(os.TempDir(), "user-input-*")
@@ -195,11 +259,13 @@ func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *Med
 	require.NoError(t, inputFile.Close())
 
 	// use the random file name as the dir name for the transfer file
-	transferDir = path.Join(inputFile.Name()+"_dir", "transfer")
+	transferDir = path.Join(inputFile.Name()+"-dir", "transfer")
+	require.NoError(t, os.MkdirAll(transferDir, 0777))
 
 	cleanup = func() {
-		constantBackOff, exponentialBackOff, config.DownloadOSURLRetries = oldConstantBackoff, oldExponentialBackoff, oldRetries
+		constantBackOff, exponentialBackOff, config.DownloadOSURLRetries, pollDelay = oldConstantBackoff, oldExponentialBackoff, oldRetries, oldPollDelay
 		require.NoError(t, os.Remove(inputFile.Name()))
+		require.NoError(t, os.RemoveAll(transferDir))
 	}
 
 	mc = &MediaConvert{
