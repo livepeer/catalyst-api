@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/livepeer/catalyst-api/config"
 	"io"
 	"net/http"
 	"net/url"
@@ -90,7 +91,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	if path.Base(args.HLSOutputFile.Path) != "index.m3u8" {
 		return fmt.Errorf("target URL must be an `index.m3u8` file, found %s", args.HLSOutputFile)
 	}
-	targetDir := path.Join(args.RequestID, getTargetDir(args.HLSOutputFile))
+	targetDir := path.Join(config.RandomTrailer(10), getTargetDir(args.HLSOutputFile))
 
 	mcInputRelPath := path.Join("input", targetDir, "video")
 	// AWS MediaConvert adds the .m3u8 to the end of the output file name
