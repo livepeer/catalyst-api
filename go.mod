@@ -3,11 +3,13 @@ module github.com/livepeer/catalyst-api
 go 1.19
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/aws/aws-sdk-go v1.44.155
 	github.com/cenkalti/backoff/v4 v4.2.0
 	github.com/cucumber/godog v0.12.5
 	github.com/google/uuid v1.3.0
 	github.com/julienschmidt/httprouter v1.3.0
+	github.com/lib/pq v1.10.7
 	github.com/livepeer/go-tools v0.1.0
 	github.com/livepeer/livepeer-data v0.6.2
 	github.com/minio/madmin-go v1.7.5
@@ -45,7 +47,6 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
-	github.com/lib/pq v1.10.7 // indirect
 	github.com/lufia/plan9stats v0.0.0-20220913051719-115f729f3c8c // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.16 // indirect
