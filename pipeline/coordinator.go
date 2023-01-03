@@ -366,12 +366,12 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 		WithLabelValues(labels...).
 		Add(float64(job.transcodedSegments))
 
-	go c.postgresMetrics(job)
+	go c.sendDBMetrics(job)
 
 	job.result <- success
 }
 
-func (c *Coordinator) postgresMetrics(job *JobInfo) {
+func (c *Coordinator) sendDBMetrics(job *JobInfo) {
 	if c.MetricsDB == nil {
 		return
 	}
