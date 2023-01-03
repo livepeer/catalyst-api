@@ -33,7 +33,7 @@ type CatalystAPIMetrics struct {
 	VODPipelineMetrics VODPipelineMetrics
 }
 
-var vodLabels = []string{"source_codec_video", "source_codec_audio", "pipeline", "catalyst_region", "num_profiles", "stage"}
+var vodLabels = []string{"source_codec_video", "source_codec_audio", "pipeline", "catalyst_region", "num_profiles", "stage", "version"}
 
 func NewMetrics() *CatalystAPIMetrics {
 	m := &CatalystAPIMetrics{
@@ -45,7 +45,7 @@ func NewMetrics() *CatalystAPIMetrics {
 		UploadVODRequestDurationSec: promauto.NewSummaryVec(prometheus.SummaryOpts{
 			Name: "upload_vod_request_duration_seconds",
 			Help: "The latency of the requests made to /api/vod in seconds broken up by success and status code",
-		}, []string{"success", "status_code"}),
+		}, []string{"success", "status_code", "version"}),
 		TranscodeSegmentDurationSec: promauto.NewHistogram(prometheus.HistogramOpts{
 			Name:    "transcode_segment_duration_seconds",
 			Help:    "Time taken to transcode a segment",

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -77,7 +78,7 @@ func (pcc *PeriodicCallbackClient) Start() *PeriodicCallbackClient {
 func recoverer(f func()) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.LogNoRequestID("panic in callback goroutine, recovering", "err", err)
+			log.LogNoRequestID("panic in callback goroutine, recovering", "err", err, "trace", debug.Stack())
 		}
 	}()
 	f()
@@ -101,10 +102,9 @@ func (pcc *PeriodicCallbackClient) SendTranscodeStatus(tsm TranscodeStatusMessag
 		}
 	}
 
-	rawStatus, _ := json.Marshal(tsm)
 	log.Log(tsm.RequestID, "Updated transcode status",
 		"timestamp", tsm.Timestamp, "status", tsm.Status, "completion_ratio", tsm.CompletionRatio,
-		"error", tsm.Error, "raw", string(rawStatus))
+		"error", tsm.Error)
 }
 
 func (pcc *PeriodicCallbackClient) SendRecordingEvent(event *RecordingEvent) {

@@ -3,8 +3,8 @@ package clients
 import (
 	"context"
 	"fmt"
+	"github.com/livepeer/catalyst-api/log"
 	"io"
-	"net/url"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -19,7 +19,7 @@ var constantBackOff = newConstantBackOffExecutor()
 func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 	storageDriver, err := drivers.ParseOSURL(osURL, true)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse OS URL %q: %s", redactURL(osURL), err)
+		return nil, fmt.Errorf("failed to parse OS URL %q: %s", log.RedactURL(osURL), err)
 	}
 
 	var fileInfoReader *drivers.FileInfoReader
@@ -43,7 +43,7 @@ func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 	err = backoff.Retry(readOperation, backoff.WithMaxRetries(constantBackOff, config.DownloadOSURLRetries))
 	if err != nil {
 		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(url, "read").Inc()
-		return nil, fmt.Errorf("failed to read from OS URL %q: %s", redactURL(osURL), err)
+		return nil, fmt.Errorf("failed to read from OS URL %q: %s", log.RedactURL(osURL), err)
 	}
 
 	duration := time.Since(start)
@@ -57,7 +57,7 @@ func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 func UploadToOSURL(osURL, filename string, data io.Reader, timeout time.Duration) error {
 	storageDriver, err := drivers.ParseOSURL(osURL, true)
 	if err != nil {
-		return fmt.Errorf("failed to parse OS URL %q: %s", redactURL(osURL), err)
+		return fmt.Errorf("failed to parse OS URL %q: %s", log.RedactURL(osURL), err)
 	}
 
 	var retries = -1
@@ -79,7 +79,7 @@ func UploadToOSURL(osURL, filename string, data io.Reader, timeout time.Duration
 	err = backoff.Retry(writeOperation, backoff.WithMaxRetries(exponentialBackOff, 2))
 	if err != nil {
 		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(url, "write").Inc()
-		return fmt.Errorf("failed to write file %q to OS URL %q: %s", filename, redactURL(osURL), err)
+		return fmt.Errorf("failed to write file %q to OS URL %q: %s", filename, log.RedactURL(osURL), err)
 	}
 
 	duration := time.Since(start)
@@ -103,14 +103,6 @@ func ListOSURL(ctx context.Context, osURL string) (drivers.PageInfo, error) {
 	}
 
 	return page, nil
-}
-
-func redactURL(urlStr string) string {
-	u, err := url.Parse(urlStr)
-	if err != nil {
-		return "REDACTED"
-	}
-	return u.Redacted()
 }
 
 func newExponentialBackOffExecutor() *backoff.ExponentialBackOff {

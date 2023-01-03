@@ -95,17 +95,25 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	mcInputRelPath := path.Join("input", targetDir, "video")
 	// AWS MediaConvert adds the .m3u8 to the end of the output file name
 	mcOutputRelPath := path.Join("output", targetDir, "index")
+	var srcInputFile *url.URL
 
-	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", mc.opts.S3AuxBucket.JoinPath(mcInputRelPath), "destOSBaseURL", mc.osTransferBucketURL.String(), "filename", mcInputRelPath)
+	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", mc.opts.S3AuxBucket.JoinPath(mcInputRelPath), "filename", mcInputRelPath)
 	size, err := copyFile(ctx, args.InputFile.String(), mc.osTransferBucketURL.String(), mcInputRelPath)
 	if err != nil {
-		return fmt.Errorf("error copying input file to S3: %w", err)
+		log.Log(args.RequestID, "error copying input file to S3", "bytes", size, "err", fmt.Sprintf("%s", err))
+		// If copyFile fails (e.g. file server closes connection), then attempt transcoding
+		// by directly passing the source URL to MC instead of using the S3 source URL.
+		srcInputFile = args.InputFile
+	} else {
+		log.Log(args.RequestID, "Successfully copied", size, "bytes to S3")
+		srcInputFile = mc.opts.S3AuxBucket.JoinPath(mcInputRelPath)
 	}
 
 	args.CollectSourceSize(size)
 	mcArgs := args
-	mcArgs.InputFile = mc.opts.S3AuxBucket.JoinPath(mcInputRelPath)
+	mcArgs.InputFile = srcInputFile
 	mcArgs.HLSOutputFile = mc.opts.S3AuxBucket.JoinPath(mcOutputRelPath)
+
 	err = mc.coreAwsTranscode(ctx, mcArgs, true)
 	if err == ErrJobAcceleration {
 		err = mc.coreAwsTranscode(ctx, mcArgs, false)
@@ -336,6 +344,7 @@ func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename string) (i
 	}
 
 	return writtenBytes.count, nil
+
 }
 
 func copyDir(source, dest *url.URL, args TranscodeJobArgs) error {

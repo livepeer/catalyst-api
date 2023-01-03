@@ -141,14 +141,14 @@ func (s *StepContext) CheckRecordedMetrics(metricsType string) error {
 	}
 
 	if metricsType == "failure" {
-		r := regexp.MustCompile(`\nupload_vod_request_duration_seconds_count{status_code="500",success="false"} 1\n`)
+		r := regexp.MustCompile(`\nupload_vod_request_duration_seconds_count{status_code="500",success="false",version="cucumber-test-version"} 1\n`)
 		if !r.Match(body) {
 			return fmt.Errorf("not a valid failure upload_vod_request_duration_seconds_count")
 		}
 	}
 
 	if metricsType == "successful" {
-		r := regexp.MustCompile(`\nupload_vod_request_duration_seconds_count{status_code="200",success="true"} 1\n`)
+		r := regexp.MustCompile(`\nupload_vod_request_duration_seconds_count{status_code="200",success="true",version="cucumber-test-version"} 1\n`)
 		if !r.Match(body) {
 			return fmt.Errorf("not a valid success upload_vod_request_duration_seconds: %q", body)
 		}

@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -339,7 +340,7 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 
 	log.Log(job.RequestID, "Finished job and deleted from job cache", "success", success)
 
-	var labels = []string{job.sourceCodecVideo, job.sourceCodecAudio, job.pipeline, job.catalystRegion, fmt.Sprint(job.numProfiles), job.state}
+	var labels = []string{job.sourceCodecVideo, job.sourceCodecAudio, job.pipeline, job.catalystRegion, fmt.Sprint(job.numProfiles), job.state, config.Version}
 
 	metrics.Metrics.VODPipelineMetrics.Count.
 		WithLabelValues(labels...).
@@ -386,7 +387,7 @@ func (c *Coordinator) postgresMetrics(job *JobInfo) {
 func recovered[T any](f func() (T, error)) (t T, err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
-			log.LogNoRequestID("panic in pipeline handler background goroutine, recovering", "err", rec)
+			log.LogNoRequestID("panic in pipeline handler background goroutine, recovering", "err", err, "trace", debug.Stack())
 			err = fmt.Errorf("panic in pipeline handler: %v", rec)
 		}
 	}()
