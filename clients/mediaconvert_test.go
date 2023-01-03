@@ -37,8 +37,8 @@ func TestOnlyS3URLsToAWSClient(t *testing.T) {
 	defer cleanup()
 
 	err := mc.Transcode(context.Background(), TranscodeJobArgs{
-		InputFile:     mustParseURL("file://" + f.Name()),
-		HLSOutputFile: mustParseURL("s3+https://endpoint.com/bucket/1234/index.m3u8"),
+		InputFile:     mustParseURL(t, "file://"+f.Name()),
+		HLSOutputFile: mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
 		CollectSourceSize: func(size int64) {
 			require.Equal(len(exampleFileContents), int(size))
 		},
@@ -81,8 +81,8 @@ func TestReportsMediaConvertProgress(t *testing.T) {
 
 	reportProgressCalls := 0
 	err := mc.Transcode(context.Background(), TranscodeJobArgs{
-		InputFile:         mustParseURL("file://" + f.Name()),
-		HLSOutputFile:     mustParseURL("s3+https://endpoint.com/bucket/1234/index.m3u8"),
+		InputFile:         mustParseURL(t, "file://"+f.Name()),
+		HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
 		CollectSourceSize: func(size int64) {},
 		ReportProgress: func(progress float64) {
 			reportProgressCalls++
@@ -111,8 +111,8 @@ func TestSendsOriginalURLToS3OnCopyError(t *testing.T) {
 
 	err := mc.Transcode(context.Background(), TranscodeJobArgs{
 		// use a non existing HTTP endpoint for the file
-		InputFile:         mustParseURL("http://localhost:3000/not-here.mp4"),
-		HLSOutputFile:     mustParseURL("s3+https://endpoint.com/bucket/1234/index.m3u8"),
+		InputFile:         mustParseURL(t, "http://localhost:3000/not-here.mp4"),
+		HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
 		CollectSourceSize: func(size int64) {},
 	})
 	require.ErrorContains(err, "secret error")
@@ -124,8 +124,8 @@ func TestSendsOriginalURLToS3OnCopyError(t *testing.T) {
 	}
 	err = mc.Transcode(context.Background(), TranscodeJobArgs{
 		// use a non existing OS URL
-		InputFile:         mustParseURL("s3+https://user:pwd@localhost:4321/bucket/no-minio-here.mp4"),
-		HLSOutputFile:     mustParseURL("s3+https://endpoint.com/bucket/1234/index.m3u8"),
+		InputFile:         mustParseURL(t, "s3+https://user:pwd@localhost:4321/bucket/no-minio-here.mp4"),
+		HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
 		CollectSourceSize: func(size int64) {},
 	})
 	require.ErrorContains(err, "download error")
@@ -173,8 +173,8 @@ func TestRetriesOnAccelerationError(t *testing.T) {
 
 	err := mc.Transcode(context.Background(), TranscodeJobArgs{
 		// use a non existing HTTP endpoint for the file
-		InputFile:         mustParseURL("file://" + inputFile.Name()),
-		HLSOutputFile:     mustParseURL("s3+https://endpoint.com/bucket/1234/index.m3u8"),
+		InputFile:         mustParseURL(t, "file://"+inputFile.Name()),
+		HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
 		CollectSourceSize: func(size int64) {},
 	})
 	require.ErrorContains(err, "done with this test")
@@ -221,8 +221,8 @@ func TestCopiesMediaConvertOutputToFinalLocation(t *testing.T) {
 	require.NoError(os.MkdirAll(path.Dir(transfOutputFile), 0777))
 
 	err := mc.Transcode(context.Background(), TranscodeJobArgs{
-		InputFile:                mustParseURL("file://" + inputFile.Name()),
-		HLSOutputFile:            mustParseURL("file:/" + outFile),
+		InputFile:                mustParseURL(t, "file://"+inputFile.Name()),
+		HLSOutputFile:            mustParseURL(t, "file:/"+outFile),
 		CollectSourceSize:        func(size int64) {},
 		ReportProgress:           func(progress float64) {},
 		CollectTranscodedSegment: func() {},
@@ -258,23 +258,23 @@ func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *Med
 
 	cleanup = func() {
 		maxRetryInterval, config.DownloadOSURLRetries, pollDelay = oldMaxRetryInterval, oldRetries, oldPollDelay
-		require.NoError(t, os.Remove(inputFile.Name()))
-		require.NoError(t, os.RemoveAll(transferDir))
+		inErr := os.Remove(inputFile.Name())
+		dirErr := os.RemoveAll(transferDir)
+		require.NoError(t, inErr)
+		require.NoError(t, dirErr)
 	}
 
 	mc = &MediaConvert{
-		s3TransferBucket:    mustParseURL("s3://thebucket"),
-		osTransferBucketURL: mustParseURL("file://" + transferDir),
+		s3TransferBucket:    mustParseURL(t, "s3://thebucket"),
+		osTransferBucketURL: mustParseURL(t, "file://"+transferDir),
 		client:              awsStub,
 	}
 	return
 }
 
-func mustParseURL(str string) *url.URL {
+func mustParseURL(t *testing.T, str string) *url.URL {
 	u, err := url.Parse(str)
-	if err != nil {
-		panic(err)
-	}
+	require.NoError(t, err)
 	return u
 }
 
