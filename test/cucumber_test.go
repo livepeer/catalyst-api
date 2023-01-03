@@ -29,7 +29,7 @@ func init() {
 	}
 
 	// Get minio
-	getMinio := exec.Command("go", "get", "github.com/minio/minio")
+	getMinio := exec.Command("go", "get", "github.com/minio/minio@v0.0.0-20221229230822-b8943fdf19ac")
 	getMinio.Dir = ".."
 	if buildErr := getMinio.Run(); buildErr != nil {
 		panic(buildErr)
