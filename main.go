@@ -54,7 +54,7 @@ func main() {
 	if metricsDBConnectionString != nil && *metricsDBConnectionString != "" {
 		metricsDB, err = sql.Open("postgres", *metricsDBConnectionString)
 		if err != nil {
-			log.Println("Error creating postgres metrics connection: ", err)
+			log.Fatalf("Error creating postgres metrics connection: %v", err)
 		}
 	} else {
 		log.Println("Postgres metrics connection string was not set, postgres metrics are disabled.")
