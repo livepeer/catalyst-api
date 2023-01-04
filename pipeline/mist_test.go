@@ -78,6 +78,11 @@ func Test_isVideo(t *testing.T) {
 			contentType: "",
 			want:        true,
 		},
+		{
+			name:        "empty content type with params",
+			contentType: "; foo=bar",
+			want:        true,
+		},
 	}
 	for _, tc := range tests {
 		tt := tc
