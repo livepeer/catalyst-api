@@ -96,7 +96,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	if path.Base(args.HLSOutputFile.Path) != "index.m3u8" {
 		return fmt.Errorf("target URL must be an `index.m3u8` file, found %s", args.HLSOutputFile)
 	}
-	targetDir := getTargetDir(args.HLSOutputFile)
+	targetDir := getTargetDir(args)
 
 	mcInputRelPath := path.Join("input", targetDir, "video")
 	// AWS MediaConvert adds the .m3u8 to the end of the output file name
@@ -431,7 +431,11 @@ func trimBaseDir(osPath, filePath string) string {
 }
 
 // Returns the directory where the files will be stored given an OS URL
-func getTargetDir(url *url.URL) string {
+func getTargetDir(args TranscodeJobArgs) string {
+	var (
+		url       = args.HLSOutputFile
+		requestID = args.RequestID
+	)
 	// remove the file name
 	dir := path.Dir(url.Path)
 	if url.Scheme == "s3" || strings.HasPrefix(url.Scheme, "s3+") {
@@ -446,7 +450,7 @@ func getTargetDir(url *url.URL) string {
 	} else if url.Scheme == "file" {
 		dir = path.Join("/", url.Host, dir)
 	}
-	return dir
+	return path.Join(requestID, dir)
 }
 
 func contains[T comparable](v T, list []T) bool {
