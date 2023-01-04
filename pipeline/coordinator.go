@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"database/sql"
 	"fmt"
 	"net/url"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	_ "github.com/lib/pq"
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
@@ -119,11 +121,12 @@ type Coordinator struct {
 
 	pipeMist, pipeExternal Handler
 
-	Jobs *cache.Cache[*JobInfo]
+	Jobs      *cache.Cache[*JobInfo]
+	MetricsDB *sql.DB
 }
 
 func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
-	extTranscoderURL string, statusClient clients.TranscodeStatusClient) (*Coordinator, error) {
+	extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB) (*Coordinator, error) {
 
 	if !strategy.IsValid() {
 		return nil, fmt.Errorf("invalid strategy: %s", strategy)
@@ -147,6 +150,7 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 		pipeMist:     &mist{mistClient},
 		pipeExternal: &external{extTranscoder},
 		Jobs:         cache.New[*JobInfo](),
+		MetricsDB:    metricsDB,
 	}, nil
 }
 
@@ -362,7 +366,22 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 		WithLabelValues(labels...).
 		Add(float64(job.transcodedSegments))
 
+	go c.sendDBMetrics(job)
+
 	job.result <- success
+}
+
+func (c *Coordinator) sendDBMetrics(job *JobInfo) {
+	if c.MetricsDB == nil {
+		return
+	}
+
+	insertDynStmt := `insert into "vod_completed"("timestamp", "request_id", "source_codec_video", "source_codec_audio", "pipeline", "catalyst_region", "state", "profiles_count", "job_duration", "source_segment_count", "transcoded_segment_count", "source_bytes_count", "source_duration") values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
+	_, err := c.MetricsDB.Exec(insertDynStmt, time.Now().Unix(), job.RequestID, job.sourceCodecVideo, job.sourceCodecAudio, job.pipeline, job.catalystRegion, job.state, job.numProfiles, time.Since(job.startTime).Milliseconds(), job.sourceSegments, job.transcodedSegments, job.sourceBytes, job.sourceDurationMs)
+	if err != nil {
+		log.LogError(job.RequestID, "error writing postgres metrics", err)
+		return
+	}
 }
 
 func recovered[T any](f func() (T, error)) (t T, err error) {

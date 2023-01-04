@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -291,6 +293,17 @@ func TestAllowsOverridingStrategyOnRequest(t *testing.T) {
 	require.Equal("catalyst_vod_bg_"+meconJob.RequestID, mistJob.StreamName)
 }
 
+func setJobInfoFields(job *JobInfo) {
+	job.catalystRegion = "test region"
+	job.sourceCodecVideo = "vid codec"
+	job.sourceCodecAudio = "audio codec"
+	job.numProfiles = 1
+	job.sourceSegments = 2
+	job.transcodedSegments = 3
+	job.sourceBytes = 4
+	job.sourceDurationMs = 5
+}
+
 func TestPipelineCollectedMetrics(t *testing.T) {
 	require := require.New(t)
 
@@ -299,16 +312,26 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 
 	mist := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
+			setJobInfoFields(job)
 			return testHandlerResult, nil
 		},
 	}
 	external := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
+			setJobInfoFields(job)
 			return testHandlerResult, nil
 		},
 	}
 
+	db, dbMock, err := sqlmock.New()
+	require.NoError(err)
+	dbMock.
+		ExpectExec("insert into \"vod_completed\".*").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "vid codec", "audio codec", "mist", "test region", "completed", 1, sqlmock.AnyArg(), 2, 3, 4, 5).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
 	coord := NewStubCoordinatorOpts(StrategyBackgroundMist, nil, mist, external)
+	coord.MetricsDB = db
 
 	coord.StartUploadJob(testJob)
 
@@ -325,6 +348,26 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 	require.Contains(body, "# TYPE vod_source_segments")
 	require.Contains(body, "# TYPE vod_source_bytes")
 	require.Contains(body, "# TYPE vod_source_duration")
+
+	// the db metrics function is called in a separate go routine so there is a chance we need to wait here
+	err = retry(3, 500*time.Millisecond, func() error {
+		return dbMock.ExpectationsWereMet()
+	})
+	require.NoError(err)
+}
+
+func retry(attempts int, sleep time.Duration, f func() error) (err error) {
+	for i := 0; i < attempts; i++ {
+		if i > 0 {
+			time.Sleep(sleep)
+			sleep *= 2
+		}
+		err = f()
+		if err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("failed after %d attempts, last error: %s", attempts, err)
 }
 
 func allFailingHandler(t *testing.T) Handler {
