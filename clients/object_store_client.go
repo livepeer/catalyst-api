@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/url"
 	"time"
+
+	"github.com/livepeer/catalyst-api/log"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/livepeer/catalyst-api/config"
@@ -13,13 +14,12 @@ import (
 	"github.com/livepeer/go-tools/drivers"
 )
 
-var exponentialBackOff = newExponentialBackOffExecutor()
-var constantBackOff = newConstantBackOffExecutor()
+var maxRetryInterval = 1 * time.Second
 
 func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 	storageDriver, err := drivers.ParseOSURL(osURL, true)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse OS URL %q: %s", redactURL(osURL), err)
+		return nil, fmt.Errorf("failed to parse OS URL %q: %s", log.RedactURL(osURL), err)
 	}
 
 	var fileInfoReader *drivers.FileInfoReader
@@ -40,10 +40,10 @@ func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 	})
 
 	start := time.Now()
-	err = backoff.Retry(readOperation, backoff.WithMaxRetries(constantBackOff, config.DownloadOSURLRetries))
+	err = backoff.Retry(readOperation, backoff.WithMaxRetries(newConstantBackOffExecutor(), config.DownloadOSURLRetries))
 	if err != nil {
 		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(url, "read").Inc()
-		return nil, fmt.Errorf("failed to read from OS URL %q: %s", redactURL(osURL), err)
+		return nil, fmt.Errorf("failed to read from OS URL %q: %s", log.RedactURL(osURL), err)
 	}
 
 	duration := time.Since(start)
@@ -57,7 +57,7 @@ func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 func UploadToOSURL(osURL, filename string, data io.Reader, timeout time.Duration) error {
 	storageDriver, err := drivers.ParseOSURL(osURL, true)
 	if err != nil {
-		return fmt.Errorf("failed to parse OS URL %q: %s", redactURL(osURL), err)
+		return fmt.Errorf("failed to parse OS URL %q: %s", log.RedactURL(osURL), err)
 	}
 
 	var retries = -1
@@ -76,10 +76,10 @@ func UploadToOSURL(osURL, filename string, data io.Reader, timeout time.Duration
 	})
 
 	start := time.Now()
-	err = backoff.Retry(writeOperation, backoff.WithMaxRetries(exponentialBackOff, 2))
+	err = backoff.Retry(writeOperation, backoff.WithMaxRetries(newExponentialBackOffExecutor(), 2))
 	if err != nil {
 		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(url, "write").Inc()
-		return fmt.Errorf("failed to write file %q to OS URL %q: %s", filename, redactURL(osURL), err)
+		return fmt.Errorf("failed to write file %q to OS URL %q: %s", filename, log.RedactURL(osURL), err)
 	}
 
 	duration := time.Since(start)
@@ -105,24 +105,16 @@ func ListOSURL(ctx context.Context, osURL string) (drivers.PageInfo, error) {
 	return page, nil
 }
 
-func redactURL(urlStr string) string {
-	u, err := url.Parse(urlStr)
-	if err != nil {
-		return "REDACTED"
-	}
-	return u.Redacted()
-}
-
 func newExponentialBackOffExecutor() *backoff.ExponentialBackOff {
 	backOff := backoff.NewExponentialBackOff()
 	backOff.InitialInterval = 200 * time.Millisecond
-	backOff.MaxInterval = 1 * time.Second
+	backOff.MaxInterval = maxRetryInterval
 
 	return backOff
 }
 
 func newConstantBackOffExecutor() *backoff.ConstantBackOff {
-	return backoff.NewConstantBackOff(1 * time.Second)
+	return backoff.NewConstantBackOff(maxRetryInterval)
 }
 
 var makeOperation = func(fn func() error) func() error {

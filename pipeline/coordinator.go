@@ -3,8 +3,9 @@ package pipeline
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"path"
-	"strconv"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -91,6 +92,17 @@ type JobInfo struct {
 	statusClient clients.TranscodeStatusClient
 	startTime    time.Time
 	result       chan bool
+
+	sourceBytes        int64
+	sourceSegments     int
+	sourceDurationMs   int64
+	sourceCodecVideo   string
+	sourceCodecAudio   string
+	transcodedSegments int
+	pipeline           string
+	catalystRegion     string
+	numProfiles        int
+	state              string
 }
 
 func (j *JobInfo) ReportProgress(stage clients.TranscodeStatus, completionRatio float64) {
@@ -216,6 +228,11 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 	log.AddContext(p.RequestID, "stream_name", streamName)
 	log.AddContext(p.RequestID, "handler", handler.Name())
 
+	var pipeline = "mist"
+	if handler.Name() == "external" {
+		pipeline = "aws-mediaconvert"
+	}
+
 	si := &JobInfo{
 		UploadJobPayload: p,
 		StreamName:       streamName,
@@ -224,6 +241,12 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		statusClient:     c.statusClient,
 		startTime:        time.Now(),
 		result:           make(chan bool, 1),
+
+		pipeline:           pipeline,
+		numProfiles:        len(p.Profiles),
+		state:              "segmenting",
+		transcodedSegments: 0,
+		catalystRegion:     os.Getenv("MY_REGION"),
 	}
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 
@@ -300,8 +323,10 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 			callbackURL = ""
 		}
 		tsm = clients.NewTranscodeStatusError(callbackURL, job.RequestID, err.Error(), errors.IsUnretriable(err))
+		job.state = "failed"
 	} else {
 		tsm = clients.NewTranscodeStatusCompleted(job.CallbackURL, job.RequestID, out.Result.InputVideo, out.Result.Outputs)
+		job.state = "completed"
 	}
 	job.statusClient.SendTranscodeStatus(tsm)
 
@@ -310,9 +335,32 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 	c.Jobs.Remove(job.StreamName)
 
 	log.Log(job.RequestID, "Finished job and deleted from job cache", "success", success)
-	metrics.Metrics.UploadVODPipelineDurationSec.
-		WithLabelValues(job.handler.Name(), strconv.FormatBool(success)).
+
+	var labels = []string{job.sourceCodecVideo, job.sourceCodecAudio, job.pipeline, job.catalystRegion, fmt.Sprint(job.numProfiles), job.state, config.Version}
+
+	metrics.Metrics.VODPipelineMetrics.Count.
+		WithLabelValues(labels...).
+		Inc()
+
+	metrics.Metrics.VODPipelineMetrics.Duration.
+		WithLabelValues(labels...).
 		Observe(time.Since(job.startTime).Seconds())
+
+	metrics.Metrics.VODPipelineMetrics.SourceSegments.
+		WithLabelValues(labels...).
+		Observe(float64(job.sourceSegments))
+
+	metrics.Metrics.VODPipelineMetrics.SourceBytes.
+		WithLabelValues(labels...).
+		Observe(float64(job.sourceBytes))
+
+	metrics.Metrics.VODPipelineMetrics.SourceDuration.
+		WithLabelValues(labels...).
+		Observe(float64(job.sourceDurationMs))
+
+	metrics.Metrics.VODPipelineMetrics.TranscodedSegments.
+		WithLabelValues(labels...).
+		Add(float64(job.transcodedSegments))
 
 	job.result <- success
 }
@@ -320,7 +368,7 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 func recovered[T any](f func() (T, error)) (t T, err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
-			log.LogNoRequestID("panic in pipeline handler background goroutine, recovering", "err", rec)
+			log.LogNoRequestID("panic in pipeline handler background goroutine, recovering", "err", err, "trace", debug.Stack())
 			err = fmt.Errorf("panic in pipeline handler: %v", rec)
 		}
 	}()

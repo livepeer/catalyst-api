@@ -79,7 +79,7 @@ func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
 			status = apiError.Status
 		}
 		m.UploadVODRequestDurationSec.
-			WithLabelValues(strconv.FormatBool(success), fmt.Sprint(status)).
+			WithLabelValues(strconv.FormatBool(success), fmt.Sprint(status), config.Version).
 			Observe(time.Since(startTime).Seconds())
 	}
 }

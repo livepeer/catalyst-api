@@ -14,6 +14,10 @@ type TranscodeJobArgs struct {
 	RequestID string
 	// Function that should be called every so often with the progress of the job.
 	ReportProgress func(completionRatio float64)
+
+	// Collect size of an asset
+	CollectSourceSize        func(size int64)
+	CollectTranscodedSegment func()
 }
 
 // TranscodProviders is the interface to an external video processing service
@@ -25,6 +29,9 @@ type TranscodeProvider interface {
 	Transcode(ctx context.Context, input TranscodeJobArgs) error
 }
 
+// Used only for mocking the client constructor on tests
+var newMediaConvertClientFunc = NewMediaConvertClient
+
 // ParseTranscodeProviderURL returns the correct provider for a given URL
 func ParseTranscodeProviderURL(input string) (TranscodeProvider, error) {
 	u, err := url.Parse(input)
@@ -34,11 +41,14 @@ func ParseTranscodeProviderURL(input string) (TranscodeProvider, error) {
 	// mediaconvert://<key id>:<key secret>@<endpoint host>?region=<aws region>&role=<arn for role>&s3_aux_bucket=<s3 bucket url>
 	if u.Scheme == "mediaconvert" {
 		endpoint := fmt.Sprintf("https://%s", u.Host)
+		if u.Host == "" {
+			return nil, fmt.Errorf("missing endpoint in url: %s", u.String())
+		}
 
 		accessKeyId := u.User.Username()
 		accessKeySecret, ok := u.User.Password()
-		if !ok {
-			return nil, fmt.Errorf("missing password in url: %s", u.String())
+		if !ok || accessKeyId == "" || accessKeySecret == "" {
+			return nil, fmt.Errorf("missing credentials in url: %s", u.String())
 		}
 
 		region := u.Query().Get("region")
@@ -56,13 +66,13 @@ func ParseTranscodeProviderURL(input string) (TranscodeProvider, error) {
 			return nil, fmt.Errorf("invalid s3_aux_bucket %s: %w", s3AuxBucketStr, err)
 		}
 
-		return NewMediaConvertClient(MediaConvertOptions{
-			Endpoint:        endpoint,
-			Region:          region,
-			Role:            role,
-			AccessKeyID:     accessKeyId,
-			AccessKeySecret: accessKeySecret,
-			S3AuxBucket:     s3AuxBucket,
+		return newMediaConvertClientFunc(MediaConvertOptions{
+			Endpoint:         endpoint,
+			Region:           region,
+			Role:             role,
+			AccessKeyID:      accessKeyId,
+			AccessKeySecret:  accessKeySecret,
+			S3TransferBucket: s3AuxBucket,
 		})
 	}
 	return nil, fmt.Errorf("unrecognized OS scheme: %s", u.Scheme)

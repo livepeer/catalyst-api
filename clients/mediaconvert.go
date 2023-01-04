@@ -21,7 +21,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const pollDelay = 10 * time.Second
+var pollDelay = 10 * time.Second
+
 const rateLimitedPollDelay = 15 * time.Second
 
 // https://docs.aws.amazon.com/mediaconvert/latest/ug/mediaconvert_error_codes.html
@@ -29,8 +30,18 @@ var errCodesAcceleration = []int64{
 	1041, // Acceleration Settings Error
 	1042, // Job Doesn't Require Enough Processing Power for Accelerated Transcoding
 	1043, // Secret Undocumented Error. Returned for this error msg: "Your input files aren't compatible with accelerated transcoding for the following reasons: [You can't use accelerated transcoding with input files that have empty edit lists as in this input: [0].] Disable accelerated transcoding and resubmit your job."
+	1550, // Acceleration Fault: There is an unexpected error with the accelerated transcoding of this job
 }
 var ErrJobAcceleration = errors.New("job should not have acceleration")
+
+type ByteAccumulatorWriter struct {
+	count int64
+}
+
+func (acc *ByteAccumulatorWriter) Write(p []byte) (int, error) {
+	acc.count += int64(len(p))
+	return 0, nil
+}
 
 type MediaConvertOptions struct {
 	Endpoint, Region, Role       string
@@ -41,13 +52,18 @@ type MediaConvertOptions struct {
 	// This should be a regular s3:// URL with only the bucket name (and/or sub
 	// path) and the OS URL will be created internally from it using the same
 	// region and credentials above.
-	S3AuxBucket *url.URL
+	S3TransferBucket *url.URL
+}
+
+type AWSMediaConvertClient interface {
+	CreateJob(*mediaconvert.CreateJobInput) (*mediaconvert.CreateJobOutput, error)
+	GetJob(*mediaconvert.GetJobInput) (*mediaconvert.GetJobOutput, error)
 }
 
 type MediaConvert struct {
-	opts                MediaConvertOptions
-	client              *mediaconvert.MediaConvert
-	osTransferBucketURL *url.URL
+	role                                  string
+	s3TransferBucket, osTransferBucketURL *url.URL
+	client                                AWSMediaConvertClient
 }
 
 func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) {
@@ -63,11 +79,11 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 		Scheme: "s3",
 		User:   url.UserPassword(opts.AccessKeyID, opts.AccessKeySecret),
 		Host:   opts.Region, // weird but compatible with drivers.ParseOSURL
-		Path:   path.Join(opts.S3AuxBucket.Host, opts.S3AuxBucket.Path),
+		Path:   path.Join(opts.S3TransferBucket.Host, opts.S3TransferBucket.Path),
 	}
 
 	client := mediaconvert.New(sess)
-	return &MediaConvert{opts, client, osTransferBucket}, nil
+	return &MediaConvert{opts.Role, opts.S3TransferBucket, osTransferBucket, client}, nil
 }
 
 // This does the whole transcode job, including the moving of the input file to
@@ -85,16 +101,29 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	mcInputRelPath := path.Join("input", targetDir, "video")
 	// AWS MediaConvert adds the .m3u8 to the end of the output file name
 	mcOutputRelPath := path.Join("output", targetDir, "index")
+	var srcInputFile *url.URL
 
-	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", mc.opts.S3AuxBucket.JoinPath(mcInputRelPath), "destOSBaseURL", mc.osTransferBucketURL.String(), "filename", mcInputRelPath)
-	err := copyFile(ctx, args.InputFile.String(), mc.osTransferBucketURL.String(), mcInputRelPath)
+	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", mc.s3TransferBucket.JoinPath(mcInputRelPath), "filename", mcInputRelPath)
+	size, err := copyFile(ctx, args.InputFile.String(), mc.osTransferBucketURL.String(), mcInputRelPath)
 	if err != nil {
-		return fmt.Errorf("error copying input file to S3: %w", err)
+		log.Log(args.RequestID, "error copying input file to S3", "bytes", size, "err", fmt.Sprintf("%s", err))
+		if args.InputFile.Scheme == "http" || args.InputFile.Scheme == "https" {
+			// If copyFile fails (e.g. file server closes connection), then attempt transcoding
+			// by directly passing the source URL to MC instead of using the S3 source URL.
+			srcInputFile = args.InputFile
+		} else {
+			return err
+		}
+	} else {
+		log.Log(args.RequestID, "Successfully copied", size, "bytes to S3")
+		srcInputFile = mc.s3TransferBucket.JoinPath(mcInputRelPath)
 	}
 
+	args.CollectSourceSize(size)
 	mcArgs := args
-	mcArgs.InputFile = mc.opts.S3AuxBucket.JoinPath(mcInputRelPath)
-	mcArgs.HLSOutputFile = mc.opts.S3AuxBucket.JoinPath(mcOutputRelPath)
+	mcArgs.InputFile = srcInputFile
+	mcArgs.HLSOutputFile = mc.s3TransferBucket.JoinPath(mcOutputRelPath)
+
 	err = mc.coreAwsTranscode(ctx, mcArgs, true)
 	if err == ErrJobAcceleration {
 		err = mc.coreAwsTranscode(ctx, mcArgs, false)
@@ -106,7 +135,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	mcOutputBaseDir := mc.osTransferBucketURL.JoinPath(mcOutputRelPath, "..")
 	ourOutputBaseDir := args.HLSOutputFile.JoinPath("..")
 	log.Log(args.RequestID, "Copying output files from S3", "source", mcOutputBaseDir, ourOutputBaseDir)
-	if err := copyDir(mcOutputBaseDir, ourOutputBaseDir); err != nil {
+	if err := copyDir(mcOutputBaseDir, ourOutputBaseDir, args); err != nil {
 		return fmt.Errorf("error copying output files: %w", err)
 	}
 	return nil
@@ -116,7 +145,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 // It expects args to be directly compatible with AWS (i.e. S3-only files).
 func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobArgs, accelerated bool) error {
 	log.Log(args.RequestID, "Creating AWS MediaConvert job", "input", args.InputFile, "output", args.HLSOutputFile, "accelerated", accelerated)
-	payload := createJobPayload(args.InputFile.String(), args.HLSOutputFile.String(), mc.opts.Role, accelerated)
+	payload := createJobPayload(args.InputFile.String(), args.HLSOutputFile.String(), mc.role, accelerated)
 	job, err := mc.client.CreateJob(payload)
 	if err != nil {
 		return fmt.Errorf("error creting mediaconvert job: %w", err)
@@ -180,7 +209,7 @@ func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *
 	var acceleration *mediaconvert.AccelerationSettings
 	if accelerated {
 		acceleration = &mediaconvert.AccelerationSettings{
-			Mode: aws.String("ENABLED"),
+			Mode: aws.String(mediaconvert.AccelerationModePreferred),
 		}
 	}
 
@@ -290,23 +319,45 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
-func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename string) error {
+func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename string) (int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	content, err := getFile(ctx, sourceURL)
+	writtenBytes := ByteAccumulatorWriter{count: 0}
+	c, err := getFile(ctx, sourceURL)
 	if err != nil {
-		return fmt.Errorf("download error: %w", err)
+		return writtenBytes.count, fmt.Errorf("download error: %w", err)
 	}
-	defer content.Close()
+	defer c.Close()
+
+	content := io.TeeReader(c, &writtenBytes)
 
 	err = UploadToOSURL(destOSBaseURL, filename, content, 1*time.Minute)
 	if err != nil {
-		return fmt.Errorf("upload error: %w", err)
+		return writtenBytes.count, fmt.Errorf("upload error: %w", err)
 	}
-	return nil
+
+	storageDriver, err := drivers.ParseOSURL(destOSBaseURL, true)
+	if err != nil {
+		return writtenBytes.count, err
+	}
+	sess := storageDriver.NewSession("")
+	info, err := sess.ReadData(context.Background(), filename)
+	if err != nil {
+		return writtenBytes.count, err
+	}
+
+	defer info.Body.Close()
+	defer sess.EndSession()
+
+	if err != nil {
+		return writtenBytes.count, err
+	}
+
+	return writtenBytes.count, nil
+
 }
 
-func copyDir(source, dest *url.URL) error {
+func copyDir(source, dest *url.URL, args TranscodeJobArgs) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	eg, ctx := errgroup.WithContext(ctx)
@@ -344,7 +395,8 @@ func copyDir(source, dest *url.URL) error {
 				if err := ctx.Err(); err != nil {
 					return err
 				}
-				err := copyFile(ctx, source.JoinPath(file).String(), dest.String(), file)
+				_, err := copyFile(ctx, source.JoinPath(file).String(), dest.String(), file)
+				args.CollectTranscodedSegment()
 				if err != nil {
 					return err
 				}
@@ -391,6 +443,8 @@ func getTargetDir(url *url.URL) string {
 			// only bucket name and file in URL
 			dir = ""
 		}
+	} else if url.Scheme == "file" {
+		dir = path.Join("/", url.Host, dir)
 	}
 	return dir
 }

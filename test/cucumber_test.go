@@ -18,14 +18,18 @@ var app *exec.Cmd
 
 func init() {
 	// Build the app
-	buildApp := exec.Command("go", "build", "-o", "test/app")
+	buildApp := exec.Command(
+		"go", "build",
+		"-ldflags", "-X 'github.com/livepeer/catalyst-api/config.Version=cucumber-test-version'",
+		"-o", "test/app",
+	)
 	buildApp.Dir = ".."
 	if buildErr := buildApp.Run(); buildErr != nil {
 		panic(buildErr)
 	}
 
 	// Get minio
-	getMinio := exec.Command("go", "get", "github.com/minio/minio")
+	getMinio := exec.Command("go", "get", "github.com/minio/minio@v0.0.0-20221229230822-b8943fdf19ac")
 	getMinio.Dir = ".."
 	if buildErr := getMinio.Run(); buildErr != nil {
 		panic(buildErr)

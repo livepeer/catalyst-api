@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -77,7 +78,7 @@ func (pcc *PeriodicCallbackClient) Start() *PeriodicCallbackClient {
 func recoverer(f func()) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.LogNoRequestID("panic in callback goroutine, recovering", "err", err)
+			log.LogNoRequestID("panic in callback goroutine, recovering", "err", err, "trace", debug.Stack())
 		}
 	}()
 	f()
@@ -89,14 +90,21 @@ func recoverer(f func()) {
 func (pcc *PeriodicCallbackClient) SendTranscodeStatus(tsm TranscodeStatusMessage) {
 	if tsm.URL != "" {
 		pcc.mapLock.Lock()
-		pcc.requestIDToLatestMessage[tsm.RequestID] = tsm
-		pcc.mapLock.Unlock()
+		defer pcc.mapLock.Unlock()
+
+		previousMessage, ok := pcc.requestIDToLatestMessage[tsm.RequestID]
+		previousCompletion := OverallCompletionRatio(previousMessage.Status, previousMessage.CompletionRatio)
+		newCompletion := OverallCompletionRatio(tsm.Status, tsm.CompletionRatio)
+
+		// Don't update the current message with one that represents an earlier stage
+		if !ok || tsm.IsTerminal() || newCompletion >= previousCompletion {
+			pcc.requestIDToLatestMessage[tsm.RequestID] = tsm
+		}
 	}
 
-	rawStatus, _ := json.Marshal(tsm)
 	log.Log(tsm.RequestID, "Updated transcode status",
 		"timestamp", tsm.Timestamp, "status", tsm.Status, "completion_ratio", tsm.CompletionRatio,
-		"error", tsm.Error, "raw", string(rawStatus))
+		"error", tsm.Error)
 }
 
 func (pcc *PeriodicCallbackClient) SendRecordingEvent(event *RecordingEvent) {
