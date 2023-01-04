@@ -27,7 +27,7 @@ func main() {
 	externalTranscoderUrl := flag.String("external-transcoder", "", "URL for the external transcoder to be used by the pipeline coordinator. Only 1 implementation today for AWS MediaConvert which should be in the format: mediaconvert://key-id:key-secret@endpoint-host?region=aws-region&role=iam-role&s3_aux_bucket=s3://bucket")
 	vodPipelineStrategy := flag.String("vod-pipeline-strategy", string(pipeline.StrategyCatalystDominance), "Which strategy to use for the VOD pipeline")
 	flag.StringVar(&config.RecordingCallback, "recording", "http://recording.livepeer.com/recording/status", "Callback URL for recording start&stop events")
-	metricsDBConnectionString := flag.String("metrics-db-conn-string", "", "Connection string to use for the metrics Postgres DB. Takes the form: host=X port=X user=X password=X dbname=X")
+	metricsDBConnectionString := flag.String("metrics-db-connection-string", "", "Connection string to use for the metrics Postgres DB. Takes the form: host=X port=X user=X password=X dbname=X")
 	flag.Parse()
 
 	if *mistJson {
@@ -51,11 +51,13 @@ func main() {
 	}
 	// Kick off the callback client, to send job update messages on a regular interval
 	statusClient := clients.NewPeriodicCallbackClient(15 * time.Second).Start()
-	if metricsDBConnectionString != nil {
+	if metricsDBConnectionString != nil && *metricsDBConnectionString != "" {
 		metricsDB, err = sql.Open("postgres", *metricsDBConnectionString)
 		if err != nil {
 			log.Println("Error creating postgres metrics connection: ", err)
 		}
+	} else {
+		log.Println("Postgres metrics connection string was not set, postgres metrics are disabled.")
 	}
 	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(*vodPipelineStrategy), mist, *externalTranscoderUrl, statusClient, metricsDB)
 	if err != nil {
