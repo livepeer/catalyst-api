@@ -21,6 +21,7 @@ type VODPipelineMetrics struct {
 }
 
 type CatalystAPIMetrics struct {
+	Version                     *prometheus.CounterVec
 	UploadVODRequestCount       prometheus.Counter
 	UploadVODRequestDurationSec *prometheus.SummaryVec
 	TranscodeSegmentDurationSec prometheus.Histogram
@@ -37,6 +38,12 @@ var vodLabels = []string{"source_codec_video", "source_codec_audio", "pipeline",
 
 func NewMetrics() *CatalystAPIMetrics {
 	m := &CatalystAPIMetrics{
+		// Fired once on startup to let us check which version of this service we're running
+		Version: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "version",
+			Help: "Current Git SHA / Tag that's running. Incremented once on app startup.",
+		}, []string{"app", "version"}),
+
 		// /api/vod request metrics
 		UploadVODRequestCount: promauto.NewCounter(prometheus.CounterOpts{
 			Name: "upload_vod_request_count",

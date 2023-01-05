@@ -49,6 +49,10 @@ func main() {
 		HttpReqUrl:      fmt.Sprintf("http://localhost:%d", *mistHttpPort),
 		TriggerCallback: fmt.Sprintf("http://localhost:%d/api/mist/trigger", *port),
 	}
+
+	// Fire a metric to let us track the version of the app we're using
+	metrics.Metrics.Version.WithLabelValues("catalyst-api", config.Version).Inc()
+
 	// Kick off the callback client, to send job update messages on a regular interval
 	statusClient := clients.NewPeriodicCallbackClient(15 * time.Second).Start()
 	if metricsDBConnectionString != nil && *metricsDBConnectionString != "" {
