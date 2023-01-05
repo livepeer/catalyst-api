@@ -450,7 +450,7 @@ func getTargetDir(args TranscodeJobArgs) string {
 	} else if url.Scheme == "file" {
 		dir = path.Join("/", url.Host, dir)
 	}
-	return path.Join(requestID, dir)
+	return path.Join(dir, requestID)
 }
 
 func contains[T comparable](v T, list []T) bool {
