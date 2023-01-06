@@ -3,6 +3,8 @@ package pipeline
 import (
 	"fmt"
 	"math"
+	"mime"
+	"net/http"
 	"net/url"
 	"path"
 	"path/filepath"
@@ -36,10 +38,17 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	job.SegmentingTargetURL = segmentingTargetURL.String()
 	log.AddContext(job.RequestID, "segmented_url", job.SegmentingTargetURL)
 
+	if !isVideo(job.RequestID, job.SourceFile) {
+		return nil, fmt.Errorf("source was not a video: %s", job.SourceFile)
+	}
 	// Arweave URLs don't support HTTP Range requests and so Mist can't natively handle them for segmenting
 	// This workaround copies the file from Arweave to S3 and then tells Mist to use the S3 URL
 	if clients.IsArweaveOrIPFSURL(job.SourceFile) {
-		newSourceURL, err := inSameDirectory(job.TargetURL, "source", "arweave-source.mp4")
+		sourceURL, err := url.Parse(job.SourceFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse source as URL: %w", err)
+		}
+		newSourceURL, err := inSameDirectory(job.TargetURL, "source", path.Base(sourceURL.Path))
 		if err != nil {
 			return nil, fmt.Errorf("cannot create location for arweave source copy: %w", err)
 		}
@@ -73,6 +82,23 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	job.ReportProgress(clients.TranscodeStatusPreparing, 0.3)
 	return ContinuePipeline, nil
+}
+
+var defaultHttpClient = &http.Client{Timeout: 5 * time.Second}
+
+func isVideo(requestID, source string) bool {
+	resp, err := defaultHttpClient.Head(source)
+	if err != nil {
+		log.Log(requestID, "failed to get headers", "err", err.Error())
+		return true // fail open on errors
+	}
+	contentType := resp.Header.Get("Content-Type")
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		log.Log(requestID, "media type parsing failed", "err", err.Error())
+		return true // fail open on errors
+	}
+	return strings.Contains(mediaType, "video")
 }
 
 func (m *mist) processUploadVOD(streamName, sourceURL, targetURL string) error {
