@@ -2,52 +2,93 @@ package clients
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
-	"github.com/hashicorp/go-retryablehttp"
+	"github.com/cenkalti/backoff/v4"
+	"github.com/livepeer/catalyst-api/config"
 )
+
+const SCHEME_IPFS = "ipfs"
+const SCHEME_ARWEAVE = "ar"
 
 const MAX_COPY_DURATION = 20 * time.Minute
 
-var defaultRetryableHttpClient = newDefaultRetryableHttpClient()
+var retryStrategy = backoff.NewConstantBackOff(1 * time.Second)
 
-func newDefaultRetryableHttpClient() *http.Client {
-	client := retryablehttp.NewClient()
-	client.RetryMax = 2                          // Retry a maximum of this+1 times
-	client.RetryWaitMin = 200 * time.Millisecond // Wait at least this long between retries
-	client.RetryWaitMax = 1 * time.Second        // Wait at most this long between retries (exponential backoff)
-	client.HTTPClient = &http.Client{
-		// Give up on requests that take more than this long - the file is probably too big for us to process locally if it takes this long
-		// or something else has gone wrong and the request is hanging
-		Timeout: MAX_COPY_DURATION,
+func CopyDStorageToS3(url, s3URL string) error {
+	content, err := DownloadDStorageFromGatewayList(url)
+	if err != nil {
+		return fmt.Errorf("error fetching content from configured gateways: %s", err)
 	}
 
-	return client.StandardClient()
-}
-
-func CopyArweaveToS3(arweaveURL, s3URL string) error {
-	resp, err := defaultRetryableHttpClient.Get(arweaveURL)
+	err = UploadToOSURL(s3URL, "", content, MAX_COPY_DURATION)
 	if err != nil {
-		return fmt.Errorf("error fetching Arweave or IPFS URL: %s", err)
-	}
-	defer resp.Body.Close()
-
-	err = UploadToOSURL(s3URL, "", resp.Body, MAX_COPY_DURATION)
-	if err != nil {
-		return fmt.Errorf("failed to copy Arweave or IPFS URL to S3: %s", err)
+		return fmt.Errorf("failed to copy content to S3: %s", err)
 	}
 
 	return nil
 }
 
-func IsArweaveOrIPFSURL(arweaveOrIPFSURL string) bool {
-	u, err := url.Parse(arweaveOrIPFSURL)
+func DownloadDStorageFromGatewayList(u string) (io.ReadCloser, error) {
+	var err error
+	var gateways []*url.URL
+	parsedURL, err := url.Parse(u)
+	if err != nil {
+		return nil, fmt.Errorf("invalid URL: %w", err)
+	}
+
+	if parsedURL.Scheme == SCHEME_ARWEAVE {
+		gateways = config.ImportArweaveGatewayURLs
+	} else {
+		gateways = config.ImportIPFSGatewayURLs
+	}
+
+	var opContent io.ReadCloser
+	downloadOperation := func() error {
+		for _, gateway := range gateways {
+			path, err := url.JoinPath(gateway.Path, parsedURL.Host)
+
+			if err != nil {
+				return fmt.Errorf("cannot build gateway path: %w", err)
+			}
+
+			url := url.URL{
+				Scheme:   gateway.Scheme,
+				Host:     gateway.Host,
+				Path:     path,
+				RawQuery: gateway.RawQuery,
+			}
+			resp, err := http.DefaultClient.Get(url.String())
+			if err == nil {
+				if resp.StatusCode >= 300 {
+					resp.Body.Close()
+					return fmt.Errorf("unexpected response: %d", resp.StatusCode)
+				}
+				opContent = resp.Body
+				return nil
+			}
+		}
+
+		return err
+	}
+
+	err = backoff.Retry(downloadOperation, backoff.WithMaxRetries(retryStrategy, 2))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get CID from any gateway: %w", err)
+	} else {
+		return opContent, nil
+
+	}
+}
+
+func IsContentAddressedResource(dStorage string) bool {
+	u, err := url.Parse(dStorage)
 	if err != nil {
 		return false
 	}
 
-	return strings.Contains(u.Host, "arweave") || strings.Contains(u.Host, "w3s.link") || strings.Contains(u.Path, "ipfs")
+	return u.Scheme == SCHEME_ARWEAVE || u.Scheme == SCHEME_IPFS
 }

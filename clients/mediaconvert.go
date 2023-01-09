@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/mediaconvert"
+	"github.com/hashicorp/go-retryablehttp"
 	xerrors "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/go-tools/drivers"
@@ -294,6 +295,8 @@ func getFile(ctx context.Context, url string) (io.ReadCloser, error) {
 	_, err := drivers.ParseOSURL(url, true)
 	if err == nil {
 		return DownloadOSURL(url)
+	} else if IsContentAddressedResource((url)) {
+		return DownloadDStorageFromGatewayList(url)
 	} else {
 		return getFileHTTP(ctx, url)
 	}
@@ -304,7 +307,7 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, xerrors.Unretriable(fmt.Errorf("error creating http request: %w", err))
 	}
-	resp, err := defaultRetryableHttpClient.Do(req)
+	resp, err := retryableHttpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error on import request: %w", err)
 	}
@@ -461,3 +464,19 @@ func contains[T comparable](v T, list []T) bool {
 	}
 	return false
 }
+
+func newRetryableHttpClient() *http.Client {
+	client := retryablehttp.NewClient()
+	client.RetryMax = 2                          // Retry a maximum of this+1 times
+	client.RetryWaitMin = 200 * time.Millisecond // Wait at least this long between retries
+	client.RetryWaitMax = 1 * time.Second        // Wait at most this long between retries (exponential backoff)
+	client.HTTPClient = &http.Client{
+		// Give up on requests that take more than this long - the file is probably too big for us to process locally if it takes this long
+		// or something else has gone wrong and the request is hanging
+		Timeout: MAX_COPY_DURATION,
+	}
+
+	return client.StandardClient()
+}
+
+var retryableHttpClient = newRetryableHttpClient()
