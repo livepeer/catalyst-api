@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -152,6 +153,9 @@ func NewMetrics() *CatalystAPIMetrics {
 			}, vodLabels),
 		},
 	}
+
+	// Fire a metric a single time to let us track the version of the app we're using
+	m.Version.WithLabelValues("catalyst-api", config.Version).Inc()
 
 	return m
 }
