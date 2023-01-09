@@ -53,3 +53,30 @@ func TestItCanCopyAnArweaveOrIPFSHTTPFileToS3(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "some file contents", string(dat))
 }
+
+func TestItHandlesPinataGatewayTokenAsQueryString(t *testing.T) {
+	outputDir, err := os.MkdirTemp(os.TempDir(), "TestItHandlesPinataGatewayTokenAsQueryString-*")
+	require.NoError(t, err)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, config.LP_PINATA_GATEWAY_TOKEN, r.URL.Query().Get("pinataGatewayToken"))
+		_, err := w.Write([]byte("some file contents"))
+		require.NoError(t, err)
+	}))
+	defer ts.Close()
+
+	gateway, _ := url.Parse(ts.URL + "/?pinataGatewayToken")
+	config.ImportIPFSGatewayURLs = []*url.URL{gateway}
+	config.LP_PINATA_GATEWAY_TOKEN = "tokenValue"
+	defer func() { config.ImportIPFSGatewayURLs = []*url.URL{} }()
+	defer func() { config.LP_PINATA_GATEWAY_TOKEN = "" }()
+
+	outputFile := filepath.Join(outputDir, "filename.txt")
+
+	err = CopyDStorageToS3("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", outputFile)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	require.Equal(t, "some file contents", string(data))
+}

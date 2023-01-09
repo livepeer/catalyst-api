@@ -55,6 +55,12 @@ func DownloadDStorageFromGatewayList(u string) (io.ReadCloser, error) {
 				return fmt.Errorf("cannot build gateway path: %w", err)
 			}
 
+			if gateway.Query().Has("pinataGatewayToken") {
+				values := gateway.Query()
+				values.Set("pinataGatewayToken", config.LP_PINATA_GATEWAY_TOKEN)
+				gateway.RawQuery = values.Encode()
+			}
+
 			url := url.URL{
 				Scheme:   gateway.Scheme,
 				Host:     gateway.Host,
