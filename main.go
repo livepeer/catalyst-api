@@ -49,6 +49,7 @@ func main() {
 		HttpReqUrl:      fmt.Sprintf("http://localhost:%d", *mistHttpPort),
 		TriggerCallback: fmt.Sprintf("http://localhost:%d/api/mist/trigger", *port),
 	}
+
 	// Kick off the callback client, to send job update messages on a regular interval
 	statusClient := clients.NewPeriodicCallbackClient(15 * time.Second).Start()
 	if metricsDBConnectionString != nil && *metricsDBConnectionString != "" {
