@@ -380,8 +380,43 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo) {
 	if job.TargetURL != nil {
 		targetURL = job.TargetURL.String()
 	}
-	insertDynStmt := `insert into "vod_completed"("finished_at", "started_at", "request_id", "source_codec_video", "source_codec_audio", "pipeline", "catalyst_region", "state", "profiles_count", "job_duration", "source_segment_count", "transcoded_segment_count", "source_bytes_count", "source_duration", "source_url", "target_url") values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`
-	_, err := c.MetricsDB.Exec(insertDynStmt, time.Now().Unix(), job.startTime.Unix(), job.RequestID, job.sourceCodecVideo, job.sourceCodecAudio, job.pipeline, job.catalystRegion, job.state, job.numProfiles, time.Since(job.startTime).Milliseconds(), job.sourceSegments, job.transcodedSegments, job.sourceBytes, job.sourceDurationMs, job.SourceFile, targetURL)
+	insertDynStmt := `insert into "vod_completed"(
+                            "finished_at",
+                            "started_at",
+                            "request_id",
+                            "source_codec_video",
+                            "source_codec_audio",
+                            "pipeline",
+                            "catalyst_region",
+                            "state",
+                            "profiles_count",
+                            "job_duration",
+                            "source_segment_count",
+                            "transcoded_segment_count",
+                            "source_bytes_count",
+                            "source_duration",
+                            "source_url",
+                            "target_url"
+                            ) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`
+	_, err := c.MetricsDB.Exec(
+		insertDynStmt,
+		time.Now().Unix(),
+		job.startTime.Unix(),
+		job.RequestID,
+		job.sourceCodecVideo,
+		job.sourceCodecAudio,
+		job.pipeline,
+		job.catalystRegion,
+		job.state,
+		job.numProfiles,
+		time.Since(job.startTime).Milliseconds(),
+		job.sourceSegments,
+		job.transcodedSegments,
+		job.sourceBytes,
+		job.sourceDurationMs,
+		job.SourceFile,
+		targetURL,
+	)
 	if err != nil {
 		log.LogError(job.RequestID, "error writing postgres metrics", err)
 		return
