@@ -30,7 +30,7 @@ func main() {
 	flag.StringVar(&config.RecordingCallback, "recording", "http://recording.livepeer.com/recording/status", "Callback URL for recording start&stop events")
 	metricsDBConnectionString := flag.String("metrics-db-connection-string", "", "Connection string to use for the metrics Postgres DB. Takes the form: host=X port=X user=X password=X dbname=X")
 	flag.StringVar(&config.LP_PINATA_GATEWAY_TOKEN, "lp-pinata-gateway-token", "", "Token used to access pinata gateways")
-	URLSliceVarFlag(&config.ImportIPFSGatewayURLs, "import-ipfs-gateway-urls", "https://w3s.link/ipfs/,https://ipfs.io/ipfs/,https://cloudflare-ipfs.com/ipfs/,https://vod-import-gtw.mypinata.cloud/ipfs/?pinataGatewayToken=", "Comma delimited ordered list of IPFS gateways (includes /ipfs/ suffix) to import assets from")
+	URLSliceVarFlag(&config.ImportIPFSGatewayURLs, "import-ipfs-gateway-urls", "https://vod-import-gtw.mypinata.cloud/ipfs/?pinataGatewayToken={{secrets.LP_PINATA_GATEWAY_TOKEN}},https://w3s.link/ipfs/,https://ipfs.io/ipfs/,https://cloudflare-ipfs.com/ipfs/", "Comma delimited ordered list of IPFS gateways (includes /ipfs/ suffix) to import assets from")
 	URLSliceVarFlag(&config.ImportArweaveGatewayURLs, "import-arweave-gateway-urls", "https://arweave.net/", "Comma delimited ordered list of arweave gateways")
 	flag.Parse()
 

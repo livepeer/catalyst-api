@@ -23,6 +23,7 @@ import (
 )
 
 var pollDelay = 10 * time.Second
+var retryableHttpClient = newRetryableHttpClient()
 
 const rateLimitedPollDelay = 15 * time.Second
 
@@ -105,7 +106,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	var srcInputFile *url.URL
 
 	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", mc.s3TransferBucket.JoinPath(mcInputRelPath), "filename", mcInputRelPath)
-	size, err := copyFile(ctx, args.InputFile.String(), mc.osTransferBucketURL.String(), mcInputRelPath)
+	size, err := copyFile(ctx, args.InputFile.String(), mc.osTransferBucketURL.String(), mcInputRelPath, args.RequestID)
 	if err != nil {
 		log.Log(args.RequestID, "error copying input file to S3", "bytes", size, "err", fmt.Sprintf("%s", err))
 		if args.InputFile.Scheme == "http" || args.InputFile.Scheme == "https" {
@@ -291,12 +292,12 @@ func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *
 	}
 }
 
-func getFile(ctx context.Context, url string) (io.ReadCloser, error) {
+func getFile(ctx context.Context, url, requestID string) (io.ReadCloser, error) {
 	_, err := drivers.ParseOSURL(url, true)
 	if err == nil {
 		return DownloadOSURL(url)
-	} else if IsContentAddressedResource((url)) {
-		return DownloadDStorageFromGatewayList(url)
+	} else if IsDStorageResource((url)) {
+		return DownloadDStorageFromGatewayList(url, requestID)
 	} else {
 		return getFileHTTP(ctx, url)
 	}
@@ -322,11 +323,11 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
-func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename string) (int64, error) {
+func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	writtenBytes := ByteAccumulatorWriter{count: 0}
-	c, err := getFile(ctx, sourceURL)
+	c, err := getFile(ctx, sourceURL, requestID)
 	if err != nil {
 		return writtenBytes.count, fmt.Errorf("download error: %w", err)
 	}
@@ -398,7 +399,7 @@ func copyDir(source, dest *url.URL, args TranscodeJobArgs) error {
 				if err := ctx.Err(); err != nil {
 					return err
 				}
-				_, err := copyFile(ctx, source.JoinPath(file).String(), dest.String(), file)
+				_, err := copyFile(ctx, source.JoinPath(file).String(), dest.String(), file, args.RequestID)
 				args.CollectTranscodedSegment()
 				if err != nil {
 					return err
@@ -478,5 +479,3 @@ func newRetryableHttpClient() *http.Client {
 
 	return client.StandardClient()
 }
-
-var retryableHttpClient = newRetryableHttpClient()

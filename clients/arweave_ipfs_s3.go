@@ -9,6 +9,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/log"
 )
 
 const SCHEME_IPFS = "ipfs"
@@ -16,81 +17,77 @@ const SCHEME_ARWEAVE = "ar"
 
 const MAX_COPY_DURATION = 20 * time.Minute
 
-var retryStrategy = backoff.NewConstantBackOff(1 * time.Second)
-
-func CopyDStorageToS3(url, s3URL string) error {
-	content, err := DownloadDStorageFromGatewayList(url)
+func CopyDStorageToS3(url, s3URL string, requestID string) error {
+	content, err := DownloadDStorageFromGatewayList(url, requestID)
 	if err != nil {
-		return fmt.Errorf("error fetching content from configured gateways: %s", err)
+		return err
 	}
 
 	err = UploadToOSURL(s3URL, "", content, MAX_COPY_DURATION)
 	if err != nil {
-		return fmt.Errorf("failed to copy content to S3: %s", err)
+		return err
 	}
 
 	return nil
 }
 
-func DownloadDStorageFromGatewayList(u string) (io.ReadCloser, error) {
+func DownloadDStorageFromGatewayList(u string, requestID string) (io.ReadCloser, error) {
 	var err error
 	var gateways []*url.URL
-	parsedURL, err := url.Parse(u)
+	dStorageURL, err := url.Parse(u)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %w", err)
 	}
 
-	if parsedURL.Scheme == SCHEME_ARWEAVE {
+	switch dStorageURL.Scheme {
+	case SCHEME_ARWEAVE:
 		gateways = config.ImportArweaveGatewayURLs
-	} else {
+	case SCHEME_IPFS:
 		gateways = config.ImportIPFSGatewayURLs
+	default:
+		return nil, fmt.Errorf("unsupported dStorage scheme %s", dStorageURL.Scheme)
 	}
 
 	var opContent io.ReadCloser
 	downloadOperation := func() error {
 		for _, gateway := range gateways {
-			path, err := url.JoinPath(gateway.Path, parsedURL.Host)
-
-			if err != nil {
-				return fmt.Errorf("cannot build gateway path: %w", err)
-			}
-
-			if gateway.Query().Has("pinataGatewayToken") {
-				values := gateway.Query()
-				values.Set("pinataGatewayToken", config.LP_PINATA_GATEWAY_TOKEN)
-				gateway.RawQuery = values.Encode()
-			}
-
-			url := url.URL{
-				Scheme:   gateway.Scheme,
-				Host:     gateway.Host,
-				Path:     path,
-				RawQuery: gateway.RawQuery,
-			}
-			resp, err := http.DefaultClient.Get(url.String())
-			if err == nil {
-				if resp.StatusCode >= 300 {
-					resp.Body.Close()
-					return fmt.Errorf("unexpected response: %d", resp.StatusCode)
-				}
-				opContent = resp.Body
+			opContent = downloadDStorageResourceFromSingleGateway(gateway, dStorageURL.Host, requestID)
+			if opContent != nil {
 				return nil
 			}
 		}
 
-		return err
+		return fmt.Errorf("failed to fetch %s from any of the gateways", u)
 	}
 
+	retryStrategy := backoff.NewConstantBackOff(1 * time.Second)
 	err = backoff.Retry(downloadOperation, backoff.WithMaxRetries(retryStrategy, 2))
 	if err != nil {
-		return nil, fmt.Errorf("failed to get CID from any gateway: %w", err)
+		return nil, err
 	} else {
 		return opContent, nil
-
 	}
 }
 
-func IsContentAddressedResource(dStorage string) bool {
+func downloadDStorageResourceFromSingleGateway(gateway *url.URL, cid, requestID string) io.ReadCloser {
+	fullURL := gateway.JoinPath(cid).String()
+	resp, err := http.DefaultClient.Get(fullURL)
+
+	if err != nil {
+		log.Log(requestID, "failed to fetch content from gateway", "error", err, "url", fullURL)
+		return nil
+	}
+
+	if resp.StatusCode >= 300 {
+		resp.Body.Close()
+		log.Log(requestID, "unexpected response from gateway", "statusCode", resp.StatusCode, "url", fullURL)
+		return nil
+	}
+
+	return resp.Body
+}
+
+func IsDStorageResource(dStorage string) bool {
 	u, err := url.Parse(dStorage)
 	if err != nil {
 		return false

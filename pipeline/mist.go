@@ -40,7 +40,7 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	// Arweave / IPFS URLs don't support HTTP Range requests and so Mist can't natively handle them for segmenting
 	// This workaround copies the file from Arweave to S3 and then tells Mist to use the S3 URL
-	if clients.IsContentAddressedResource(job.SourceFile) {
+	if clients.IsDStorageResource(job.SourceFile) {
 		if !isVideo(job.RequestID, job.SourceFile) {
 			return nil, fmt.Errorf("source was not a video: %s", job.SourceFile)
 		}
@@ -54,7 +54,7 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		}
 		log.AddContext(job.RequestID, "new_source_url", newSourceURL.String())
 
-		if err := clients.CopyDStorageToS3(job.SourceFile, newSourceURL.String()); err != nil {
+		if err := clients.CopyDStorageToS3(job.SourceFile, newSourceURL.String(), job.RequestID); err != nil {
 			return nil, fmt.Errorf("cannot copy content: %w", err)
 		}
 		job.SourceFile = newSourceURL.String()

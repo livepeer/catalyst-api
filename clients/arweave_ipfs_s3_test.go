@@ -13,11 +13,11 @@ import (
 )
 
 func TestItCanRecogniseArweaveOrIPFSURLs(t *testing.T) {
-	require.False(t, IsContentAddressedResource("http://google.com"))
-	require.False(t, IsContentAddressedResource("https://twitter.com/search?q=arweave"))
-	require.False(t, IsContentAddressedResource("arr://jL-YU1yUcZ5aWPku6dcjwLnoS-E0qs2QPzVXIA7Hfz0"))
-	require.True(t, IsContentAddressedResource("ar://jL-YU1yUcZ5aWPku6dcjwLnoS-E0qs2QPzVXIA7Hfz0"))
-	require.True(t, IsContentAddressedResource("ipfs://bafkreiasibks3ncaz4tbcedhqgwqoaxvipluqv5bhwboq2yny63omyll5i"))
+	require.False(t, IsDStorageResource("http://google.com"))
+	require.False(t, IsDStorageResource("https://twitter.com/search?q=arweave"))
+	require.False(t, IsDStorageResource("arr://jL-YU1yUcZ5aWPku6dcjwLnoS-E0qs2QPzVXIA7Hfz0"))
+	require.True(t, IsDStorageResource("ar://jL-YU1yUcZ5aWPku6dcjwLnoS-E0qs2QPzVXIA7Hfz0"))
+	require.True(t, IsDStorageResource("ipfs://bafkreiasibks3ncaz4tbcedhqgwqoaxvipluqv5bhwboq2yny63omyll5i"))
 }
 
 func TestItCanCopyAnArweaveOrIPFSHTTPFileToS3(t *testing.T) {
@@ -45,7 +45,7 @@ func TestItCanCopyAnArweaveOrIPFSHTTPFileToS3(t *testing.T) {
 	outputFile := filepath.Join(outputDir, "filename.txt")
 
 	// Do the copy
-	err = CopyDStorageToS3("ar://jL-YU1yUcZ5aWPku6dcjwLnoS-E0qs2QPzVXIA7Hfz0", outputFile)
+	err = CopyDStorageToS3("ar://jL-YU1yUcZ5aWPku6dcjwLnoS-E0qs2QPzVXIA7Hfz0", outputFile, "reqID")
 	require.NoError(t, err)
 
 	// Check that the file has the contents we'd expect
@@ -59,21 +59,20 @@ func TestItHandlesPinataGatewayTokenAsQueryString(t *testing.T) {
 	require.NoError(t, err)
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, config.LP_PINATA_GATEWAY_TOKEN, r.URL.Query().Get("pinataGatewayToken"))
+		require.Equal(t, "tokenValue", r.URL.Query().Get("pinataGatewayToken"))
 		_, err := w.Write([]byte("some file contents"))
 		require.NoError(t, err)
 	}))
 	defer ts.Close()
 
-	gateway, _ := url.Parse(ts.URL + "/?pinataGatewayToken")
+	gateway, _ := url.Parse(ts.URL + "/?pinataGatewayToken=tokenValue")
 	config.ImportIPFSGatewayURLs = []*url.URL{gateway}
-	config.LP_PINATA_GATEWAY_TOKEN = "tokenValue"
 	defer func() { config.ImportIPFSGatewayURLs = []*url.URL{} }()
 	defer func() { config.LP_PINATA_GATEWAY_TOKEN = "" }()
 
 	outputFile := filepath.Join(outputDir, "filename.txt")
 
-	err = CopyDStorageToS3("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", outputFile)
+	err = CopyDStorageToS3("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", outputFile, "reqID")
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(outputFile)
