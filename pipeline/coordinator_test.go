@@ -302,6 +302,7 @@ func setJobInfoFields(job *JobInfo) {
 	job.transcodedSegments = 3
 	job.sourceBytes = 4
 	job.sourceDurationMs = 5
+	job.startTime = time.Unix(0, 0)
 }
 
 func TestPipelineCollectedMetrics(t *testing.T) {
@@ -327,7 +328,7 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 	require.NoError(err)
 	dbMock.
 		ExpectExec("insert into \"vod_completed\".*").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "vid codec", "audio codec", "mist", "test region", "completed", 1, sqlmock.AnyArg(), 2, 3, 4, 5).
+		WithArgs(sqlmock.AnyArg(), 0, sqlmock.AnyArg(), "vid codec", "audio codec", "mist", "test region", "completed", 1, sqlmock.AnyArg(), 2, 3, 4, 5, "source-file", "s3+https://storage.google.com/bucket/key").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	coord := NewStubCoordinatorOpts(StrategyBackgroundMist, nil, mist, external)
