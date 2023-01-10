@@ -56,6 +56,8 @@ func main() {
 
 	// Kick off the callback client, to send job update messages on a regular interval
 	statusClient := clients.NewPeriodicCallbackClient(15 * time.Second).Start()
+
+	// Emit high-cardinality metrics to a Postrgres database if configured
 	if metricsDBConnectionString != nil && *metricsDBConnectionString != "" {
 		metricsDB, err = sql.Open("postgres", *metricsDBConnectionString)
 		if err != nil {
@@ -64,11 +66,15 @@ func main() {
 	} else {
 		log.Println("Postgres metrics connection string was not set, postgres metrics are disabled.")
 	}
+
+	// Start the "co-ordinator" that determines whether to send jobs to the Catalyst transcoding pipeline
+	// or an external one
 	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(*vodPipelineStrategy), mist, *externalTranscoderUrl, statusClient, metricsDB)
 	if err != nil {
 		log.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 	}
 
+	// Start the HTTP API server
 	if err := api.ListenAndServe(*port, *apiToken, vodEngine); err != nil {
 		log.Fatal(err)
 	}
