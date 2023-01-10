@@ -55,20 +55,69 @@ func TestItCanCopyAnArweaveOrIPFSHTTPFileToS3(t *testing.T) {
 }
 
 func TestItHandlesPinataGatewayTokenAsQueryString(t *testing.T) {
+	cid := "Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu"
 	outputDir, err := os.MkdirTemp(os.TempDir(), "TestItHandlesPinataGatewayTokenAsQueryString-*")
 	require.NoError(t, err)
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "tokenValue", r.URL.Query().Get("pinataGatewayToken"))
+		require.Contains(t, r.URL.Path, cid)
 		_, err := w.Write([]byte("some file contents"))
 		require.NoError(t, err)
 	}))
 	defer ts.Close()
 
-	gateway, _ := url.Parse(ts.URL + "/?pinataGatewayToken=tokenValue")
+	gateway, _ := url.Parse(ts.URL + "/ipfs/?pinataGatewayToken=tokenValue")
 	config.ImportIPFSGatewayURLs = []*url.URL{gateway}
 	defer func() { config.ImportIPFSGatewayURLs = []*url.URL{} }()
 	defer func() { config.LP_PINATA_GATEWAY_TOKEN = "" }()
+
+	outputFile := filepath.Join(outputDir, "filename.txt")
+
+	err = CopyDStorageToS3("ipfs://"+cid, outputFile, "reqID")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	require.Equal(t, "some file contents", string(data))
+}
+
+func TestItTriesWithMultipleGateways(t *testing.T) {
+	type TestResult struct {
+		gatewayCallLog   []string
+		successfulCalls  []string
+		gatewayCallCount []int
+	}
+	var testResult = TestResult{[]string{}, []string{}, []int{0, 0, 0}}
+
+	outputDir, err := os.MkdirTemp(os.TempDir(), "TestItHandlesPinataGatewayTokenAsQueryString-*")
+	require.NoError(t, err)
+
+	for i := range testResult.gatewayCallCount {
+		serverIndex := i
+		var ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			testResult.gatewayCallLog = append(testResult.gatewayCallLog, r.Host)
+			count := testResult.gatewayCallCount[serverIndex]
+			if count == 0 {
+				w.WriteHeader(http.StatusInternalServerError)
+			} else {
+				_, err := w.Write([]byte("some file contents"))
+				require.NoError(t, err)
+				require.Equal(t, 0, serverIndex)
+				testResult.successfulCalls = append(testResult.successfulCalls, r.Host)
+			}
+			testResult.gatewayCallCount[serverIndex]++
+		}))
+
+		defer ts.Close()
+
+		url, err := url.Parse(ts.URL)
+		require.NoError(t, err)
+
+		config.ImportIPFSGatewayURLs = append(config.ImportIPFSGatewayURLs, url)
+	}
+
+	defer func() { config.ImportIPFSGatewayURLs = []*url.URL{} }()
 
 	outputFile := filepath.Join(outputDir, "filename.txt")
 
@@ -78,4 +127,19 @@ func TestItHandlesPinataGatewayTokenAsQueryString(t *testing.T) {
 	data, err := os.ReadFile(outputFile)
 	require.NoError(t, err)
 	require.Equal(t, "some file contents", string(data))
+	require.Equal(t, 2, testResult.gatewayCallCount[0])
+	require.Equal(t, 1, testResult.gatewayCallCount[1])
+	require.Equal(t, 1, testResult.gatewayCallCount[2])
+	require.Len(t, testResult.successfulCalls, 1)
+	require.Equal(t, testResult.successfulCalls[0], config.ImportIPFSGatewayURLs[0].Host)
+	require.Len(t, testResult.gatewayCallLog, 4)
+	var expectedSequence = []string{
+		config.ImportIPFSGatewayURLs[0].Host,
+		config.ImportIPFSGatewayURLs[1].Host,
+		config.ImportIPFSGatewayURLs[2].Host,
+		config.ImportIPFSGatewayURLs[0].Host,
+	}
+	for i, log := range expectedSequence {
+		require.Equal(t, log, testResult.gatewayCallLog[i])
+	}
 }
