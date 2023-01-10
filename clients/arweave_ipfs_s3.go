@@ -74,13 +74,13 @@ func downloadDStorageResourceFromSingleGateway(gateway *url.URL, cid, requestID 
 	resp, err := http.DefaultClient.Get(fullURL)
 
 	if err != nil {
-		log.Log(requestID, "failed to fetch content from gateway", "error", err, "url", fullURL)
+		log.LogError(requestID, "failed to fetch content from gateway", err, "url", fullURL)
 		return nil
 	}
 
 	if resp.StatusCode >= 300 {
 		resp.Body.Close()
-		log.Log(requestID, "unexpected response from gateway", "statusCode", resp.StatusCode, "url", fullURL)
+		log.Log(requestID, "unexpected response from gateway", "status_code", resp.StatusCode, "url", fullURL)
 		return nil
 	}
 
