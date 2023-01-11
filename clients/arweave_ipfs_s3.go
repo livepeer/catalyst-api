@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -39,19 +40,38 @@ func DownloadDStorageFromGatewayList(u string, requestID string) (io.ReadCloser,
 		return nil, fmt.Errorf("invalid URL: %w", err)
 	}
 
-	switch dStorageURL.Scheme {
-	case SCHEME_ARWEAVE:
+	var resourceID string
+
+	if dStorageURL.Scheme == SCHEME_ARWEAVE {
 		gateways = config.ImportArweaveGatewayURLs
-	case SCHEME_IPFS:
+		resourceID = dStorageURL.Host
+	} else if dStorageURL.Scheme == SCHEME_IPFS {
 		gateways = config.ImportIPFSGatewayURLs
-	default:
-		return nil, fmt.Errorf("unsupported dStorage scheme %s", dStorageURL.Scheme)
+		resourceID = dStorageURL.Host
+	} else {
+		var gateway, dStorageType string
+		resourceID, gateway, dStorageType = parseDStorageGatewayURL(dStorageURL)
+		if dStorageType == "" {
+			return nil, fmt.Errorf("unsupported dStorage resource %s", dStorageURL.Scheme)
+		}
+
+		gatewayURL, err := url.Parse(gateway)
+		if err != nil {
+			return nil, fmt.Errorf("invalid URL: %w", err)
+		}
+
+		gateways = append(gateways, gatewayURL)
+		if dStorageType == "ar" {
+			gateways = append(gateways, config.ImportArweaveGatewayURLs...)
+		} else {
+			gateways = append(gateways, config.ImportIPFSGatewayURLs...)
+		}
 	}
 
 	var opContent io.ReadCloser
 	downloadOperation := func() error {
 		for _, gateway := range gateways {
-			opContent = downloadDStorageResourceFromSingleGateway(gateway, dStorageURL.Host, requestID)
+			opContent = downloadDStorageResourceFromSingleGateway(gateway, resourceID, requestID)
 			if opContent != nil {
 				return nil
 			}
@@ -69,8 +89,8 @@ func DownloadDStorageFromGatewayList(u string, requestID string) (io.ReadCloser,
 	}
 }
 
-func downloadDStorageResourceFromSingleGateway(gateway *url.URL, cid, requestID string) io.ReadCloser {
-	fullURL := gateway.JoinPath(cid).String()
+func downloadDStorageResourceFromSingleGateway(gateway *url.URL, resourceId, requestID string) io.ReadCloser {
+	fullURL := gateway.JoinPath(resourceId).String()
 	resp, err := http.DefaultClient.Get(fullURL)
 
 	if err != nil {
@@ -93,5 +113,27 @@ func IsDStorageResource(dStorage string) bool {
 		return false
 	}
 
-	return u.Scheme == SCHEME_ARWEAVE || u.Scheme == SCHEME_IPFS
+	if u.Scheme == SCHEME_ARWEAVE || u.Scheme == SCHEME_IPFS {
+		return true
+	}
+	_, _, dStorageType := parseDStorageGatewayURL(u)
+
+	return dStorageType != ""
+}
+
+func parseDStorageGatewayURL(u *url.URL) (string, string, string) {
+	if strings.Contains(u.Host, "arweave") {
+		resource := strings.TrimLeft(u.Path, "/")
+		gateway := strings.ReplaceAll(u.String(), resource, "")
+		return resource, gateway, "ar"
+	}
+
+	if strings.Contains(u.Host, "w3s.link") || strings.Contains(u.Path, "/ipfs/") {
+		parts := strings.Split(u.Path, "/ipfs/")
+		resource := parts[1]
+		gateway := strings.ReplaceAll(u.String(), resource, "")
+		return resource, gateway, "ipfs"
+	}
+
+	return "", "", ""
 }

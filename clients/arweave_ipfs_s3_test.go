@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/livepeer/catalyst-api/config"
@@ -70,7 +71,6 @@ func TestItHandlesPinataGatewayTokenAsQueryString(t *testing.T) {
 	gateway, _ := url.Parse(ts.URL + "/ipfs/?pinataGatewayToken=tokenValue")
 	config.ImportIPFSGatewayURLs = []*url.URL{gateway}
 	defer func() { config.ImportIPFSGatewayURLs = []*url.URL{} }()
-	defer func() { config.LP_PINATA_GATEWAY_TOKEN = "" }()
 
 	outputFile := filepath.Join(outputDir, "filename.txt")
 
@@ -142,4 +142,70 @@ func TestItTriesWithMultipleGateways(t *testing.T) {
 	for i, log := range expectedSequence {
 		require.Equal(t, log, testResult.gatewayCallLog[i])
 	}
+}
+
+func TestItExtractsGatewayDStorageType(t *testing.T) {
+	u, err := url.Parse("https://cloudflare-ipfs.com/ipfs/12345/file.json?queryString=value")
+	require.NoError(t, err)
+	id, gateway, gatewayType := parseDStorageGatewayURL(u)
+	require.Equal(t, "ipfs", gatewayType)
+	require.Equal(t, "12345/file.json", id)
+	require.Equal(t, "https://cloudflare-ipfs.com/ipfs/?queryString=value", gateway)
+
+	u, err = url.Parse("https://arweave.net/12345")
+	require.NoError(t, err)
+	id, gateway, gatewayType = parseDStorageGatewayURL(u)
+	require.Equal(t, "ar", gatewayType)
+	require.Equal(t, "12345", id)
+	require.Equal(t, "https://arweave.net/", gateway)
+
+	u, err = url.Parse("http://not-a-dstorage-url.com/12345")
+	require.NoError(t, err)
+	id, gateway, gatewayType = parseDStorageGatewayURL(u)
+	require.Equal(t, "", gatewayType)
+	require.Equal(t, "", id)
+	require.Equal(t, "", gateway)
+}
+
+func TestItHandlesGatewayURLsAsSource(t *testing.T) {
+	resourceId := "Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu/file.json"
+	outputDir, err := os.MkdirTemp(os.TempDir(), "TestItHandlesGatewayURLsAsSource-*")
+	require.NoError(t, err)
+
+	requestedURLs := []string{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedURLs = append(requestedURLs, r.URL.Path)
+		if strings.HasPrefix(r.URL.Path, "/fallback/ipfs/") || len(requestedURLs) < 3 {
+			w.WriteHeader(http.StatusInternalServerError)
+		} else {
+			require.Contains(t, r.URL.Path, resourceId)
+			_, err := w.Write([]byte("some file contents"))
+			require.NoError(t, err)
+		}
+	}))
+	defer ts.Close()
+
+	fallbackGateway, err := url.Parse(ts.URL + "/fallback/ipfs/")
+	require.NoError(t, err)
+	config.ImportIPFSGatewayURLs = []*url.URL{fallbackGateway}
+	defer func() { config.ImportIPFSGatewayURLs = []*url.URL{} }()
+
+	outputFile := filepath.Join(outputDir, "filename.txt")
+
+	err = CopyDStorageToS3(ts.URL+"/ipfs/"+resourceId+"?queryString=value", outputFile, "reqID")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	require.Equal(t, "some file contents", string(data))
+	require.Len(t, requestedURLs, 3)
+
+	// provided gateway is used first
+	require.Equal(t, "/ipfs/"+resourceId, requestedURLs[0])
+
+	// our fallback gateway is used
+	require.Equal(t, "/fallback/ipfs/"+resourceId, requestedURLs[1])
+
+	// it cat fetch from provided gateway
+	require.Equal(t, "/ipfs/"+resourceId, requestedURLs[2])
 }

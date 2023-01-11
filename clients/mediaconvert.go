@@ -296,7 +296,7 @@ func getFile(ctx context.Context, url, requestID string) (io.ReadCloser, error) 
 	_, err := drivers.ParseOSURL(url, true)
 	if err == nil {
 		return DownloadOSURL(url)
-	} else if IsDStorageResource((url)) {
+	} else if IsDStorageResource(url) {
 		return DownloadDStorageFromGatewayList(url, requestID)
 	} else {
 		return getFileHTTP(ctx, url)
