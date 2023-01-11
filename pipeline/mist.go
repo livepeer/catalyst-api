@@ -38,12 +38,12 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	job.SegmentingTargetURL = segmentingTargetURL.String()
 	log.AddContext(job.RequestID, "segmented_url", job.SegmentingTargetURL)
 
-	if !isVideo(job.RequestID, job.SourceFile) {
-		return nil, fmt.Errorf("source was not a video: %s", job.SourceFile)
-	}
 	// Arweave URLs don't support HTTP Range requests and so Mist can't natively handle them for segmenting
 	// This workaround copies the file from Arweave to S3 and then tells Mist to use the S3 URL
 	if clients.IsArweaveOrIPFSURL(job.SourceFile) {
+		if !isVideo(job.RequestID, job.SourceFile) {
+			return nil, fmt.Errorf("source was not a video: %s", job.SourceFile)
+		}
 		sourceURL, err := url.Parse(job.SourceFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse source as URL: %w", err)
