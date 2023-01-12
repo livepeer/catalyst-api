@@ -25,7 +25,7 @@ var (
 	testJob = UploadJobPayload{
 		RequestID:   "123",
 		SourceFile:  "source-file",
-		TargetURL:   &url.URL{Scheme: "s3+https", Host: "storage.google.com", Path: "/bucket/key"},
+		TargetURL:   &url.URL{Scheme: "s3+https", Host: "storage.google.com", Path: "/bucket/key", User: url.UserPassword("user", "pass")},
 		CallbackURL: "http://localhost:3000/dummy",
 	}
 )
@@ -328,7 +328,7 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 	require.NoError(err)
 	dbMock.
 		ExpectExec("insert into \"vod_completed\".*").
-		WithArgs(sqlmock.AnyArg(), 0, sqlmock.AnyArg(), "vid codec", "audio codec", "mist", "test region", "completed", 1, sqlmock.AnyArg(), 2, 3, 4, 5, "source-file", "s3+https://storage.google.com/bucket/key").
+		WithArgs(sqlmock.AnyArg(), 0, sqlmock.AnyArg(), "vid codec", "audio codec", "mist", "test region", "completed", 1, sqlmock.AnyArg(), 2, 3, 4, 5, "source-file", "s3+https://user:xxxxx@storage.google.com/bucket/key").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	coord := NewStubCoordinatorOpts(StrategyBackgroundMist, nil, mist, external)

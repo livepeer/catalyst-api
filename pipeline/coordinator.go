@@ -378,7 +378,7 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo) {
 
 	targetURL := ""
 	if job.TargetURL != nil {
-		targetURL = job.TargetURL.String()
+		targetURL = job.TargetURL.Redacted()
 	}
 	insertDynStmt := `insert into "vod_completed"(
                             "finished_at",
@@ -414,7 +414,7 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo) {
 		job.transcodedSegments,
 		job.sourceBytes,
 		job.sourceDurationMs,
-		job.SourceFile,
+		log.RedactURL(job.SourceFile),
 		targetURL,
 	)
 	if err != nil {
