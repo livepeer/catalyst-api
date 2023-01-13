@@ -60,8 +60,8 @@ func DownloadDStorageFromGatewayList(u string, requestID string) (io.ReadCloser,
 			return nil, fmt.Errorf("invalid URL: %w", err)
 		}
 
-		gateways = append(gateways, gatewayURL)
-		if dStorageType == "ar" {
+		gateways = []*url.URL{gatewayURL}
+		if dStorageType == SCHEME_ARWEAVE {
 			gateways = append(gateways, config.ImportArweaveGatewayURLs...)
 		} else {
 			gateways = append(gateways, config.ImportIPFSGatewayURLs...)
@@ -122,17 +122,16 @@ func IsDStorageResource(dStorage string) bool {
 }
 
 func parseDStorageGatewayURL(u *url.URL) (string, string, string) {
-	if strings.Contains(u.Host, "arweave") {
+	if u.Host == "arweave.net" {
 		resource := strings.TrimLeft(u.Path, "/")
 		gateway := strings.ReplaceAll(u.String(), resource, "")
-		return resource, gateway, "ar"
+		return resource, gateway, SCHEME_ARWEAVE
 	}
 
 	if strings.Contains(u.Host, "w3s.link") || strings.Contains(u.Path, "/ipfs/") {
-		parts := strings.Split(u.Path, "/ipfs/")
-		resource := parts[1]
+		resource := strings.TrimPrefix(u.Path, "/ipfs/")
 		gateway := strings.ReplaceAll(u.String(), resource, "")
-		return resource, gateway, "ipfs"
+		return resource, gateway, SCHEME_IPFS
 	}
 
 	return "", "", ""

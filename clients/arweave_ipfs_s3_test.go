@@ -148,14 +148,14 @@ func TestItExtractsGatewayDStorageType(t *testing.T) {
 	u, err := url.Parse("https://cloudflare-ipfs.com/ipfs/12345/file.json?queryString=value")
 	require.NoError(t, err)
 	id, gateway, gatewayType := parseDStorageGatewayURL(u)
-	require.Equal(t, "ipfs", gatewayType)
+	require.Equal(t, SCHEME_IPFS, gatewayType)
 	require.Equal(t, "12345/file.json", id)
 	require.Equal(t, "https://cloudflare-ipfs.com/ipfs/?queryString=value", gateway)
 
 	u, err = url.Parse("https://arweave.net/12345")
 	require.NoError(t, err)
 	id, gateway, gatewayType = parseDStorageGatewayURL(u)
-	require.Equal(t, "ar", gatewayType)
+	require.Equal(t, SCHEME_ARWEAVE, gatewayType)
 	require.Equal(t, "12345", id)
 	require.Equal(t, "https://arweave.net/", gateway)
 
