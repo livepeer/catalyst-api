@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -28,6 +29,8 @@ func main() {
 	vodPipelineStrategy := flag.String("vod-pipeline-strategy", string(pipeline.StrategyCatalystDominance), "Which strategy to use for the VOD pipeline")
 	flag.StringVar(&config.RecordingCallback, "recording", "http://recording.livepeer.com/recording/status", "Callback URL for recording start&stop events")
 	metricsDBConnectionString := flag.String("metrics-db-connection-string", "", "Connection string to use for the metrics Postgres DB. Takes the form: host=X port=X user=X password=X dbname=X")
+	URLSliceVarFlag(&config.ImportIPFSGatewayURLs, "import-ipfs-gateway-urls", "https://vod-import-gtw.mypinata.cloud/ipfs/?pinataGatewayToken={{secrets.LP_PINATA_GATEWAY_TOKEN}},https://w3s.link/ipfs/,https://ipfs.io/ipfs/,https://cloudflare-ipfs.com/ipfs/", "Comma delimited ordered list of IPFS gateways (includes /ipfs/ suffix) to import assets from")
+	URLSliceVarFlag(&config.ImportArweaveGatewayURLs, "import-arweave-gateway-urls", "https://arweave.net/", "Comma delimited ordered list of arweave gateways")
 	flag.Parse()
 
 	if *mistJson {
@@ -52,6 +55,8 @@ func main() {
 
 	// Kick off the callback client, to send job update messages on a regular interval
 	statusClient := clients.NewPeriodicCallbackClient(15 * time.Second).Start()
+
+	// Emit high-cardinality metrics to a Postrgres database if configured
 	if metricsDBConnectionString != nil && *metricsDBConnectionString != "" {
 		metricsDB, err = sql.Open("postgres", *metricsDBConnectionString)
 		if err != nil {
@@ -60,11 +65,15 @@ func main() {
 	} else {
 		log.Println("Postgres metrics connection string was not set, postgres metrics are disabled.")
 	}
+
+	// Start the "co-ordinator" that determines whether to send jobs to the Catalyst transcoding pipeline
+	// or an external one
 	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(*vodPipelineStrategy), mist, *externalTranscoderUrl, statusClient, metricsDB)
 	if err != nil {
 		log.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 	}
 
+	// Start the HTTP API server
 	if err := api.ListenAndServe(*port, *apiToken, vodEngine); err != nil {
 		log.Fatal(err)
 	}
@@ -89,4 +98,25 @@ func URLVarFlag(fs *flag.FlagSet, dest **url.URL, name, value, usage string) {
 	fs.Func(name, usage, func(s string) error {
 		return parseURL(s, dest)
 	})
+}
+
+func URLSliceVarFlag(dest *[]*url.URL, name, value, usage string) {
+	if err := parseURLs(value, dest); err != nil {
+		panic(err)
+	}
+	flag.Func(name, usage, func(s string) error {
+		return parseURLs(s, dest)
+	})
+}
+
+func parseURLs(s string, dest *[]*url.URL) error {
+	strs := strings.Split(s, ",")
+	urls := make([]*url.URL, len(strs))
+	for i, str := range strs {
+		if err := parseURL(str, &urls[i]); err != nil {
+			return err
+		}
+	}
+	*dest = urls
+	return nil
 }
