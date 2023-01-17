@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"path"
-	"strconv"
 	"sync"
 	"time"
 
@@ -35,13 +34,6 @@ type TranscodeSegmentRequest struct {
 	RequestID        string                                 `json:"-"`
 	ReportProgress   func(clients.TranscodeStatus, float64) `json:"-"`
 }
-
-const (
-	MIN_VIDEO_BITRATE            = 100_000
-	ABSOLUTE_MIN_VIDEO_BITRATE   = 5_000
-	MAX_DEFAULT_RENDITION_WIDTH  = 1280
-	MAX_DEFAULT_RENDITION_HEIGHT = 720
-)
 
 var LocalBroadcasterClient clients.BroadcasterClient
 
@@ -83,7 +75,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	// If Profiles haven't been overridden, use the default set
 	if len(transcodeProfiles) == 0 {
-		transcodeProfiles, err = getPlaybackProfiles(inputInfo)
+		transcodeProfiles, err = clients.GetPlaybackProfiles(inputInfo)
 		if err != nil {
 			return outputs, segmentsCount, fmt.Errorf("failed to get playback profiles: %w", err)
 		}
@@ -217,49 +209,6 @@ func getProfileIndex(transcodeProfiles []clients.EncodedProfile, profile string)
 
 func calculateCompletedRatio(totalSegments, completedSegments int) float64 {
 	return (1 / float64(totalSegments)) * float64(completedSegments)
-}
-
-func getPlaybackProfiles(iv clients.InputVideo) ([]clients.EncodedProfile, error) {
-	video, err := iv.GetVideoTrack()
-	if err != nil {
-		return nil, fmt.Errorf("no video track found in input video: %w", err)
-	}
-	profiles := make([]clients.EncodedProfile, 0, len(clients.DefaultTranscodeProfiles)+1)
-	for _, profile := range clients.DefaultTranscodeProfiles {
-		// transcoding job will adjust the width to match aspect ratio. no need to
-		// check it here.
-		lowerQualityThanSrc := profile.Height <= video.Height && profile.Bitrate < video.Bitrate
-		if lowerQualityThanSrc {
-			profiles = append(profiles, profile)
-		}
-	}
-	if len(profiles) == 0 {
-		profiles = []clients.EncodedProfile{lowBitrateProfile(video)}
-	}
-	profiles = append(profiles, clients.EncodedProfile{
-		Name:    strconv.FormatInt(int64(video.Height), 10) + "p0",
-		Bitrate: video.Bitrate,
-		FPS:     0,
-		Width:   video.Width,
-		Height:  video.Height,
-	})
-	return profiles, nil
-}
-
-func lowBitrateProfile(video clients.InputTrack) clients.EncodedProfile {
-	bitrate := int64(float64(video.Bitrate) * (1.0 / 2.0))
-	if bitrate < MIN_VIDEO_BITRATE && video.Bitrate > MIN_VIDEO_BITRATE {
-		bitrate = MIN_VIDEO_BITRATE
-	} else if bitrate < ABSOLUTE_MIN_VIDEO_BITRATE {
-		bitrate = ABSOLUTE_MIN_VIDEO_BITRATE
-	}
-	return clients.EncodedProfile{
-		Name:    "low-bitrate",
-		FPS:     0,
-		Bitrate: bitrate,
-		Width:   video.Width,
-		Height:  video.Height,
-	}
 }
 
 func channelFromWaitgroup(wg *sync.WaitGroup) chan bool {

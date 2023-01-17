@@ -148,11 +148,30 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 // It expects args to be directly compatible with AWS (i.e. S3-only files).
 func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobArgs, accelerated bool) error {
 	log.Log(args.RequestID, "Creating AWS MediaConvert job", "input", args.InputFile, "output", args.HLSOutputFile, "accelerated", accelerated)
+
+	// hard coded example input for now until we have the real input info
+	inputInfo := InputVideo{
+		Tracks: []InputTrack{
+			{
+				Type:    "video",
+				Bitrate: 4_000_000,
+				VideoTrack: VideoTrack{
+					Width:  1920,
+					Height: 1080,
+				},
+			},
+		},
+	}
+	transcodeProfiles, err := GetPlaybackProfiles(inputInfo)
+	if err != nil {
+		return fmt.Errorf("failed to get playback profiles: %w", err)
+	}
+
 	hlsOut := args.HLSOutputFile.String()
 	pathParts := strings.Split(hlsOut, string(filepath.Separator))
 	pathParts[len(pathParts)-1] = "static"
 	mp4Out := strings.Join(pathParts, string(filepath.Separator))
-	payload := createJobPayload(args.InputFile.String(), hlsOut, mp4Out, mc.role, accelerated)
+	payload := createJobPayload(args.InputFile.String(), hlsOut, mp4Out, mc.role, accelerated, transcodeProfiles)
 	job, err := mc.client.CreateJob(payload)
 	if err != nil {
 		return fmt.Errorf("error creting mediaconvert job: %w", err)
@@ -212,7 +231,7 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 	}
 }
 
-func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, accelerated bool) *mediaconvert.CreateJobInput {
+func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, accelerated bool, profiles []EncodedProfile) *mediaconvert.CreateJobInput {
 	var acceleration *mediaconvert.AccelerationSettings
 	if accelerated {
 		acceleration = &mediaconvert.AccelerationSettings{
@@ -247,7 +266,7 @@ func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, acce
 						},
 						Type: aws.String("HLS_GROUP_SETTINGS"),
 					},
-					Outputs:    outputs("M3U8"),
+					Outputs:    outputs("M3U8", profiles),
 					CustomName: aws.String("hls"),
 				},
 				{
@@ -261,7 +280,7 @@ func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, acce
 						},
 						Type: aws.String("FILE_GROUP_SETTINGS"),
 					},
-					Outputs:    outputs("MP4"),
+					Outputs:    outputs("MP4", profiles),
 					CustomName: aws.String("mp4"),
 				},
 			},
@@ -274,12 +293,12 @@ func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, acce
 	}
 }
 
-func outputs(container string) []*mediaconvert.Output {
-	return []*mediaconvert.Output{
-		output(container, "360p", 640, 360, 800_000),
-		output(container, "720p", 1280, 720, 3_000_000),
-		output(container, "240", 426, 240, 400_000),
+func outputs(container string, profiles []EncodedProfile) []*mediaconvert.Output {
+	outs := make([]*mediaconvert.Output, 0, len(profiles))
+	for _, profile := range profiles {
+		outs = append(outs, output(container, profile.Name, profile.Width, profile.Height, profile.Bitrate))
 	}
+	return outs
 }
 
 func output(container, name string, width, height, maxBitrate int64) *mediaconvert.Output {
