@@ -43,38 +43,6 @@ const (
 	MAX_DEFAULT_RENDITION_HEIGHT = 720
 )
 
-// The default set of encoding profiles to use when none are specified
-var defaultTranscodeProfiles = []clients.EncodedProfile{
-	// {
-	// 	Name:    "240p0",
-	// 	FPS:     0,
-	// 	Bitrate: 250_000,
-	// 	Width:   426,
-	// 	Height:  240,
-	// },
-	{
-		Name:    "360p0",
-		FPS:     0,
-		Bitrate: 800_000,
-		Width:   640,
-		Height:  360,
-	},
-	// {
-	// 	Name:    "480p0",
-	// 	FPS:     0,
-	// 	Bitrate: 1_600_000,
-	// 	Width:   854,
-	// 	Height:  480,
-	// },
-	{
-		Name:    "720p0",
-		FPS:     0,
-		Bitrate: 3_000_000,
-		Width:   1280,
-		Height:  720,
-	},
-}
-
 var LocalBroadcasterClient clients.BroadcasterClient
 
 func init() {
@@ -256,8 +224,8 @@ func getPlaybackProfiles(iv clients.InputVideo) ([]clients.EncodedProfile, error
 	if err != nil {
 		return nil, fmt.Errorf("no video track found in input video: %w", err)
 	}
-	profiles := make([]clients.EncodedProfile, 0, len(defaultTranscodeProfiles)+1)
-	for _, profile := range defaultTranscodeProfiles {
+	profiles := make([]clients.EncodedProfile, 0, len(clients.DefaultTranscodeProfiles)+1)
+	for _, profile := range clients.DefaultTranscodeProfiles {
 		// transcoding job will adjust the width to match aspect ratio. no need to
 		// check it here.
 		lowerQualityThanSrc := profile.Height <= video.Height && profile.Bitrate < video.Bitrate

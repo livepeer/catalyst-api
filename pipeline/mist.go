@@ -92,6 +92,9 @@ func isVideo(requestID, source string) bool {
 		log.Log(requestID, "failed to get headers", "err", err.Error())
 		return true // fail open on errors
 	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return true // fail open
+	}
 	contentType := resp.Header.Get("Content-Type")
 	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
