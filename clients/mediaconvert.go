@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -147,13 +148,17 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 // It expects args to be directly compatible with AWS (i.e. S3-only files).
 func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobArgs, accelerated bool) error {
 	log.Log(args.RequestID, "Creating AWS MediaConvert job", "input", args.InputFile, "output", args.HLSOutputFile, "accelerated", accelerated)
-	payload := createJobPayload(args.InputFile.String(), args.HLSOutputFile.String(), mc.role, accelerated)
+	hlsOut := args.HLSOutputFile.String()
+	pathParts := strings.Split(hlsOut, string(filepath.Separator))
+	pathParts[len(pathParts)-1] = "static"
+	mp4Out := strings.Join(pathParts, string(filepath.Separator))
+	payload := createJobPayload(args.InputFile.String(), hlsOut, mp4Out, mc.role, accelerated)
 	job, err := mc.client.CreateJob(payload)
 	if err != nil {
 		return fmt.Errorf("error creting mediaconvert job: %w", err)
 	}
 	jobID := job.Job.Id
-	log.AddContext("mediaconvert_job_id", aws.StringValue(jobID))
+	log.AddContext(args.RequestID, "mediaconvert_job_id", aws.StringValue(jobID))
 	log.Log(args.RequestID, "Created MediaConvert job")
 
 	// poll the job until completion or error
@@ -207,7 +212,7 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 	}
 }
 
-func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *mediaconvert.CreateJobInput {
+func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, accelerated bool) *mediaconvert.CreateJobInput {
 	var acceleration *mediaconvert.AccelerationSettings
 	if accelerated {
 		acceleration = &mediaconvert.AccelerationSettings{
@@ -242,45 +247,22 @@ func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *
 						},
 						Type: aws.String("HLS_GROUP_SETTINGS"),
 					},
-					Outputs: []*mediaconvert.Output{
-						{
-							VideoDescription: &mediaconvert.VideoDescription{
-								CodecSettings: &mediaconvert.VideoCodecSettings{
-									Codec: aws.String("H_264"),
-									H264Settings: &mediaconvert.H264Settings{
-										RateControlMode:    aws.String("QVBR"),
-										SceneChangeDetect:  aws.String("TRANSITION_DETECTION"),
-										QualityTuningLevel: aws.String("MULTI_PASS_HQ"),
-										FramerateControl:   aws.String("INITIALIZE_FROM_SOURCE"),
-									}}},
-							AudioDescriptions: []*mediaconvert.AudioDescription{
-								{
-									CodecSettings: &mediaconvert.AudioCodecSettings{
-										Codec: aws.String("AAC"),
-										AacSettings: &mediaconvert.AacSettings{
-											Bitrate:    aws.Int64(96000),
-											CodingMode: aws.String("CODING_MODE_2_0"),
-											SampleRate: aws.Int64(48000),
-										},
-									},
-								},
-							},
-							OutputSettings: &mediaconvert.OutputSettings{
-								HlsSettings: &mediaconvert.HlsSettings{},
-							},
-							ContainerSettings: &mediaconvert.ContainerSettings{
-								Container:    aws.String("M3U8"),
-								M3u8Settings: &mediaconvert.M3u8Settings{},
-							},
-						},
-					},
+					Outputs:    outputs("M3U8"),
 					CustomName: aws.String("hls"),
-					AutomatedEncodingSettings: &mediaconvert.AutomatedEncodingSettings{
-						AbrSettings: &mediaconvert.AutomatedAbrSettings{
-							MaxAbrBitrate: aws.Int64(8000000),
-							MaxRenditions: aws.Int64(3),
+				},
+				{
+					Name: aws.String("Static MP4 Output"),
+					OutputGroupSettings: &mediaconvert.OutputGroupSettings{
+						FileGroupSettings: &mediaconvert.FileGroupSettings{
+							Destination: aws.String(mp4OutputFile),
+							DestinationSettings: &mediaconvert.DestinationSettings{
+								S3Settings: &mediaconvert.S3DestinationSettings{},
+							},
 						},
+						Type: aws.String("FILE_GROUP_SETTINGS"),
 					},
+					Outputs:    outputs("MP4"),
+					CustomName: aws.String("mp4"),
 				},
 			},
 			TimecodeConfig: &mediaconvert.TimecodeConfig{
@@ -289,6 +271,47 @@ func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *
 		},
 		Role:                 aws.String(role),
 		AccelerationSettings: acceleration,
+	}
+}
+
+func outputs(container string) []*mediaconvert.Output {
+	return []*mediaconvert.Output{
+		output(container, "360p", 640, 360, 800_000),
+		output(container, "720p", 1280, 720, 3_000_000),
+		output(container, "240", 426, 240, 400_000),
+	}
+}
+
+func output(container, name string, width, height, maxBitrate int64) *mediaconvert.Output {
+	return &mediaconvert.Output{
+		VideoDescription: &mediaconvert.VideoDescription{
+			Width:  aws.Int64(width),
+			Height: aws.Int64(height),
+			CodecSettings: &mediaconvert.VideoCodecSettings{
+				Codec: aws.String("H_264"),
+				H264Settings: &mediaconvert.H264Settings{
+					MaxBitrate:         aws.Int64(maxBitrate),
+					RateControlMode:    aws.String("QVBR"),
+					SceneChangeDetect:  aws.String("TRANSITION_DETECTION"),
+					QualityTuningLevel: aws.String("MULTI_PASS_HQ"),
+					FramerateControl:   aws.String("INITIALIZE_FROM_SOURCE"),
+				}}},
+		AudioDescriptions: []*mediaconvert.AudioDescription{
+			{
+				CodecSettings: &mediaconvert.AudioCodecSettings{
+					Codec: aws.String("AAC"),
+					AacSettings: &mediaconvert.AacSettings{
+						Bitrate:    aws.Int64(96000),
+						CodingMode: aws.String("CODING_MODE_2_0"),
+						SampleRate: aws.Int64(48000),
+					},
+				},
+			},
+		},
+		ContainerSettings: &mediaconvert.ContainerSettings{
+			Container: aws.String(container),
+		},
+		NameModifier: aws.String(name),
 	}
 }
 
