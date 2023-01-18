@@ -241,6 +241,53 @@ func TestCopiesMediaConvertOutputToFinalLocation(t *testing.T) {
 	require.Equal(exampleFileContents, string(content))
 }
 
+func Test_createJobPayload(t *testing.T) {
+	type args struct {
+		inputFile     string
+		hlsOutputFile string
+		mp4OutputFile string
+		role          string
+		accelerated   bool
+		profiles      []EncodedProfile
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			name: "happy",
+			args: args{
+				inputFile:     "input",
+				hlsOutputFile: "output",
+				mp4OutputFile: "mp4out",
+				role:          "role",
+				accelerated:   false,
+				profiles:      DefaultTranscodeProfiles,
+			},
+			want: "fixtures/mediaconvert_payloads/happy.txt",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual := createJobPayload(tt.args.inputFile, tt.args.hlsOutputFile, tt.args.mp4OutputFile, tt.args.role, tt.args.accelerated, tt.args.profiles)
+			require.NotNil(t, actual)
+			require.Equal(t, loadFixture(t, tt.want, actual.String()), actual.String())
+		})
+	}
+}
+
+func loadFixture(t *testing.T, expectedPath, actual string) string {
+	if os.Getenv("REGEN_FIXTURES") != "" {
+		err := os.WriteFile(expectedPath, []byte(actual), 0644)
+		require.NoError(t, err)
+	}
+
+	file, err := os.ReadFile(expectedPath)
+	require.NoError(t, err)
+	return string(file)
+}
+
 func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *MediaConvert, inputFile *os.File, transferDir string, cleanup func()) {
 	oldMaxRetryInterval, oldRetries, oldPollDelay := maxRetryInterval, config.DownloadOSURLRetries, pollDelay
 	maxRetryInterval, config.DownloadOSURLRetries, pollDelay = 1*time.Millisecond, 1, 1*time.Millisecond

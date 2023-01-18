@@ -296,16 +296,15 @@ func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, acce
 func outputs(container string, profiles []EncodedProfile) []*mediaconvert.Output {
 	outs := make([]*mediaconvert.Output, 0, len(profiles))
 	for _, profile := range profiles {
-		outs = append(outs, output(container, profile.Name, profile.Width, profile.Height, profile.Bitrate))
+		outs = append(outs, output(container, profile.Name, profile.Width, profile.Bitrate))
 	}
 	return outs
 }
 
-func output(container, name string, width, height, maxBitrate int64) *mediaconvert.Output {
+func output(container, name string, width, maxBitrate int64) *mediaconvert.Output {
 	return &mediaconvert.Output{
 		VideoDescription: &mediaconvert.VideoDescription{
-			Width:  aws.Int64(width),
-			Height: aws.Int64(height),
+			Width: aws.Int64(width),
 			CodecSettings: &mediaconvert.VideoCodecSettings{
 				Codec: aws.String("H_264"),
 				H264Settings: &mediaconvert.H264Settings{
