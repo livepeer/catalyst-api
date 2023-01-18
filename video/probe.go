@@ -1,12 +1,13 @@
-package video 
+package video
 
 import (
 	"context"
-//	"fmt"
-	"time"
-	"io"
+	//	"fmt"
 	"gopkg.in/vansante/go-ffprobe.v2"
+	"io"
+	"time"
 )
+
 /*
 type ProbeInfo struct {
 	Format  *ffprobe.Format

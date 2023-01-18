@@ -93,6 +93,7 @@ func isVideo(requestID, source string) bool {
 		return true // fail open on errors
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		log.Log(requestID, "bad status code", "status", resp.StatusCode)
 		return true // fail open
 	}
 	contentType := resp.Header.Get("Content-Type")

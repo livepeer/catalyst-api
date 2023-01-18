@@ -58,6 +58,7 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 					},
 				},
 			},
+			// TODO add mp4 outs?
 		},
 	}, nil
 }
