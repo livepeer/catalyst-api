@@ -128,7 +128,7 @@ func TestItRetriesSavingData(t *testing.T) {
 	}
 	defer func() { makeOperation = original }()
 
-	err := UploadToOSURL(os.TempDir(), "name", bytes.NewReader([]byte("foo")), 1*time.Second)
+	_, err := UploadToOSURL(os.TempDir(), "name", bytes.NewReader([]byte("foo")), 1*time.Second)
 
 	require.NoError(t, err)
 	require.Equal(t, 2, retries)
@@ -145,7 +145,7 @@ func TestItFailsAfterMaxSavesRetriesReached(t *testing.T) {
 	}
 	defer func() { makeOperation = original }()
 
-	err := UploadToOSURL(os.TempDir(), "name", bytes.NewReader([]byte("foo")), 1*time.Second)
+	_, err := UploadToOSURL(os.TempDir(), "name", bytes.NewReader([]byte("foo")), 1*time.Second)
 
 	require.Error(t, err)
 	require.Equal(t, 3, retries)

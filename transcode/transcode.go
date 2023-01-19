@@ -3,7 +3,6 @@ package transcode
 import (
 	"bytes"
 	"fmt"
-	"github.com/livepeer/go-tools/drivers"
 	"net/url"
 	"path"
 	"strconv"
@@ -166,11 +165,11 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, err
 	}
 
-	osDriver, _ := drivers.ParseOSURL(targetTranscodedRenditionOutputURL.String(), true)
-	w3LinkUrl := osDriver.Publish()
-	if w3LinkUrl != "" {
-		manifestManifestURL = path.Join(w3LinkUrl, "index.m3u8")
-	}
+	//osDriver, _ := drivers.ParseOSURL(targetTranscodedRenditionOutputURL.String(), true)
+	//w3LinkUrl := osDriver.Publish()
+	//if w3LinkUrl != "" {
+	//	manifestManifestURL = path.Join(w3LinkUrl, "index.m3u8")
+	//}
 
 	output := clients.OutputVideo{Type: "object_store", Manifest: manifestManifestURL}
 	//for _, rendition := range transcodedStats {
@@ -230,13 +229,14 @@ func transcodeSegment(
 			return fmt.Errorf("error building rendition segment URL %q: %s", targetRenditionURL, err)
 		}
 
-		err = clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), time.Minute)
+		renditionUrl, err := clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), time.Minute)
 		if err != nil {
 			return fmt.Errorf("failed to upload master playlist: %s", err)
 		}
 		// bitrate calculation
 		transcodedStats[renditionIndex].Bytes += int64(len(transcodedSegment.MediaData))
 		transcodedStats[renditionIndex].DurationMs += float64(segment.Input.DurationMillis)
+		transcodedStats[renditionIndex].RenditionURLs[segment.Index] = renditionUrl
 	}
 
 	for _, stats := range transcodedStats {
@@ -320,10 +320,11 @@ func statsFromProfiles(profiles []clients.EncodedProfile) []*RenditionStats {
 	stats := []*RenditionStats{}
 	for _, profile := range profiles {
 		stats = append(stats, &RenditionStats{
-			Name:   profile.Name,
-			Width:  profile.Width,  // TODO: extract this from actual media retrieved from B
-			Height: profile.Height, // TODO: extract this from actual media retrieved from B
-			FPS:    profile.FPS,    // TODO: extract this from actual media retrieved from B
+			Name:          profile.Name,
+			Width:         profile.Width,  // TODO: extract this from actual media retrieved from B
+			Height:        profile.Height, // TODO: extract this from actual media retrieved from B
+			FPS:           profile.FPS,    // TODO: extract this from actual media retrieved from B
+			RenditionURLs: make(map[int]string),
 		})
 	}
 	return stats
@@ -338,4 +339,5 @@ type RenditionStats struct {
 	DurationMs       float64
 	ManifestLocation string
 	BitsPerSecond    uint32
+	RenditionURLs    map[int]string
 }

@@ -3,8 +3,6 @@ package transcode
 import (
 	"fmt"
 	"net/url"
-	"path"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -93,20 +91,6 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 	})
 
 	for i, profile := range transcodedStats {
-		// For each profile, add a new entry to the master manifest
-		masterPlaylist.Append(
-			path.Join(profile.Name, "index.m3u8"),
-			&m3u8.MediaPlaylist{
-				TargetDuration: sourceManifest.TargetDuration,
-			},
-			m3u8.VariantParams{
-				Name:       fmt.Sprintf("%d-%s", i, profile.Name),
-				Bandwidth:  profile.BitsPerSecond,
-				FrameRate:  float64(profile.FPS),
-				Resolution: fmt.Sprintf("%dx%d", profile.Width, profile.Height),
-			},
-		)
-
 		// For each profile, create and upload a new rendition manifest
 		renditionPlaylist, err := m3u8.NewMediaPlaylist(sourceManifest.WinSize(), sourceManifest.Count())
 		if err != nil {
@@ -114,13 +98,15 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		}
 
 		// Add segments to the manifest
-		for i, sourceSegment := range sourceManifest.Segments {
+		for j, sourceSegment := range sourceManifest.Segments {
 			// The segments list is a ring buffer - see https://github.com/grafov/m3u8/issues/140
 			// and so we only know we've hit the end of the list when we find a nil element
 			if sourceSegment == nil {
 				break
 			}
-			err := renditionPlaylist.Append(fmt.Sprintf("%d.ts", i), sourceSegment.Duration, "")
+			// TODO: If web3
+			//err := renditionPlaylist.Append(fmt.Sprintf("%d.ts", i), sourceSegment.Duration, "")
+			err := renditionPlaylist.Append(fmt.Sprintf("%s/%d.ts", profile.RenditionURLs[j], j), sourceSegment.Duration, "")
 			if err != nil {
 				return "", fmt.Errorf("failed to append to rendition playlist number %d: %s", i, err)
 			}
@@ -131,24 +117,41 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 
 		manifestFilename := "index.m3u8"
 		renditionManifestBaseURL := fmt.Sprintf("%s/%s", targetOSURL, profile.Name)
-		err = clients.UploadToOSURL(renditionManifestBaseURL, manifestFilename, strings.NewReader(renditionPlaylist.String()), 30*time.Second)
+		manifestLocation, err := clients.UploadToOSURL(renditionManifestBaseURL, manifestFilename, strings.NewReader(renditionPlaylist.String()), 30*time.Second)
 		if err != nil {
 			return "", fmt.Errorf("failed to upload rendition playlist: %s", err)
 		}
 		// update manifest location
-		transcodedStats[i].ManifestLocation, err = url.JoinPath(renditionManifestBaseURL, manifestFilename)
-		if err != nil {
-			// should not block the ingestion flow or make it fail on error.
-			transcodedStats[i].ManifestLocation = ""
-		}
+		//transcodedStats[i].ManifestLocation, err = url.JoinPath(renditionManifestBaseURL, manifestFilename)
+		transcodedStats[i].ManifestLocation = fmt.Sprintf("%s/%s", manifestLocation, manifestFilename)
+		//if err != nil {
+		// should not block the ingestion flow or make it fail on error.
+		//transcodedStats[i].ManifestLocation = ""
+		//}
+
+		// For each profile, add a new entry to the master manifest
+		masterPlaylist.Append(
+			transcodedStats[i].ManifestLocation,
+			&m3u8.MediaPlaylist{
+				TargetDuration: sourceManifest.TargetDuration,
+			},
+			m3u8.VariantParams{
+				Name:       fmt.Sprintf("%d-%s", i, profile.Name),
+				Bandwidth:  profile.BitsPerSecond,
+				FrameRate:  float64(profile.FPS),
+				Resolution: fmt.Sprintf("%dx%d", profile.Width, profile.Height),
+			},
+		)
 	}
 
-	err := clients.UploadToOSURL(targetOSURL, MASTER_MANIFEST_FILENAME, strings.NewReader(masterPlaylist.String()), 30*time.Second)
+	//_, err := clients.UploadToOSURL(targetOSURL, MASTER_MANIFEST_FILENAME, strings.NewReader(masterPlaylist.String()), 30*time.Second)
+	res, err := clients.UploadToOSURL(targetOSURL, MASTER_MANIFEST_FILENAME, strings.NewReader(masterPlaylist.String()), 30*time.Second)
 	if err != nil {
 		return "", fmt.Errorf("failed to upload master playlist: %s", err)
 	}
 
-	return filepath.Join(targetOSURL, MASTER_MANIFEST_FILENAME), nil
+	//return filepath.Join(targetOSURL, MASTER_MANIFEST_FILENAME), nil
+	return fmt.Sprintf("%s/%s", res, MASTER_MANIFEST_FILENAME), nil
 }
 
 func manifestURLToSegmentURL(manifestURL, segmentFilename string) (string, error) {

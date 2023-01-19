@@ -24,7 +24,7 @@ func CopyDStorageToS3(url, s3URL string, requestID string) error {
 		return err
 	}
 
-	err = UploadToOSURL(s3URL, "", content, MAX_COPY_DURATION)
+	_, err = UploadToOSURL(s3URL, "", content, MAX_COPY_DURATION)
 	if err != nil {
 		return err
 	}
