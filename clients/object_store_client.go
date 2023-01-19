@@ -71,6 +71,7 @@ func UploadToOSURL(osURL, filename string, data io.Reader, timeout time.Duration
 		} else {
 			url = info.S3Info.Host
 		}
+
 		_, err := sess.SaveData(context.Background(), filename, data, nil, timeout)
 		return err
 	})
