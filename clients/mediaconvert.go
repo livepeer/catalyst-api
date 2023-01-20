@@ -399,6 +399,7 @@ func copyDir(source, dest *url.URL, args TranscodeJobArgs) error {
 				if err := ctx.Err(); err != nil {
 					return err
 				}
+				// TODO: Here we would need to collect new video URLs and later rewrite the manifest file
 				_, err := copyFile(ctx, source.JoinPath(file).String(), dest.String(), file, args.RequestID)
 				args.CollectTranscodedSegment()
 				if err != nil {
