@@ -2,12 +2,12 @@ package video
 
 import (
 	"context"
-	"fmt"
+//	"fmt"
 	"time"
 	"io"
 	"gopkg.in/vansante/go-ffprobe.v2"
 )
-
+/*
 type ProbeInfo struct {
 	Format  *ffprobe.Format
 	Streams []*ffprobe.Stream
@@ -16,13 +16,14 @@ type ProbeInfo struct {
 func (p ProbeInfo) String() string {
 	return fmt.Sprintf("Format: %v \nStreams: %v", p.Format, p.Streams)
 }
+*/
 
 func ProbeFileReader(ctx context.Context, fileReader io.Reader) (*ffprobe.ProbeData, error) {
 	return ffprobe.ProbeReader(ctx, fileReader)
 }
 
-func ProbeFileFromOS(file io.Reader) (*ProbeInfo, error) {
-	var probeInfo ProbeInfo
+func ProbeFileFromOS(file io.Reader) (*ffprobe.ProbeData, error) {
+	var probeInfo ffprobe.ProbeData
 	probeCtx, probeCancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer probeCancel()
 

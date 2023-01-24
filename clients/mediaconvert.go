@@ -10,6 +10,7 @@ import (
 	"path"
 	"strings"
 	"time"
+	"strconv"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -125,22 +126,50 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	// temporarily probe input mp4 here...
 	f, err := DownloadOSURL(mc.osTransferBucketURL.JoinPath(mcInputRelPath).String())
 	if err != nil {
-		log.Log(args.RequestID, "error downloading MP4 input file from S3 for probing", "err", fmt.Sprintf("%s",err))
+		log.Log(args.RequestID, "error downloading MP4 input file from S3 for probing", "err", fmt.Sprintf("%s", err))
 	}
 	probe, err := video.ProbeFileFromOS(f)
 	if err != nil {
-		log.Log(args.RequestID, "error probing MP4 input file from S3", "err", fmt.Sprintf("%s",err))
+		log.Log(args.RequestID, "error probing MP4 input file from S3", "err", fmt.Sprintf("%s", err))
 	}
-	fmt.Println("XXX: PROBEINFO", probe, "error: ", err)
 
-	return err
-
-
+	bitrate, err := strconv.ParseInt(probe.FirstVideoStream().BitRate, 10, 64)
+	if err != nil {
+		log.Log(args.RequestID, "error parsing bitrate from probed data", "err", fmt.Sprintf("%s", err))
+	}
+	fsize, err := strconv.ParseInt(probe.Format.Size, 10, 64)
+	if err != nil {
+		log.Log(args.RequestID, "error parsing size from probed data", "err", fmt.Sprintf("%s", err))
+	}
+	fps, err := strconv.ParseFloat(probe.FirstVideoStream().AvgFrameRate, 64)
+	if err != nil {
+		log.Log(args.RequestID, "error parsing fps from probed data", "err", fmt.Sprintf("%s", err))
+	}
+	iv := InputVideo{
+		Tracks: []InputTrack{
+			{
+				Type:    	"video",
+				Codec:		probe.FirstVideoStream().CodecName,
+				Bitrate:	bitrate,
+				DurationSec:	float64(probe.Format.Duration()),
+				SizeBytes:	fsize,
+				VideoTrack: VideoTrack{
+					Width:  int64(probe.FirstVideoStream().Width),
+					Height: int64(probe.FirstVideoStream().Height),
+					FPS:	fps,
+				},
+			},
+		},
+	}
 
 	args.CollectSourceSize(size)
 	mcArgs := args
+	mcArgs.InputFileInfo = iv
 	mcArgs.InputFile = srcInputFile
 	mcArgs.HLSOutputFile = mc.s3TransferBucket.JoinPath(mcOutputRelPath)
+
+fmt.Println("mcArgs.....", mcArgs)
+return err
 
 	err = mc.coreAwsTranscode(ctx, mcArgs, true)
 	if err == ErrJobAcceleration {
