@@ -50,7 +50,7 @@
                   SceneChangeDetect: "TRANSITION_DETECTION"
                 }
               },
-              Width: 640
+              Height: 360
             }
           },{
             AudioDescriptions: [{
@@ -78,7 +78,7 @@
                   SceneChangeDetect: "TRANSITION_DETECTION"
                 }
               },
-              Width: 1280
+              Height: 720
             }
           }]
       },{
@@ -121,7 +121,7 @@
                   SceneChangeDetect: "TRANSITION_DETECTION"
                 }
               },
-              Width: 640
+              Height: 360
             }
           },{
             AudioDescriptions: [{
@@ -149,7 +149,7 @@
                   SceneChangeDetect: "TRANSITION_DETECTION"
                 }
               },
-              Width: 1280
+              Height: 720
             }
           }]
       }],

@@ -29,6 +29,7 @@ var pollDelay = 10 * time.Second
 var retryableHttpClient = newRetryableHttpClient()
 
 const rateLimitedPollDelay = 15 * time.Second
+const maxMP4OutDuration = 2 * time.Minute
 
 // https://docs.aws.amazon.com/mediaconvert/latest/ug/mediaconvert_error_codes.html
 var errCodesAcceleration = []int64{
@@ -164,11 +165,10 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	iv := video.InputVideo{
 		Tracks: []video.InputTrack{
 			{
-				Type:        "video",
-				Codec:       probe.FirstVideoStream().CodecName,
-				Bitrate:     bitrate,
-				DurationSec: probe.Format.Duration().Seconds(),
-				SizeBytes:   fsize,
+				Type:      "video",
+				Codec:     probe.FirstVideoStream().CodecName,
+				Bitrate:   bitrate,
+				SizeBytes: fsize,
 				VideoTrack: video.VideoTrack{
 					Width:  int64(probe.FirstVideoStream().Width),
 					Height: int64(probe.FirstVideoStream().Height),
@@ -176,6 +176,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 				},
 			},
 		},
+		Duration: probe.Format.Duration().Seconds(),
 	}
 
 	args.CollectSourceSize(size)
@@ -218,9 +219,12 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 	}
 
 	hlsOut := args.HLSOutputFile.String()
-	pathParts := strings.Split(hlsOut, string(filepath.Separator))
-	pathParts[len(pathParts)-1] = "static"
-	mp4Out := strings.Join(pathParts, string(filepath.Separator))
+	mp4Out := ""
+	if args.InputFileInfo.Duration <= maxMP4OutDuration.Seconds() {
+		pathParts := strings.Split(hlsOut, string(filepath.Separator))
+		pathParts[len(pathParts)-1] = "static"
+		mp4Out = strings.Join(pathParts, string(filepath.Separator))
+	}
 	payload := createJobPayload(args.InputFile.String(), hlsOut, mp4Out, mc.role, accelerated, transcodeProfiles)
 	job, err := mc.client.CreateJob(payload)
 	if err != nil {
@@ -305,35 +309,7 @@ func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, acce
 					},
 				},
 			},
-			OutputGroups: []*mediaconvert.OutputGroup{
-				{
-					Name: aws.String("Apple HLS"),
-					OutputGroupSettings: &mediaconvert.OutputGroupSettings{
-						HlsGroupSettings: &mediaconvert.HlsGroupSettings{
-							Destination:      aws.String(hlsOutputFile),
-							MinSegmentLength: aws.Int64(0),
-							SegmentLength:    aws.Int64(10),
-						},
-						Type: aws.String("HLS_GROUP_SETTINGS"),
-					},
-					Outputs:    outputs("M3U8", profiles),
-					CustomName: aws.String("hls"),
-				},
-				{
-					Name: aws.String("Static MP4 Output"),
-					OutputGroupSettings: &mediaconvert.OutputGroupSettings{
-						FileGroupSettings: &mediaconvert.FileGroupSettings{
-							Destination: aws.String(mp4OutputFile),
-							DestinationSettings: &mediaconvert.DestinationSettings{
-								S3Settings: &mediaconvert.S3DestinationSettings{},
-							},
-						},
-						Type: aws.String("FILE_GROUP_SETTINGS"),
-					},
-					Outputs:    outputs("MP4", profiles),
-					CustomName: aws.String("mp4"),
-				},
-			},
+			OutputGroups: outputGroups(hlsOutputFile, mp4OutputFile, profiles),
 			TimecodeConfig: &mediaconvert.TimecodeConfig{
 				Source: aws.String("ZEROBASED"),
 			},
@@ -341,6 +317,41 @@ func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, acce
 		Role:                 aws.String(role),
 		AccelerationSettings: acceleration,
 	}
+}
+
+func outputGroups(hlsOutputFile, mp4OutputFile string, profiles []video.EncodedProfile) []*mediaconvert.OutputGroup {
+	groups := []*mediaconvert.OutputGroup{
+		{
+			Name: aws.String("Apple HLS"),
+			OutputGroupSettings: &mediaconvert.OutputGroupSettings{
+				HlsGroupSettings: &mediaconvert.HlsGroupSettings{
+					Destination:      aws.String(hlsOutputFile),
+					MinSegmentLength: aws.Int64(0),
+					SegmentLength:    aws.Int64(10),
+				},
+				Type: aws.String("HLS_GROUP_SETTINGS"),
+			},
+			Outputs:    outputs("M3U8", profiles),
+			CustomName: aws.String("hls"),
+		},
+	}
+	if mp4OutputFile != "" {
+		groups = append(groups, &mediaconvert.OutputGroup{
+			Name: aws.String("Static MP4 Output"),
+			OutputGroupSettings: &mediaconvert.OutputGroupSettings{
+				FileGroupSettings: &mediaconvert.FileGroupSettings{
+					Destination: aws.String(mp4OutputFile),
+					DestinationSettings: &mediaconvert.DestinationSettings{
+						S3Settings: &mediaconvert.S3DestinationSettings{},
+					},
+				},
+				Type: aws.String("FILE_GROUP_SETTINGS"),
+			},
+			Outputs:    outputs("MP4", profiles),
+			CustomName: aws.String("mp4"),
+		})
+	}
+	return groups
 }
 
 func outputs(container string, profiles []video.EncodedProfile) []*mediaconvert.Output {
