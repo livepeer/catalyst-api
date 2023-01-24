@@ -18,6 +18,7 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	xerrors "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/video"
 	"github.com/livepeer/go-tools/drivers"
 	"golang.org/x/sync/errgroup"
 )
@@ -120,6 +121,21 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 		log.Log(args.RequestID, "Successfully copied", size, "bytes to S3")
 		srcInputFile = mc.s3TransferBucket.JoinPath(mcInputRelPath)
 	}
+
+	// temporarily probe input mp4 here...
+	f, err := DownloadOSURL(mc.osTransferBucketURL.JoinPath(mcInputRelPath).String())
+	if err != nil {
+		log.Log(args.RequestID, "error downloading MP4 input file from S3 for probing", "err", fmt.Sprintf("%s",err))
+	}
+	probe, err := video.ProbeFileFromOS(f)
+	if err != nil {
+		log.Log(args.RequestID, "error probing MP4 input file from S3", "err", fmt.Sprintf("%s",err))
+	}
+	fmt.Println("XXX: PROBEINFO", probe, "error: ", err)
+
+	return err
+
+
 
 	args.CollectSourceSize(size)
 	mcArgs := args
