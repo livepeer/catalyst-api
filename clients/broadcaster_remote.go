@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/livepeer/catalyst-api/video"
 	"io"
 	"math/rand"
 	"net/http"
@@ -38,7 +39,7 @@ func NewRemoteBroadcasterClient(credentials Credentials) (RemoteBroadcasterClien
 	}, nil
 }
 
-func (c *RemoteBroadcasterClient) TranscodeSegmentWithRemoteBroadcaster(segment io.Reader, sequenceNumber int64, profiles []EncodedProfile, streamName string, durationMillis int64) (TranscodeResult, error) {
+func (c *RemoteBroadcasterClient) TranscodeSegmentWithRemoteBroadcaster(segment io.Reader, sequenceNumber int64, profiles []video.EncodedProfile, streamName string, durationMillis int64) (TranscodeResult, error) {
 	// Get available broadcasters
 	bList, err := findBroadcaster(c.credentials)
 	if err != nil {
@@ -101,7 +102,7 @@ func findBroadcaster(c Credentials) (BroadcasterList, error) {
 
 // CreateStream registers new stream on Livepeer infra and returns manifestId
 // Call `ReleaseManifestId(manifestId)` after use
-func CreateStream(c Credentials, streamName string, profiles []EncodedProfile) (string, error) {
+func CreateStream(c Credentials, streamName string, profiles []video.EncodedProfile) (string, error) {
 	requestURL, err := url.JoinPath(c.CustomAPIURL, "stream")
 	if err != nil {
 		return "", fmt.Errorf("appending stream to api url %s: %v", c.CustomAPIURL, err)

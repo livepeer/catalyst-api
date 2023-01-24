@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/livepeer/catalyst-api/video"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -133,7 +134,7 @@ func TestVODHandlerProfiles(t *testing.T) {
 	inputUrl, outputUrl := createTempManifests(t)
 
 	// Define profiles
-	profiles := []clients.EncodedProfile{
+	profiles := []video.EncodedProfile{
 		{Name: "p360", Width: 640, Height: 360, Bitrate: 200000, FPS: 24},
 		{Name: "p240", Width: 427, Height: 240, Bitrate: 100000, FPS: 24},
 	}

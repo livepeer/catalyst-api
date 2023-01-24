@@ -3,6 +3,7 @@ package transcode
 import (
 	"bytes"
 	"fmt"
+	"github.com/livepeer/catalyst-api/video"
 	"net/url"
 	"path"
 	"sync"
@@ -15,13 +16,13 @@ import (
 )
 
 type TranscodeSegmentRequest struct {
-	SourceFile        string                   `json:"source_location"`
-	CallbackURL       string                   `json:"callback_url"`
-	SourceManifestURL string                   `json:"source_manifest_url"`
-	StreamKey         string                   `json:"streamKey"`
-	AccessToken       string                   `json:"accessToken"`
-	TranscodeAPIUrl   string                   `json:"transcodeAPIUrl"`
-	Profiles          []clients.EncodedProfile `json:"profiles"`
+	SourceFile        string                 `json:"source_location"`
+	CallbackURL       string                 `json:"callback_url"`
+	SourceManifestURL string                 `json:"source_manifest_url"`
+	StreamKey         string                 `json:"streamKey"`
+	AccessToken       string                 `json:"accessToken"`
+	TranscodeAPIUrl   string                 `json:"transcodeAPIUrl"`
+	Profiles          []video.EncodedProfile `json:"profiles"`
 	Detection         struct {
 		Freq                uint `json:"freq"`
 		SampleRate          uint `json:"sampleRate"`
@@ -45,7 +46,7 @@ func init() {
 	LocalBroadcasterClient = b
 }
 
-func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo clients.InputVideo) ([]clients.OutputVideo, int, error) {
+func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo video.InputVideo) ([]clients.OutputVideo, int, error) {
 	log.AddContext(transcodeRequest.RequestID, "source", transcodeRequest.SourceFile, "source_manifest", transcodeRequest.SourceManifestURL, "stream_name", streamName)
 	log.Log(transcodeRequest.RequestID, "RunTranscodeProcess (v2) Beginning")
 
@@ -75,7 +76,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	// If Profiles haven't been overridden, use the default set
 	if len(transcodeProfiles) == 0 {
-		transcodeProfiles, err = clients.GetPlaybackProfiles(inputInfo)
+		transcodeProfiles, err = video.GetPlaybackProfiles(inputInfo)
 		if err != nil {
 			return outputs, segmentsCount, fmt.Errorf("failed to get playback profiles: %w", err)
 		}
@@ -136,7 +137,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 func transcodeSegment(
 	segment segmentInfo, streamName, manifestID string,
 	transcodeRequest TranscodeSegmentRequest,
-	transcodeProfiles []clients.EncodedProfile,
+	transcodeProfiles []video.EncodedProfile,
 	targetOSURL *url.URL,
 	transcodedStats []*RenditionStats,
 ) error {
@@ -198,7 +199,7 @@ func transcodeSegment(
 	return nil
 }
 
-func getProfileIndex(transcodeProfiles []clients.EncodedProfile, profile string) int {
+func getProfileIndex(transcodeProfiles []video.EncodedProfile, profile string) int {
 	for i, p := range transcodeProfiles {
 		if p.Name == profile {
 			return i
@@ -225,7 +226,7 @@ type segmentInfo struct {
 	Index int
 }
 
-func statsFromProfiles(profiles []clients.EncodedProfile) []*RenditionStats {
+func statsFromProfiles(profiles []video.EncodedProfile) []*RenditionStats {
 	stats := []*RenditionStats{}
 	for _, profile := range profiles {
 		stats = append(stats, &RenditionStats{

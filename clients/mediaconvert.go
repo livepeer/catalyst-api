@@ -161,15 +161,15 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 			log.Log(args.RequestID, "error parsing fps from probed data", "err", fmt.Sprintf("%s", err))
 		}
 	}
-	iv := InputVideo{
-		Tracks: []InputTrack{
+	iv := video.InputVideo{
+		Tracks: []video.InputTrack{
 			{
 				Type:        "video",
 				Codec:       probe.FirstVideoStream().CodecName,
 				Bitrate:     bitrate,
 				DurationSec: probe.Format.Duration().Seconds(),
 				SizeBytes:   fsize,
-				VideoTrack: VideoTrack{
+				VideoTrack: video.VideoTrack{
 					Width:  int64(probe.FirstVideoStream().Width),
 					Height: int64(probe.FirstVideoStream().Height),
 					FPS:    fps,
@@ -211,7 +211,7 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 
 	transcodeProfiles := args.Profiles
 	if len(transcodeProfiles) == 0 {
-		transcodeProfiles, err = GetPlaybackProfiles(args.InputFileInfo)
+		transcodeProfiles, err = video.GetPlaybackProfiles(args.InputFileInfo)
 		if err != nil {
 			return fmt.Errorf("failed to get playback profiles: %w", err)
 		}
@@ -281,7 +281,7 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 	}
 }
 
-func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, accelerated bool, profiles []EncodedProfile) *mediaconvert.CreateJobInput {
+func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, accelerated bool, profiles []video.EncodedProfile) *mediaconvert.CreateJobInput {
 	var acceleration *mediaconvert.AccelerationSettings
 	if accelerated {
 		acceleration = &mediaconvert.AccelerationSettings{
@@ -343,7 +343,7 @@ func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, acce
 	}
 }
 
-func outputs(container string, profiles []EncodedProfile) []*mediaconvert.Output {
+func outputs(container string, profiles []video.EncodedProfile) []*mediaconvert.Output {
 	outs := make([]*mediaconvert.Output, 0, len(profiles))
 	for _, profile := range profiles {
 		outs = append(outs, output(container, profile.Name, profile.Height, profile.Bitrate))

@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"fmt"
+	"github.com/livepeer/catalyst-api/video"
 	"math"
 	"mime"
 	"net/http"
@@ -174,24 +175,24 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 	var audioCodec = ""
 	var videoCodec = ""
 
-	inputInfo := clients.InputVideo{
+	inputInfo := video.InputVideo{
 		Format:    "mp4", // hardcoded as mist stream is in dtsc format.
 		Duration:  float64(p.StreamMediaDurationMillis) / 1000.0,
 		SizeBytes: p.WrittenBytes,
 	}
 	for _, track := range streamInfo.Meta.Tracks {
-		inputInfo.Tracks = append(inputInfo.Tracks, clients.InputTrack{
+		inputInfo.Tracks = append(inputInfo.Tracks, video.InputTrack{
 			Type:         track.Type,
 			Codec:        track.Codec,
 			Bitrate:      int64(track.Bps * 8),
 			DurationSec:  float64(track.Lastms-track.Firstms) / 1000.0,
 			StartTimeSec: float64(track.Firstms) / 1000.0,
-			VideoTrack: clients.VideoTrack{
+			VideoTrack: video.VideoTrack{
 				Width:  int64(track.Width),
 				Height: int64(track.Height),
 				FPS:    float64(track.Fpks) / 1000.0,
 			},
-			AudioTrack: clients.AudioTrack{
+			AudioTrack: video.AudioTrack{
 				Channels:   track.Channels,
 				SampleRate: track.Rate,
 				SampleBits: track.Size,

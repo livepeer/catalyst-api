@@ -3,6 +3,7 @@ package pipeline
 import (
 	"errors"
 	"fmt"
+	"github.com/livepeer/catalyst-api/video"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -20,7 +21,7 @@ import (
 
 var (
 	testHandlerResult = &HandlerOutput{
-		Result: &UploadJobResult{clients.InputVideo{}, []clients.OutputVideo{}},
+		Result: &UploadJobResult{video.InputVideo{}, []clients.OutputVideo{}},
 	}
 	testJob = UploadJobPayload{
 		RequestID:   "123",

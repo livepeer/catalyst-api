@@ -3,6 +3,7 @@ package clients
 import (
 	"context"
 	"errors"
+	"github.com/livepeer/catalyst-api/video"
 	"net/url"
 	"os"
 	"io"
@@ -264,7 +265,7 @@ func Test_createJobPayload(t *testing.T) {
 		mp4OutputFile string
 		role          string
 		accelerated   bool
-		profiles      []EncodedProfile
+		profiles      []video.EncodedProfile
 	}
 	tests := []struct {
 		name string
@@ -279,7 +280,7 @@ func Test_createJobPayload(t *testing.T) {
 				mp4OutputFile: "mp4out",
 				role:          "role",
 				accelerated:   false,
-				profiles:      DefaultTranscodeProfiles,
+				profiles:      video.DefaultTranscodeProfiles,
 			},
 			want: "fixtures/mediaconvert_payloads/happy.txt",
 		},

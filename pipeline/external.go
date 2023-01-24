@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/livepeer/catalyst-api/video"
 	"net/url"
 	"time"
 
@@ -47,7 +48,7 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	return &HandlerOutput{
 		Result: &UploadJobResult{
-			InputVideo: clients.InputVideo{
+			InputVideo: video.InputVideo{
 				// TODO: Figure out what to do here. Studio doesn't use these anyway.
 			},
 			Outputs: []clients.OutputVideo{

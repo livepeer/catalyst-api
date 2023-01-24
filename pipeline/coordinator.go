@@ -3,6 +3,7 @@ package pipeline
 import (
 	"database/sql"
 	"fmt"
+	"github.com/livepeer/catalyst-api/video"
 	"net/url"
 	"os"
 	"path"
@@ -56,14 +57,14 @@ type UploadJobPayload struct {
 	TranscodeAPIUrl       string
 	HardcodedBroadcasters string
 	RequestID             string
-	Profiles              []clients.EncodedProfile
+	Profiles              []video.EncodedProfile
 	PipelineStrategy      Strategy
 }
 
 // UploadJobResult is the object returned by the successful execution of an
 // upload job.
 type UploadJobResult struct {
-	InputVideo clients.InputVideo
+	InputVideo video.InputVideo
 	Outputs    []clients.OutputVideo
 }
 

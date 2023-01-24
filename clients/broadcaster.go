@@ -2,12 +2,12 @@ package clients
 
 import (
 	"fmt"
+	"github.com/livepeer/catalyst-api/video"
 	"io"
 	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/url"
-	"strconv"
 	"time"
 
 	"github.com/livepeer/catalyst-api/metrics"
@@ -17,11 +17,6 @@ import (
 const TRANSCODE_TIMEOUT = 3 * time.Minute
 
 const API_TIMEOUT = 10 * time.Second
-
-const (
-	MIN_VIDEO_BITRATE          = 100_000
-	ABSOLUTE_MIN_VIDEO_BITRATE = 5_000
-)
 
 type TranscodeResult struct {
 	Renditions []*RenditionSegment
@@ -34,13 +29,13 @@ type RenditionSegment struct {
 }
 
 type createStreamPayload struct {
-	Name     string           `json:"name,omitempty"`
-	Profiles []EncodedProfile `json:"profiles"`
+	Name     string                 `json:"name,omitempty"`
+	Profiles []video.EncodedProfile `json:"profiles"`
 }
 
 type LivepeerTranscodeConfiguration struct {
-	Profiles          []EncodedProfile `json:"profiles"`
-	TimeoutMultiplier int              `json:"timeoutMultiplier"`
+	Profiles          []video.EncodedProfile `json:"profiles"`
+	TimeoutMultiplier int                    `json:"timeoutMultiplier"`
 }
 
 type Credentials struct {
@@ -56,100 +51,11 @@ type StreamAllocResponse struct {
 	ManifestId string `json:"id"`
 }
 
-type EncodedProfile struct {
-	Name         string `json:"name,omitempty"`
-	Width        int64  `json:"width,omitempty"`
-	Height       int64  `json:"height,omitempty"`
-	Bitrate      int64  `json:"bitrate,omitempty"`
-	FPS          int64  `json:"fps"`
-	FPSDen       int64  `json:"fpsDen,omitempty"`
-	Profile      string `json:"profile,omitempty"`
-	GOP          string `json:"gop,omitempty"`
-	Encoder      string `json:"encoder,omitempty"`
-	ColorDepth   int64  `json:"colorDepth,omitempty"`
-	ChromaFormat int64  `json:"chromaFormat,omitempty"`
-}
-
-// DefaultTranscodeProfiles defines the default set of encoding profiles to use when none are specified
-var DefaultTranscodeProfiles = []EncodedProfile{
-	// {
-	// 	Name:    "240p0",
-	// 	FPS:     0,
-	// 	Bitrate: 250_000,
-	// 	Width:   426,
-	// 	Height:  240,
-	// },
-	{
-		Name:    "360p0",
-		FPS:     0,
-		Bitrate: 800_000,
-		Width:   640,
-		Height:  360,
-	},
-	// {
-	// 	Name:    "480p0",
-	// 	FPS:     0,
-	// 	Bitrate: 1_600_000,
-	// 	Width:   854,
-	// 	Height:  480,
-	// },
-	{
-		Name:    "720p0",
-		FPS:     0,
-		Bitrate: 3_000_000,
-		Width:   1280,
-		Height:  720,
-	},
-}
-
-func GetPlaybackProfiles(iv InputVideo) ([]EncodedProfile, error) {
-	video, err := iv.GetVideoTrack()
-	if err != nil {
-		return nil, fmt.Errorf("no video track found in input video: %w", err)
-	}
-	profiles := make([]EncodedProfile, 0, len(DefaultTranscodeProfiles)+1)
-	for _, profile := range DefaultTranscodeProfiles {
-		// transcoding job will adjust the width to match aspect ratio. no need to
-		// check it here.
-		lowerQualityThanSrc := profile.Height <= video.Height && profile.Bitrate < video.Bitrate
-		if lowerQualityThanSrc {
-			profiles = append(profiles, profile)
-		}
-	}
-	if len(profiles) == 0 {
-		profiles = []EncodedProfile{lowBitrateProfile(video)}
-	}
-	profiles = append(profiles, EncodedProfile{
-		Name:    strconv.FormatInt(video.Height, 10) + "p0",
-		Bitrate: video.Bitrate,
-		FPS:     0,
-		Width:   video.Width,
-		Height:  video.Height,
-	})
-	return profiles, nil
-}
-
-func lowBitrateProfile(video InputTrack) EncodedProfile {
-	bitrate := int64(float64(video.Bitrate) * (1.0 / 2.0))
-	if bitrate < MIN_VIDEO_BITRATE && video.Bitrate > MIN_VIDEO_BITRATE {
-		bitrate = MIN_VIDEO_BITRATE
-	} else if bitrate < ABSOLUTE_MIN_VIDEO_BITRATE {
-		bitrate = ABSOLUTE_MIN_VIDEO_BITRATE
-	}
-	return EncodedProfile{
-		Name:    "low-bitrate",
-		FPS:     0,
-		Bitrate: bitrate,
-		Width:   video.Width,
-		Height:  video.Height,
-	}
-}
-
 var client = newRetryableClient(&http.Client{Timeout: TRANSCODE_TIMEOUT})
 
 // TranscodeSegment sends media to Livepeer network and returns rendition segments
 // If manifestId == "" one will be created and deleted after use, pass real value to reuse across multiple calls
-func transcodeSegment(inputSegment io.Reader, sequenceNumber, mediaDurationMillis int64, broadcasterURL url.URL, manifestId string, profiles []EncodedProfile, transcodeConfigHeader string) (TranscodeResult, error) {
+func transcodeSegment(inputSegment io.Reader, sequenceNumber, mediaDurationMillis int64, broadcasterURL url.URL, manifestId string, profiles []video.EncodedProfile, transcodeConfigHeader string) (TranscodeResult, error) {
 	t := TranscodeResult{}
 
 	// Send segment to be transcoded
