@@ -16,6 +16,7 @@ type TranscodeJobArgs struct {
 	ReportProgress func(completionRatio float64)
 	// Input File info used to by transcoder provider(s) to set transcode options
 	InputFileInfo InputVideo
+	Profiles      []EncodedProfile
 
 	// Collect size of an asset
 	CollectSourceSize        func(size int64)

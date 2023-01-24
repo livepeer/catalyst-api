@@ -9,9 +9,9 @@ import (
 	"net/url"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
-	"strconv"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -142,22 +142,37 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	if err != nil {
 		log.Log(args.RequestID, "error parsing size from probed data", "err", fmt.Sprintf("%s", err))
 	}
-	fps, err := strconv.ParseFloat(probe.FirstVideoStream().AvgFrameRate, 64)
-	if err != nil {
-		log.Log(args.RequestID, "error parsing fps from probed data", "err", fmt.Sprintf("%s", err))
+	frameRate := probe.FirstVideoStream().AvgFrameRate
+	parts := strings.Split(frameRate, "/")
+	var fps float64
+	if len(parts) > 1 {
+		x, err := strconv.ParseFloat(parts[0], 64)
+		if err != nil {
+			log.Log(args.RequestID, "error parsing fps from probed data", "err", fmt.Sprintf("%s", err))
+		}
+		y, err := strconv.ParseFloat(parts[1], 64)
+		if err != nil {
+			log.Log(args.RequestID, "error parsing fps from probed data", "err", fmt.Sprintf("%s", err))
+		}
+		fps = x / y
+	} else {
+		fps, err = strconv.ParseFloat(frameRate, 64)
+		if err != nil {
+			log.Log(args.RequestID, "error parsing fps from probed data", "err", fmt.Sprintf("%s", err))
+		}
 	}
 	iv := InputVideo{
 		Tracks: []InputTrack{
 			{
-				Type:    	"video",
-				Codec:		probe.FirstVideoStream().CodecName,
-				Bitrate:	bitrate,
-				DurationSec:	float64(probe.Format.Duration()),
-				SizeBytes:	fsize,
+				Type:        "video",
+				Codec:       probe.FirstVideoStream().CodecName,
+				Bitrate:     bitrate,
+				DurationSec: probe.Format.Duration().Seconds(),
+				SizeBytes:   fsize,
 				VideoTrack: VideoTrack{
 					Width:  int64(probe.FirstVideoStream().Width),
 					Height: int64(probe.FirstVideoStream().Height),
-					FPS:	fps,
+					FPS:    fps,
 				},
 			},
 		},
@@ -169,8 +184,8 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	mcArgs.InputFile = srcInputFile
 	mcArgs.HLSOutputFile = mc.s3TransferBucket.JoinPath(mcOutputRelPath)
 
-fmt.Println("mcArgs.....", mcArgs)
-return err
+	fmt.Println("mcArgs.....", mcArgs)
+	//return err
 
 	err = mc.coreAwsTranscode(ctx, mcArgs, true)
 	if err == ErrJobAcceleration {
@@ -191,25 +206,15 @@ return err
 
 // This is the function that does the core AWS workflow for transcoding a file.
 // It expects args to be directly compatible with AWS (i.e. S3-only files).
-func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobArgs, accelerated bool) error {
+func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobArgs, accelerated bool) (err error) {
 	log.Log(args.RequestID, "Creating AWS MediaConvert job", "input", args.InputFile, "output", args.HLSOutputFile, "accelerated", accelerated)
 
-	// hard coded example input for now until we have the real input info
-	inputInfo := InputVideo{
-		Tracks: []InputTrack{
-			{
-				Type:    "video",
-				Bitrate: 4_000_000,
-				VideoTrack: VideoTrack{
-					Width:  1920,
-					Height: 1080,
-				},
-			},
-		},
-	}
-	transcodeProfiles, err := GetPlaybackProfiles(inputInfo)
-	if err != nil {
-		return fmt.Errorf("failed to get playback profiles: %w", err)
+	transcodeProfiles := args.Profiles
+	if len(transcodeProfiles) == 0 {
+		transcodeProfiles, err = GetPlaybackProfiles(args.InputFileInfo)
+		if err != nil {
+			return fmt.Errorf("failed to get playback profiles: %w", err)
+		}
 	}
 
 	hlsOut := args.HLSOutputFile.String()
@@ -341,15 +346,15 @@ func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, acce
 func outputs(container string, profiles []EncodedProfile) []*mediaconvert.Output {
 	outs := make([]*mediaconvert.Output, 0, len(profiles))
 	for _, profile := range profiles {
-		outs = append(outs, output(container, profile.Name, profile.Width, profile.Bitrate))
+		outs = append(outs, output(container, profile.Name, profile.Height, profile.Bitrate))
 	}
 	return outs
 }
 
-func output(container, name string, width, maxBitrate int64) *mediaconvert.Output {
+func output(container, name string, height, maxBitrate int64) *mediaconvert.Output {
 	return &mediaconvert.Output{
 		VideoDescription: &mediaconvert.VideoDescription{
-			Width: aws.Int64(width),
+			Height: aws.Int64(height),
 			CodecSettings: &mediaconvert.VideoCodecSettings{
 				Codec: aws.String("H_264"),
 				H264Settings: &mediaconvert.H264Settings{

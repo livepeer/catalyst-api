@@ -30,6 +30,7 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		RequestID:     job.RequestID,
 		InputFile:     sourceFileUrl,
 		HLSOutputFile: job.TargetURL,
+		Profiles:      job.Profiles,
 		ReportProgress: func(progress float64) {
 			job.ReportProgress(clients.TranscodeStatusTranscoding, progress)
 		},
