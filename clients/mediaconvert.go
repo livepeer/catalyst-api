@@ -246,6 +246,7 @@ func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *
 								CodecSettings: &mediaconvert.VideoCodecSettings{
 									Codec: aws.String("H_264"),
 									H264Settings: &mediaconvert.H264Settings{
+										GopSizeUnits:       aws.String(mediaconvert.H264GopSizeUnitsAuto),
 										RateControlMode:    aws.String("QVBR"),
 										SceneChangeDetect:  aws.String("TRANSITION_DETECTION"),
 										QualityTuningLevel: aws.String("MULTI_PASS_HQ"),
