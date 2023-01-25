@@ -133,15 +133,12 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	probe, err := video.ProbeFileFromOS(f)
 	if err != nil {
 		log.Log(args.RequestID, "error probing MP4 input file from S3", "err", fmt.Sprintf("%s", err))
+		return err
 	}
 
 	bitrate, err := strconv.ParseInt(probe.FirstVideoStream().BitRate, 10, 64)
 	if err != nil {
 		log.Log(args.RequestID, "error parsing bitrate from probed data", "err", fmt.Sprintf("%s", err))
-	}
-	fsize, err := strconv.ParseInt(probe.Format.Size, 10, 64)
-	if err != nil {
-		log.Log(args.RequestID, "error parsing size from probed data", "err", fmt.Sprintf("%s", err))
 	}
 	frameRate := probe.FirstVideoStream().AvgFrameRate
 	parts := strings.Split(frameRate, "/")
@@ -168,7 +165,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 				Type:      "video",
 				Codec:     probe.FirstVideoStream().CodecName,
 				Bitrate:   bitrate,
-				SizeBytes: fsize,
+				SizeBytes: size,
 				VideoTrack: video.VideoTrack{
 					Width:  int64(probe.FirstVideoStream().Width),
 					Height: int64(probe.FirstVideoStream().Height),
@@ -184,9 +181,6 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	mcArgs.InputFileInfo = iv
 	mcArgs.InputFile = srcInputFile
 	mcArgs.HLSOutputFile = mc.s3TransferBucket.JoinPath(mcOutputRelPath)
-
-	fmt.Println("mcArgs.....", mcArgs)
-	//return err
 
 	err = mc.coreAwsTranscode(ctx, mcArgs, true)
 	if err == ErrJobAcceleration {

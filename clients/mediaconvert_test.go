@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"github.com/livepeer/catalyst-api/video"
+	"io"
 	"net/url"
 	"os"
-	"io"
 	"path"
 	"testing"
 	"time"
@@ -49,23 +49,23 @@ func TestOnlyS3URLsToAWSClient(t *testing.T) {
 		},
 	})
 	require.ErrorContains(err, "secret error")
-/*
-	// Check that the file was copied to the osTransferBucketURL folder
-	content, err := os.Open(path.Join(transferDir, "input/1234/video"))
-	require.NoError(err)
+	/*
+		// Check that the file was copied to the osTransferBucketURL folder
+		content, err := os.Open(path.Join(transferDir, "input/1234/video"))
+		require.NoError(err)
 
-	hashContent := md5.New()
-	require.NoError(err)
-	_, err = io.Copy(hashContent, content)
-	require.NoError(err)
+		hashContent := md5.New()
+		require.NoError(err)
+		_, err = io.Copy(hashContent, content)
+		require.NoError(err)
 
-	hashInputFile := md5.New()
-	require.NoError(err)
-	_, err = io.Copy(hashInputFile, f)
-	require.NoError(err)
+		hashInputFile := md5.New()
+		require.NoError(err)
+		_, err = io.Copy(hashInputFile, f)
+		require.NoError(err)
 
-	require.Equal(hashInputFile, hashContent)
-*/
+		require.Equal(hashInputFile, hashContent)
+	*/
 }
 
 func TestReportsMediaConvertProgress(t *testing.T) {
