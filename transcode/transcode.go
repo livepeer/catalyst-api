@@ -3,7 +3,6 @@ package transcode
 import (
 	"bytes"
 	"fmt"
-	"github.com/livepeer/catalyst-api/video"
 	"net/url"
 	"path"
 	"sync"
@@ -13,6 +12,7 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
+	"github.com/livepeer/catalyst-api/video"
 )
 
 type TranscodeSegmentRequest struct {

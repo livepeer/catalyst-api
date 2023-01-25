@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/livepeer/catalyst-api/video"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -25,6 +24,7 @@ import (
 	"github.com/livepeer/catalyst-api/mokeypatching"
 	"github.com/livepeer/catalyst-api/pipeline"
 	"github.com/livepeer/catalyst-api/transcode"
+	"github.com/livepeer/catalyst-api/video"
 	"github.com/livepeer/go-tools/drivers"
 	"github.com/stretchr/testify/require"
 )

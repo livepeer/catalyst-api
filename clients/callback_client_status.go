@@ -3,9 +3,9 @@ package clients
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/livepeer/catalyst-api/video"
 
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/video"
 )
 
 // An enum of potential statuses a Transcode job can have

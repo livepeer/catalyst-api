@@ -128,17 +128,16 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	// temporarily probe input mp4 here...
 	f, err := DownloadOSURL(mc.osTransferBucketURL.JoinPath(mcInputRelPath).String())
 	if err != nil {
-		log.Log(args.RequestID, "error downloading MP4 input file from S3 for probing", "err", fmt.Sprintf("%s", err))
+		return fmt.Errorf("error downloading MP4 input file from S3 for probing: %w", err)
 	}
 	probe, err := video.ProbeFileFromOS(f)
 	if err != nil {
-		log.Log(args.RequestID, "error probing MP4 input file from S3", "err", fmt.Sprintf("%s", err))
-		return err
+		return fmt.Errorf("error probing MP4 input file from S3: %w", err)
 	}
 
 	bitrate, err := strconv.ParseInt(probe.FirstVideoStream().BitRate, 10, 64)
 	if err != nil {
-		log.Log(args.RequestID, "error parsing bitrate from probed data", "err", fmt.Sprintf("%s", err))
+		return fmt.Errorf("error parsing bitrate from probed data: %w", err)
 	}
 	frameRate := probe.FirstVideoStream().AvgFrameRate
 	parts := strings.Split(frameRate, "/")

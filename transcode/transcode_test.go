@@ -3,7 +3,6 @@ package transcode
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/livepeer/catalyst-api/video"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/video"
 	"github.com/stretchr/testify/require"
 )
 

@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/livepeer/catalyst-api/video"
 	"net/url"
 	"time"
 
 	"github.com/livepeer/catalyst-api/clients"
+	"github.com/livepeer/catalyst-api/video"
 )
 
 type external struct {

@@ -2,7 +2,6 @@ package clients
 
 import (
 	"fmt"
-	"github.com/livepeer/catalyst-api/video"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/livepeer/catalyst-api/metrics"
+	"github.com/livepeer/catalyst-api/video"
 )
 
 // Broadcaster-node already has built-in retry logic. We want to rely on that and set generous timeout here:

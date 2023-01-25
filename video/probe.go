@@ -2,10 +2,10 @@ package video
 
 import (
 	"context"
-	//	"fmt"
-	"gopkg.in/vansante/go-ffprobe.v2"
 	"io"
 	"time"
+
+	"gopkg.in/vansante/go-ffprobe.v2"
 )
 
 /*

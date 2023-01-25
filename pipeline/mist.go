@@ -2,7 +2,6 @@ package pipeline
 
 import (
 	"fmt"
-	"github.com/livepeer/catalyst-api/video"
 	"math"
 	"mime"
 	"net/http"
@@ -15,6 +14,7 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/transcode"
+	"github.com/livepeer/catalyst-api/video"
 )
 
 type mist struct {

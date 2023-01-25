@@ -3,11 +3,11 @@ package clients
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/livepeer/catalyst-api/video"
 	"io"
 	"net/url"
 
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/video"
 )
 
 // Currently only implemented by LocalBroadcasterClient

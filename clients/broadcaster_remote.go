@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/livepeer/catalyst-api/video"
 	"io"
 	"math/rand"
 	"net/http"
@@ -14,6 +13,7 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
+	"github.com/livepeer/catalyst-api/video"
 )
 
 type RemoteBroadcasterClient struct {

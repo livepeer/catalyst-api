@@ -3,7 +3,6 @@ package pipeline
 import (
 	"database/sql"
 	"fmt"
-	"github.com/livepeer/catalyst-api/video"
 	"net/url"
 	"os"
 	"path"
@@ -18,6 +17,7 @@ import (
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
+	"github.com/livepeer/catalyst-api/video"
 )
 
 // Strategy indicates how the pipelines should be coordinated. Mainly changes

@@ -3,8 +3,9 @@ package clients
 import (
 	"context"
 	"fmt"
-	"github.com/livepeer/catalyst-api/video"
 	"net/url"
+
+	"github.com/livepeer/catalyst-api/video"
 )
 
 type TranscodeJobArgs struct {

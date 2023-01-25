@@ -2,19 +2,19 @@ package clients
 
 import (
 	"context"
+	"crypto/md5"
 	"errors"
-	"github.com/livepeer/catalyst-api/video"
 	"io"
 	"net/url"
 	"os"
 	"path"
 	"testing"
 	"time"
-	//"crypto/md5"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/mediaconvert"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/video"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,7 +36,7 @@ func TestOnlyS3URLsToAWSClient(t *testing.T) {
 			return nil, errors.New("secret error")
 		},
 	}
-	mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
+	mc, f, transferDir, cleanup := setupTestMediaConvert(t, awsStub)
 	defer cleanup()
 	sz, err := f.Stat()
 	require.NoError(err)
@@ -49,23 +49,21 @@ func TestOnlyS3URLsToAWSClient(t *testing.T) {
 		},
 	})
 	require.ErrorContains(err, "secret error")
-	/*
-		// Check that the file was copied to the osTransferBucketURL folder
-		content, err := os.Open(path.Join(transferDir, "input/1234/video"))
-		require.NoError(err)
+	// Check that the file was copied to the osTransferBucketURL folder
+	content, err := os.Open(path.Join(transferDir, "input/1234/video"))
+	require.NoError(err)
 
-		hashContent := md5.New()
-		require.NoError(err)
-		_, err = io.Copy(hashContent, content)
-		require.NoError(err)
+	hashContent := md5.New()
+	_, err = io.Copy(hashContent, content)
+	require.NoError(err)
 
-		hashInputFile := md5.New()
-		require.NoError(err)
-		_, err = io.Copy(hashInputFile, f)
-		require.NoError(err)
+	inputFile, err := os.Open(f.Name())
+	require.NoError(err)
+	hashInputFile := md5.New()
+	_, err = io.Copy(hashInputFile, inputFile)
+	require.NoError(err)
 
-		require.Equal(hashInputFile, hashContent)
-	*/
+	require.Equal(hashInputFile, hashContent)
 }
 
 func TestReportsMediaConvertProgress(t *testing.T) {

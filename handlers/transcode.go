@@ -2,13 +2,13 @@ package handlers
 
 import (
 	"encoding/json"
-	"github.com/livepeer/catalyst-api/video"
 	"io"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/transcode"
+	"github.com/livepeer/catalyst-api/video"
 	"github.com/xeipuuv/gojsonschema"
 )
 
