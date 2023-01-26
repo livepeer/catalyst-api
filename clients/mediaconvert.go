@@ -362,7 +362,7 @@ func output(container, name string, height, maxBitrate int64) *mediaconvert.Outp
 			CodecSettings: &mediaconvert.VideoCodecSettings{
 				Codec: aws.String("H_264"),
 				H264Settings: &mediaconvert.H264Settings{
-          GopSizeUnits:       aws.String(mediaconvert.H264GopSizeUnitsAuto),
+					GopSizeUnits:       aws.String(mediaconvert.H264GopSizeUnitsAuto),
 					MaxBitrate:         aws.Int64(maxBitrate),
 					RateControlMode:    aws.String("QVBR"),
 					SceneChangeDetect:  aws.String("TRANSITION_DETECTION"),
