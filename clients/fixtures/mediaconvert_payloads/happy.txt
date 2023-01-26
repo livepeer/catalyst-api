@@ -44,6 +44,7 @@
                 Codec: "H_264",
                 H264Settings: {
                   FramerateControl: "INITIALIZE_FROM_SOURCE",
+                  GopSizeUnits: "AUTO",
                   MaxBitrate: 800000,
                   QualityTuningLevel: "MULTI_PASS_HQ",
                   RateControlMode: "QVBR",
@@ -72,6 +73,7 @@
                 Codec: "H_264",
                 H264Settings: {
                   FramerateControl: "INITIALIZE_FROM_SOURCE",
+                  GopSizeUnits: "AUTO",
                   MaxBitrate: 3000000,
                   QualityTuningLevel: "MULTI_PASS_HQ",
                   RateControlMode: "QVBR",
@@ -115,6 +117,7 @@
                 Codec: "H_264",
                 H264Settings: {
                   FramerateControl: "INITIALIZE_FROM_SOURCE",
+                  GopSizeUnits: "AUTO",
                   MaxBitrate: 800000,
                   QualityTuningLevel: "MULTI_PASS_HQ",
                   RateControlMode: "QVBR",
@@ -143,6 +146,7 @@
                 Codec: "H_264",
                 H264Settings: {
                   FramerateControl: "INITIALIZE_FROM_SOURCE",
+                  GopSizeUnits: "AUTO",
                   MaxBitrate: 3000000,
                   QualityTuningLevel: "MULTI_PASS_HQ",
                   RateControlMode: "QVBR",
