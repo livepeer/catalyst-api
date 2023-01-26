@@ -24,7 +24,6 @@ import (
 	"github.com/livepeer/catalyst-api/mokeypatching"
 	"github.com/livepeer/catalyst-api/pipeline"
 	"github.com/livepeer/catalyst-api/transcode"
-	"github.com/livepeer/catalyst-api/video"
 	"github.com/livepeer/go-tools/drivers"
 	"github.com/stretchr/testify/require"
 )
@@ -134,7 +133,7 @@ func TestVODHandlerProfiles(t *testing.T) {
 	inputUrl, outputUrl := createTempManifests(t)
 
 	// Define profiles
-	profiles := []video.EncodedProfile{
+	profiles := []clients.EncodedProfile{
 		{Name: "p360", Width: 640, Height: 360, Bitrate: 200000, FPS: 24},
 		{Name: "p240", Width: 427, Height: 240, Bitrate: 100000, FPS: 24},
 	}

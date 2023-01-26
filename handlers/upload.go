@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/pipeline"
-	"github.com/livepeer/catalyst-api/video"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -37,8 +37,8 @@ type UploadVODRequest struct {
 	AccessToken     string `json:"accessToken"`
 	TranscodeAPIUrl string `json:"transcodeAPIUrl"`
 	// Forwarded to transcoding stage:
-	Profiles         []video.EncodedProfile `json:"profiles"`
-	PipelineStrategy pipeline.Strategy      `json:"pipeline_strategy"`
+	Profiles         []clients.EncodedProfile `json:"profiles"`
+	PipelineStrategy pipeline.Strategy        `json:"pipeline_strategy"`
 }
 
 type UploadVODResponse struct {

@@ -14,14 +14,13 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
-	"github.com/livepeer/catalyst-api/video"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/stretchr/testify/require"
 )
 
 var (
 	testHandlerResult = &HandlerOutput{
-		Result: &UploadJobResult{video.InputVideo{}, []clients.OutputVideo{}},
+		Result: &UploadJobResult{clients.InputVideo{}, []clients.OutputVideo{}},
 	}
 	testJob = UploadJobPayload{
 		RequestID:   "123",

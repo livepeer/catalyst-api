@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/livepeer/catalyst-api/metrics"
-	"github.com/livepeer/catalyst-api/video"
 )
 
 // Broadcaster-node already has built-in retry logic. We want to rely on that and set generous timeout here:
@@ -29,13 +28,13 @@ type RenditionSegment struct {
 }
 
 type createStreamPayload struct {
-	Name     string                 `json:"name,omitempty"`
-	Profiles []video.EncodedProfile `json:"profiles"`
+	Name     string           `json:"name,omitempty"`
+	Profiles []EncodedProfile `json:"profiles"`
 }
 
 type LivepeerTranscodeConfiguration struct {
-	Profiles          []video.EncodedProfile `json:"profiles"`
-	TimeoutMultiplier int                    `json:"timeoutMultiplier"`
+	Profiles          []EncodedProfile `json:"profiles"`
+	TimeoutMultiplier int              `json:"timeoutMultiplier"`
 }
 
 type Credentials struct {
@@ -51,11 +50,25 @@ type StreamAllocResponse struct {
 	ManifestId string `json:"id"`
 }
 
+type EncodedProfile struct {
+	Name         string `json:"name,omitempty"`
+	Width        int64  `json:"width,omitempty"`
+	Height       int64  `json:"height,omitempty"`
+	Bitrate      int64  `json:"bitrate,omitempty"`
+	FPS          int64  `json:"fps"`
+	FPSDen       int64  `json:"fpsDen,omitempty"`
+	Profile      string `json:"profile,omitempty"`
+	GOP          string `json:"gop,omitempty"`
+	Encoder      string `json:"encoder,omitempty"`
+	ColorDepth   int64  `json:"colorDepth,omitempty"`
+	ChromaFormat int64  `json:"chromaFormat,omitempty"`
+}
+
 var client = newRetryableClient(&http.Client{Timeout: TRANSCODE_TIMEOUT})
 
 // TranscodeSegment sends media to Livepeer network and returns rendition segments
 // If manifestId == "" one will be created and deleted after use, pass real value to reuse across multiple calls
-func transcodeSegment(inputSegment io.Reader, sequenceNumber, mediaDurationMillis int64, broadcasterURL url.URL, manifestId string, profiles []video.EncodedProfile, transcodeConfigHeader string) (TranscodeResult, error) {
+func transcodeSegment(inputSegment io.Reader, sequenceNumber, mediaDurationMillis int64, broadcasterURL url.URL, manifestId string, profiles []EncodedProfile, transcodeConfigHeader string) (TranscodeResult, error) {
 	t := TranscodeResult{}
 
 	// Send segment to be transcoded

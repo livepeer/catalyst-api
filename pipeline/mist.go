@@ -14,7 +14,6 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/transcode"
-	"github.com/livepeer/catalyst-api/video"
 )
 
 type mist struct {
@@ -92,10 +91,6 @@ func isVideo(requestID, source string) bool {
 	if err != nil {
 		log.Log(requestID, "failed to get headers", "err", err.Error())
 		return true // fail open on errors
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		log.Log(requestID, "bad status code", "status", resp.StatusCode)
-		return true // fail open
 	}
 	contentType := resp.Header.Get("Content-Type")
 	mediaType, _, err := mime.ParseMediaType(contentType)
@@ -175,24 +170,24 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 	var audioCodec = ""
 	var videoCodec = ""
 
-	inputInfo := video.InputVideo{
+	inputInfo := clients.InputVideo{
 		Format:    "mp4", // hardcoded as mist stream is in dtsc format.
 		Duration:  float64(p.StreamMediaDurationMillis) / 1000.0,
 		SizeBytes: p.WrittenBytes,
 	}
 	for _, track := range streamInfo.Meta.Tracks {
-		inputInfo.Tracks = append(inputInfo.Tracks, video.InputTrack{
+		inputInfo.Tracks = append(inputInfo.Tracks, clients.InputTrack{
 			Type:         track.Type,
 			Codec:        track.Codec,
 			Bitrate:      int64(track.Bps * 8),
 			DurationSec:  float64(track.Lastms-track.Firstms) / 1000.0,
 			StartTimeSec: float64(track.Firstms) / 1000.0,
-			VideoTrack: video.VideoTrack{
+			VideoTrack: clients.VideoTrack{
 				Width:  int64(track.Width),
 				Height: int64(track.Height),
 				FPS:    float64(track.Fpks) / 1000.0,
 			},
-			AudioTrack: video.AudioTrack{
+			AudioTrack: clients.AudioTrack{
 				Channels:   track.Channels,
 				SampleRate: track.Rate,
 				SampleBits: track.Size,

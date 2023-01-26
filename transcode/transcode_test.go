@@ -16,7 +16,6 @@ import (
 
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
-	"github.com/livepeer/catalyst-api/video"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,7 +34,7 @@ type StubBroadcasterClient struct {
 	tr clients.TranscodeResult
 }
 
-func (c StubBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumber int64, profiles []video.EncodedProfile, durationMillis int64, manifestID string) (clients.TranscodeResult, error) {
+func (c StubBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumber int64, profiles []clients.EncodedProfile, durationMillis int64, manifestID string) (clients.TranscodeResult, error) {
 	return c.tr, nil
 }
 
@@ -87,7 +86,7 @@ func TestItCanTranscode(t *testing.T) {
 	}))
 	defer callbackServer.Close()
 
-	sourceVideoTrack := video.VideoTrack{
+	sourceVideoTrack := clients.VideoTrack{
 		Width:  2020,
 		Height: 2020,
 	}
@@ -119,11 +118,11 @@ func TestItCanTranscode(t *testing.T) {
 			},
 		},
 		"streamName",
-		video.InputVideo{
+		clients.InputVideo{
 			Duration:  123.0,
 			Format:    "some-format",
 			SizeBytes: 123,
-			Tracks: []video.InputTrack{
+			Tracks: []clients.InputTrack{
 				{
 					Type:       "video",
 					VideoTrack: sourceVideoTrack,

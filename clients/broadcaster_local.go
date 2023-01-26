@@ -7,13 +7,12 @@ import (
 	"net/url"
 
 	"github.com/livepeer/catalyst-api/config"
-	"github.com/livepeer/catalyst-api/video"
 )
 
 // Currently only implemented by LocalBroadcasterClient
 // TODO: Try to come up with a unified interface across Local and Remote
 type BroadcasterClient interface {
-	TranscodeSegment(segment io.Reader, sequenceNumber int64, profiles []video.EncodedProfile, durationMillis int64, manifestID string) (TranscodeResult, error)
+	TranscodeSegment(segment io.Reader, sequenceNumber int64, profiles []EncodedProfile, durationMillis int64, manifestID string) (TranscodeResult, error)
 }
 
 type LocalBroadcasterClient struct {
@@ -30,7 +29,7 @@ func NewLocalBroadcasterClient(broadcasterURL string) (LocalBroadcasterClient, e
 	}, nil
 }
 
-func (c LocalBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumber int64, profiles []video.EncodedProfile, durationMillis int64, manifestID string) (TranscodeResult, error) {
+func (c LocalBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumber int64, profiles []EncodedProfile, durationMillis int64, manifestID string) (TranscodeResult, error) {
 	conf := LivepeerTranscodeConfiguration{
 		TimeoutMultiplier: 10,
 	}
