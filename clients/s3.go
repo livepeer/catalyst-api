@@ -8,6 +8,7 @@ import (
 
 type S3Signer interface {
 	PresignS3(bucket, key string) (string, error)
+	GetObject(bucket, key string) (*s3.GetObjectOutput, error)
 }
 
 type S3Client struct {
@@ -20,4 +21,11 @@ func (c *S3Client) PresignS3(bucket, key string) (string, error) {
 		Key:    &key,
 	})
 	return req.Presign(5 * time.Minute)
+}
+
+func (c *S3Client) GetObject(bucket, key string) (*s3.GetObjectOutput, error) {
+	return c.s3.GetObject(&s3.GetObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+	})
 }

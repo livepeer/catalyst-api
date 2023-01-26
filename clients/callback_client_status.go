@@ -91,7 +91,7 @@ type TranscodeStatusMessage struct {
 
 type OutputVideoFile struct {
 	Type      string `json:"type"`
-	SizeBytes int    `json:"size"`
+	SizeBytes int64  `json:"size"`
 	Location  string `json:"location"`
 }
 
