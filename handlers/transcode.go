@@ -6,9 +6,9 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/transcode"
+	"github.com/livepeer/catalyst-api/video"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -38,7 +38,7 @@ func (d *CatalystAPIHandlersCollection) TranscodeSegment() httprouter.Handle {
 
 		// Note: This is no longer used pipeline stage
 		// TODO: Revisit later with better mistserver integration
-		_, _, err = transcode.RunTranscodeProcess(transcodeRequest, "", clients.InputVideo{})
+		_, _, err = transcode.RunTranscodeProcess(transcodeRequest, "", video.InputVideo{})
 		if err != nil {
 			errors.WriteHTTPInternalServerError(w, "Error running Transcode process", err)
 		}

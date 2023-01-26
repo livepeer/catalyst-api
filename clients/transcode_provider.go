@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+
+	"github.com/livepeer/catalyst-api/video"
 )
 
 type TranscodeJobArgs struct {
@@ -14,6 +16,9 @@ type TranscodeJobArgs struct {
 	RequestID string
 	// Function that should be called every so often with the progress of the job.
 	ReportProgress func(completionRatio float64)
+	// Input File info used to by transcoder provider(s) to set transcode options
+	InputFileInfo video.InputVideo
+	Profiles      []video.EncodedProfile
 
 	// Collect size of an asset
 	CollectSourceSize        func(size int64)

@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,15 +17,19 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/mediaconvert"
+	"github.com/hashicorp/go-retryablehttp"
 	xerrors "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/video"
 	"github.com/livepeer/go-tools/drivers"
 	"golang.org/x/sync/errgroup"
 )
 
 var pollDelay = 10 * time.Second
+var retryableHttpClient = newRetryableHttpClient()
 
 const rateLimitedPollDelay = 15 * time.Second
+const maxMP4OutDuration = 2 * time.Minute
 
 // https://docs.aws.amazon.com/mediaconvert/latest/ug/mediaconvert_error_codes.html
 var errCodesAcceleration = []int64{
@@ -104,7 +110,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	var srcInputFile *url.URL
 
 	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", mc.s3TransferBucket.JoinPath(mcInputRelPath), "filename", mcInputRelPath)
-	size, err := copyFile(ctx, args.InputFile.String(), mc.osTransferBucketURL.String(), mcInputRelPath)
+	size, err := copyFile(ctx, args.InputFile.String(), mc.osTransferBucketURL.String(), mcInputRelPath, args.RequestID)
 	if err != nil {
 		log.Log(args.RequestID, "error copying input file to S3", "bytes", size, "err", fmt.Sprintf("%s", err))
 		if args.InputFile.Scheme == "http" || args.InputFile.Scheme == "https" {
@@ -119,8 +125,59 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 		srcInputFile = mc.s3TransferBucket.JoinPath(mcInputRelPath)
 	}
 
+	// temporarily probe input mp4 here...
+	f, err := DownloadOSURL(mc.osTransferBucketURL.JoinPath(mcInputRelPath).String())
+	if err != nil {
+		return fmt.Errorf("error downloading MP4 input file from S3 for probing: %w", err)
+	}
+	probe, err := video.ProbeFileFromOS(f)
+	if err != nil {
+		return fmt.Errorf("error probing MP4 input file from S3: %w", err)
+	}
+
+	bitrate, err := strconv.ParseInt(probe.FirstVideoStream().BitRate, 10, 64)
+	if err != nil {
+		return fmt.Errorf("error parsing bitrate from probed data: %w", err)
+	}
+	frameRate := probe.FirstVideoStream().AvgFrameRate
+	parts := strings.Split(frameRate, "/")
+	var fps float64
+	if len(parts) > 1 {
+		x, err := strconv.ParseFloat(parts[0], 64)
+		if err != nil {
+			log.Log(args.RequestID, "error parsing fps from probed data", "err", fmt.Sprintf("%s", err))
+		}
+		y, err := strconv.ParseFloat(parts[1], 64)
+		if err != nil {
+			log.Log(args.RequestID, "error parsing fps from probed data", "err", fmt.Sprintf("%s", err))
+		}
+		fps = x / y
+	} else {
+		fps, err = strconv.ParseFloat(frameRate, 64)
+		if err != nil {
+			log.Log(args.RequestID, "error parsing fps from probed data", "err", fmt.Sprintf("%s", err))
+		}
+	}
+	iv := video.InputVideo{
+		Tracks: []video.InputTrack{
+			{
+				Type:      "video",
+				Codec:     probe.FirstVideoStream().CodecName,
+				Bitrate:   bitrate,
+				SizeBytes: size,
+				VideoTrack: video.VideoTrack{
+					Width:  int64(probe.FirstVideoStream().Width),
+					Height: int64(probe.FirstVideoStream().Height),
+					FPS:    fps,
+				},
+			},
+		},
+		Duration: probe.Format.Duration().Seconds(),
+	}
+
 	args.CollectSourceSize(size)
 	mcArgs := args
+	mcArgs.InputFileInfo = iv
 	mcArgs.InputFile = srcInputFile
 	mcArgs.HLSOutputFile = mc.s3TransferBucket.JoinPath(mcOutputRelPath)
 
@@ -143,15 +200,31 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 
 // This is the function that does the core AWS workflow for transcoding a file.
 // It expects args to be directly compatible with AWS (i.e. S3-only files).
-func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobArgs, accelerated bool) error {
+func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobArgs, accelerated bool) (err error) {
 	log.Log(args.RequestID, "Creating AWS MediaConvert job", "input", args.InputFile, "output", args.HLSOutputFile, "accelerated", accelerated)
-	payload := createJobPayload(args.InputFile.String(), args.HLSOutputFile.String(), mc.role, accelerated)
+
+	transcodeProfiles := args.Profiles
+	if len(transcodeProfiles) == 0 {
+		transcodeProfiles, err = video.GetPlaybackProfiles(args.InputFileInfo)
+		if err != nil {
+			return fmt.Errorf("failed to get playback profiles: %w", err)
+		}
+	}
+
+	hlsOut := args.HLSOutputFile.String()
+	mp4Out := ""
+	if args.InputFileInfo.Duration <= maxMP4OutDuration.Seconds() {
+		pathParts := strings.Split(hlsOut, string(filepath.Separator))
+		pathParts[len(pathParts)-1] = "static"
+		mp4Out = strings.Join(pathParts, string(filepath.Separator))
+	}
+	payload := createJobPayload(args.InputFile.String(), hlsOut, mp4Out, mc.role, accelerated, transcodeProfiles)
 	job, err := mc.client.CreateJob(payload)
 	if err != nil {
 		return fmt.Errorf("error creting mediaconvert job: %w", err)
 	}
 	jobID := job.Job.Id
-	log.AddContext("mediaconvert_job_id", aws.StringValue(jobID))
+	log.AddContext(args.RequestID, "mediaconvert_job_id", aws.StringValue(jobID))
 	log.Log(args.RequestID, "Created MediaConvert job")
 
 	// poll the job until completion or error
@@ -205,7 +278,7 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 	}
 }
 
-func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *mediaconvert.CreateJobInput {
+func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, accelerated bool, profiles []video.EncodedProfile) *mediaconvert.CreateJobInput {
 	var acceleration *mediaconvert.AccelerationSettings
 	if accelerated {
 		acceleration = &mediaconvert.AccelerationSettings{
@@ -229,59 +302,7 @@ func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *
 					},
 				},
 			},
-			OutputGroups: []*mediaconvert.OutputGroup{
-				{
-					Name: aws.String("Apple HLS"),
-					OutputGroupSettings: &mediaconvert.OutputGroupSettings{
-						HlsGroupSettings: &mediaconvert.HlsGroupSettings{
-							Destination:      aws.String(hlsOutputFile),
-							MinSegmentLength: aws.Int64(0),
-							SegmentLength:    aws.Int64(10),
-						},
-						Type: aws.String("HLS_GROUP_SETTINGS"),
-					},
-					Outputs: []*mediaconvert.Output{
-						{
-							VideoDescription: &mediaconvert.VideoDescription{
-								CodecSettings: &mediaconvert.VideoCodecSettings{
-									Codec: aws.String("H_264"),
-									H264Settings: &mediaconvert.H264Settings{
-										GopSizeUnits:       aws.String(mediaconvert.H264GopSizeUnitsAuto),
-										RateControlMode:    aws.String("QVBR"),
-										SceneChangeDetect:  aws.String("TRANSITION_DETECTION"),
-										QualityTuningLevel: aws.String("MULTI_PASS_HQ"),
-										FramerateControl:   aws.String("INITIALIZE_FROM_SOURCE"),
-									}}},
-							AudioDescriptions: []*mediaconvert.AudioDescription{
-								{
-									CodecSettings: &mediaconvert.AudioCodecSettings{
-										Codec: aws.String("AAC"),
-										AacSettings: &mediaconvert.AacSettings{
-											Bitrate:    aws.Int64(96000),
-											CodingMode: aws.String("CODING_MODE_2_0"),
-											SampleRate: aws.Int64(48000),
-										},
-									},
-								},
-							},
-							OutputSettings: &mediaconvert.OutputSettings{
-								HlsSettings: &mediaconvert.HlsSettings{},
-							},
-							ContainerSettings: &mediaconvert.ContainerSettings{
-								Container:    aws.String("M3U8"),
-								M3u8Settings: &mediaconvert.M3u8Settings{},
-							},
-						},
-					},
-					CustomName: aws.String("hls"),
-					AutomatedEncodingSettings: &mediaconvert.AutomatedEncodingSettings{
-						AbrSettings: &mediaconvert.AutomatedAbrSettings{
-							MaxAbrBitrate: aws.Int64(8000000),
-							MaxRenditions: aws.Int64(3),
-						},
-					},
-				},
-			},
+			OutputGroups: outputGroups(hlsOutputFile, mp4OutputFile, profiles),
 			TimecodeConfig: &mediaconvert.TimecodeConfig{
 				Source: aws.String("ZEROBASED"),
 			},
@@ -291,10 +312,88 @@ func createJobPayload(inputFile, hlsOutputFile, role string, accelerated bool) *
 	}
 }
 
-func getFile(ctx context.Context, url string) (io.ReadCloser, error) {
+func outputGroups(hlsOutputFile, mp4OutputFile string, profiles []video.EncodedProfile) []*mediaconvert.OutputGroup {
+	groups := []*mediaconvert.OutputGroup{
+		{
+			Name: aws.String("Apple HLS"),
+			OutputGroupSettings: &mediaconvert.OutputGroupSettings{
+				HlsGroupSettings: &mediaconvert.HlsGroupSettings{
+					Destination:      aws.String(hlsOutputFile),
+					MinSegmentLength: aws.Int64(0),
+					SegmentLength:    aws.Int64(10),
+				},
+				Type: aws.String("HLS_GROUP_SETTINGS"),
+			},
+			Outputs:    outputs("M3U8", profiles),
+			CustomName: aws.String("hls"),
+		},
+	}
+	if mp4OutputFile != "" {
+		groups = append(groups, &mediaconvert.OutputGroup{
+			Name: aws.String("Static MP4 Output"),
+			OutputGroupSettings: &mediaconvert.OutputGroupSettings{
+				FileGroupSettings: &mediaconvert.FileGroupSettings{
+					Destination: aws.String(mp4OutputFile),
+					DestinationSettings: &mediaconvert.DestinationSettings{
+						S3Settings: &mediaconvert.S3DestinationSettings{},
+					},
+				},
+				Type: aws.String("FILE_GROUP_SETTINGS"),
+			},
+			Outputs:    outputs("MP4", profiles),
+			CustomName: aws.String("mp4"),
+		})
+	}
+	return groups
+}
+
+func outputs(container string, profiles []video.EncodedProfile) []*mediaconvert.Output {
+	outs := make([]*mediaconvert.Output, 0, len(profiles))
+	for _, profile := range profiles {
+		outs = append(outs, output(container, profile.Name, profile.Height, profile.Bitrate))
+	}
+	return outs
+}
+
+func output(container, name string, height, maxBitrate int64) *mediaconvert.Output {
+	return &mediaconvert.Output{
+		VideoDescription: &mediaconvert.VideoDescription{
+			Height: aws.Int64(height),
+			CodecSettings: &mediaconvert.VideoCodecSettings{
+				Codec: aws.String("H_264"),
+				H264Settings: &mediaconvert.H264Settings{
+          GopSizeUnits:       aws.String(mediaconvert.H264GopSizeUnitsAuto),
+					MaxBitrate:         aws.Int64(maxBitrate),
+					RateControlMode:    aws.String("QVBR"),
+					SceneChangeDetect:  aws.String("TRANSITION_DETECTION"),
+					QualityTuningLevel: aws.String("MULTI_PASS_HQ"),
+					FramerateControl:   aws.String("INITIALIZE_FROM_SOURCE"),
+				}}},
+		AudioDescriptions: []*mediaconvert.AudioDescription{
+			{
+				CodecSettings: &mediaconvert.AudioCodecSettings{
+					Codec: aws.String("AAC"),
+					AacSettings: &mediaconvert.AacSettings{
+						Bitrate:    aws.Int64(96000),
+						CodingMode: aws.String("CODING_MODE_2_0"),
+						SampleRate: aws.Int64(48000),
+					},
+				},
+			},
+		},
+		ContainerSettings: &mediaconvert.ContainerSettings{
+			Container: aws.String(container),
+		},
+		NameModifier: aws.String(name),
+	}
+}
+
+func getFile(ctx context.Context, url, requestID string) (io.ReadCloser, error) {
 	_, err := drivers.ParseOSURL(url, true)
 	if err == nil {
 		return DownloadOSURL(url)
+	} else if IsDStorageResource(url) {
+		return DownloadDStorageFromGatewayList(url, requestID)
 	} else {
 		return getFileHTTP(ctx, url)
 	}
@@ -305,7 +404,7 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, xerrors.Unretriable(fmt.Errorf("error creating http request: %w", err))
 	}
-	resp, err := defaultRetryableHttpClient.Do(req)
+	resp, err := retryableHttpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error on import request: %w", err)
 	}
@@ -320,11 +419,11 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
-func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename string) (int64, error) {
+func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	writtenBytes := ByteAccumulatorWriter{count: 0}
-	c, err := getFile(ctx, sourceURL)
+	c, err := getFile(ctx, sourceURL, requestID)
 	if err != nil {
 		return writtenBytes.count, fmt.Errorf("download error: %w", err)
 	}
@@ -396,7 +495,7 @@ func copyDir(source, dest *url.URL, args TranscodeJobArgs) error {
 				if err := ctx.Err(); err != nil {
 					return err
 				}
-				_, err := copyFile(ctx, source.JoinPath(file).String(), dest.String(), file)
+				_, err := copyFile(ctx, source.JoinPath(file).String(), dest.String(), file, args.RequestID)
 				args.CollectTranscodedSegment()
 				if err != nil {
 					return err
@@ -461,4 +560,18 @@ func contains[T comparable](v T, list []T) bool {
 		}
 	}
 	return false
+}
+
+func newRetryableHttpClient() *http.Client {
+	client := retryablehttp.NewClient()
+	client.RetryMax = 2                          // Retry a maximum of this+1 times
+	client.RetryWaitMin = 200 * time.Millisecond // Wait at least this long between retries
+	client.RetryWaitMax = 1 * time.Second        // Wait at most this long between retries (exponential backoff)
+	client.HTTPClient = &http.Client{
+		// Give up on requests that take more than this long - the file is probably too big for us to process locally if it takes this long
+		// or something else has gone wrong and the request is hanging
+		Timeout: MAX_COPY_DURATION,
+	}
+
+	return client.StandardClient()
 }

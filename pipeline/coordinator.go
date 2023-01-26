@@ -17,6 +17,7 @@ import (
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
+	"github.com/livepeer/catalyst-api/video"
 )
 
 // Strategy indicates how the pipelines should be coordinated. Mainly changes
@@ -56,14 +57,14 @@ type UploadJobPayload struct {
 	TranscodeAPIUrl       string
 	HardcodedBroadcasters string
 	RequestID             string
-	Profiles              []clients.EncodedProfile
+	Profiles              []video.EncodedProfile
 	PipelineStrategy      Strategy
 }
 
 // UploadJobResult is the object returned by the successful execution of an
 // upload job.
 type UploadJobResult struct {
-	InputVideo clients.InputVideo
+	InputVideo video.InputVideo
 	Outputs    []clients.OutputVideo
 }
 
@@ -378,7 +379,7 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo) {
 
 	targetURL := ""
 	if job.TargetURL != nil {
-		targetURL = job.TargetURL.String()
+		targetURL = job.TargetURL.Redacted()
 	}
 	insertDynStmt := `insert into "vod_completed"(
                             "finished_at",
@@ -414,7 +415,7 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo) {
 		job.transcodedSegments,
 		job.sourceBytes,
 		job.sourceDurationMs,
-		job.SourceFile,
+		log.RedactURL(job.SourceFile),
 		targetURL,
 	)
 	if err != nil {

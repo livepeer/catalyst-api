@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/pipeline"
+	"github.com/livepeer/catalyst-api/video"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -37,8 +37,8 @@ type UploadVODRequest struct {
 	AccessToken     string `json:"accessToken"`
 	TranscodeAPIUrl string `json:"transcodeAPIUrl"`
 	// Forwarded to transcoding stage:
-	Profiles         []clients.EncodedProfile `json:"profiles"`
-	PipelineStrategy pipeline.Strategy        `json:"pipeline_strategy"`
+	Profiles         []video.EncodedProfile `json:"profiles"`
+	PipelineStrategy pipeline.Strategy      `json:"pipeline_strategy"`
 }
 
 type UploadVODResponse struct {
@@ -103,12 +103,6 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	var requestID = config.RandomTrailer(8)
 	log.AddContext(requestID, "source", uploadVODRequest.Url)
 
-	httpURL, err := dStorageToHTTP(uploadVODRequest.Url)
-	if err != nil {
-		return false, errors.WriteHTTPBadRequest(w, "error in applyInputGateway()", err)
-	}
-	uploadVODRequest.Url = httpURL
-
 	// find source segment URL
 	var tURL string
 	for _, o := range uploadVODRequest.OutputLocations {
@@ -130,6 +124,8 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	if strat := uploadVODRequest.PipelineStrategy; strat != "" && !strat.IsValid() {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("invalid value provided for pipeline strategy: %q", uploadVODRequest.PipelineStrategy))
 	}
+
+	log.Log(requestID, "Received VOD Upload request", "pipeline_strategy", uploadVODRequest.PipelineStrategy, "num_profiles", len(uploadVODRequest.Profiles))
 
 	// Once we're happy with the request, do the rest of the Segmenting stage asynchronously to allow us to
 	// from the API call and free up the HTTP connection
@@ -156,22 +152,4 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	}
 
 	return true, errors.APIError{}
-}
-
-const SCHEME_IPFS = "ipfs"
-const SCHEME_ARWEAVE = "ar"
-
-func dStorageToHTTP(inputUrl string) (string, error) {
-	sourceUrl, err := url.Parse(inputUrl)
-	if err != nil {
-		return inputUrl, err
-	}
-
-	switch sourceUrl.Scheme {
-	case SCHEME_IPFS:
-		return fmt.Sprintf("https://cloudflare-ipfs.com/ipfs/%s", sourceUrl.Host), nil
-	case SCHEME_ARWEAVE:
-		return fmt.Sprintf("https://arweave.net/%s", sourceUrl.Host), nil
-	}
-	return inputUrl, nil
 }

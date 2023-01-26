@@ -31,6 +31,12 @@ jobs:
         if: steps.go.outputs.cache-hit != 'true'
         run: go mod download
 
+      - name: Install dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: ffmpeg
+          version: 1.0
+
       - name: go fmt
         run: |
           go fmt ./...
