@@ -135,12 +135,11 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 		srcInputFile = mc.s3TransferBucket.JoinPath(mcInputRelPath)
 	}
 
+	// temporarily probe input mp4 here...
 	presigned, err := mc.s3.PresignS3(mc.s3TransferBucket.Host, mcInputRelPath)
 	if err != nil {
 		return fmt.Errorf("error creating s3 url: %w", err)
 	}
-	log.Log(args.RequestID, "copied", "url", srcInputFile.String(), "presign", presigned, "relpath", mcInputRelPath, "os", mc.osTransferBucketURL, "s3", mc.s3TransferBucket)
-	// temporarily probe input mp4 here...
 	probe, err := video.ProbeURL(presigned)
 	if err != nil {
 		return fmt.Errorf("error probing MP4 input file from S3: %w", err)
