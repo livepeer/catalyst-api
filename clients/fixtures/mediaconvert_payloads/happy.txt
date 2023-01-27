@@ -45,7 +45,7 @@
                 H264Settings: {
                   FramerateControl: "INITIALIZE_FROM_SOURCE",
                   GopSizeUnits: "AUTO",
-                  MaxBitrate: 800000,
+                  MaxBitrate: 1000000,
                   QualityTuningLevel: "MULTI_PASS_HQ",
                   RateControlMode: "QVBR",
                   SceneChangeDetect: "TRANSITION_DETECTION"
@@ -74,7 +74,7 @@
                 H264Settings: {
                   FramerateControl: "INITIALIZE_FROM_SOURCE",
                   GopSizeUnits: "AUTO",
-                  MaxBitrate: 3000000,
+                  MaxBitrate: 4000000,
                   QualityTuningLevel: "MULTI_PASS_HQ",
                   RateControlMode: "QVBR",
                   SceneChangeDetect: "TRANSITION_DETECTION"
@@ -118,7 +118,7 @@
                 H264Settings: {
                   FramerateControl: "INITIALIZE_FROM_SOURCE",
                   GopSizeUnits: "AUTO",
-                  MaxBitrate: 800000,
+                  MaxBitrate: 1000000,
                   QualityTuningLevel: "MULTI_PASS_HQ",
                   RateControlMode: "QVBR",
                   SceneChangeDetect: "TRANSITION_DETECTION"
@@ -147,7 +147,7 @@
                 H264Settings: {
                   FramerateControl: "INITIALIZE_FROM_SOURCE",
                   GopSizeUnits: "AUTO",
-                  MaxBitrate: 3000000,
+                  MaxBitrate: 4000000,
                   QualityTuningLevel: "MULTI_PASS_HQ",
                   RateControlMode: "QVBR",
                   SceneChangeDetect: "TRANSITION_DETECTION"
