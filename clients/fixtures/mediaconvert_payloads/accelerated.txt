@@ -1,0 +1,167 @@
+{
+  AccelerationSettings: {
+    Mode: "PREFERRED"
+  },
+  Role: "role",
+  Settings: {
+    Inputs: [{
+        AudioSelectors: {
+          Audio Selector 1: {
+            DefaultSelection: "DEFAULT"
+          }
+        },
+        FileInput: "input",
+        TimecodeSource: "ZEROBASED",
+        VideoSelector: {
+          Rotate: "AUTO"
+        }
+      }],
+    OutputGroups: [{
+        CustomName: "hls",
+        Name: "Apple HLS",
+        OutputGroupSettings: {
+          HlsGroupSettings: {
+            Destination: "output",
+            MinSegmentLength: 0,
+            SegmentLength: 10
+          },
+          Type: "HLS_GROUP_SETTINGS"
+        },
+        Outputs: [{
+            AudioDescriptions: [{
+                CodecSettings: {
+                  AacSettings: {
+                    Bitrate: 96000,
+                    CodingMode: "CODING_MODE_2_0",
+                    SampleRate: 48000
+                  },
+                  Codec: "AAC"
+                }
+              }],
+            ContainerSettings: {
+              Container: "M3U8"
+            },
+            NameModifier: "360p0",
+            VideoDescription: {
+              CodecSettings: {
+                Codec: "H_264",
+                H264Settings: {
+                  FramerateControl: "INITIALIZE_FROM_SOURCE",
+                  GopSizeUnits: "AUTO",
+                  MaxBitrate: 800000,
+                  QualityTuningLevel: "MULTI_PASS_HQ",
+                  RateControlMode: "QVBR",
+                  SceneChangeDetect: "TRANSITION_DETECTION"
+                }
+              },
+              Height: 360
+            }
+          },{
+            AudioDescriptions: [{
+                CodecSettings: {
+                  AacSettings: {
+                    Bitrate: 96000,
+                    CodingMode: "CODING_MODE_2_0",
+                    SampleRate: 48000
+                  },
+                  Codec: "AAC"
+                }
+              }],
+            ContainerSettings: {
+              Container: "M3U8"
+            },
+            NameModifier: "720p0",
+            VideoDescription: {
+              CodecSettings: {
+                Codec: "H_264",
+                H264Settings: {
+                  FramerateControl: "INITIALIZE_FROM_SOURCE",
+                  GopSizeUnits: "AUTO",
+                  MaxBitrate: 3000000,
+                  QualityTuningLevel: "MULTI_PASS_HQ",
+                  RateControlMode: "QVBR",
+                  SceneChangeDetect: "TRANSITION_DETECTION"
+                }
+              },
+              Height: 720
+            }
+          }]
+      },{
+        CustomName: "mp4",
+        Name: "Static MP4 Output",
+        OutputGroupSettings: {
+          FileGroupSettings: {
+            Destination: "mp4out",
+            DestinationSettings: {
+              S3Settings: {
+
+              }
+            }
+          },
+          Type: "FILE_GROUP_SETTINGS"
+        },
+        Outputs: [{
+            AudioDescriptions: [{
+                CodecSettings: {
+                  AacSettings: {
+                    Bitrate: 96000,
+                    CodingMode: "CODING_MODE_2_0",
+                    SampleRate: 48000
+                  },
+                  Codec: "AAC"
+                }
+              }],
+            ContainerSettings: {
+              Container: "MP4"
+            },
+            NameModifier: "360p0",
+            VideoDescription: {
+              CodecSettings: {
+                Codec: "H_264",
+                H264Settings: {
+                  FramerateControl: "INITIALIZE_FROM_SOURCE",
+                  GopSizeUnits: "AUTO",
+                  MaxBitrate: 800000,
+                  QualityTuningLevel: "MULTI_PASS_HQ",
+                  RateControlMode: "QVBR",
+                  SceneChangeDetect: "TRANSITION_DETECTION"
+                }
+              },
+              Height: 360
+            }
+          },{
+            AudioDescriptions: [{
+                CodecSettings: {
+                  AacSettings: {
+                    Bitrate: 96000,
+                    CodingMode: "CODING_MODE_2_0",
+                    SampleRate: 48000
+                  },
+                  Codec: "AAC"
+                }
+              }],
+            ContainerSettings: {
+              Container: "MP4"
+            },
+            NameModifier: "720p0",
+            VideoDescription: {
+              CodecSettings: {
+                Codec: "H_264",
+                H264Settings: {
+                  FramerateControl: "INITIALIZE_FROM_SOURCE",
+                  GopSizeUnits: "AUTO",
+                  MaxBitrate: 3000000,
+                  QualityTuningLevel: "MULTI_PASS_HQ",
+                  RateControlMode: "QVBR",
+                  SceneChangeDetect: "TRANSITION_DETECTION"
+                }
+              },
+              Height: 720
+            }
+          }]
+      }],
+    TimecodeConfig: {
+      Source: "ZEROBASED"
+    }
+  }
+}
