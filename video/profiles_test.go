@@ -13,18 +13,33 @@ func TestGetPlaybackProfiles(t *testing.T) {
 		want  []EncodedProfile
 	}{
 		{
-			name: "low bitrate 720p input",
+			name: "360p input",
 			track: InputTrack{
 				Type:    "video",
-				Bitrate: 1_000_000,
+				Bitrate: 800_001,
 				VideoTrack: VideoTrack{
-					Width:  1200,
-					Height: 720,
+					Width:  640,
+					Height: 360,
 				},
 			},
 			want: []EncodedProfile{
-				{Name: "360p0", Width: 640, Height: 360, Bitrate: 800_000},
-				{Name: "720p0", Width: 1200, Height: 720, Bitrate: 1_000_000},
+				{Name: "low-bitrate", Width: 640, Height: 360, Bitrate: 400_000},
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 800_001},
+			},
+		},
+		{
+			name: "low bitrate 360p input",
+			track: InputTrack{
+				Type:    "video",
+				Bitrate: 500_000,
+				VideoTrack: VideoTrack{
+					Width:  640,
+					Height: 360,
+				},
+			},
+			want: []EncodedProfile{
+				{Name: "low-bitrate", Width: 640, Height: 360, Bitrate: 250_000},
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 500_000},
 			},
 		},
 		{
@@ -43,6 +58,21 @@ func TestGetPlaybackProfiles(t *testing.T) {
 			},
 		},
 		{
+			name: "low bitrate 720p input",
+			track: InputTrack{
+				Type:    "video",
+				Bitrate: 1_000_000,
+				VideoTrack: VideoTrack{
+					Width:  1200,
+					Height: 720,
+				},
+			},
+			want: []EncodedProfile{
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 800_000},
+				{Name: "720p0", Width: 1200, Height: 720, Bitrate: 1_000_000},
+			},
+		},
+		{
 			name: "1080p input",
 			track: InputTrack{
 				Type:    "video",
@@ -56,21 +86,6 @@ func TestGetPlaybackProfiles(t *testing.T) {
 				{Name: "360p0", Width: 640, Height: 360, Bitrate: 800_000},
 				{Name: "720p0", Width: 1280, Height: 720, Bitrate: 3_000_000},
 				{Name: "1080p0", Width: 1920, Height: 1080, Bitrate: 5_000_000},
-			},
-		},
-		{
-			name: "low bitrate 360p input",
-			track: InputTrack{
-				Type:    "video",
-				Bitrate: 500_000,
-				VideoTrack: VideoTrack{
-					Width:  640,
-					Height: 360,
-				},
-			},
-			want: []EncodedProfile{
-				{Name: "low-bitrate", Width: 640, Height: 360, Bitrate: 250_000},
-				{Name: "360p0", Width: 640, Height: 360, Bitrate: 500_000},
 			},
 		},
 	}
