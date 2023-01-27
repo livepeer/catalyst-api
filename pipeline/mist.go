@@ -17,6 +17,9 @@ import (
 	"github.com/livepeer/catalyst-api/video"
 )
 
+const MIST_SEGMENTING_SUBDIR = "source"
+const TARGET_SEGMENT_LENGTH_SECS = "5"
+
 type mist struct {
 	MistClient clients.MistAPIClient
 }
@@ -32,7 +35,7 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		return nil, fmt.Errorf("target output file should have .m3u8 extension, found %q", targetExtension)
 	}
 
-	segmentingTargetURL, err := inSameDirectory(*job.TargetURL, "source", targetManifestFilename)
+	segmentingTargetURL, err := inSameDirectory(*job.TargetURL, MIST_SEGMENTING_SUBDIR, targetManifestFilename)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create targetSegmentedOutputURL: %w", err)
 	}
@@ -55,7 +58,7 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse source as URL: %w", err)
 		}
-		newSourceURL, err := inSameDirectory(*job.TargetURL, "source", path.Base(sourceURL.Path))
+		newSourceURL, err := inSameDirectory(*job.TargetURL, MIST_SEGMENTING_SUBDIR, path.Base(sourceURL.Path))
 		if err != nil {
 			return nil, fmt.Errorf("cannot create location for source copy: %w", err)
 		}
@@ -286,14 +289,14 @@ func inSameDirectory(base url.URL, paths ...string) (*url.URL, error) {
 //	s3+https://xyz:xyz@storage.googleapis.com/a/b/c/seg_$currentMediaTime.ts?m3u8=index.m3u8&split=5
 func targetURLToMistTargetURL(targetURL url.URL) (string, error) {
 	targetManifestFilename := path.Base(targetURL.Path)
-	segmentingTargetURL, err := inSameDirectory(targetURL, "source", "seg_$currentMediaTime.ts")
+	segmentingTargetURL, err := inSameDirectory(targetURL, MIST_SEGMENTING_SUBDIR, "seg_$currentMediaTime.ts")
 	if err != nil {
-		return "", fmt.Errorf("cannot create targetSegmentedOutputURL: %w", err)
+		return "", fmt.Errorf("cannot create segmentingTargetURL: %w", err)
 	}
 
 	queryValues := segmentingTargetURL.Query()
 	queryValues.Add("m3u8", targetManifestFilename)
-	queryValues.Add("split", "5")
+	queryValues.Add("split", TARGET_SEGMENT_LENGTH_SECS)
 	segmentingTargetURL.RawQuery = queryValues.Encode()
 
 	return segmentingTargetURL.String(), nil
