@@ -40,7 +40,7 @@ func Test_inSameDirectory(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			base, err := url.Parse(tc.args.base)
 			require.NoError(t, err)
-			got, err := inSameDirectory(base, tc.args.paths...)
+			got, err := inSameDirectory(*base, tc.args.paths...)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got.String())
 		})
@@ -96,4 +96,18 @@ func Test_isVideo(t *testing.T) {
 			require.Equal(t, tc.want, isVideo("", ts.URL))
 		})
 	}
+}
+
+func TestItConvertsTargetURLToMistURLCorrectly(t *testing.T) {
+	initialTargetURL, err := url.Parse("s3+https://abc:def@storage.googleapis.com/a/b/c/index.m3u8")
+	require.NoError(t, err)
+
+	mistTargetURL, err := targetURLToMistTargetURL(*initialTargetURL)
+	require.NoError(t, err)
+
+	require.Equal(
+		t,
+		"s3+https://abc:def@storage.googleapis.com/a/b/c/source/seg_$currentMediaTime.ts?m3u8=index.m3u8&split=5",
+		mistTargetURL,
+	)
 }

@@ -32,11 +32,17 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		return nil, fmt.Errorf("target output file should have .m3u8 extension, found %q", targetExtension)
 	}
 
-	segmentingTargetURL, err := inSameDirectory(job.TargetURL, "source", targetManifestFilename)
+	segmentingTargetURL, err := inSameDirectory(*job.TargetURL, "source", targetManifestFilename)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create targetSegmentedOutputURL: %w", err)
 	}
 	job.SegmentingTargetURL = segmentingTargetURL.String()
+
+	mistTargetURL, err := targetURLToMistTargetURL(*job.TargetURL)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create mistTargetURL: %w", err)
+	}
+	log.AddContext(job.RequestID, "mist_target_url", mistTargetURL)
 	log.AddContext(job.RequestID, "segmented_url", job.SegmentingTargetURL)
 
 	// Arweave / IPFS URLs don't support HTTP Range requests and so Mist can't natively handle them for segmenting
@@ -49,7 +55,7 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse source as URL: %w", err)
 		}
-		newSourceURL, err := inSameDirectory(job.TargetURL, "source", path.Base(sourceURL.Path))
+		newSourceURL, err := inSameDirectory(*job.TargetURL, "source", path.Base(sourceURL.Path))
 		if err != nil {
 			return nil, fmt.Errorf("cannot create location for source copy: %w", err)
 		}
@@ -76,7 +82,7 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	log.Log(job.RequestID, "Beginning segmenting")
 	// Tell Mist to do the segmenting. Upon completion / error, Mist will call Triggers to notify us.
-	if err := m.processUploadVOD(job.StreamName, job.SourceFile, job.SegmentingTargetURL); err != nil {
+	if err := m.processUploadVOD(job.StreamName, job.SourceFile, mistTargetURL); err != nil {
 		log.LogError(job.RequestID, "Cannot process upload VOD request", err)
 		return nil, fmt.Errorf("cannot process upload VOD request: %w", err)
 	}
@@ -263,7 +269,7 @@ func (m *mist) HandlePushEndTrigger(job *JobInfo, p PushEndPayload) (*HandlerOut
 	return ContinuePipeline, nil
 }
 
-func inSameDirectory(base *url.URL, paths ...string) (*url.URL, error) {
+func inSameDirectory(base url.URL, paths ...string) (*url.URL, error) {
 	baseDir := path.Dir(base.Path)
 	paths = append([]string{baseDir}, paths...)
 	fullPath := path.Join(paths...)
@@ -272,4 +278,23 @@ func inSameDirectory(base *url.URL, paths ...string) (*url.URL, error) {
 		return nil, fmt.Errorf("failed to parse same directory path: %w", err)
 	}
 	return base.ResolveReference(pathUrl), nil
+}
+
+// We receive something in the form s3+https://xyz:xyz@storage.googleapis.com/a/b/c/index.m3u8
+// and give it to Mist in the form:
+//
+//	s3+https://xyz:xyz@storage.googleapis.com/a/b/c/seg_$currentMediaTime.ts?m3u8=index.m3u8&split=5
+func targetURLToMistTargetURL(targetURL url.URL) (string, error) {
+	targetManifestFilename := path.Base(targetURL.Path)
+	segmentingTargetURL, err := inSameDirectory(targetURL, "source", "seg_$currentMediaTime.ts")
+	if err != nil {
+		return "", fmt.Errorf("cannot create targetSegmentedOutputURL: %w", err)
+	}
+
+	queryValues := segmentingTargetURL.Query()
+	queryValues.Add("m3u8", targetManifestFilename)
+	queryValues.Add("split", "5")
+	segmentingTargetURL.RawQuery = queryValues.Encode()
+
+	return segmentingTargetURL.String(), nil
 }
