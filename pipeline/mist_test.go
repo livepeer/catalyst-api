@@ -98,7 +98,7 @@ func Test_isVideo(t *testing.T) {
 	}
 }
 
-func TestItConvertsTargetURLToMistURLCorrectly(t *testing.T) {
+func TestItConvertsS3TargetURLToMistTargetURLCorrectly(t *testing.T) {
 	initialTargetURL, err := url.Parse("s3+https://abc:def@storage.googleapis.com/a/b/c/index.m3u8")
 	require.NoError(t, err)
 
@@ -108,6 +108,20 @@ func TestItConvertsTargetURLToMistURLCorrectly(t *testing.T) {
 	require.Equal(
 		t,
 		"s3+https://abc:def@storage.googleapis.com/a/b/c/source/seg_$currentMediaTime.ts?m3u8=index.m3u8&split=5",
+		mistTargetURL,
+	)
+}
+
+func TestItConvertsLocalPathToMistTargetCorrectly(t *testing.T) {
+	initialTargetURL, err := url.Parse("/a/b/c/index.m3u8")
+	require.NoError(t, err)
+
+	mistTargetURL, err := targetURLToMistTargetURL(*initialTargetURL)
+	require.NoError(t, err)
+
+	require.Equal(
+		t,
+		"/a/b/c/source/seg_$currentMediaTime.ts?m3u8=index.m3u8&split=5",
 		mistTargetURL,
 	)
 }

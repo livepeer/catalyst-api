@@ -17,6 +17,7 @@ require (
 	github.com/stretchr/testify v1.8.1
 	github.com/xeipuuv/gojsonschema v1.2.0
 	golang.org/x/sync v0.1.0
+	gopkg.in/vansante/go-ffprobe.v2 v2.1.1
 	sigs.k8s.io/yaml v1.3.0
 )
 
@@ -84,7 +85,6 @@ require (
 	google.golang.org/grpc v1.50.1 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
-	gopkg.in/vansante/go-ffprobe.v2 v2.1.1 // indirect
 )
 
 require (
