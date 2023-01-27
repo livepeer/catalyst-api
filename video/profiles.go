@@ -79,7 +79,7 @@ func GetPlaybackProfiles(iv InputVideo) ([]EncodedProfile, error) {
 	for _, profile := range DefaultTranscodeProfiles {
 		// transcoding job will adjust the width to match aspect ratio. no need to
 		// check it here.
-		lowerQualityThanSrc := profile.Height <= video.Height && profile.Bitrate < video.Bitrate
+		lowerQualityThanSrc := profile.Height < video.Height && profile.Bitrate < video.Bitrate
 		if lowerQualityThanSrc {
 			profiles = append(profiles, profile)
 		}
