@@ -289,7 +289,7 @@ func inSameDirectory(base url.URL, paths ...string) (*url.URL, error) {
 //	s3+https://xyz:xyz@storage.googleapis.com/a/b/c/seg_$currentMediaTime.ts?m3u8=index.m3u8&split=5
 func targetURLToMistTargetURL(targetURL url.URL) (string, error) {
 	targetManifestFilename := path.Base(targetURL.Path)
-	segmentingTargetURL, err := inSameDirectory(targetURL, MIST_SEGMENTING_SUBDIR, "seg_$currentMediaTime.ts")
+	segmentingTargetURL, err := inSameDirectory(targetURL, MIST_SEGMENTING_SUBDIR, "$currentMediaTime.ts")
 	if err != nil {
 		return "", fmt.Errorf("cannot create segmentingTargetURL: %w", err)
 	}

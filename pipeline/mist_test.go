@@ -107,7 +107,7 @@ func TestItConvertsS3TargetURLToMistTargetURLCorrectly(t *testing.T) {
 
 	require.Equal(
 		t,
-		"s3+https://abc:def@storage.googleapis.com/a/b/c/source/seg_$currentMediaTime.ts?m3u8=index.m3u8&split=5",
+		"s3+https://abc:def@storage.googleapis.com/a/b/c/source/$currentMediaTime.ts?m3u8=index.m3u8&split=5",
 		mistTargetURL,
 	)
 }
@@ -121,7 +121,7 @@ func TestItConvertsLocalPathToMistTargetCorrectly(t *testing.T) {
 
 	require.Equal(
 		t,
-		"/a/b/c/source/seg_$currentMediaTime.ts?m3u8=index.m3u8&split=5",
+		"/a/b/c/source/$currentMediaTime.ts?m3u8=index.m3u8&split=5",
 		mistTargetURL,
 	)
 }
