@@ -2,7 +2,9 @@ package transcode
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"github.com/livepeer/go-tools/drivers"
 	"net/url"
 	"path"
 	"sync"
@@ -55,7 +57,9 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	outputs := []clients.OutputVideo{}
 
 	// Parse the manifest destination of the segmented output specified in the request
-	segmentedOutputManifestURL, err := url.Parse(transcodeRequest.SourceManifestURL)
+	// TODO
+	//segmentedOutputManifestURL, err := url.Parse(transcodeRequest.SourceManifestURL)
+	segmentedOutputManifestURL, err := url.Parse(fmt.Sprintf("w3s://user:password@%s/video/hls/", config.RandomTrailer(8)))
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("failed to parse transcodeRequest.UploadURL: %s", err)
 	}
@@ -125,10 +129,18 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, err
 	}
 
-	output := clients.OutputVideo{Type: "object_store", Manifest: manifestManifestURL}
-	for _, rendition := range transcodedStats {
-		output.Videos = append(output.Videos, clients.OutputVideoFile{Location: rendition.ManifestLocation, SizeBytes: int(rendition.Bytes)})
+	// TODO
+	osDriver, _ := drivers.ParseOSURL(targetTranscodedRenditionOutputURL.String(), true)
+	w3LinkUrl, _ := osDriver.Publish(context.TODO())
+	if w3LinkUrl != "" {
+		manifestManifestURL = path.Join(w3LinkUrl, "index.m3u8")
 	}
+
+	// TODO
+	output := clients.OutputVideo{Type: "object_store", Manifest: manifestManifestURL}
+	//for _, rendition := range transcodedStats {
+	//	output.Videos = append(output.Videos, clients.OutputVideoFile{Location: rendition.ManifestLocation, SizeBytes: int(rendition.Bytes)})
+	//}
 	outputs = []clients.OutputVideo{output}
 	// Return outputs for .dtsh file creation
 	return outputs, segmentsCount, nil
