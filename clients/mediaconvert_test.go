@@ -351,6 +351,7 @@ func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *Med
 		s3TransferBucket:    mustParseURL(t, "s3://thebucket"),
 		osTransferBucketURL: mustParseURL(t, "file://"+transferDir),
 		client:              awsStub,
+		s3:                  &stubS3Client{transferDir},
 	}
 	return
 }
@@ -378,4 +379,12 @@ func (s *stubMediaConvertClient) GetJob(input *mediaconvert.GetJobInput) (*media
 		return nil, errors.New("not implemented")
 	}
 	return s.getJob(input)
+}
+
+type stubS3Client struct {
+	transferDir string
+}
+
+func (s *stubS3Client) PresignS3(_, key string) (string, error) {
+	return s.transferDir + "/" + key, nil
 }
