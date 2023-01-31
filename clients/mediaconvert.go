@@ -2,7 +2,6 @@ package clients
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -74,7 +73,7 @@ type MediaConvert struct {
 	role                                  string
 	s3TransferBucket, osTransferBucketURL *url.URL
 	client                                AWSMediaConvertClient
-	s3                                    S3Signer
+	s3                                    S3
 }
 
 func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) {
@@ -238,8 +237,6 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 		mp4OutVid.Videos = mc.outputVideoFiles(mcArgs, ourOutputBaseDir, mp4OutFilePrefix, ".mp4")
 		outputVideos = append(outputVideos, mp4OutVid)
 	}
-	vidsJson, _ := json.Marshal(outputVideos)
-	log.Log(args.RequestID, "output vids", "json", vidsJson)
 	return outputVideos, nil
 }
 
@@ -247,6 +244,7 @@ func (mc *MediaConvert) outputVideoFiles(mcArgs TranscodeJobArgs, ourOutputBaseD
 	for _, profile := range mcArgs.Profiles {
 		suffix := profile.Name + fileSuffix
 		key := mcArgs.MP4OutputLocation.Path + suffix
+		// get object from s3 to check that it exists and to find out the file size
 		s3Obj, err := mc.s3.GetObject(mc.s3TransferBucket.Host, key)
 		if err != nil {
 			log.Log(mcArgs.RequestID, "error getting mp4 info from s3", "err", err, "bucket", mc.s3TransferBucket.Host, "key", key)

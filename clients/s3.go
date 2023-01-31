@@ -6,7 +6,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 )
 
-type S3Signer interface {
+type S3 interface {
 	PresignS3(bucket, key string) (string, error)
 	GetObject(bucket, key string) (*s3.GetObjectOutput, error)
 }
