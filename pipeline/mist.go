@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"fmt"
+	"github.com/livepeer/catalyst-api/config"
 	"math"
 	"mime"
 	"net/http"
@@ -17,7 +18,8 @@ import (
 )
 
 type mist struct {
-	MistClient clients.MistAPIClient
+	MistClient      clients.MistAPIClient
+	SourceOutputUrl string
 }
 
 func (m *mist) Name() string {
@@ -31,7 +33,21 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		return nil, fmt.Errorf("target output file should have .m3u8 extension, found %q", targetExtension)
 	}
 
-	segmentingTargetURL, err := inSameDirectory(job.TargetURL, "source", targetManifestFilename)
+	var sourceOutputUrl *url.URL
+	if job.SourceOutputURL != nil {
+		sourceOutputUrl = job.SourceOutputURL
+	} else {
+		perRequestPath, err := url.JoinPath(m.SourceOutputUrl, config.RandomTrailer(8), "output.m3u8")
+		if err != nil {
+			return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
+		}
+		if sourceOutputUrl, err = url.Parse(perRequestPath); err != nil {
+			return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
+		}
+	}
+
+	fmt.Println(sourceOutputUrl)
+	segmentingTargetURL, err := inSameDirectory(sourceOutputUrl, "source", targetManifestFilename)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create targetSegmentedOutputURL: %w", err)
 	}
@@ -48,7 +64,7 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse source as URL: %w", err)
 		}
-		newSourceURL, err := inSameDirectory(job.TargetURL, "source", path.Base(sourceURL.Path))
+		newSourceURL, err := inSameDirectory(sourceOutputUrl, "source", path.Base(sourceURL.Path))
 		if err != nil {
 			return nil, fmt.Errorf("cannot create location for source copy: %w", err)
 		}

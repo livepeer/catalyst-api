@@ -103,21 +103,27 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	var requestID = config.RandomTrailer(8)
 	log.AddContext(requestID, "source", uploadVODRequest.Url)
 
-	// find source segment URL
+	// find output storage URLs for source and target segments
+	var useTargetForSourceOutput bool
 	var tURL string
 	for _, o := range uploadVODRequest.OutputLocations {
+		tURL = o.URL
 		if o.Outputs.SourceSegments {
-			tURL = o.URL
+			useTargetForSourceOutput = true
 			break
 		}
 	}
 	if tURL == "" {
-		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("no source segment URL in request"))
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("no output URL in request"))
 	}
 
 	// Create a separate subdirectory for the source segments
 	// Use the output directory specified in request as the output directory of transcoded renditions
 	targetURL, err := url.Parse(tURL)
+	var sourceOutputURL *url.URL
+	if useTargetForSourceOutput {
+		sourceOutputURL = targetURL
+	}
 	if err != nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file should end in .m3u8 extension"))
 	}
@@ -132,6 +138,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	d.VODEngine.StartUploadJob(pipeline.UploadJobPayload{
 		SourceFile:       uploadVODRequest.Url,
 		CallbackURL:      uploadVODRequest.CallbackUrl,
+		SourceOutputURL:  sourceOutputURL,
 		TargetURL:        targetURL,
 		AccessToken:      uploadVODRequest.AccessToken,
 		TranscodeAPIUrl:  uploadVODRequest.TranscodeAPIUrl,

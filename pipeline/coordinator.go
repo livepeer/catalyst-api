@@ -51,6 +51,7 @@ func (s Strategy) IsValid() bool {
 type UploadJobPayload struct {
 	SourceFile            string
 	CallbackURL           string
+	SourceOutputURL       *url.URL
 	TargetURL             *url.URL
 	AccessToken           string
 	TranscodeAPIUrl       string
@@ -126,7 +127,7 @@ type Coordinator struct {
 }
 
 func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
-	extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB) (*Coordinator, error) {
+	sourceOutputUrl, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB) (*Coordinator, error) {
 
 	if !strategy.IsValid() {
 		return nil, fmt.Errorf("invalid strategy: %s", strategy)
@@ -147,7 +148,7 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 	return &Coordinator{
 		strategy:     strategy,
 		statusClient: statusClient,
-		pipeMist:     &mist{mistClient},
+		pipeMist:     &mist{MistClient: mistClient, SourceOutputUrl: sourceOutputUrl},
 		pipeExternal: &external{extTranscoder},
 		Jobs:         cache.New[*JobInfo](),
 		MetricsDB:    metricsDB,
@@ -166,7 +167,7 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 		statusClient = clients.TranscodeStatusFunc(func(tsm clients.TranscodeStatusMessage) {})
 	}
 	if pipeMist == nil {
-		pipeMist = &mist{clients.StubMistClient{}}
+		pipeMist = &mist{MistClient: clients.StubMistClient{}}
 	}
 	if pipeExternal == nil {
 		pipeExternal = &external{}
