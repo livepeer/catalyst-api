@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -158,26 +159,28 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, err
 	}
 
-	// TODO: Generate manifest for W3S
 	// Build the manifests and push them to storage
 	manifestManifestURL, err := GenerateAndUploadManifests(sourceManifest, targetTranscodedRenditionOutputURL.String(), transcodedStats)
 	if err != nil {
 		return outputs, segmentsCount, err
 	}
 
-	// TODO
-	osDriver, _ := drivers.ParseOSURL(targetTranscodedRenditionOutputURL.String(), true)
-	videoUrl, err := osDriver.Publish(context.TODO())
-	if err == nil && videoUrl != "" {
-		manifestManifestURL, _ = url.JoinPath(videoUrl, tout.Path, "index.m3u8")
+	var playbackBaseURL string
+	osDriver, err := drivers.ParseOSURL(targetTranscodedRenditionOutputURL.String(), true)
+	if err != nil {
+		return outputs, segmentsCount, fmt.Errorf("failed to parse targetTranscodedRenditionOutputURL: %s", err)
+	}
+	videoUrl, err := osDriver.Publish(context.Background())
+	if err == drivers.ErrNotSupported {
+		playbackBaseURL = targetTranscodedRenditionOutputURL.String()
+	} else if err == nil {
+		playbackBaseURL, _ = url.JoinPath(videoUrl, tout.Path)
 	}
 
-	// TODO: Generate all manifests
-	// TODO: Make sure credentials from w3 are not returned
-	output := clients.OutputVideo{Type: "object_store", Manifest: manifestManifestURL}
-	//for _, rendition := range transcodedStats {
-	//	output.Videos = append(output.Videos, clients.OutputVideoFile{Location: rendition.ManifestLocation, SizeBytes: int(rendition.Bytes)})
-	//}
+	output := clients.OutputVideo{Type: "object_store", Manifest: strings.ReplaceAll(manifestManifestURL, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)}
+	for _, rendition := range transcodedStats {
+		output.Videos = append(output.Videos, clients.OutputVideoFile{Location: strings.ReplaceAll(rendition.ManifestLocation, targetTranscodedRenditionOutputURL.String(), playbackBaseURL), SizeBytes: int(rendition.Bytes)})
+	}
 	outputs = []clients.OutputVideo{output}
 	// Return outputs for .dtsh file creation
 	return outputs, segmentsCount, nil

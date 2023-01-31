@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/url"
 	"path"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -148,7 +147,12 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		return "", fmt.Errorf("failed to upload master playlist: %s", err)
 	}
 
-	return filepath.Join(targetOSURL, MASTER_MANIFEST_FILENAME), nil
+	res, err := url.JoinPath(targetOSURL, MASTER_MANIFEST_FILENAME)
+	if err != nil {
+		return "", fmt.Errorf("failed to create URL for master playlist: %s", err)
+	}
+
+	return res, nil
 }
 
 func manifestURLToSegmentURL(manifestURL, segmentFilename string) (string, error) {
