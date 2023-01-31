@@ -46,7 +46,6 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		}
 	}
 
-	fmt.Println(sourceOutputUrl)
 	segmentingTargetURL, err := inSameDirectory(sourceOutputUrl, "source", targetManifestFilename)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create targetSegmentedOutputURL: %w", err)
@@ -179,6 +178,7 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 		SourceStreamInfo:  streamInfo,
 		Profiles:          job.Profiles,
 		SourceManifestURL: job.SegmentingTargetURL,
+		TargetURL:         job.TargetURL.String(),
 		RequestID:         requestID,
 		ReportProgress:    job.ReportProgress,
 	}

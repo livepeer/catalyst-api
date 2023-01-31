@@ -21,6 +21,7 @@ type TranscodeSegmentRequest struct {
 	SourceFile        string                   `json:"source_location"`
 	CallbackURL       string                   `json:"callback_url"`
 	SourceManifestURL string                   `json:"source_manifest_url"`
+	TargetURL         string                   `json:"target_url,omitempty"`
 	StreamKey         string                   `json:"streamKey"`
 	AccessToken       string                   `json:"accessToken"`
 	TranscodeAPIUrl   string                   `json:"transcodeAPIUrl"`
@@ -96,17 +97,15 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	outputs := []clients.OutputVideo{}
 
 	// Parse the manifest destination of the segmented output specified in the request
-	// TODO
-	//segmentedOutputManifestURL, err := url.Parse(transcodeRequest.SourceManifestURL)
-	segmentedOutputManifestURL, err := url.Parse(fmt.Sprintf("w3s://user:password@%s/video/hls/", config.RandomTrailer(8)))
+	segmentedOutputManifestURL, err := url.Parse(transcodeRequest.SourceManifestURL)
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("failed to parse transcodeRequest.UploadURL: %s", err)
 	}
-	// Go back to the root directory to set as the output for transcode renditions
-	targetTranscodedPath := path.Dir(path.Dir(segmentedOutputManifestURL.Path))
 
 	// Generate the rendition output URL (e.g. s3+https://USER:PASS@storage.googleapis.com/user/hls/)
-	tout, err := url.Parse(targetTranscodedPath)
+	// TODO: Add private key
+	// TODO: Check if the end needs to be "output.m3u8"
+	tout, err := url.Parse(transcodeRequest.TargetURL)
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("failed to parse targetTranscodedPath: %s", err)
 	}
@@ -162,6 +161,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, err
 	}
 
+	// TODO: Generate manifest for W3S
 	// Build the manifests and push them to storage
 	manifestManifestURL, err := GenerateAndUploadManifests(sourceManifest, targetTranscodedRenditionOutputURL.String(), transcodedStats)
 	if err != nil {
@@ -170,12 +170,13 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	// TODO
 	osDriver, _ := drivers.ParseOSURL(targetTranscodedRenditionOutputURL.String(), true)
-	w3LinkUrl, _ := osDriver.Publish(context.TODO())
-	if w3LinkUrl != "" {
-		manifestManifestURL = path.Join(w3LinkUrl, "index.m3u8")
+	videoUrl, err := osDriver.Publish(context.TODO())
+	if err == nil && videoUrl != "" {
+		manifestManifestURL = path.Join(videoUrl, tout.Path, "index.m3u8")
 	}
 
-	// TODO
+	// TODO: Generate all manifests
+	// TODO: Make sure credentials from w3 are not returned
 	output := clients.OutputVideo{Type: "object_store", Manifest: manifestManifestURL}
 	//for _, rendition := range transcodedStats {
 	//	output.Videos = append(output.Videos, clients.OutputVideoFile{Location: rendition.ManifestLocation, SizeBytes: int(rendition.Bytes)})
