@@ -96,20 +96,17 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	outputs := []clients.OutputVideo{}
 
-	// Parse the manifest destination of the segmented output specified in the request
-	segmentedOutputManifestURL, err := url.Parse(transcodeRequest.SourceManifestURL)
-	if err != nil {
-		return outputs, segmentsCount, fmt.Errorf("failed to parse transcodeRequest.UploadURL: %s", err)
-	}
-
-	// Generate the rendition output URL (e.g. s3+https://USER:PASS@storage.googleapis.com/user/hls/)
 	// TODO: Add private key
-	// TODO: Check if the end needs to be "output.m3u8"
-	tout, err := url.Parse(transcodeRequest.TargetURL)
+	// Generate the rendition output URL (e.g. s3+https://USER:PASS@storage.googleapis.com/user/hls/)
+	targetURL, err := url.Parse(transcodeRequest.TargetURL)
+	if err != nil {
+		return outputs, segmentsCount, fmt.Errorf("failed to parse transcodeRequest.TargetURL: %s", err)
+	}
+	tout, err := url.Parse(path.Dir(targetURL.Path))
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("failed to parse targetTranscodedPath: %s", err)
 	}
-	targetTranscodedRenditionOutputURL := segmentedOutputManifestURL.ResolveReference(tout)
+	targetTranscodedRenditionOutputURL := targetURL.ResolveReference(tout)
 
 	// Grab some useful parameters to be used later from the TranscodeSegmentRequest
 	sourceManifestOSURL := transcodeRequest.SourceManifestURL
@@ -172,7 +169,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	osDriver, _ := drivers.ParseOSURL(targetTranscodedRenditionOutputURL.String(), true)
 	videoUrl, err := osDriver.Publish(context.TODO())
 	if err == nil && videoUrl != "" {
-		manifestManifestURL = path.Join(videoUrl, tout.Path, "index.m3u8")
+		manifestManifestURL, _ = url.JoinPath(videoUrl, tout.Path, "index.m3u8")
 	}
 
 	// TODO: Generate all manifests
