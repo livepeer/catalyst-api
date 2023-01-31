@@ -97,9 +97,12 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	outputs := []clients.OutputVideo{}
 
-	// TODO: Add private key
 	// Generate the rendition output URL (e.g. s3+https://USER:PASS@storage.googleapis.com/user/hls/)
-	targetURL, err := url.Parse(transcodeRequest.TargetURL)
+	targetURLWithCredentials, err := withCredentials(transcodeRequest.TargetURL)
+	if err != nil {
+		return outputs, segmentsCount, fmt.Errorf("failed to add credentials to transcodeRequest.TargetURL: %s", err)
+	}
+	targetURL, err := url.Parse(targetURLWithCredentials)
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("failed to parse transcodeRequest.TargetURL: %s", err)
 	}
@@ -343,4 +346,18 @@ type RenditionStats struct {
 	DurationMs       float64
 	ManifestLocation string
 	BitsPerSecond    uint32
+}
+
+// Adds additional credentials to url if needed
+func withCredentials(URL string) (string, error) {
+	resUrl, err := url.Parse(URL)
+	if err != nil {
+		return "", err
+	}
+	if resUrl.Scheme == "w3s" {
+		key := config.UcanKey
+		proof := resUrl.User.Username()
+		resUrl.User = url.UserPassword(key, proof)
+	}
+	return resUrl.String(), nil
 }
