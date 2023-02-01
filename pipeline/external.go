@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/livepeer/go-tools/drivers"
 	"net/url"
 	"time"
 
@@ -44,6 +45,19 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		return nil, fmt.Errorf("external transcoder error: %w", err)
 	}
 
+	// TODO: Change to playback URL
+	var playbackURL string
+	osDriver, err := drivers.ParseOSURL(job.TargetURL.String(), true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse job.TargetURL: %s", err)
+	}
+	videoUrl, err := osDriver.Publish(context.Background())
+	if err == drivers.ErrNotSupported {
+		playbackURL = job.TargetURL.String()
+	} else if err == nil {
+		playbackURL, _ = url.JoinPath(videoUrl, job.TargetURL.Path)
+	}
+
 	return &HandlerOutput{
 		Result: &UploadJobResult{
 			InputVideo: clients.InputVideo{
@@ -52,7 +66,7 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 			Outputs: []clients.OutputVideo{
 				{
 					Type:     "object_store",
-					Manifest: job.TargetURL.String(),
+					Manifest: playbackURL,
 					Videos:   []clients.OutputVideoFile{
 						// TODO: Figure out what to do here. Studio doesn't use these anyway.
 					},
