@@ -7,7 +7,6 @@ import (
 	"github.com/livepeer/go-tools/drivers"
 	"net/url"
 	"path"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,7 +24,7 @@ type TranscodeSegmentRequest struct {
 	SourceFile        string                 `json:"source_location"`
 	CallbackURL       string                 `json:"callback_url"`
 	SourceManifestURL string                 `json:"source_manifest_url"`
-  TargetURL         string                   `json:"target_url,omitempty"`
+	TargetURL         string                 `json:"target_url,omitempty"`
 	StreamKey         string                 `json:"streamKey"`
 	AccessToken       string                 `json:"accessToken"`
 	TranscodeAPIUrl   string                 `json:"transcodeAPIUrl"`

@@ -49,7 +49,7 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		}
 	}
 
-	segmentingTargetURL, err := inSameDirectory(sourceOutputUrl, MIST_SEGMENTING_SUBDIR, targetManifestFilename)
+	segmentingTargetURL, err := inSameDirectory(*sourceOutputUrl, MIST_SEGMENTING_SUBDIR, targetManifestFilename)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create targetSegmentedOutputURL: %w", err)
 	}
@@ -73,7 +73,7 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 			return nil, fmt.Errorf("failed to parse source as URL: %w", err)
 		}
 
-		newSourceURL, err := inSameDirectory(sourceOutputUrl, MIST_SEGMENTING_SUBDIR, path.Base(sourceURL.Path))
+		newSourceURL, err := inSameDirectory(*sourceOutputUrl, MIST_SEGMENTING_SUBDIR, path.Base(sourceURL.Path))
 		if err != nil {
 			return nil, fmt.Errorf("cannot create location for source copy: %w", err)
 		}
