@@ -2,12 +2,13 @@ package transcode
 
 import (
 	"fmt"
-	"github.com/grafov/m3u8"
-	"github.com/livepeer/catalyst-api/clients"
 	"net/url"
 	"path"
 	"sort"
 	"strings"
+
+	"github.com/grafov/m3u8"
+	"github.com/livepeer/catalyst-api/clients"
 )
 
 const MASTER_MANIFEST_FILENAME = "index.m3u8"

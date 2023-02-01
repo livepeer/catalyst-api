@@ -121,16 +121,18 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Build the manifests and push them to storage
-	manifestManifestURL, err := GenerateAndUploadManifests(sourceManifest, targetTranscodedRenditionOutputURL.String(), transcodedStats)
+	manifestURL, err := GenerateAndUploadManifests(sourceManifest, targetTranscodedRenditionOutputURL.String(), transcodedStats)
 	if err != nil {
 		return outputs, segmentsCount, err
 	}
 
 	playbackBaseURL := PublishDriverSession(targetTranscodedRenditionOutputURL.String(), tout.Path)
 
-	output := clients.OutputVideo{Type: "object_store", Manifest: strings.ReplaceAll(manifestManifestURL, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)}
+	manifestURL = strings.ReplaceAll(manifestURL, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
+	output := clients.OutputVideo{Type: "object_store", Manifest: manifestURL}
 	for _, rendition := range transcodedStats {
-		output.Videos = append(output.Videos, clients.OutputVideoFile{Location: strings.ReplaceAll(rendition.ManifestLocation, targetTranscodedRenditionOutputURL.String(), playbackBaseURL), SizeBytes: int(rendition.Bytes)})
+		videoManifestURL := strings.ReplaceAll(rendition.ManifestLocation, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
+		output.Videos = append(output.Videos, clients.OutputVideoFile{Location: videoManifestURL, SizeBytes: int(rendition.Bytes)})
 	}
 	outputs = []clients.OutputVideo{output}
 	// Return outputs for .dtsh file creation
