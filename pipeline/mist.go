@@ -2,7 +2,6 @@ package pipeline
 
 import (
 	"fmt"
-	"github.com/livepeer/catalyst-api/config"
 	"math"
 	"mime"
 	"net/http"
@@ -37,7 +36,7 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	if job.SourceOutputURL != nil {
 		sourceOutputUrl = job.SourceOutputURL
 	} else {
-		perRequestPath, err := url.JoinPath(m.SourceOutputUrl, config.RandomTrailer(8), "output.m3u8")
+		perRequestPath, err := url.JoinPath(m.SourceOutputUrl, job.RequestID, "output.m3u8")
 		if err != nil {
 			return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
 		}
