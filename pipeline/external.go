@@ -45,7 +45,6 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		return nil, fmt.Errorf("external transcoder error: %w", err)
 	}
 
-	// TODO: Change to playback URL
 	var playbackURL string
 	osDriver, err := drivers.ParseOSURL(job.TargetURL.String(), true)
 	if err != nil {

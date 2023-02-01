@@ -120,12 +120,18 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	// Create a separate subdirectory for the source segments
 	// Use the output directory specified in request as the output directory of transcoded renditions
 	targetURL, err := url.Parse(tURL)
+	if err != nil {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file should end in .m3u8 extension"))
+	}
+	// Hack for web3.storage to distinguish different jobs, before calling Publish()
+	// Can be removed after we address this issue: https://github.com/livepeer/go-tools/issues/16
+	if targetURL.Scheme == "w3s" {
+		targetURL.Host = requestID
+	}
+
 	var sourceOutputURL *url.URL
 	if useTargetForSourceOutput {
 		sourceOutputURL = targetURL
-	}
-	if err != nil {
-		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file should end in .m3u8 extension"))
 	}
 	if strat := uploadVODRequest.PipelineStrategy; strat != "" && !strat.IsValid() {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("invalid value provided for pipeline strategy: %q", uploadVODRequest.PipelineStrategy))
