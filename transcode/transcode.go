@@ -16,19 +16,20 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
+	"github.com/livepeer/catalyst-api/video"
 )
 
 const UPLOAD_TIMEOUT = 5 * time.Minute
 
 type TranscodeSegmentRequest struct {
-	SourceFile        string                   `json:"source_location"`
-	CallbackURL       string                   `json:"callback_url"`
-	SourceManifestURL string                   `json:"source_manifest_url"`
-	TargetURL         string                   `json:"target_url,omitempty"`
-	StreamKey         string                   `json:"streamKey"`
-	AccessToken       string                   `json:"accessToken"`
-	TranscodeAPIUrl   string                   `json:"transcodeAPIUrl"`
-	Profiles          []clients.EncodedProfile `json:"profiles"`
+	SourceFile        string                 `json:"source_location"`
+	CallbackURL       string                 `json:"callback_url"`
+	SourceManifestURL string                 `json:"source_manifest_url"`
+  TargetURL         string                   `json:"target_url,omitempty"`
+	StreamKey         string                 `json:"streamKey"`
+	AccessToken       string                 `json:"accessToken"`
+	TranscodeAPIUrl   string                 `json:"transcodeAPIUrl"`
+	Profiles          []video.EncodedProfile `json:"profiles"`
 	Detection         struct {
 		Freq                uint `json:"freq"`
 		SampleRate          uint `json:"sampleRate"`
@@ -42,45 +43,6 @@ type TranscodeSegmentRequest struct {
 	ReportProgress   func(clients.TranscodeStatus, float64) `json:"-"`
 }
 
-const (
-	MIN_VIDEO_BITRATE            = 100_000
-	ABSOLUTE_MIN_VIDEO_BITRATE   = 5_000
-	MAX_DEFAULT_RENDITION_WIDTH  = 1280
-	MAX_DEFAULT_RENDITION_HEIGHT = 720
-)
-
-// The default set of encoding profiles to use when none are specified
-var defaultTranscodeProfiles = []clients.EncodedProfile{
-	// {
-	// 	Name:    "240p0",
-	// 	FPS:     0,
-	// 	Bitrate: 250_000,
-	// 	Width:   426,
-	// 	Height:  240,
-	// },
-	{
-		Name:    "360p0",
-		FPS:     0,
-		Bitrate: 800_000,
-		Width:   640,
-		Height:  360,
-	},
-	// {
-	// 	Name:    "480p0",
-	// 	FPS:     0,
-	// 	Bitrate: 1_600_000,
-	// 	Width:   854,
-	// 	Height:  480,
-	// },
-	{
-		Name:    "720p0",
-		FPS:     0,
-		Bitrate: 3_000_000,
-		Width:   1280,
-		Height:  720,
-	},
-}
-
 var LocalBroadcasterClient clients.BroadcasterClient
 
 func init() {
@@ -91,7 +53,7 @@ func init() {
 	LocalBroadcasterClient = b
 }
 
-func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo clients.InputVideo) ([]clients.OutputVideo, int, error) {
+func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo video.InputVideo) ([]clients.OutputVideo, int, error) {
 	log.AddContext(transcodeRequest.RequestID, "source", transcodeRequest.SourceFile, "source_manifest", transcodeRequest.SourceManifestURL, "stream_name", streamName)
 	log.Log(transcodeRequest.RequestID, "RunTranscodeProcess (v2) Beginning")
 
@@ -116,7 +78,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	// If Profiles haven't been overridden, use the default set
 	if len(transcodeProfiles) == 0 {
-		transcodeProfiles, err = getPlaybackProfiles(inputInfo)
+		transcodeProfiles, err = video.GetPlaybackProfiles(inputInfo)
 		if err != nil {
 			return outputs, segmentsCount, fmt.Errorf("failed to get playback profiles: %w", err)
 		}
@@ -194,7 +156,7 @@ func PublishDriverSession(osUrl string, relPath string) string {
 func transcodeSegment(
 	segment segmentInfo, streamName, manifestID string,
 	transcodeRequest TranscodeSegmentRequest,
-	transcodeProfiles []clients.EncodedProfile,
+	transcodeProfiles []video.EncodedProfile,
 	targetOSURL *url.URL,
 	transcodedStats []*RenditionStats,
 ) error {
@@ -256,7 +218,7 @@ func transcodeSegment(
 	return nil
 }
 
-func getProfileIndex(transcodeProfiles []clients.EncodedProfile, profile string) int {
+func getProfileIndex(transcodeProfiles []video.EncodedProfile, profile string) int {
 	for i, p := range transcodeProfiles {
 		if p.Name == profile {
 			return i
@@ -267,49 +229,6 @@ func getProfileIndex(transcodeProfiles []clients.EncodedProfile, profile string)
 
 func calculateCompletedRatio(totalSegments, completedSegments int) float64 {
 	return (1 / float64(totalSegments)) * float64(completedSegments)
-}
-
-func getPlaybackProfiles(iv clients.InputVideo) ([]clients.EncodedProfile, error) {
-	video, err := iv.GetVideoTrack()
-	if err != nil {
-		return nil, fmt.Errorf("no video track found in input video: %w", err)
-	}
-	profiles := make([]clients.EncodedProfile, 0, len(defaultTranscodeProfiles)+1)
-	for _, profile := range defaultTranscodeProfiles {
-		// transcoding job will adjust the width to match aspect ratio. no need to
-		// check it here.
-		lowerQualityThanSrc := profile.Height <= video.Height && profile.Bitrate < video.Bitrate
-		if lowerQualityThanSrc {
-			profiles = append(profiles, profile)
-		}
-	}
-	if len(profiles) == 0 {
-		profiles = []clients.EncodedProfile{lowBitrateProfile(video)}
-	}
-	profiles = append(profiles, clients.EncodedProfile{
-		Name:    strconv.FormatInt(int64(video.Height), 10) + "p0",
-		Bitrate: video.Bitrate,
-		FPS:     0,
-		Width:   video.Width,
-		Height:  video.Height,
-	})
-	return profiles, nil
-}
-
-func lowBitrateProfile(video clients.InputTrack) clients.EncodedProfile {
-	bitrate := int64(float64(video.Bitrate) * (1.0 / 2.0))
-	if bitrate < MIN_VIDEO_BITRATE && video.Bitrate > MIN_VIDEO_BITRATE {
-		bitrate = MIN_VIDEO_BITRATE
-	} else if bitrate < ABSOLUTE_MIN_VIDEO_BITRATE {
-		bitrate = ABSOLUTE_MIN_VIDEO_BITRATE
-	}
-	return clients.EncodedProfile{
-		Name:    "low-bitrate",
-		FPS:     0,
-		Bitrate: bitrate,
-		Width:   video.Width,
-		Height:  video.Height,
-	}
 }
 
 func channelFromWaitgroup(wg *sync.WaitGroup) chan bool {
@@ -326,7 +245,7 @@ type segmentInfo struct {
 	Index int
 }
 
-func statsFromProfiles(profiles []clients.EncodedProfile) []*RenditionStats {
+func statsFromProfiles(profiles []video.EncodedProfile) []*RenditionStats {
 	stats := []*RenditionStats{}
 	for _, profile := range profiles {
 		stats = append(stats, &RenditionStats{

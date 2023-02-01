@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/video"
 )
 
 // An enum of potential statuses a Transcode job can have
@@ -83,44 +84,9 @@ type TranscodeStatusMessage struct {
 	Unretriable bool   `json:"unretriable,omitempty"`
 
 	// Only used for the "Completed" status message
-	Type       string        `json:"type,omitempty"`
-	InputVideo InputVideo    `json:"video_spec,omitempty"`
-	Outputs    []OutputVideo `json:"outputs,omitempty"`
-}
-
-type VideoTrack struct {
-	Width       int64   `json:"width,omitempty"`
-	Height      int64   `json:"height,omitempty"`
-	PixelFormat string  `json:"pixel_format,omitempty"`
-	FPS         float64 `json:"fps,omitempty"`
-}
-
-type AudioTrack struct {
-	Channels   int `json:"channels,omitempty"`
-	SampleRate int `json:"sample_rate,omitempty"`
-	SampleBits int `json:"sample_bits,omitempty"`
-}
-
-type InputTrack struct {
-	Type         string  `json:"type"`
-	Codec        string  `json:"codec"`
-	Bitrate      int64   `json:"bitrate"`
-	DurationSec  float64 `json:"duration"`
-	SizeBytes    int64   `json:"size"`
-	StartTimeSec float64 `json:"start_time"`
-
-	// Fields only used if this is a Video Track
-	VideoTrack
-
-	// Fields only used if this is an Audio Track
-	AudioTrack
-}
-
-type InputVideo struct {
-	Format    string       `json:"format,omitempty"`
-	Tracks    []InputTrack `json:"tracks,omitempty"`
-	Duration  float64      `json:"duration,omitempty"`
-	SizeBytes int          `json:"size,omitempty"`
+	Type       string           `json:"type,omitempty"`
+	InputVideo video.InputVideo `json:"video_spec,omitempty"`
+	Outputs    []OutputVideo    `json:"outputs,omitempty"`
 }
 
 type OutputVideoFile struct {
@@ -158,7 +124,7 @@ func NewTranscodeStatusError(url, requestID, errorMsg string, unretriable bool) 
 }
 
 // Separate method as this requires a much richer message than the other status callbacks
-func NewTranscodeStatusCompleted(url, requestID string, iv InputVideo, ov []OutputVideo) TranscodeStatusMessage {
+func NewTranscodeStatusCompleted(url, requestID string, iv video.InputVideo, ov []OutputVideo) TranscodeStatusMessage {
 	return TranscodeStatusMessage{
 		URL:             url,
 		CompletionRatio: OverallCompletionRatio(TranscodeStatusCompleted, 1),
@@ -176,18 +142,6 @@ func NewTranscodeStatusCompleted(url, requestID string, iv InputVideo, ov []Outp
 func (tsm TranscodeStatusMessage) IsTerminal() bool {
 	return tsm.Status == TranscodeStatusError ||
 		tsm.Status == TranscodeStatusCompleted
-}
-
-// Finds the video track from the list of input video tracks
-// If multiple video tracks present, returns the first one
-// If no video tracks present, returns an error
-func (i InputVideo) GetVideoTrack() (InputTrack, error) {
-	for _, t := range i.Tracks {
-		if t.Type == "video" {
-			return t, nil
-		}
-	}
-	return InputTrack{}, fmt.Errorf("no video tracks found")
 }
 
 // Calculate the overall completion ratio based on the completion ratio of the current stage.
