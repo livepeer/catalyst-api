@@ -11,7 +11,7 @@ import (
 type TranscodeJobArgs struct {
 	// Input and output URLs for the job. Input can be any HTTP or OS URL, while
 	// output must be a OS URL.
-	InputFile, HLSOutputFile *url.URL
+	InputFile, HLSOutputFile, MP4OutputLocation *url.URL
 	// Just for logging purposes.
 	RequestID string
 	// Function that should be called every so often with the progress of the job.
@@ -31,7 +31,7 @@ type TranscodeJobArgs struct {
 // transcode unsupported files, etc) and quality assurance (compare result of
 // external vs mist pipelines).
 type TranscodeProvider interface {
-	Transcode(ctx context.Context, input TranscodeJobArgs) error
+	Transcode(ctx context.Context, args TranscodeJobArgs) ([]OutputVideo, error)
 }
 
 // Used only for mocking the client constructor on tests

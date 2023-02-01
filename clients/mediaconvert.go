@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -29,8 +28,11 @@ import (
 var pollDelay = 10 * time.Second
 var retryableHttpClient = newRetryableHttpClient()
 
-const rateLimitedPollDelay = 15 * time.Second
-const maxMP4OutDuration = 2 * time.Minute
+const (
+	rateLimitedPollDelay = 15 * time.Second
+	maxMP4OutDuration    = 2 * time.Minute
+	mp4OutFilePrefix     = "static"
+)
 
 // https://docs.aws.amazon.com/mediaconvert/latest/ug/mediaconvert_error_codes.html
 var errCodesAcceleration = []int64{
@@ -71,7 +73,7 @@ type MediaConvert struct {
 	role                                  string
 	s3TransferBucket, osTransferBucketURL *url.URL
 	client                                AWSMediaConvertClient
-	s3                                    S3Signer
+	s3                                    S3
 }
 
 func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) {
@@ -108,9 +110,9 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 //
 // It calls the input.ReportProgress function to report the progress of the job
 // during the polling loop.
-func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) error {
+func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([]OutputVideo, error) {
 	if path.Base(args.HLSOutputFile.Path) != "index.m3u8" {
-		return fmt.Errorf("target URL must be an `index.m3u8` file, found %s", args.HLSOutputFile)
+		return nil, fmt.Errorf("target URL must be an `index.m3u8` file, found %s", args.HLSOutputFile)
 	}
 	targetDir := getTargetDir(args)
 
@@ -128,7 +130,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 			// by directly passing the source URL to MC instead of using the S3 source URL.
 			srcInputFile = args.InputFile
 		} else {
-			return err
+			return nil, err
 		}
 	} else {
 		log.Log(args.RequestID, "Successfully copied", size, "bytes to S3")
@@ -138,16 +140,16 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	// temporarily probe input mp4 here...
 	presigned, err := mc.s3.PresignS3(mc.s3TransferBucket.Host, mcInputRelPath)
 	if err != nil {
-		return fmt.Errorf("error creating s3 url: %w", err)
+		return nil, fmt.Errorf("error creating s3 url: %w", err)
 	}
 	probe, err := video.ProbeURL(presigned)
 	if err != nil {
-		return fmt.Errorf("error probing MP4 input file from S3: %w", err)
+		return nil, fmt.Errorf("error probing MP4 input file from S3: %w", err)
 	}
 
 	bitrate, err := strconv.ParseInt(probe.FirstVideoStream().BitRate, 10, 64)
 	if err != nil {
-		return fmt.Errorf("error parsing bitrate from probed data: %w", err)
+		return nil, fmt.Errorf("error parsing bitrate from probed data: %w", err)
 	}
 	frameRate := probe.FirstVideoStream().AvgFrameRate
 	parts := strings.Split(frameRate, "/")
@@ -191,21 +193,75 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 	mcArgs.InputFile = srcInputFile
 	mcArgs.HLSOutputFile = mc.s3TransferBucket.JoinPath(mcOutputRelPath)
 
+	if len(mcArgs.Profiles) == 0 {
+		mcArgs.Profiles, err = video.GetPlaybackProfiles(mcArgs.InputFileInfo)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get playback profiles: %w", err)
+		}
+	}
+
+	// only output MP4s for short videos, with duration less than maxMP4OutDuration
+	if args.InputFileInfo.Duration <= maxMP4OutDuration.Seconds() {
+		// sets the mp4 path to be the same as HLS except for the suffix being "static"
+		// resulting files look something like https://storage.googleapis.com/bucket/25afy0urw3zu2476/static360p0.mp4
+		mcArgs.MP4OutputLocation = mc.s3TransferBucket.JoinPath(path.Join("output", targetDir, mp4OutFilePrefix))
+	}
+
 	err = mc.coreAwsTranscode(ctx, mcArgs, true)
 	if err == ErrJobAcceleration {
 		err = mc.coreAwsTranscode(ctx, mcArgs, false)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	mcOutputBaseDir := mc.osTransferBucketURL.JoinPath(mcOutputRelPath, "..")
 	ourOutputBaseDir := args.HLSOutputFile.JoinPath("..")
-	log.Log(args.RequestID, "Copying output files from S3", "source", mcOutputBaseDir, ourOutputBaseDir)
+	log.Log(args.RequestID, "Copying output files from S3", "source", mcOutputBaseDir, "dest", ourOutputBaseDir)
 	if err := copyDir(mcOutputBaseDir, ourOutputBaseDir, args); err != nil {
-		return fmt.Errorf("error copying output files: %w", err)
+		return nil, fmt.Errorf("error copying output files: %w", err)
 	}
-	return nil
+
+	outputVideos := []OutputVideo{
+		{
+			Type:     "object_store",
+			Manifest: args.HLSOutputFile.String(),
+			Videos:   mc.outputVideoFiles(mcArgs, ourOutputBaseDir, "index", "m3u8"),
+		},
+	}
+	if mcArgs.MP4OutputLocation != nil {
+		mp4OutVid := OutputVideo{
+			Type:     "object_store",
+			Manifest: "",
+		}
+		mp4OutVid.Videos = mc.outputVideoFiles(mcArgs, ourOutputBaseDir, mp4OutFilePrefix, "mp4")
+		outputVideos = append(outputVideos, mp4OutVid)
+	}
+	return outputVideos, nil
+}
+
+func (mc *MediaConvert) outputVideoFiles(mcArgs TranscodeJobArgs, ourOutputBaseDir *url.URL, filePrefix, fileSuffix string) (files []OutputVideoFile) {
+	for _, profile := range mcArgs.Profiles {
+		suffix := profile.Name + "." + fileSuffix
+		key := mcArgs.HLSOutputFile.JoinPath("..", filePrefix+suffix).Path
+		// get object from s3 to check that it exists and to find out the file size
+		s3Obj, err := mc.s3.GetObject(mc.s3TransferBucket.Host, key)
+		if err != nil {
+			log.Log(mcArgs.RequestID, "error getting info from s3", "err", err, "bucket", mc.s3TransferBucket.Host, "key", key)
+			continue
+		}
+		if s3Obj.ContentLength == nil || *s3Obj.ContentLength <= 0 {
+			log.Log(mcArgs.RequestID, "invalid content length for s3 object", "ContentLength", s3Obj.ContentLength)
+			continue
+		}
+
+		files = append(files, OutputVideoFile{
+			Type:      fileSuffix,
+			SizeBytes: *s3Obj.ContentLength,
+			Location:  ourOutputBaseDir.JoinPath(filePrefix + suffix).String(),
+		})
+	}
+	return
 }
 
 // This is the function that does the core AWS workflow for transcoding a file.
@@ -213,22 +269,11 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) er
 func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobArgs, accelerated bool) (err error) {
 	log.Log(args.RequestID, "Creating AWS MediaConvert job", "input", args.InputFile, "output", args.HLSOutputFile, "accelerated", accelerated)
 
-	transcodeProfiles := args.Profiles
-	if len(transcodeProfiles) == 0 {
-		transcodeProfiles, err = video.GetPlaybackProfiles(args.InputFileInfo)
-		if err != nil {
-			return fmt.Errorf("failed to get playback profiles: %w", err)
-		}
-	}
-
-	hlsOut := args.HLSOutputFile.String()
 	mp4Out := ""
-	if args.InputFileInfo.Duration <= maxMP4OutDuration.Seconds() {
-		pathParts := strings.Split(hlsOut, string(filepath.Separator))
-		pathParts[len(pathParts)-1] = "static"
-		mp4Out = strings.Join(pathParts, string(filepath.Separator))
+	if args.MP4OutputLocation != nil {
+		mp4Out = args.MP4OutputLocation.String()
 	}
-	payload := createJobPayload(args.InputFile.String(), hlsOut, mp4Out, mc.role, accelerated, transcodeProfiles)
+	payload := createJobPayload(args.InputFile.String(), args.HLSOutputFile.String(), mp4Out, mc.role, accelerated, args.Profiles)
 	job, err := mc.client.CreateJob(payload)
 	if err != nil {
 		return fmt.Errorf("error creting mediaconvert job: %w", err)

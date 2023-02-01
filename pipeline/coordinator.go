@@ -367,12 +367,19 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 		WithLabelValues(labels...).
 		Add(float64(job.transcodedSegments))
 
-	go c.sendDBMetrics(job)
+	go c.sendDBMetrics(job, out)
 
 	job.result <- success
 }
 
-func (c *Coordinator) sendDBMetrics(job *JobInfo) {
+func getProfileCount(out *HandlerOutput) int {
+	if out == nil || out.Result == nil || len(out.Result.Outputs) < 1 {
+		return 0
+	}
+	return len(out.Result.Outputs[0].Videos)
+}
+
+func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
 	if c.MetricsDB == nil {
 		return
 	}
@@ -409,7 +416,7 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo) {
 		job.pipeline,
 		job.catalystRegion,
 		job.state,
-		job.numProfiles,
+		getProfileCount(out),
 		time.Since(job.startTime).Milliseconds(),
 		job.sourceSegments,
 		job.transcodedSegments,

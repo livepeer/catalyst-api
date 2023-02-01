@@ -13,6 +13,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/mediaconvert"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/video"
 	"github.com/stretchr/testify/require"
@@ -41,7 +42,7 @@ func TestOnlyS3URLsToAWSClient(t *testing.T) {
 	sz, err := f.Stat()
 	require.NoError(err)
 
-	err = mc.Transcode(context.Background(), TranscodeJobArgs{
+	_, err = mc.Transcode(context.Background(), TranscodeJobArgs{
 		InputFile:     mustParseURL(t, "file://"+f.Name()),
 		HLSOutputFile: mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
 		CollectSourceSize: func(size int64) {
@@ -95,7 +96,7 @@ func TestReportsMediaConvertProgress(t *testing.T) {
 	defer cleanup()
 
 	reportProgressCalls := 0
-	err := mc.Transcode(context.Background(), TranscodeJobArgs{
+	_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
 		InputFile:         mustParseURL(t, "file://"+f.Name()),
 		HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
 		CollectSourceSize: func(size int64) {},
@@ -124,7 +125,7 @@ func TestSendsOriginalURLToS3OnCopyError(t *testing.T) {
 	mc, _, transferDir, cleanup := setupTestMediaConvert(t, awsStub)
 	defer cleanup()
 
-	err := mc.Transcode(context.Background(), TranscodeJobArgs{
+	_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
 		// use a non existing HTTP endpoint for the file
 		InputFile:         mustParseURL(t, "http://localhost:3000/not-here.mp4"),
 		HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
@@ -137,7 +138,7 @@ func TestSendsOriginalURLToS3OnCopyError(t *testing.T) {
 		require.Fail("should not have been called")
 		return nil, errors.New("unreachable")
 	}
-	err = mc.Transcode(context.Background(), TranscodeJobArgs{
+	_, err = mc.Transcode(context.Background(), TranscodeJobArgs{
 		// use a non existing OS URL
 		InputFile:         mustParseURL(t, "s3+https://user:pwd@localhost:4321/bucket/no-minio-here.mp4"),
 		HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
@@ -186,7 +187,7 @@ func TestRetriesOnAccelerationError(t *testing.T) {
 	mc, inputFile, _, cleanup := setupTestMediaConvert(t, awsStub)
 	defer cleanup()
 
-	err := mc.Transcode(context.Background(), TranscodeJobArgs{
+	_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
 		// use a non existing HTTP endpoint for the file
 		InputFile:         mustParseURL(t, "file://"+inputFile.Name()),
 		HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
@@ -235,7 +236,7 @@ func TestCopiesMediaConvertOutputToFinalLocation(t *testing.T) {
 	transfOutputFile = path.Join(transferDir, "output", outFile)
 	require.NoError(os.MkdirAll(path.Dir(transfOutputFile), 0777))
 
-	err := mc.Transcode(context.Background(), TranscodeJobArgs{
+	_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
 		InputFile:                mustParseURL(t, "file://"+inputFile.Name()),
 		HLSOutputFile:            mustParseURL(t, "file:/"+outFile),
 		CollectSourceSize:        func(size int64) {},
@@ -387,4 +388,10 @@ type stubS3Client struct {
 
 func (s *stubS3Client) PresignS3(_, key string) (string, error) {
 	return s.transferDir + "/" + key, nil
+}
+
+func (s *stubS3Client) GetObject(bucket, key string) (*s3.GetObjectOutput, error) {
+	return &s3.GetObjectOutput{
+		ContentLength: aws.Int64(123),
+	}, nil
 }
