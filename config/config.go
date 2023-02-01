@@ -32,5 +32,3 @@ var DownloadOSURLRetries uint64 = 10
 var ImportIPFSGatewayURLs []*url.URL = []*url.URL{}
 
 var ImportArweaveGatewayURLs []*url.URL = []*url.URL{}
-
-var UcanKey string
