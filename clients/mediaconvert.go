@@ -340,23 +340,6 @@ func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 		return writtenBytes.count, fmt.Errorf("upload error: %w", err)
 	}
 
-	storageDriver, err := drivers.ParseOSURL(destOSBaseURL, true)
-	if err != nil {
-		return writtenBytes.count, err
-	}
-	sess := storageDriver.NewSession("")
-	info, err := sess.ReadData(context.Background(), filename)
-	if err != nil {
-		return writtenBytes.count, err
-	}
-
-	defer info.Body.Close()
-	defer sess.EndSession()
-
-	if err != nil {
-		return writtenBytes.count, err
-	}
-
 	return writtenBytes.count, nil
 
 }
@@ -431,7 +414,7 @@ func trimBaseDir(osPath, filePath string) string {
 			return filePath
 		}
 	}
-	return strings.TrimPrefix(filePath, baseDir)
+	return strings.TrimLeft(strings.TrimPrefix(filePath, baseDir), "/")
 }
 
 // Returns the directory where the files will be stored given an OS URL
