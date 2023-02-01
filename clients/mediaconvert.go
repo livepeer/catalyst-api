@@ -119,22 +119,11 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 	mcInputRelPath := path.Join("input", targetDir, "video")
 	// AWS MediaConvert adds the .m3u8 to the end of the output file name
 	mcOutputRelPath := path.Join("output", targetDir, "index")
-	var srcInputFile *url.URL
 
 	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", mc.s3TransferBucket.JoinPath(mcInputRelPath), "filename", mcInputRelPath)
 	size, err := copyFile(ctx, args.InputFile.String(), mc.osTransferBucketURL.String(), mcInputRelPath, args.RequestID)
 	if err != nil {
-		log.Log(args.RequestID, "error copying input file to S3", "bytes", size, "err", fmt.Sprintf("%s", err))
-		if args.InputFile.Scheme == "http" || args.InputFile.Scheme == "https" {
-			// If copyFile fails (e.g. file server closes connection), then attempt transcoding
-			// by directly passing the source URL to MC instead of using the S3 source URL.
-			srcInputFile = args.InputFile
-		} else {
-			return nil, err
-		}
-	} else {
-		log.Log(args.RequestID, "Successfully copied", size, "bytes to S3")
-		srcInputFile = mc.s3TransferBucket.JoinPath(mcInputRelPath)
+		return nil, fmt.Errorf("error copying input file to S3: %w", err)
 	}
 
 	// temporarily probe input mp4 here...
@@ -190,7 +179,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 	args.CollectSourceSize(size)
 	mcArgs := args
 	mcArgs.InputFileInfo = iv
-	mcArgs.InputFile = srcInputFile
+	mcArgs.InputFile = mc.s3TransferBucket.JoinPath(mcInputRelPath)
 	mcArgs.HLSOutputFile = mc.s3TransferBucket.JoinPath(mcOutputRelPath)
 
 	if len(mcArgs.Profiles) == 0 {
@@ -509,7 +498,6 @@ func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 	}
 
 	return writtenBytes.count, nil
-
 }
 
 func copyDir(source, dest *url.URL, args TranscodeJobArgs) error {

@@ -97,7 +97,7 @@ type OutputVideoFile struct {
 
 type OutputVideo struct {
 	Type     string            `json:"type"`
-	Manifest string            `json:"manifest"`
+	Manifest string            `json:"manifest,omitempty"`
 	Videos   []OutputVideoFile `json:"videos"`
 }
 
