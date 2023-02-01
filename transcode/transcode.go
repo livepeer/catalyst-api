@@ -24,7 +24,7 @@ type TranscodeSegmentRequest struct {
 	SourceFile        string                 `json:"source_location"`
 	CallbackURL       string                 `json:"callback_url"`
 	SourceManifestURL string                 `json:"source_manifest_url"`
-	TargetURL         string                 `json:"target_url,omitempty"`
+	TargetURL         string                 `json:"target_url"`
 	StreamKey         string                 `json:"streamKey"`
 	AccessToken       string                 `json:"accessToken"`
 	TranscodeAPIUrl   string                 `json:"transcodeAPIUrl"`
@@ -60,7 +60,15 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	outputs := []clients.OutputVideo{}
 
-	targetURL, err := url.Parse(transcodeRequest.TargetURL)
+	var targetURL *url.URL
+	var err error
+	if transcodeRequest.TargetURL != "" {
+		targetURL, err = url.Parse(transcodeRequest.TargetURL)
+	} else {
+		// TargetURL not defined in the request, fall back the source manifest dir
+		targetURL, err = url.Parse(path.Dir(transcodeRequest.SourceManifestURL))
+	}
+
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("failed to parse transcodeRequest.TargetURL: %s", err)
 	}
