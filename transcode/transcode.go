@@ -18,6 +18,8 @@ import (
 	"github.com/livepeer/catalyst-api/metrics"
 )
 
+const UPLOAD_TIMEOUT = 5 * time.Minute
+
 type TranscodeSegmentRequest struct {
 	SourceFile        string                   `json:"source_location"`
 	CallbackURL       string                   `json:"callback_url"`
@@ -233,7 +235,7 @@ func transcodeSegment(
 			return fmt.Errorf("error building rendition segment URL %q: %s", targetRenditionURL, err)
 		}
 
-		err = clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), time.Minute)
+		err = clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), UPLOAD_TIMEOUT)
 		if err != nil {
 			return fmt.Errorf("failed to upload master playlist: %s", err)
 		}
