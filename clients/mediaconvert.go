@@ -226,7 +226,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 		{
 			Type:     "object_store",
 			Manifest: args.HLSOutputFile.String(),
-			Videos:   mc.outputVideoFiles(mcArgs, ourOutputBaseDir, "index", ".m3u8"),
+			Videos:   mc.outputVideoFiles(mcArgs, ourOutputBaseDir, "index", "m3u8"),
 		},
 	}
 	if mcArgs.MP4OutputLocation != nil {
@@ -234,7 +234,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 			Type:     "object_store",
 			Manifest: "",
 		}
-		mp4OutVid.Videos = mc.outputVideoFiles(mcArgs, ourOutputBaseDir, mp4OutFilePrefix, ".mp4")
+		mp4OutVid.Videos = mc.outputVideoFiles(mcArgs, ourOutputBaseDir, mp4OutFilePrefix, "mp4")
 		outputVideos = append(outputVideos, mp4OutVid)
 	}
 	return outputVideos, nil
@@ -242,21 +242,21 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 
 func (mc *MediaConvert) outputVideoFiles(mcArgs TranscodeJobArgs, ourOutputBaseDir *url.URL, filePrefix, fileSuffix string) (files []OutputVideoFile) {
 	for _, profile := range mcArgs.Profiles {
-		suffix := profile.Name + fileSuffix
-		key := mcArgs.MP4OutputLocation.Path + suffix
+		suffix := profile.Name + "." + fileSuffix
+		key := mcArgs.HLSOutputFile.JoinPath("..", filePrefix+suffix).Path
 		// get object from s3 to check that it exists and to find out the file size
 		s3Obj, err := mc.s3.GetObject(mc.s3TransferBucket.Host, key)
 		if err != nil {
-			log.Log(mcArgs.RequestID, "error getting mp4 info from s3", "err", err, "bucket", mc.s3TransferBucket.Host, "key", key)
+			log.Log(mcArgs.RequestID, "error getting info from s3", "err", err, "bucket", mc.s3TransferBucket.Host, "key", key)
 			continue
 		}
 		if s3Obj.ContentLength == nil || *s3Obj.ContentLength <= 0 {
-			log.Log(mcArgs.RequestID, "invalid content length for mp4 s3 object", "ContentLength", s3Obj.ContentLength)
+			log.Log(mcArgs.RequestID, "invalid content length for s3 object", "ContentLength", s3Obj.ContentLength)
 			continue
 		}
 
 		files = append(files, OutputVideoFile{
-			Type:      "mp4",
+			Type:      fileSuffix,
 			SizeBytes: *s3Obj.ContentLength,
 			Location:  ourOutputBaseDir.JoinPath(filePrefix + suffix).String(),
 		})
