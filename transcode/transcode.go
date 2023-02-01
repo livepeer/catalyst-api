@@ -165,17 +165,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, err
 	}
 
-	var playbackBaseURL string
-	osDriver, err := drivers.ParseOSURL(targetTranscodedRenditionOutputURL.String(), true)
-	if err != nil {
-		return outputs, segmentsCount, fmt.Errorf("failed to parse targetTranscodedRenditionOutputURL: %s", err)
-	}
-	videoUrl, err := osDriver.Publish(context.Background())
-	if err == drivers.ErrNotSupported {
-		playbackBaseURL = targetTranscodedRenditionOutputURL.String()
-	} else if err == nil {
-		playbackBaseURL, _ = url.JoinPath(videoUrl, tout.Path)
-	}
+	playbackBaseURL := PublishDriverSession(targetTranscodedRenditionOutputURL.String(), tout.Path)
 
 	output := clients.OutputVideo{Type: "object_store", Manifest: strings.ReplaceAll(manifestManifestURL, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)}
 	for _, rendition := range transcodedStats {
@@ -184,6 +174,21 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	outputs = []clients.OutputVideo{output}
 	// Return outputs for .dtsh file creation
 	return outputs, segmentsCount, nil
+}
+
+func PublishDriverSession(osUrl string, relPath string) string {
+	osDriver, err := drivers.ParseOSURL(osUrl, true)
+	if err != nil {
+		return ""
+	}
+	videoUrl, err := osDriver.Publish(context.Background())
+	if err == drivers.ErrNotSupported {
+		return osUrl
+	} else if err == nil {
+		res, _ := url.JoinPath(videoUrl, relPath)
+		return res
+	}
+	return ""
 }
 
 func transcodeSegment(

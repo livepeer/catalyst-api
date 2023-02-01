@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/livepeer/go-tools/drivers"
+	"github.com/livepeer/catalyst-api/transcode"
 	"net/url"
 	"time"
 
@@ -45,17 +45,7 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		return nil, fmt.Errorf("external transcoder error: %w", err)
 	}
 
-	var playbackURL string
-	osDriver, err := drivers.ParseOSURL(job.TargetURL.String(), true)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse job.TargetURL: %s", err)
-	}
-	videoUrl, err := osDriver.Publish(context.Background())
-	if err == drivers.ErrNotSupported {
-		playbackURL = job.TargetURL.String()
-	} else if err == nil {
-		playbackURL, _ = url.JoinPath(videoUrl, job.TargetURL.Path)
-	}
+	playbackURL := transcode.PublishDriverSession(job.TargetURL.String(), job.TargetURL.Path)
 
 	return &HandlerOutput{
 		Result: &UploadJobResult{
