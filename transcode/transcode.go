@@ -147,6 +147,10 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	return outputs, segmentsCount, nil
 }
 
+// PublishDriverSession tries to publish the given osUrl and returns a publicly accessible video URL.
+// If driver supports `Publish()`, e.g. web3.storage, then return the path to the video.
+// If driver does not support `Publish()`, e.g. S3, then return the input osUrl, video should be accessible with osUrl.
+// In case of any other error, return an empty string; we don't want to propagate osUrl by default, because it may contain sensitive data.
 func PublishDriverSession(osUrl string, relPath string) string {
 	osDriver, err := drivers.ParseOSURL(osUrl, true)
 	if err != nil {
