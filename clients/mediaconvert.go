@@ -218,6 +218,19 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 			Videos:   []OutputVideoFile{},
 		},
 	}
+
+	if mcArgs.MP4OutputLocation != nil {
+		// mp4OutVid := OutputVideo{
+		// Type:     "object_store",
+		// Manifest: "",
+		// }
+
+		// Temporary commenting until we fix task-runner panic
+		_ = mc.outputVideoFiles(mcArgs, ourOutputBaseDir, mp4OutFilePrefix, "mp4")
+		// mp4OutVid.Videos = mc.outputVideoFiles(mcArgs, ourOutputBaseDir, mp4OutFilePrefix, "mp4")
+		// outputVideos = append(outputVideos, mp4OutVid)
+	}
+
 	return outputVideos, nil
 }
 
