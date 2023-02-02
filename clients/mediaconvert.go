@@ -74,6 +74,7 @@ type MediaConvert struct {
 	s3TransferBucket, osTransferBucketURL *url.URL
 	client                                AWSMediaConvertClient
 	s3                                    S3
+	ffprobe                               video.FFProbeClient
 }
 
 func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) {
@@ -101,7 +102,14 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 	}
 
 	client := mediaconvert.New(sess)
-	return &MediaConvert{opts.Role, opts.S3TransferBucket, osTransferBucket, client, &S3Client{s3.New(s3Sess)}}, nil
+	return &MediaConvert{
+		role:                opts.Role,
+		s3TransferBucket:    opts.S3TransferBucket,
+		osTransferBucketURL: osTransferBucket,
+		client:              client,
+		s3:                  &S3Client{s3.New(s3Sess)},
+		ffprobe:             &video.FFProbe{},
+	}, nil
 }
 
 // This does the whole transcode job, including the moving of the input file to
@@ -131,7 +139,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 	if err != nil {
 		return nil, fmt.Errorf("error creating s3 url: %w", err)
 	}
-	probe, err := video.ProbeURL(presigned)
+	probe, err := mc.ffprobe.ProbeURL(presigned)
 	if err != nil {
 		return nil, fmt.Errorf("error probing MP4 input file from S3: %w", err)
 	}
