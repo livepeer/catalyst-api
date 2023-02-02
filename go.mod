@@ -10,7 +10,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/lib/pq v1.10.7
-	github.com/livepeer/go-tools v0.1.2-0.20230131205846-1298d6b320a7
+	github.com/livepeer/go-tools v0.2.1
 	github.com/livepeer/livepeer-data v0.6.2
 	github.com/minio/madmin-go v1.7.5
 	github.com/prometheus/client_golang v1.14.0
