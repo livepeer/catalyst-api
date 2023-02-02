@@ -17,6 +17,7 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/video"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/vansante/go-ffprobe.v2"
 )
 
 const dummyHlsPlaylist = `
@@ -309,6 +310,55 @@ func Test_createJobPayload(t *testing.T) {
 	}
 }
 
+func Test_MP4OutDurationCheck(t *testing.T) {
+	require := require.New(t)
+
+	tests := []struct {
+		name     string
+		duration float64
+		outputs  []string
+	}{
+		{
+			name:     "hls and mp4",
+			duration: 120,
+			outputs:  []string{"hls", "mp4"},
+		},
+		{
+			name:     "hls only",
+			duration: 121,
+			outputs:  []string{"hls"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			awsStub := &stubMediaConvertClient{
+				createJob: func(input *mediaconvert.CreateJobInput) (*mediaconvert.CreateJobOutput, error) {
+					require.Len(input.Settings.OutputGroups, len(tt.outputs))
+					for i, outputName := range tt.outputs {
+						require.Equal(outputName, *input.Settings.OutputGroups[i].CustomName)
+					}
+					// throw an error to end exit early as we only want to test the MC job input
+					return nil, errors.New("secret error")
+				},
+			}
+			mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
+			mc.ffprobe = &stubFFprobe{
+				Bitrate:  "1000000",
+				Duration: tt.duration,
+			}
+			defer cleanup()
+
+			_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
+				InputFile:         mustParseURL(t, "file://"+f.Name()),
+				HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
+				CollectSourceSize: func(size int64) {},
+			})
+			require.Error(err)
+		})
+	}
+}
+
 func loadFixture(t *testing.T, expectedPath, actual string) string {
 	if os.Getenv("REGEN_FIXTURES") != "" {
 		err := os.WriteFile(expectedPath, []byte(actual), 0644)
@@ -353,6 +403,7 @@ func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *Med
 		osTransferBucketURL: mustParseURL(t, "file://"+transferDir),
 		client:              awsStub,
 		s3:                  &stubS3Client{transferDir},
+		ffprobe:             &video.FFProbe{},
 	}
 	return
 }
@@ -393,5 +444,24 @@ func (s *stubS3Client) PresignS3(_, key string) (string, error) {
 func (s *stubS3Client) GetObject(bucket, key string) (*s3.GetObjectOutput, error) {
 	return &s3.GetObjectOutput{
 		ContentLength: aws.Int64(123),
+	}, nil
+}
+
+type stubFFprobe struct {
+	Bitrate  string
+	Duration float64
+}
+
+func (f *stubFFprobe) ProbeURL(_ string) (*ffprobe.ProbeData, error) {
+	return &ffprobe.ProbeData{
+		Streams: []*ffprobe.Stream{
+			{
+				BitRate:   f.Bitrate,
+				CodecType: "video",
+			},
+		},
+		Format: &ffprobe.Format{
+			DurationSeconds: f.Duration,
+		},
 	}, nil
 }
