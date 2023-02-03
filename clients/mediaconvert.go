@@ -144,7 +144,11 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 		return nil, fmt.Errorf("error probing MP4 input file from S3: %w", err)
 	}
 
-	bitrate, err := strconv.ParseInt(probe.FirstVideoStream().BitRate, 10, 64)
+	bitRateValue := probe.FirstVideoStream().BitRate
+	if bitRateValue == "" {
+		bitRateValue = probe.Format.BitRate
+	}
+	bitrate, err := strconv.ParseInt(bitRateValue, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing bitrate from probed data: %w", err)
 	}
