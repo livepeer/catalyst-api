@@ -47,7 +47,10 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		return nil, fmt.Errorf("external transcoder error: %w", err)
 	}
 
-	playbackURL := transcode.PublishDriverSession(job.TargetURL.String(), job.TargetURL.Path)
+	playbackURL, err := transcode.PublishDriverSession(job.TargetURL.String(), job.TargetURL.Path)
+	if err != nil {
+		return nil, err
+	}
 
 	return &HandlerOutput{
 		Result: &UploadJobResult{
