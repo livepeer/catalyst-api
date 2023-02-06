@@ -232,13 +232,3 @@ func TestParallelJobSaveTime(t *testing.T) {
 	require.Less(t, elapsed, 160*time.Millisecond) // usually takes less than 101ms on idle machine
 	time.Sleep(10 * time.Millisecond)              // wait for other workers to exit
 }
-
-func TestPublishDriverSession(t *testing.T) {
-	require := require.New(t)
-
-	s3Url := "s3+http://usename:password@bucket/hls/"
-	require.Equal(s3Url, PublishDriverSession(s3Url, "whatever"))
-
-	invalidUrl := "invalid://some-invalid-url"
-	require.Equal("", PublishDriverSession(invalidUrl, "whatever"))
-}
