@@ -150,3 +150,17 @@ func TestItFailsAfterMaxSavesRetriesReached(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, 3, retries)
 }
+
+func TestPublishDriverSession(t *testing.T) {
+	require := require.New(t)
+
+	s3Url := "s3+http://usename:password@bucket/hls/"
+	s3UrlRes, err := PublishDriverSession(s3Url, "whatever")
+	require.NoError(err)
+	require.Equal(s3Url, s3UrlRes)
+
+	invalidUrl := "invalid://some-invalid-url"
+	invalidUrlRes, err := PublishDriverSession(invalidUrl, "whatever")
+	require.Error(err)
+	require.Equal("", invalidUrlRes)
+}

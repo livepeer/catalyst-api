@@ -21,21 +21,25 @@ import (
 	"github.com/xeipuuv/gojsonschema"
 )
 
+type UploadVODRequestOutputLocationOutputs struct {
+	SourceMp4          bool `json:"source_mp4"`
+	SourceSegments     bool `json:"source_segments"`
+	TranscodedSegments bool `json:"transcoded_segments"`
+}
+
+type UploadVODRequestOutputLocation struct {
+	Type            string                                `json:"type"`
+	URL             string                                `json:"url"`
+	PinataAccessKey string                                `json:"pinata_access_key"`
+	Outputs         UploadVODRequestOutputLocationOutputs `json:"outputs,omitempty"`
+}
+
 type UploadVODRequest struct {
-	Url             string `json:"url"`
-	CallbackUrl     string `json:"callback_url"`
-	OutputLocations []struct {
-		Type            string `json:"type"`
-		URL             string `json:"url"`
-		PinataAccessKey string `json:"pinata_access_key"`
-		Outputs         struct {
-			SourceMp4          bool `json:"source_mp4"`
-			SourceSegments     bool `json:"source_segments"`
-			TranscodedSegments bool `json:"transcoded_segments"`
-		} `json:"outputs,omitempty"`
-	} `json:"output_locations,omitempty"`
-	AccessToken     string `json:"accessToken"`
-	TranscodeAPIUrl string `json:"transcodeAPIUrl"`
+	Url             string                           `json:"url"`
+	CallbackUrl     string                           `json:"callback_url"`
+	OutputLocations []UploadVODRequestOutputLocation `json:"output_locations,omitempty"`
+	AccessToken     string                           `json:"accessToken"`
+	TranscodeAPIUrl string                           `json:"transcodeAPIUrl"`
 	// Forwarded to transcoding stage:
 	Profiles         []video.EncodedProfile `json:"profiles"`
 	PipelineStrategy pipeline.Strategy      `json:"pipeline_strategy"`
@@ -62,6 +66,24 @@ func HasContentType(r *http.Request, mimetype string) bool {
 	}
 
 	return false
+}
+
+func (r UploadVODRequest) getSourceOutputURL() (*url.URL, error) {
+	for _, o := range r.OutputLocations {
+		if o.Outputs.SourceSegments {
+			return url.Parse(o.URL)
+		}
+	}
+	return nil, nil
+}
+
+func (r UploadVODRequest) getTargetURL() (*url.URL, error) {
+	for _, o := range r.OutputLocations {
+		if o.Outputs.TranscodedSegments {
+			return url.Parse(o.URL)
+		}
+	}
+	return nil, fmt.Errorf("no output_location with transcoded_segments")
 }
 
 func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
@@ -103,24 +125,24 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	var requestID = config.RandomTrailer(8)
 	log.AddContext(requestID, "source", uploadVODRequest.Url)
 
-	// find source segment URL
-	var tURL string
-	for _, o := range uploadVODRequest.OutputLocations {
-		if o.Outputs.SourceSegments {
-			tURL = o.URL
-			break
-		}
-	}
-	if tURL == "" {
-		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("no source segment URL in request"))
-	}
-
 	// Create a separate subdirectory for the source segments
 	// Use the output directory specified in request as the output directory of transcoded renditions
-	targetURL, err := url.Parse(tURL)
+	targetURL, err := uploadVODRequest.getTargetURL()
 	if err != nil {
-		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("target output file should end in .m3u8 extension"))
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 	}
+	// Hack for web3.storage to distinguish different jobs, before calling Publish()
+	// Can be removed after we address this issue: https://github.com/livepeer/go-tools/issues/16
+	if targetURL.Scheme == "w3s" {
+		targetURL.Host = requestID
+		log.AddContext(requestID, "w3s-url", targetURL.String())
+	}
+
+	sourceOutputURL, err := uploadVODRequest.getSourceOutputURL()
+	if err != nil {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+	}
+
 	if strat := uploadVODRequest.PipelineStrategy; strat != "" && !strat.IsValid() {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("invalid value provided for pipeline strategy: %q", uploadVODRequest.PipelineStrategy))
 	}
@@ -132,6 +154,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	d.VODEngine.StartUploadJob(pipeline.UploadJobPayload{
 		SourceFile:       uploadVODRequest.Url,
 		CallbackURL:      uploadVODRequest.CallbackUrl,
+		SourceOutputURL:  sourceOutputURL,
 		TargetURL:        targetURL,
 		AccessToken:      uploadVODRequest.AccessToken,
 		TranscodeAPIUrl:  uploadVODRequest.TranscodeAPIUrl,

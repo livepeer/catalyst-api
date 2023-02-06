@@ -211,7 +211,7 @@ func TestVODHandlerProfiles(t *testing.T) {
 		"output_locations": [{
 			"type": "object_store",
 			"url": "%s",
-			"outputs": {"source_segments": true}
+			"outputs": {"source_segments": true,"transcoded_segments": true}
 		}]
 	}`, inputUrl, callbackServer.URL, outputUrl)
 	router := httprouter.New()
@@ -301,7 +301,8 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 				"type": "object_store",
 				"url": "memory://localhost/output.m3u8",
  				"outputs": {
-					"source_segments": true
+					"source_segments": true,
+					"transcoded_segments": true
 				}
 			},
 			{

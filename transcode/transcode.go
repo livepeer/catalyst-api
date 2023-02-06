@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,10 +16,13 @@ import (
 	"github.com/livepeer/catalyst-api/video"
 )
 
+const UPLOAD_TIMEOUT = 5 * time.Minute
+
 type TranscodeSegmentRequest struct {
 	SourceFile        string                 `json:"source_location"`
 	CallbackURL       string                 `json:"callback_url"`
 	SourceManifestURL string                 `json:"source_manifest_url"`
+	TargetURL         string                 `json:"target_url"`
 	StreamKey         string                 `json:"streamKey"`
 	AccessToken       string                 `json:"accessToken"`
 	TranscodeAPIUrl   string                 `json:"transcodeAPIUrl"`
@@ -54,20 +58,24 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	outputs := []clients.OutputVideo{}
 
-	// Parse the manifest destination of the segmented output specified in the request
-	segmentedOutputManifestURL, err := url.Parse(transcodeRequest.SourceManifestURL)
-	if err != nil {
-		return outputs, segmentsCount, fmt.Errorf("failed to parse transcodeRequest.UploadURL: %s", err)
+	var targetURL *url.URL
+	var err error
+	if transcodeRequest.TargetURL != "" {
+		targetURL, err = url.Parse(transcodeRequest.TargetURL)
+	} else {
+		// TargetURL not defined in the /api/transcode/file request; for the backwards-compatibility, use SourceManifestURL.
+		// For the /api/vod endpoint, TargetURL is always defined.
+		targetURL, err = url.Parse(path.Dir(transcodeRequest.SourceManifestURL))
 	}
-	// Go back to the root directory to set as the output for transcode renditions
-	targetTranscodedPath := path.Dir(path.Dir(segmentedOutputManifestURL.Path))
 
-	// Generate the rendition output URL (e.g. s3+https://USER:PASS@storage.googleapis.com/user/hls/)
-	tout, err := url.Parse(targetTranscodedPath)
+	if err != nil {
+		return outputs, segmentsCount, fmt.Errorf("failed to parse transcodeRequest.TargetURL: %s", err)
+	}
+	tout, err := url.Parse(path.Dir(targetURL.Path))
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("failed to parse targetTranscodedPath: %s", err)
 	}
-	targetTranscodedRenditionOutputURL := segmentedOutputManifestURL.ResolveReference(tout)
+	targetTranscodedRenditionOutputURL := targetURL.ResolveReference(tout)
 
 	// Grab some useful parameters to be used later from the TranscodeSegmentRequest
 	sourceManifestOSURL := transcodeRequest.SourceManifestURL
@@ -120,14 +128,21 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Build the manifests and push them to storage
-	manifestManifestURL, err := GenerateAndUploadManifests(sourceManifest, targetTranscodedRenditionOutputURL.String(), transcodedStats)
+	manifestURL, err := GenerateAndUploadManifests(sourceManifest, targetTranscodedRenditionOutputURL.String(), transcodedStats)
 	if err != nil {
 		return outputs, segmentsCount, err
 	}
 
-	output := clients.OutputVideo{Type: "object_store", Manifest: manifestManifestURL}
+	playbackBaseURL, err := clients.PublishDriverSession(targetTranscodedRenditionOutputURL.String(), tout.Path)
+	if err != nil {
+		return outputs, segmentsCount, err
+	}
+
+	manifestURL = strings.ReplaceAll(manifestURL, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
+	output := clients.OutputVideo{Type: "object_store", Manifest: manifestURL}
 	for _, rendition := range transcodedStats {
-		output.Videos = append(output.Videos, clients.OutputVideoFile{Location: rendition.ManifestLocation, SizeBytes: rendition.Bytes})
+		videoManifestURL := strings.ReplaceAll(rendition.ManifestLocation, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
+		output.Videos = append(output.Videos, clients.OutputVideoFile{Location: videoManifestURL, SizeBytes: rendition.Bytes})
 	}
 	outputs = []clients.OutputVideo{output}
 	// Return outputs for .dtsh file creation
@@ -183,7 +198,7 @@ func transcodeSegment(
 			return fmt.Errorf("error building rendition segment URL %q: %s", targetRenditionURL, err)
 		}
 
-		err = clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), time.Minute)
+		err = clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), UPLOAD_TIMEOUT)
 		if err != nil {
 			return fmt.Errorf("failed to upload master playlist: %s", err)
 		}

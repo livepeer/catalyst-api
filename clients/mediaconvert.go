@@ -223,11 +223,20 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 		return nil, fmt.Errorf("error copying output files: %w", err)
 	}
 
+	playbackDir, err := PublishDriverSession(ourOutputBaseDir.String(), ourOutputBaseDir.Path)
+	if err != nil {
+		return nil, err
+	}
+	playbackDirURL, err := url.Parse(playbackDir)
+	if err != nil {
+		return nil, err
+	}
+
 	outputVideos := []OutputVideo{
 		{
 			Type:     "object_store",
-			Manifest: args.HLSOutputFile.String(),
-			Videos:   mc.outputVideoFiles(mcArgs, ourOutputBaseDir, "index", "m3u8"),
+			Manifest: playbackDirURL.JoinPath("index.m3u8").String(),
+			Videos:   mc.outputVideoFiles(mcArgs, playbackDirURL, "index", "m3u8"),
 		},
 	}
 	if mcArgs.MP4OutputLocation != nil {
@@ -235,7 +244,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 			Type:     "object_store",
 			Manifest: "",
 		}
-		mp4OutVid.Videos = mc.outputVideoFiles(mcArgs, ourOutputBaseDir, mp4OutFilePrefix, "mp4")
+		mp4OutVid.Videos = mc.outputVideoFiles(mcArgs, playbackDirURL, mp4OutFilePrefix, "mp4")
 		outputVideos = append(outputVideos, mp4OutVid)
 	}
 	return outputVideos, nil
@@ -487,26 +496,9 @@ func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 
 	content := io.TeeReader(c, &writtenBytes)
 
-	err = UploadToOSURL(destOSBaseURL, filename, content, 1*time.Minute)
+	err = UploadToOSURL(destOSBaseURL, filename, content, 5*time.Minute)
 	if err != nil {
 		return writtenBytes.count, fmt.Errorf("upload error: %w", err)
-	}
-
-	storageDriver, err := drivers.ParseOSURL(destOSBaseURL, true)
-	if err != nil {
-		return writtenBytes.count, err
-	}
-	sess := storageDriver.NewSession("")
-	info, err := sess.ReadData(context.Background(), filename)
-	if err != nil {
-		return writtenBytes.count, err
-	}
-
-	defer info.Body.Close()
-	defer sess.EndSession()
-
-	if err != nil {
-		return writtenBytes.count, err
 	}
 
 	return writtenBytes.count, nil
@@ -582,7 +574,7 @@ func trimBaseDir(osPath, filePath string) string {
 			return filePath
 		}
 	}
-	return strings.TrimPrefix(filePath, baseDir)
+	return strings.TrimLeft(strings.TrimPrefix(filePath, baseDir), "/")
 }
 
 // Returns the directory where the files will be stored given an OS URL

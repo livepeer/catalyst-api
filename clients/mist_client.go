@@ -34,6 +34,7 @@ type MistClient struct {
 	ApiUrl          string
 	HttpReqUrl      string
 	TriggerCallback string
+	SourceOutputUrl string
 	configMu        sync.Mutex
 }
 
