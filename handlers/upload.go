@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	errors2 "errors"
 	"fmt"
 	"io"
 	"mime"
@@ -79,10 +78,12 @@ func (r UploadVODRequest) getSourceOutputURL() (*url.URL, error) {
 }
 
 func (r UploadVODRequest) getTargetURL() (*url.URL, error) {
-	if len(r.OutputLocations) < 1 {
-		return nil, errors2.New("no output locations")
+	for _, o := range r.OutputLocations {
+		if o.Outputs.TranscodedSegments {
+			return url.Parse(o.URL)
+		}
 	}
-	return url.Parse(r.OutputLocations[0].URL)
+	return nil, fmt.Errorf("no output_location with transcoded_segments")
 }
 
 func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
@@ -134,6 +135,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	// Can be removed after we address this issue: https://github.com/livepeer/go-tools/issues/16
 	if targetURL.Scheme == "w3s" {
 		targetURL.Host = requestID
+		log.AddContext(requestID, "w3s-url", targetURL.String())
 	}
 
 	sourceOutputURL, err := uploadVODRequest.getSourceOutputURL()
