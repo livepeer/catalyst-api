@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/livepeer/catalyst-api/transcode"
 	"net/url"
 	"time"
 
@@ -47,28 +46,11 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		return nil, fmt.Errorf("external transcoder error: %w", err)
 	}
 
-	playbackURL, err := transcode.PublishDriverSession(job.TargetURL.String(), job.TargetURL.Path)
-	if err != nil {
-		return nil, err
-	}
-
 	return &HandlerOutput{
 		Result: &UploadJobResult{
 			InputVideo: video.InputVideo{
 				// TODO: Figure out what to do here. Studio doesn't use these anyway.
 			},
-      // TODO: Resolve 
-			Outputs: []clients.OutputVideo{
-				{
-					Type:     "object_store",
-					Manifest: playbackURL,
-					Videos:   []clients.OutputVideoFile{
-						// TODO: Figure out what to do here. Studio doesn't use these anyway.
-					},
-				},
-			},
-			// TODO add mp4 outs?
-      // TODO: Resolve conflicts
 			Outputs: outputVideos,
 		},
 	}, nil

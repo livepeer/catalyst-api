@@ -2,9 +2,7 @@ package transcode
 
 import (
 	"bytes"
-	"context"
 	"fmt"
-	"github.com/livepeer/go-tools/drivers"
 	"net/url"
 	"path"
 	"strings"
@@ -135,7 +133,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, err
 	}
 
-	playbackBaseURL, err := PublishDriverSession(targetTranscodedRenditionOutputURL.String(), tout.Path)
+	playbackBaseURL, err := clients.PublishDriverSession(targetTranscodedRenditionOutputURL.String(), tout.Path)
 	if err != nil {
 		return outputs, segmentsCount, err
 	}
@@ -144,32 +142,11 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	output := clients.OutputVideo{Type: "object_store", Manifest: manifestURL}
 	for _, rendition := range transcodedStats {
 		videoManifestURL := strings.ReplaceAll(rendition.ManifestLocation, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
-    output.Videos = append(output.Videos, clients.OutputVideoFile{Location: videoManifestURL, SizeBytes: rendition.Bytes})
+		output.Videos = append(output.Videos, clients.OutputVideoFile{Location: videoManifestURL, SizeBytes: rendition.Bytes})
 	}
 	outputs = []clients.OutputVideo{output}
 	// Return outputs for .dtsh file creation
 	return outputs, segmentsCount, nil
-}
-
-// PublishDriverSession tries to publish the given osUrl and returns a publicly accessible video URL.
-// If driver supports `Publish()`, e.g. web3.storage, then return the path to the video.
-// If driver does not support `Publish()`, e.g. S3, then return the input osUrl, video should be accessible with osUrl.
-// In case of any other error, return an empty string and an error.
-func PublishDriverSession(osUrl string, relPath string) (string, error) {
-	osDriver, err := drivers.ParseOSURL(osUrl, true)
-	if err != nil {
-		return "", err
-	}
-	videoUrl, err := osDriver.Publish(context.Background())
-	if err == drivers.ErrNotSupported {
-		// driver does not support Publish(), video will be accessible with osUrl
-		return osUrl, nil
-	} else if err != nil {
-		// error while publishing the video
-		return "", err
-	}
-	// driver supports Publish() and returned a video url, return it joined with the relative path
-	return url.JoinPath(videoUrl, relPath)
 }
 
 func transcodeSegment(

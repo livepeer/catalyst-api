@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"time"
 
 	"github.com/livepeer/catalyst-api/log"
@@ -103,6 +104,27 @@ func ListOSURL(ctx context.Context, osURL string) (drivers.PageInfo, error) {
 	}
 
 	return page, nil
+}
+
+// PublishDriverSession tries to publish the given osUrl and returns a publicly accessible video URL.
+// If driver supports `Publish()`, e.g. web3.storage, then return the path to the video.
+// If driver does not support `Publish()`, e.g. S3, then return the input osUrl, video should be accessible with osUrl.
+// In case of any other error, return an empty string and an error.
+func PublishDriverSession(osUrl string, relPath string) (string, error) {
+	osDriver, err := drivers.ParseOSURL(osUrl, true)
+	if err != nil {
+		return "", err
+	}
+	videoUrl, err := osDriver.Publish(context.Background())
+	if err == drivers.ErrNotSupported {
+		// driver does not support Publish(), video will be accessible with osUrl
+		return osUrl, nil
+	} else if err != nil {
+		// error while publishing the video
+		return "", err
+	}
+	// driver supports Publish() and returned a video url, return it joined with the relative path
+	return url.JoinPath(videoUrl, relPath)
 }
 
 func newExponentialBackOffExecutor() *backoff.ExponentialBackOff {

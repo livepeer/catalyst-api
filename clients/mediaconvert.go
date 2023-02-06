@@ -223,11 +223,20 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 		return nil, fmt.Errorf("error copying output files: %w", err)
 	}
 
+	playbackDir, err := PublishDriverSession(ourOutputBaseDir.String(), ourOutputBaseDir.Path)
+	if err != nil {
+		return nil, err
+	}
+	playbackDirURL, err := url.Parse(playbackDir)
+	if err != nil {
+		return nil, err
+	}
+
 	outputVideos := []OutputVideo{
 		{
 			Type:     "object_store",
-			Manifest: args.HLSOutputFile.String(),
-			Videos:   mc.outputVideoFiles(mcArgs, ourOutputBaseDir, "index", "m3u8"),
+			Manifest: playbackDirURL.JoinPath("index.m3u8").String(),
+			Videos:   mc.outputVideoFiles(mcArgs, playbackDirURL, "index", "m3u8"),
 		},
 	}
 	if mcArgs.MP4OutputLocation != nil {
@@ -235,7 +244,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 			Type:     "object_store",
 			Manifest: "",
 		}
-		mp4OutVid.Videos = mc.outputVideoFiles(mcArgs, ourOutputBaseDir, mp4OutFilePrefix, "mp4")
+		mp4OutVid.Videos = mc.outputVideoFiles(mcArgs, playbackDirURL, mp4OutFilePrefix, "mp4")
 		outputVideos = append(outputVideos, mp4OutVid)
 	}
 	return outputVideos, nil
