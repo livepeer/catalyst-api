@@ -302,7 +302,7 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 				"url": "memory://localhost/output.m3u8",
  				"outputs": {
 					"source_segments": true,
-                    "transcoded_segments": true
+					"transcoded_segments": true
 				}
 			},
 			{
