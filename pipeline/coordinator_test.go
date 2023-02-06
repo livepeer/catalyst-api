@@ -21,7 +21,9 @@ import (
 
 var (
 	testHandlerResult = &HandlerOutput{
-		Result: &UploadJobResult{video.InputVideo{}, []clients.OutputVideo{}},
+		Result: &UploadJobResult{video.InputVideo{}, []clients.OutputVideo{
+			{Type: "object_store", Manifest: "manifest", Videos: []clients.OutputVideoFile{{}}},
+		}},
 	}
 	testJob = UploadJobPayload{
 		RequestID:   "123",

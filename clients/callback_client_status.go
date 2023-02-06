@@ -91,13 +91,13 @@ type TranscodeStatusMessage struct {
 
 type OutputVideoFile struct {
 	Type      string `json:"type"`
-	SizeBytes int    `json:"size"`
+	SizeBytes int64  `json:"size"`
 	Location  string `json:"location"`
 }
 
 type OutputVideo struct {
 	Type     string            `json:"type"`
-	Manifest string            `json:"manifest"`
+	Manifest string            `json:"manifest,omitempty"`
 	Videos   []OutputVideoFile `json:"videos"`
 }
 

@@ -28,7 +28,7 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
 	defer cancel()
-	err = e.transcoder.Transcode(ctx, clients.TranscodeJobArgs{
+	outputVideos, err := e.transcoder.Transcode(ctx, clients.TranscodeJobArgs{
 		RequestID:     job.RequestID,
 		InputFile:     sourceFileUrl,
 		HLSOutputFile: job.TargetURL,
@@ -57,6 +57,7 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 			InputVideo: video.InputVideo{
 				// TODO: Figure out what to do here. Studio doesn't use these anyway.
 			},
+      // TODO: Resolve 
 			Outputs: []clients.OutputVideo{
 				{
 					Type:     "object_store",
@@ -67,6 +68,8 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 				},
 			},
 			// TODO add mp4 outs?
+      // TODO: Resolve conflicts
+			Outputs: outputVideos,
 		},
 	}, nil
 }
