@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
-	"github.com/livepeer/go-tools/drivers"
 	"log"
 	"net/url"
 	"strings"
@@ -24,7 +23,6 @@ func main() {
 	mistPort := flag.Int("mist-port", 4242, "Port to listen on")
 	mistHttpPort := flag.Int("mist-http-port", 8080, "Port to listen on")
 	apiToken := flag.String("api-token", "IAmAuthorized", "Auth header value for API access")
-	flag.StringVar(&drivers.W3sUcanKey, "ucan-key", "", "UCAN private key used to authenticate to web3.storage")
 	mistJson := flag.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
 	promPort := flag.Int("prom-port", 2112, "Prometheus metrics port")
 	sourceOutputUrl := flag.String("source-output", "", "URL for the video source segments used if source_segments is not defined in the upload request")
