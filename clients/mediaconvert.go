@@ -191,26 +191,19 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 	if err != nil {
 		return nil, err
 	}
-	outputVideos := []video.OutputVideo{
-		{
-			Type:     "object_store",
-			Manifest: playbackDirURL.JoinPath("index.m3u8").String(),
-			Videos:   outputHLSFiles,
-		},
+	outputVideo := video.OutputVideo{
+		Type:     "object_store",
+		Manifest: playbackDirURL.JoinPath("index.m3u8").String(),
+		Videos:   outputHLSFiles,
 	}
 	if mcArgs.MP4OutputLocation != nil {
 		outputMP4Files, err := mc.outputVideoFiles(mcArgs, playbackDirURL, mp4OutFilePrefix, "mp4")
 		if err != nil {
 			return nil, err
 		}
-		mp4OutputVideos := video.OutputVideo{
-			Type:     "object_store",
-			Manifest: "",
-			Videos:   outputMP4Files,
-		}
-		outputVideos = append(outputVideos, mp4OutputVideos)
+		outputVideo.MP4Outputs = outputMP4Files
 	}
-	return outputVideos, nil
+	return []video.OutputVideo{outputVideo}, nil
 }
 
 func (mc *MediaConvert) outputVideoFiles(mcArgs TranscodeJobArgs, ourOutputBaseDir *url.URL, filePrefix, fileSuffix string) (files []video.OutputVideoFile, err error) {

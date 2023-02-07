@@ -133,16 +133,17 @@ type EncodedProfile struct {
 }
 
 type OutputVideo struct {
-	Type     string            `json:"type"`
-	Manifest string            `json:"manifest,omitempty"`
-	Videos   []OutputVideoFile `json:"videos"`
+	Type       string            `json:"type"`
+	Manifest   string            `json:"manifest,omitempty"`
+	Videos     []OutputVideoFile `json:"videos"`
+	MP4Outputs []OutputVideoFile `json:"mp4_outputs,omitempty"`
 }
 
 type OutputVideoFile struct {
 	Type      string `json:"type"`
-	SizeBytes int64  `json:"size"`
+	SizeBytes int64  `json:"size,omitempty"`
 	Location  string `json:"location"`
-	Width     int64  `json:"width"`
-	Height    int64  `json:"height"`
-	Bitrate   int64  `json:"bitrate"`
+	Width     int64  `json:"width,omitempty"`
+	Height    int64  `json:"height,omitempty"`
+	Bitrate   int64  `json:"bitrate,omitempty"`
 }
