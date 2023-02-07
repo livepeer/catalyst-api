@@ -385,8 +385,8 @@ github.com/libp2p/go-msgio v0.2.0 h1:W6shmB+FeynDrUVl2dgFQvzfBZcXiyqY4VmpQLu9FqU
 github.com/libp2p/go-nat v0.1.0 h1:MfVsH6DLcpa04Xr+p8hmVRG4juse0s3J8HyNWYHffXg=
 github.com/libp2p/go-netroute v0.2.0 h1:0FpsbsvuSnAhXFnCY0VLFbJOzaK0VnP0r1QT/o4nWRE=
 github.com/libp2p/go-openssl v0.1.0 h1:LBkKEcUv6vtZIQLVTegAil8jbNpJErQ9AnT+bWV+Ooo=
-github.com/livepeer/go-tools v0.2.1 h1:1nzXmEyNmHQ1nOPM3AHOhETPRC17pSl0HytYUhOkKHk=
-github.com/livepeer/go-tools v0.2.1/go.mod h1:/aZ+20XYLdeebFA3CrQTkHUf7DmiGBzh6Bs8JkbelUA=
+github.com/livepeer/go-tools v0.2.2 h1:XYou40a0Zst4cJBk4Jnhax333livlUgGCPBSR3MhMxQ=
+github.com/livepeer/go-tools v0.2.2/go.mod h1:/aZ+20XYLdeebFA3CrQTkHUf7DmiGBzh6Bs8JkbelUA=
 github.com/livepeer/livepeer-data v0.6.2 h1:b/+CppOJsXipt2eBwTBnW1ldGu+2HVVQsV+iq65x73E=
 github.com/livepeer/livepeer-data v0.6.2/go.mod h1:6xP6P9IzKaenw9jJoxkcZzJx1qSQe3UBYKUBZ61gXl8=
 github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0/go.mod h1:zJYVVT2jmtg6P3p1VtQj7WsuWi/y4VnjVBn7F8KPB3I=
