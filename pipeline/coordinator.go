@@ -66,7 +66,7 @@ type UploadJobPayload struct {
 // upload job.
 type UploadJobResult struct {
 	InputVideo video.InputVideo
-	Outputs    []clients.OutputVideo
+	Outputs    []video.OutputVideo
 }
 
 // RecordingEndPayload is the required payload from a recording end trigger.

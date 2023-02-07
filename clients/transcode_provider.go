@@ -31,7 +31,7 @@ type TranscodeJobArgs struct {
 // transcode unsupported files, etc) and quality assurance (compare result of
 // external vs mist pipelines).
 type TranscodeProvider interface {
-	Transcode(ctx context.Context, args TranscodeJobArgs) ([]OutputVideo, error)
+	Transcode(ctx context.Context, args TranscodeJobArgs) ([]video.OutputVideo, error)
 }
 
 // Used only for mocking the client constructor on tests
