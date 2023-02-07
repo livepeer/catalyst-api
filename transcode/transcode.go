@@ -50,13 +50,13 @@ func init() {
 	LocalBroadcasterClient = b
 }
 
-func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo video.InputVideo) ([]clients.OutputVideo, int, error) {
+func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo video.InputVideo) ([]video.OutputVideo, int, error) {
 	log.AddContext(transcodeRequest.RequestID, "source", transcodeRequest.SourceFile, "source_manifest", transcodeRequest.SourceManifestURL, "stream_name", streamName)
 	log.Log(transcodeRequest.RequestID, "RunTranscodeProcess (v2) Beginning")
 
 	var segmentsCount = 0
 
-	outputs := []clients.OutputVideo{}
+	outputs := []video.OutputVideo{}
 
 	var targetURL *url.URL
 	var err error
@@ -139,12 +139,12 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	manifestURL = strings.ReplaceAll(manifestURL, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
-	output := clients.OutputVideo{Type: "object_store", Manifest: manifestURL}
+	output := video.OutputVideo{Type: "object_store", Manifest: manifestURL}
 	for _, rendition := range transcodedStats {
 		videoManifestURL := strings.ReplaceAll(rendition.ManifestLocation, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
-		output.Videos = append(output.Videos, clients.OutputVideoFile{Location: videoManifestURL, SizeBytes: rendition.Bytes})
+		output.Videos = append(output.Videos, video.OutputVideoFile{Location: videoManifestURL, SizeBytes: rendition.Bytes})
 	}
-	outputs = []clients.OutputVideo{output}
+	outputs = []video.OutputVideo{output}
 	// Return outputs for .dtsh file creation
 	return outputs, segmentsCount, nil
 }

@@ -5,6 +5,11 @@ import (
 	"strconv"
 )
 
+const (
+	MIN_VIDEO_BITRATE          = 100_000
+	ABSOLUTE_MIN_VIDEO_BITRATE = 5_000
+)
+
 type InputVideo struct {
 	Format    string       `json:"format,omitempty"`
 	Tracks    []InputTrack `json:"tracks,omitempty"`
@@ -113,11 +118,6 @@ func lowBitrateProfile(video InputTrack) EncodedProfile {
 	}
 }
 
-const (
-	MIN_VIDEO_BITRATE          = 100_000
-	ABSOLUTE_MIN_VIDEO_BITRATE = 5_000
-)
-
 type EncodedProfile struct {
 	Name         string `json:"name,omitempty"`
 	Width        int64  `json:"width,omitempty"`
@@ -130,4 +130,19 @@ type EncodedProfile struct {
 	Encoder      string `json:"encoder,omitempty"`
 	ColorDepth   int64  `json:"colorDepth,omitempty"`
 	ChromaFormat int64  `json:"chromaFormat,omitempty"`
+}
+
+type OutputVideo struct {
+	Type     string            `json:"type"`
+	Manifest string            `json:"manifest,omitempty"`
+	Videos   []OutputVideoFile `json:"videos"`
+}
+
+type OutputVideoFile struct {
+	Type      string `json:"type"`
+	SizeBytes int64  `json:"size"`
+	Location  string `json:"location"`
+	Width     int64  `json:"width"`
+	Height    int64  `json:"height"`
+	Bitrate   int64  `json:"bitrate"`
 }

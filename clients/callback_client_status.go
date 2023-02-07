@@ -84,24 +84,9 @@ type TranscodeStatusMessage struct {
 	Unretriable bool   `json:"unretriable,omitempty"`
 
 	// Only used for the "Completed" status message
-	Type       string           `json:"type,omitempty"`
-	InputVideo video.InputVideo `json:"video_spec,omitempty"`
-	Outputs    []OutputVideo    `json:"outputs,omitempty"`
-}
-
-type OutputVideoFile struct {
-	Type      string `json:"type"`
-	SizeBytes int64  `json:"size"`
-	Location  string `json:"location"`
-	Width     int64  `json:"width"`
-	Height    int64  `json:"height"`
-	Bitrate   int64  `json:"bitrate"`
-}
-
-type OutputVideo struct {
-	Type     string            `json:"type"`
-	Manifest string            `json:"manifest,omitempty"`
-	Videos   []OutputVideoFile `json:"videos"`
+	Type       string              `json:"type,omitempty"`
+	InputVideo video.InputVideo    `json:"video_spec,omitempty"`
+	Outputs    []video.OutputVideo `json:"outputs,omitempty"`
 }
 
 // This method will accept the completion ratio of the current stage and will translate that into the overall ratio
@@ -127,7 +112,7 @@ func NewTranscodeStatusError(url, requestID, errorMsg string, unretriable bool) 
 }
 
 // Separate method as this requires a much richer message than the other status callbacks
-func NewTranscodeStatusCompleted(url, requestID string, iv video.InputVideo, ov []OutputVideo) TranscodeStatusMessage {
+func NewTranscodeStatusCompleted(url, requestID string, iv video.InputVideo, ov []video.OutputVideo) TranscodeStatusMessage {
 	return TranscodeStatusMessage{
 		URL:             url,
 		CompletionRatio: OverallCompletionRatio(TranscodeStatusCompleted, 1),

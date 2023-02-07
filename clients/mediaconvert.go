@@ -117,7 +117,7 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 //
 // It calls the input.ReportProgress function to report the progress of the job
 // during the polling loop.
-func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([]OutputVideo, error) {
+func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([]video.OutputVideo, error) {
 	if path.Base(args.HLSOutputFile.Path) != "index.m3u8" {
 		return nil, fmt.Errorf("target URL must be an `index.m3u8` file, found %s", args.HLSOutputFile)
 	}
@@ -191,7 +191,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 	if err != nil {
 		return nil, err
 	}
-	outputVideos := []OutputVideo{
+	outputVideos := []video.OutputVideo{
 		{
 			Type:     "object_store",
 			Manifest: playbackDirURL.JoinPath("index.m3u8").String(),
@@ -203,7 +203,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 		if err != nil {
 			return nil, err
 		}
-		mp4OutputVideos := OutputVideo{
+		mp4OutputVideos := video.OutputVideo{
 			Type:     "object_store",
 			Manifest: "",
 			Videos:   outputMP4Files,
@@ -213,12 +213,12 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 	return outputVideos, nil
 }
 
-func (mc *MediaConvert) outputVideoFiles(mcArgs TranscodeJobArgs, ourOutputBaseDir *url.URL, filePrefix, fileSuffix string) (files []OutputVideoFile, err error) {
+func (mc *MediaConvert) outputVideoFiles(mcArgs TranscodeJobArgs, ourOutputBaseDir *url.URL, filePrefix, fileSuffix string) (files []video.OutputVideoFile, err error) {
 	for _, profile := range mcArgs.Profiles {
 		suffix := profile.Name + "." + fileSuffix
 		key := mcArgs.HLSOutputFile.JoinPath("..", filePrefix+suffix).Path
 		// get object from s3 to check that it exists and to find out the file size
-		videoFile := OutputVideoFile{
+		videoFile := video.OutputVideoFile{
 			Type:     fileSuffix,
 			Location: ourOutputBaseDir.JoinPath(filePrefix + suffix).String(),
 		}
