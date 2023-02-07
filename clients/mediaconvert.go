@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"strconv"
 	"strings"
 	"time"
 
@@ -74,7 +73,7 @@ type MediaConvert struct {
 	s3TransferBucket, osTransferBucketURL *url.URL
 	client                                AWSMediaConvertClient
 	s3                                    S3
-	ffprobe                               video.FFProbeClient
+	probe                                 video.Prober
 }
 
 func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) {
@@ -108,7 +107,7 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 		osTransferBucketURL: osTransferBucket,
 		client:              client,
 		s3:                  &S3Client{s3.New(s3Sess)},
-		ffprobe:             &video.FFProbe{},
+		probe:               video.Probe{},
 	}, nil
 }
 
@@ -134,63 +133,19 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 		return nil, fmt.Errorf("error copying input file to S3: %w", err)
 	}
 
-	// temporarily probe input mp4 here...
-	presigned, err := mc.s3.PresignS3(mc.s3TransferBucket.Host, mcInputRelPath)
+	presignedInputFileURL, err := mc.s3.PresignS3(mc.s3TransferBucket.Host, mcInputRelPath)
 	if err != nil {
 		return nil, fmt.Errorf("error creating s3 url: %w", err)
 	}
-	probe, err := mc.ffprobe.ProbeURL(presigned)
+
+	inputVideoProbe, err := mc.probe.ProbeFile(presignedInputFileURL)
 	if err != nil {
 		return nil, fmt.Errorf("error probing MP4 input file from S3: %w", err)
 	}
 
-	bitRateValue := probe.FirstVideoStream().BitRate
-	if bitRateValue == "" {
-		bitRateValue = probe.Format.BitRate
-	}
-	bitrate, err := strconv.ParseInt(bitRateValue, 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing bitrate from probed data: %w", err)
-	}
-	frameRate := probe.FirstVideoStream().AvgFrameRate
-	parts := strings.Split(frameRate, "/")
-	var fps float64
-	if len(parts) > 1 {
-		x, err := strconv.ParseFloat(parts[0], 64)
-		if err != nil {
-			log.Log(args.RequestID, "error parsing fps from probed data", "err", fmt.Sprintf("%s", err))
-		}
-		y, err := strconv.ParseFloat(parts[1], 64)
-		if err != nil {
-			log.Log(args.RequestID, "error parsing fps from probed data", "err", fmt.Sprintf("%s", err))
-		}
-		fps = x / y
-	} else {
-		fps, err = strconv.ParseFloat(frameRate, 64)
-		if err != nil {
-			log.Log(args.RequestID, "error parsing fps from probed data", "err", fmt.Sprintf("%s", err))
-		}
-	}
-	iv := video.InputVideo{
-		Tracks: []video.InputTrack{
-			{
-				Type:      "video",
-				Codec:     probe.FirstVideoStream().CodecName,
-				Bitrate:   bitrate,
-				SizeBytes: size,
-				VideoTrack: video.VideoTrack{
-					Width:  int64(probe.FirstVideoStream().Width),
-					Height: int64(probe.FirstVideoStream().Height),
-					FPS:    fps,
-				},
-			},
-		},
-		Duration: probe.Format.Duration().Seconds(),
-	}
-
 	args.CollectSourceSize(size)
 	mcArgs := args
-	mcArgs.InputFileInfo = iv
+	mcArgs.InputFileInfo = inputVideoProbe
 	mcArgs.InputFile = mc.s3TransferBucket.JoinPath(mcInputRelPath)
 	mcArgs.HLSOutputFile = mc.s3TransferBucket.JoinPath(mcOutputRelPath)
 
@@ -232,44 +187,62 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 		return nil, err
 	}
 
+	outputHLSFiles, err := mc.outputVideoFiles(mcArgs, playbackDirURL, "index", "m3u8")
+	if err != nil {
+		return nil, err
+	}
 	outputVideos := []OutputVideo{
 		{
 			Type:     "object_store",
 			Manifest: playbackDirURL.JoinPath("index.m3u8").String(),
-			Videos:   mc.outputVideoFiles(mcArgs, playbackDirURL, "index", "m3u8"),
+			Videos:   outputHLSFiles,
 		},
 	}
 	if mcArgs.MP4OutputLocation != nil {
-		mp4OutVid := OutputVideo{
+		outputMP4Files, err := mc.outputVideoFiles(mcArgs, playbackDirURL, mp4OutFilePrefix, "mp4")
+		if err != nil {
+			return nil, err
+		}
+		mp4OutputVideos := OutputVideo{
 			Type:     "object_store",
 			Manifest: "",
+			Videos:   outputMP4Files,
 		}
-		mp4OutVid.Videos = mc.outputVideoFiles(mcArgs, playbackDirURL, mp4OutFilePrefix, "mp4")
-		outputVideos = append(outputVideos, mp4OutVid)
+		outputVideos = append(outputVideos, mp4OutputVideos)
 	}
 	return outputVideos, nil
 }
 
-func (mc *MediaConvert) outputVideoFiles(mcArgs TranscodeJobArgs, ourOutputBaseDir *url.URL, filePrefix, fileSuffix string) (files []OutputVideoFile) {
+func (mc *MediaConvert) outputVideoFiles(mcArgs TranscodeJobArgs, ourOutputBaseDir *url.URL, filePrefix, fileSuffix string) (files []OutputVideoFile, err error) {
 	for _, profile := range mcArgs.Profiles {
 		suffix := profile.Name + "." + fileSuffix
 		key := mcArgs.HLSOutputFile.JoinPath("..", filePrefix+suffix).Path
 		// get object from s3 to check that it exists and to find out the file size
-		s3Obj, err := mc.s3.GetObject(mc.s3TransferBucket.Host, key)
-		if err != nil {
-			log.Log(mcArgs.RequestID, "error getting info from s3", "err", err, "bucket", mc.s3TransferBucket.Host, "key", key)
-			continue
+		videoFile := OutputVideoFile{
+			Type:     fileSuffix,
+			Location: ourOutputBaseDir.JoinPath(filePrefix + suffix).String(),
 		}
-		if s3Obj.ContentLength == nil || *s3Obj.ContentLength <= 0 {
-			log.Log(mcArgs.RequestID, "invalid content length for s3 object", "ContentLength", s3Obj.ContentLength)
-			continue
-		}
+		// probe output mp4 files
+		if fileSuffix == "mp4" {
+			presignedOutputFileURL, err := mc.s3.PresignS3(mc.s3TransferBucket.Host, key)
+			if err != nil {
+				return nil, fmt.Errorf("error creating s3 url: %w", err)
+			}
+			outputVideoProbe, err := mc.probe.ProbeFile(presignedOutputFileURL)
+			if err != nil {
+				return nil, fmt.Errorf("error probing output file from S3: %w", err)
 
-		files = append(files, OutputVideoFile{
-			Type:      fileSuffix,
-			SizeBytes: *s3Obj.ContentLength,
-			Location:  ourOutputBaseDir.JoinPath(filePrefix + suffix).String(),
-		})
+			}
+			videoFile.SizeBytes = int64(outputVideoProbe.SizeBytes)
+			videoTrack, err := outputVideoProbe.GetVideoTrack()
+			if err != nil {
+				return nil, fmt.Errorf("no video track found in output video: %w", err)
+			}
+			videoFile.Height = videoTrack.Height
+			videoFile.Width = videoTrack.Width
+			videoFile.Bitrate = videoTrack.Bitrate
+		}
+		files = append(files, videoFile)
 	}
 	return
 }
