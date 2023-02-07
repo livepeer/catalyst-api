@@ -28,9 +28,10 @@ var pollDelay = 10 * time.Second
 var retryableHttpClient = newRetryableHttpClient()
 
 const (
-	rateLimitedPollDelay = 15 * time.Second
-	maxMP4OutDuration    = 2 * time.Minute
-	mp4OutFilePrefix     = "static"
+	rateLimitedPollDelay  = 15 * time.Second
+	maxMP4OutDuration     = 2 * time.Minute
+	mp4OutFilePrefix      = "static"
+	maxInputFileSizeBytes = 10 * 1024 * 1024 * 1024 // 10 GiB
 )
 
 // https://docs.aws.amazon.com/mediaconvert/latest/ug/mediaconvert_error_codes.html
@@ -141,6 +142,10 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 	inputVideoProbe, err := mc.probe.ProbeFile(presignedInputFileURL)
 	if err != nil {
 		return nil, fmt.Errorf("error probing MP4 input file from S3: %w", err)
+	}
+
+	if inputVideoProbe.SizeBytes > maxInputFileSizeBytes {
+		return nil, fmt.Errorf("input file %d bytes was greater than %d bytes", inputVideoProbe.SizeBytes, maxInputFileSizeBytes)
 	}
 
 	args.CollectSourceSize(size)

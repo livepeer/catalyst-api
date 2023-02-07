@@ -14,7 +14,7 @@ type InputVideo struct {
 	Format    string       `json:"format,omitempty"`
 	Tracks    []InputTrack `json:"tracks,omitempty"`
 	Duration  float64      `json:"duration,omitempty"`
-	SizeBytes int          `json:"size,omitempty"`
+	SizeBytes int64        `json:"size,omitempty"`
 }
 
 // Finds the video track from the list of input video tracks

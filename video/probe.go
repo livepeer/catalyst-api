@@ -2,6 +2,7 @@ package video
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -29,7 +30,11 @@ func (p Probe) ProbeFile(url string) (InputVideo, error) {
 
 func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 	// parse bitrate
-	bitRateValue := probeData.FirstVideoStream().BitRate
+	videoStream := probeData.FirstVideoStream()
+	if videoStream == nil {
+		return InputVideo{}, errors.New("error probing mp4 input file from s3: no video stream found")
+	}
+	bitRateValue := videoStream.BitRate
 	if bitRateValue == "" {
 		bitRateValue = probeData.Format.BitRate
 	}
@@ -43,7 +48,7 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 		return InputVideo{}, fmt.Errorf("error parsing filesize from probed data: %w", err)
 	}
 	// parse fps
-	frameRate := probeData.FirstVideoStream().AvgFrameRate
+	frameRate := videoStream.AvgFrameRate
 	parts := strings.Split(frameRate, "/")
 	var fps float64
 	if len(parts) > 1 {
@@ -67,17 +72,18 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 		Tracks: []InputTrack{
 			{
 				Type:      "video",
-				Codec:     probeData.FirstVideoStream().CodecName,
+				Codec:     videoStream.CodecName,
 				Bitrate:   bitrate,
 				SizeBytes: size,
 				VideoTrack: VideoTrack{
-					Width:  int64(probeData.FirstVideoStream().Width),
-					Height: int64(probeData.FirstVideoStream().Height),
+					Width:  int64(videoStream.Width),
+					Height: int64(videoStream.Height),
 					FPS:    fps,
 				},
 			},
 		},
-		Duration: probeData.Format.Duration().Seconds(),
+		Duration:  probeData.Format.Duration().Seconds(),
+		SizeBytes: size,
 	}
 
 	return iv, nil

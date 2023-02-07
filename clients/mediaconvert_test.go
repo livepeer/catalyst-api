@@ -383,6 +383,7 @@ func TestProbe(t *testing.T) {
 				},
 			},
 		},
+		SizeBytes: 2779520,
 	}
 	require.Equal(expectedInput, iv)
 }
