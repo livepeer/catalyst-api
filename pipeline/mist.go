@@ -205,7 +205,7 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 	inputInfo := video.InputVideo{
 		Format:    "mp4", // hardcoded as mist stream is in dtsc format.
 		Duration:  float64(p.StreamMediaDurationMillis) / 1000.0,
-		SizeBytes: p.WrittenBytes,
+		SizeBytes: int64(p.WrittenBytes),
 	}
 	for _, track := range streamInfo.Meta.Tracks {
 		inputInfo.Tracks = append(inputInfo.Tracks, video.InputTrack{
