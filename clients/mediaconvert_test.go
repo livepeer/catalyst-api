@@ -363,23 +363,9 @@ func Test_MP4OutDurationCheck(t *testing.T) {
 }
 
 func TestProbe(t *testing.T) {
-
 	require := require.New(t)
-	awsStub := &stubMediaConvertClient{
-		createJob: func(input *mediaconvert.CreateJobInput) (*mediaconvert.CreateJobOutput, error) {
-			// check that only an s3:// URL is sent to AWS client
-			require.Equal("s3://thebucket/input/1234/video", *input.Settings.Inputs[0].FileInput)
-			require.Equal("s3://thebucket/output/1234/index", *input.Settings.OutputGroups[0].OutputGroupSettings.HlsGroupSettings.Destination)
-			return nil, errors.New("secret error")
-		},
-	}
-	_, f, _, cleanup := setupTestMediaConvert(t, awsStub)
-	defer cleanup()
-	_, err := f.Stat()
-	require.NoError(err)
-
-	probe := stubFFprobe{}
-	iv, err := probe.ProbeFile("file://" + f.Name())
+	probe := video.Probe{}
+	iv, err := probe.ProbeFile("./fixtures/mediaconvert_payloads/sample.mp4")
 	require.NoError(err)
 
 	expectedInput := video.InputVideo{
@@ -389,7 +375,7 @@ func TestProbe(t *testing.T) {
 				Type:      "video",
 				Codec:     "h264",
 				Bitrate:   1234521,
-				SizeBytes: 2779549,
+				SizeBytes: 2779520,
 				VideoTrack: video.VideoTrack{
 					Width:  576,
 					Height: 1024,
