@@ -17,7 +17,6 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/video"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/vansante/go-ffprobe.v2"
 )
 
 const dummyHlsPlaylist = `
@@ -343,10 +342,7 @@ func Test_MP4OutDurationCheck(t *testing.T) {
 				},
 			}
 			mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
-			mc.ffprobe = &stubFFprobe{
-				Bitrate:  "1000000",
-				Duration: tt.duration,
-			}
+			mc.probe = stubFFprobe{}
 			defer cleanup()
 
 			_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
@@ -357,6 +353,45 @@ func Test_MP4OutDurationCheck(t *testing.T) {
 			require.Error(err)
 		})
 	}
+}
+
+func TestProbe(t *testing.T) {
+
+	require := require.New(t)
+	awsStub := &stubMediaConvertClient{
+		createJob: func(input *mediaconvert.CreateJobInput) (*mediaconvert.CreateJobOutput, error) {
+			// check that only an s3:// URL is sent to AWS client
+			require.Equal("s3://thebucket/input/1234/video", *input.Settings.Inputs[0].FileInput)
+			require.Equal("s3://thebucket/output/1234/index", *input.Settings.OutputGroups[0].OutputGroupSettings.HlsGroupSettings.Destination)
+			return nil, errors.New("secret error")
+		},
+	}
+	_, f, _, cleanup := setupTestMediaConvert(t, awsStub)
+	defer cleanup()
+	_, err := f.Stat()
+	require.NoError(err)
+
+	probe := stubFFprobe{}
+	iv, err := probe.ProbeFile("file://" + f.Name())
+	require.NoError(err)
+
+	expectedInput := video.InputVideo{
+		Duration: 16.254,
+		Tracks: []video.InputTrack{
+			{
+				Type:      "video",
+				Codec:     "h264",
+				Bitrate:   1234521,
+				SizeBytes: 2779549,
+				VideoTrack: video.VideoTrack{
+					Width:  576,
+					Height: 1024,
+					FPS:    30,
+				},
+			},
+		},
+	}
+	require.Equal(expectedInput, iv)
 }
 
 func loadFixture(t *testing.T, expectedPath, actual string) string {
@@ -403,7 +438,7 @@ func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *Med
 		osTransferBucketURL: mustParseURL(t, "file://"+transferDir),
 		client:              awsStub,
 		s3:                  &stubS3Client{transferDir},
-		ffprobe:             &video.FFProbe{},
+		probe:               video.Probe{},
 	}
 	return
 }
@@ -452,16 +487,21 @@ type stubFFprobe struct {
 	Duration float64
 }
 
-func (f *stubFFprobe) ProbeURL(_ string) (*ffprobe.ProbeData, error) {
-	return &ffprobe.ProbeData{
-		Streams: []*ffprobe.Stream{
+func (f stubFFprobe) ProbeFile(_ string) (video.InputVideo, error) {
+	return video.InputVideo{
+		Duration: 16.254,
+		Tracks: []video.InputTrack{
 			{
-				BitRate:   f.Bitrate,
-				CodecType: "video",
+				Type:      "video",
+				Codec:     "h264",
+				Bitrate:   1234521,
+				SizeBytes: 2779549,
+				VideoTrack: video.VideoTrack{
+					Width:  576,
+					Height: 1024,
+					FPS:    30,
+				},
 			},
-		},
-		Format: &ffprobe.Format{
-			DurationSeconds: f.Duration,
 		},
 	}, nil
 }
