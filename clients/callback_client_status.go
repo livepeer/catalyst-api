@@ -93,6 +93,9 @@ type OutputVideoFile struct {
 	Type      string `json:"type"`
 	SizeBytes int64  `json:"size"`
 	Location  string `json:"location"`
+	Width     int64  `json:"width"`
+	Height    int64  `json:"height"`
+	Bitrate   int64  `json:"bitrate"`
 }
 
 type OutputVideo struct {
