@@ -230,6 +230,10 @@ func TestCopiesMediaConvertOutputToFinalLocation(t *testing.T) {
 	}
 	mc, inputFile, transferDir, cleanup := setupTestMediaConvert(t, awsStub)
 	defer cleanup()
+	mc.probe = stubFFprobe{
+		Bitrate:  1000000,
+		Duration: 60,
+	}
 
 	outFile := path.Join(transferDir, "../out/index.m3u8")
 	defer os.RemoveAll(path.Dir(outFile))
@@ -342,7 +346,10 @@ func Test_MP4OutDurationCheck(t *testing.T) {
 				},
 			}
 			mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
-			mc.probe = stubFFprobe{}
+			mc.probe = stubFFprobe{
+				Bitrate:  1000000,
+				Duration: tt.duration,
+			}
 			defer cleanup()
 
 			_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
@@ -483,18 +490,18 @@ func (s *stubS3Client) GetObject(bucket, key string) (*s3.GetObjectOutput, error
 }
 
 type stubFFprobe struct {
-	Bitrate  string
+	Bitrate  int64
 	Duration float64
 }
 
 func (f stubFFprobe) ProbeFile(_ string) (video.InputVideo, error) {
 	return video.InputVideo{
-		Duration: 16.254,
+		Duration: f.Duration,
 		Tracks: []video.InputTrack{
 			{
 				Type:      "video",
 				Codec:     "h264",
-				Bitrate:   1234521,
+				Bitrate:   f.Bitrate,
 				SizeBytes: 2779549,
 				VideoTrack: video.VideoTrack{
 					Width:  576,
