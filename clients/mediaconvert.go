@@ -162,7 +162,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 	}
 
 	// only output MP4s for short videos, with duration less than maxMP4OutDuration
-	if mcArgs.InputFileInfo.Duration <= maxMP4OutDuration.Seconds() {
+	if args.AutoMP4 && mcArgs.InputFileInfo.Duration <= maxMP4OutDuration.Seconds() {
 		// sets the mp4 path to be the same as HLS except for the suffix being "static"
 		// resulting files look something like https://storage.googleapis.com/bucket/25afy0urw3zu2476/static360p0.mp4
 		mcArgs.MP4OutputLocation = mc.s3TransferBucket.JoinPath(path.Join("output", targetDir, mp4OutFilePrefix))

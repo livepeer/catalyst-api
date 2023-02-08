@@ -356,6 +356,7 @@ func Test_MP4OutDurationCheck(t *testing.T) {
 				InputFile:         mustParseURL(t, "file://"+f.Name()),
 				HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
 				CollectSourceSize: func(size int64) {},
+				AutoMP4:           true,
 			})
 			require.Error(err)
 		})

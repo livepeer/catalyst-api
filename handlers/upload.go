@@ -25,6 +25,7 @@ type UploadVODRequestOutputLocationOutputs struct {
 	SourceMp4          bool `json:"source_mp4"`
 	SourceSegments     bool `json:"source_segments"`
 	TranscodedSegments bool `json:"transcoded_segments"`
+	AutoMP4            bool `json:"auto_mp4"`
 }
 
 type UploadVODRequestOutputLocation struct {
@@ -84,6 +85,15 @@ func (r UploadVODRequest) getTargetURL() (*url.URL, error) {
 		}
 	}
 	return nil, fmt.Errorf("no output_location with transcoded_segments")
+}
+
+func (r UploadVODRequest) isAutoMP4() bool {
+	for _, o := range r.OutputLocations {
+		if o.Outputs.AutoMP4 {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
@@ -161,6 +171,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		RequestID:        requestID,
 		Profiles:         uploadVODRequest.Profiles,
 		PipelineStrategy: uploadVODRequest.PipelineStrategy,
+		AutoMP4:          uploadVODRequest.isAutoMP4(),
 	})
 
 	respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})
