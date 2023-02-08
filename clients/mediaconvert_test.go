@@ -373,10 +373,9 @@ func TestProbe(t *testing.T) {
 		Duration: 16.254,
 		Tracks: []video.InputTrack{
 			{
-				Type:      "video",
-				Codec:     "h264",
-				Bitrate:   1234521,
-				SizeBytes: 2779520,
+				Type:    "video",
+				Codec:   "h264",
+				Bitrate: 1234521,
 				VideoTrack: video.VideoTrack{
 					Width:  576,
 					Height: 1024,
@@ -487,10 +486,9 @@ func (f stubFFprobe) ProbeFile(_ string) (video.InputVideo, error) {
 		Duration: f.Duration,
 		Tracks: []video.InputTrack{
 			{
-				Type:      "video",
-				Codec:     "h264",
-				Bitrate:   f.Bitrate,
-				SizeBytes: 2779549,
+				Type:    "video",
+				Codec:   "h264",
+				Bitrate: f.Bitrate,
 				VideoTrack: video.VideoTrack{
 					Width:  576,
 					Height: 1024,
