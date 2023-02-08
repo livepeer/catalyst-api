@@ -71,10 +71,9 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 	iv := InputVideo{
 		Tracks: []InputTrack{
 			{
-				Type:      "video",
-				Codec:     videoStream.CodecName,
-				Bitrate:   bitrate,
-				SizeBytes: size,
+				Type:    "video",
+				Codec:   videoStream.CodecName,
+				Bitrate: bitrate,
 				VideoTrack: VideoTrack{
 					Width:  int64(videoStream.Width),
 					Height: int64(videoStream.Height),

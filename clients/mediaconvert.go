@@ -231,7 +231,7 @@ func (mc *MediaConvert) outputVideoFiles(mcArgs TranscodeJobArgs, ourOutputBaseD
 				return nil, fmt.Errorf("error probing output file from S3: %w", err)
 
 			}
-			videoFile.SizeBytes = int64(outputVideoProbe.SizeBytes)
+			videoFile.SizeBytes = outputVideoProbe.SizeBytes
 			videoTrack, err := outputVideoProbe.GetVideoTrack()
 			if err != nil {
 				return nil, fmt.Errorf("no video track found in output video: %w", err)
