@@ -92,6 +92,9 @@ type JobInfo struct {
 	// this is only set&used internally in the mist pipeline
 	SegmentingTargetURL string
 
+	InputFileInfo video.InputVideo
+	TransferURL   *url.URL
+
 	handler      Handler
 	hasFallback  bool
 	statusClient clients.TranscodeStatusClient
@@ -124,12 +127,14 @@ type Coordinator struct {
 
 	pipeMist, pipeExternal Handler
 
-	Jobs      *cache.Cache[*JobInfo]
-	MetricsDB *sql.DB
+	Jobs            *cache.Cache[*JobInfo]
+	MetricsDB       *sql.DB
+	inputCopy       *clients.InputCopy
+	SourceOutputUrl string
 }
 
 func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
-	sourceOutputUrl, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB) (*Coordinator, error) {
+	sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB) (*Coordinator, error) {
 
 	if !strategy.IsValid() {
 		return nil, fmt.Errorf("invalid strategy: %s", strategy)
@@ -150,10 +155,14 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 	return &Coordinator{
 		strategy:     strategy,
 		statusClient: statusClient,
-		pipeMist:     &mist{MistClient: mistClient, SourceOutputUrl: sourceOutputUrl},
+		pipeMist:     &mist{MistClient: mistClient},
 		pipeExternal: &external{extTranscoder},
 		Jobs:         cache.New[*JobInfo](),
 		MetricsDB:    metricsDB,
+		inputCopy: &clients.InputCopy{
+			Probe: video.Probe{},
+		},
+		SourceOutputUrl: sourceOutputURL,
 	}, nil
 }
 
@@ -261,6 +270,44 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 	log.Log(si.RequestID, "Wrote to jobs cache")
 
 	c.runHandlerAsync(si, func() (*HandlerOutput, error) {
+
+		sourceURL, err := url.Parse(si.SourceFile)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing source as url: %w", err)
+		}
+
+		var sourceOutputUrl *url.URL
+		perRequestPath, err := url.JoinPath(c.SourceOutputUrl, si.RequestID, "index.m3u8")
+		if err != nil {
+			return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
+		}
+		if sourceOutputUrl, err = url.Parse(perRequestPath); err != nil {
+			return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
+		}
+		si.TransferURL = sourceOutputUrl
+
+		newSourceURL, err := inSameDirectory(*sourceOutputUrl, MIST_SEGMENTING_SUBDIR, path.Base(sourceURL.Path))
+		if err != nil {
+			return nil, fmt.Errorf("cannot create location for source copy: %w", err)
+		}
+		log.AddContext(si.RequestID, "new_source_url", newSourceURL.String())
+
+		// TODO needs to be presigned GCS, for now bucket is public so this works
+		httpURL := &url.URL{
+			Scheme: "https",
+			Host:   newSourceURL.Host,
+			Path:   newSourceURL.Path,
+		}
+
+		inputVideoProbe, signedURL, err := c.inputCopy.CopyInputToS3(si.RequestID, sourceURL, httpURL, newSourceURL)
+		if err != nil {
+			return nil, fmt.Errorf("error copying input to storage: %w", err)
+		}
+		si.SourceFile = signedURL
+		si.ReportProgress(clients.TranscodeStatusPreparing, 0.1)
+
+		si.InputFileInfo = inputVideoProbe
+		//return nil, fmt.Errorf("nope")
 		return si.handler.HandleStartUploadJob(si)
 	})
 	return si.result

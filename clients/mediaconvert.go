@@ -74,7 +74,6 @@ type MediaConvert struct {
 	client                                AWSMediaConvertClient
 	s3                                    S3
 	probe                                 video.Prober
-	inputCopy                             *InputCopy
 }
 
 func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) {
@@ -111,7 +110,6 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 		client:              client,
 		s3:                  s3Client,
 		probe:               probe,
-		inputCopy:           &InputCopy{s3Client, probe},
 	}, nil
 }
 
@@ -121,20 +119,16 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 //
 // It calls the input.ReportProgress function to report the progress of the job
 // during the polling loop.
-func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([]video.OutputVideo, error) {
+func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (outs []video.OutputVideo, err error) {
 	if path.Base(args.HLSOutputFile.Path) != "index.m3u8" {
 		return nil, fmt.Errorf("target URL must be an `index.m3u8` file, found %s", args.HLSOutputFile)
 	}
 	targetDir := getTargetDir(args)
 
-	mcInputRelPath := path.Join("input", targetDir, "video")
 	// AWS MediaConvert adds the .m3u8 to the end of the output file name
 	mcOutputRelPath := path.Join("output", targetDir, "index")
 
-	mcArgs, err := mc.inputCopy.CopyInputToS3(args, mc.osTransferBucketURL.JoinPath(mcInputRelPath))
-	if err != nil {
-		return nil, err
-	}
+	mcArgs := args
 	mcArgs.HLSOutputFile = mc.s3TransferBucket.JoinPath(mcOutputRelPath)
 
 	if len(mcArgs.Profiles) == 0 {

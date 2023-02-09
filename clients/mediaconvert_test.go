@@ -104,6 +104,19 @@ func TestReportsMediaConvertProgress(t *testing.T) {
 			reportProgressCalls++
 			require.InEpsilon(0.5, progress, 1e-9)
 		},
+		InputFileInfo: video.InputVideo{
+			Tracks: []video.InputTrack{{
+				Type:    "video",
+				Codec:   "",
+				Bitrate: 3000,
+				VideoTrack: video.VideoTrack{
+					Width:  1080,
+					Height: 7200,
+				},
+				AudioTrack: video.AudioTrack{},
+			}},
+			Duration: 60_000,
+		},
 	})
 	require.ErrorContains(err, "done with this test")
 	require.Equal(1, createJobCalls)
@@ -342,11 +355,11 @@ func Test_FramerateCheck(t *testing.T) {
 			}
 			mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
 			defer cleanup()
-			mc.inputCopy.Probe = stubFFprobe{
-				Bitrate:  1000000,
-				Duration: 60,
-				FPS:      tt.fps,
-			}
+			//mc.inputCopy.Probe = stubFFprobe{
+			//	Bitrate:  1000000,
+			//	Duration: 60,
+			//	FPS:      tt.fps,
+			//}
 
 			_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
 				InputFile:         mustParseURL(t, "file://"+f.Name()),
@@ -410,11 +423,11 @@ func Test_MP4OutDurationCheck(t *testing.T) {
 			}
 			mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
 			defer cleanup()
-			mc.inputCopy.Probe = stubFFprobe{
-				Bitrate:  1000000,
-				Duration: tt.duration,
-				FPS:      30,
-			}
+			//mc.inputCopy.Probe = stubFFprobe{
+			//	Bitrate:  1000000,
+			//	Duration: tt.duration,
+			//	FPS:      30,
+			//}
 
 			_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
 				InputFile:         mustParseURL(t, "file://"+f.Name()),
@@ -491,7 +504,7 @@ func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *Med
 		require.NoError(t, inputFile.Close())
 	}
 
-	s3Client := &stubS3Client{}
+	s3Client := &stubS3Client{transferDir}
 	probe := video.Probe{}
 	mc = &MediaConvert{
 		s3TransferBucket:    mustParseURL(t, "s3://thebucket"),
@@ -499,7 +512,7 @@ func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *Med
 		client:              awsStub,
 		s3:                  s3Client,
 		probe:               probe,
-		inputCopy:           &InputCopy{s3Client, probe},
+		//inputCopy:           &InputCopy{s3Client, probe},
 	}
 	return
 }
@@ -529,10 +542,12 @@ func (s *stubMediaConvertClient) GetJob(input *mediaconvert.GetJobInput) (*media
 	return s.getJob(input)
 }
 
-type stubS3Client struct{}
+type stubS3Client struct {
+	transferDir string
+}
 
 func (s *stubS3Client) PresignS3(_, key string) (string, error) {
-	return key, nil
+	return s.transferDir + "/" + key, nil
 }
 
 func (s *stubS3Client) GetObject(bucket, key string) (*s3.GetObjectOutput, error) {

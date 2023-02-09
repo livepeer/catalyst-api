@@ -64,30 +64,6 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	log.AddContext(job.RequestID, "mist_target_url", mistTargetURL)
 	log.AddContext(job.RequestID, "segmented_url", job.SegmentingTargetURL)
 
-	// Arweave / IPFS URLs don't support HTTP Range requests and so Mist can't natively handle them for segmenting
-	// This workaround copies the file from Arweave to S3 and then tells Mist to use the S3 URL
-	if clients.IsDStorageResource(job.SourceFile) {
-		if !isVideo(job.RequestID, job.SourceFile) {
-			return nil, fmt.Errorf("source was not a video: %s", job.SourceFile)
-		}
-		sourceURL, err := url.Parse(job.SourceFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse source as URL: %w", err)
-		}
-
-		newSourceURL, err := inSameDirectory(*sourceOutputUrl, MIST_SEGMENTING_SUBDIR, path.Base(sourceURL.Path))
-		if err != nil {
-			return nil, fmt.Errorf("cannot create location for source copy: %w", err)
-		}
-		log.AddContext(job.RequestID, "new_source_url", newSourceURL.String())
-
-		if err := clients.CopyDStorageToS3(job.SourceFile, newSourceURL.String(), job.RequestID); err != nil {
-			return nil, fmt.Errorf("cannot copy content: %w", err)
-		}
-		job.SourceFile = newSourceURL.String()
-		job.ReportProgress(clients.TranscodeStatusPreparing, 0.1)
-	}
-
 	// Attempt an out-of-band call to generate the dtsh headers using MistIn*
 	var dtshStartTime = time.Now()
 	dstDir, _ := filepath.Split(job.SegmentingTargetURL)
