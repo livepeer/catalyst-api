@@ -139,10 +139,13 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 		return nil, fmt.Errorf("error creating s3 url: %w", err)
 	}
 
+	log.Log(args.RequestID, "starting probe", "s3url", mc.s3TransferBucket.JoinPath(mcInputRelPath))
 	inputVideoProbe, err := mc.probe.ProbeFile(presignedInputFileURL)
 	if err != nil {
+		log.Log(args.RequestID, "probe failed", "s3url", mc.s3TransferBucket.JoinPath(mcInputRelPath), "err", err)
 		return nil, fmt.Errorf("error probing MP4 input file from S3: %w", err)
 	}
+	log.Log(args.RequestID, "probe succeeded", "s3url", mc.s3TransferBucket.JoinPath(mcInputRelPath))
 
 	if inputVideoProbe.SizeBytes > maxInputFileSizeBytes {
 		return nil, fmt.Errorf("input file %d bytes was greater than %d bytes", inputVideoProbe.SizeBytes, maxInputFileSizeBytes)
