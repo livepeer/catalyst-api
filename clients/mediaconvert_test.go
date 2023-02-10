@@ -233,6 +233,7 @@ func TestCopiesMediaConvertOutputToFinalLocation(t *testing.T) {
 	mc.probe = stubFFprobe{
 		Bitrate:  1000000,
 		Duration: 60,
+		FPS:      30,
 	}
 
 	outFile := path.Join(transferDir, "../out/index.m3u8")
@@ -313,6 +314,52 @@ func Test_createJobPayload(t *testing.T) {
 	}
 }
 
+func Test_FramerateCheck(t *testing.T) {
+	tests := []struct {
+		name        string
+		fps         float64
+		expectedErr error
+	}{
+		{
+			name:        "valid framerate",
+			fps:         30,
+			expectedErr: nil,
+		},
+		{
+			name:        "invalid framerate",
+			fps:         0,
+			expectedErr: errors.New("invalid framerate: 0.000000"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			awsStub := &stubMediaConvertClient{
+				createJob: func(input *mediaconvert.CreateJobInput) (*mediaconvert.CreateJobOutput, error) {
+					// throw an error to end exit early as we only want to test the MC job input
+					return nil, errors.New("secret error")
+				},
+			}
+			mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
+			mc.probe = stubFFprobe{
+				Bitrate:  1000000,
+				Duration: 60,
+				FPS:      tt.fps,
+			}
+			defer cleanup()
+
+			_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
+				InputFile:         mustParseURL(t, "file://"+f.Name()),
+				HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
+				CollectSourceSize: func(size int64) {},
+			})
+			if tt.expectedErr != nil {
+				require.EqualError(t, err, tt.expectedErr.Error())
+			}
+		})
+	}
+}
+
 func Test_MP4OutDurationCheck(t *testing.T) {
 	require := require.New(t)
 
@@ -349,6 +396,7 @@ func Test_MP4OutDurationCheck(t *testing.T) {
 			mc.probe = stubFFprobe{
 				Bitrate:  1000000,
 				Duration: tt.duration,
+				FPS:      30,
 			}
 			defer cleanup()
 
@@ -478,6 +526,7 @@ func (s *stubS3Client) GetObject(bucket, key string) (*s3.GetObjectOutput, error
 type stubFFprobe struct {
 	Bitrate  int64
 	Duration float64
+	FPS      float64
 }
 
 func (f stubFFprobe) ProbeFile(_ string) (video.InputVideo, error) {
@@ -491,7 +540,7 @@ func (f stubFFprobe) ProbeFile(_ string) (video.InputVideo, error) {
 				VideoTrack: video.VideoTrack{
 					Width:  576,
 					Height: 1024,
-					FPS:    30,
+					FPS:    f.FPS,
 				},
 			},
 		},
