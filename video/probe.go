@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"gopkg.in/vansante/go-ffprobe.v2"
 )
 
@@ -18,10 +19,19 @@ type Prober interface {
 type Probe struct {
 }
 
-func (p Probe) ProbeFile(url string) (InputVideo, error) {
-	probeCtx, probeCancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer probeCancel()
-	data, err := ffprobe.ProbeURL(probeCtx, url)
+func (p Probe) ProbeFile(url string) (iv InputVideo, err error) {
+	var data *ffprobe.ProbeData
+	operation := func() error {
+		probeCtx, probeCancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer probeCancel()
+		data, err = ffprobe.ProbeURL(probeCtx, url)
+		return err
+	}
+
+	backOff := backoff.NewExponentialBackOff()
+	backOff.InitialInterval = 500 * time.Millisecond
+	backOff.MaxInterval = 2 * time.Second
+	err = backoff.Retry(operation, backoff.WithMaxRetries(backOff, 3))
 	if err != nil {
 		return InputVideo{}, fmt.Errorf("error probing: %w", err)
 	}
