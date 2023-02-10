@@ -341,12 +341,12 @@ func Test_FramerateCheck(t *testing.T) {
 				},
 			}
 			mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
+			defer cleanup()
 			mc.probe = stubFFprobe{
 				Bitrate:  1000000,
 				Duration: 60,
 				FPS:      tt.fps,
 			}
-			defer cleanup()
 
 			_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
 				InputFile:         mustParseURL(t, "file://"+f.Name()),
@@ -358,6 +358,22 @@ func Test_FramerateCheck(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_EmptyFile(t *testing.T) {
+	mc, f, _, cleanup := setupTestMediaConvert(t, nil)
+	defer cleanup()
+
+	err := os.Truncate(f.Name(), 0)
+	require.NoError(t, err)
+
+	inputURL := mustParseURL(t, "file://"+f.Name())
+	_, err = mc.Transcode(context.Background(), TranscodeJobArgs{
+		InputFile:         inputURL,
+		HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
+		CollectSourceSize: func(size int64) {},
+	})
+	require.EqualError(t, err, "zero bytes found for source: "+inputURL.String())
 }
 
 func Test_MP4OutDurationCheck(t *testing.T) {
@@ -393,12 +409,12 @@ func Test_MP4OutDurationCheck(t *testing.T) {
 				},
 			}
 			mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
+			defer cleanup()
 			mc.probe = stubFFprobe{
 				Bitrate:  1000000,
 				Duration: tt.duration,
 				FPS:      30,
 			}
-			defer cleanup()
 
 			_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
 				InputFile:         mustParseURL(t, "file://"+f.Name()),

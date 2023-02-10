@@ -133,6 +133,9 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 	if err != nil {
 		return nil, fmt.Errorf("error copying input file to S3: %w", err)
 	}
+	if size <= 0 {
+		return nil, fmt.Errorf("zero bytes found for source: %s", args.InputFile)
+	}
 
 	presignedInputFileURL, err := mc.s3.PresignS3(mc.s3TransferBucket.Host, mcInputRelPath)
 	if err != nil {
