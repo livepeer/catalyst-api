@@ -39,11 +39,16 @@ func (p Probe) ProbeFile(url string) (iv InputVideo, err error) {
 }
 
 func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
-	// parse bitrate
+	// check for a valid video stream
 	videoStream := probeData.FirstVideoStream()
 	if videoStream == nil {
-		return InputVideo{}, errors.New("error probing mp4 input file from s3: no video stream found")
+		return InputVideo{}, errors.New("error checking for video: no video stream found")
 	}
+	// check for unsupported video stream(s)
+	if strings.Contains("mjpeg", videoStream.CodecName) {
+		return InputVideo{}, errors.New("error checking for video: mjpeg is not supported")
+	}
+	// parse bitrate
 	bitRateValue := videoStream.BitRate
 	if bitRateValue == "" {
 		bitRateValue = probeData.Format.BitRate
