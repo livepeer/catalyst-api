@@ -58,24 +58,9 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 		return InputVideo{}, fmt.Errorf("error parsing filesize from probed data: %w", err)
 	}
 	// parse fps
-	frameRate := videoStream.AvgFrameRate
-	parts := strings.Split(frameRate, "/")
-	var fps float64
-	if len(parts) > 1 {
-		x, err := strconv.ParseFloat(parts[0], 64)
-		if err != nil {
-			return InputVideo{}, fmt.Errorf("error parsing fps numerator from probed data: %w", err)
-		}
-		y, err := strconv.ParseFloat(parts[1], 64)
-		if err != nil {
-			return InputVideo{}, fmt.Errorf("error parsing fps denominator from probed data: %w", err)
-		}
-		fps = x / y
-	} else {
-		fps, err = strconv.ParseFloat(frameRate, 64)
-		if err != nil {
-			return InputVideo{}, fmt.Errorf("error parsing fps from probed data: %w", err)
-		}
+	fps, err := parseFps(videoStream.AvgFrameRate)
+	if err != nil {
+		return InputVideo{}, fmt.Errorf("error parsing fps numerator from probed data: %w", err)
 	}
 	// format file stats into InputVideo
 	iv := InputVideo{
@@ -96,4 +81,40 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 	}
 
 	return iv, nil
+}
+
+// function taken from task-runner task/probe.go
+func parseFps(framerate string) (float64, error) {
+	if framerate == "" {
+		return 0, nil
+	}
+	parts := strings.SplitN(framerate, "/", 2)
+	if len(parts) < 2 {
+		fps, err := strconv.ParseFloat(framerate, 64)
+		if err != nil {
+			return 0, fmt.Errorf("error parsing framerate: %w", err)
+		}
+		return fps, nil
+	}
+	num, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, fmt.Errorf("error parsing framerate numerator: %w", err)
+	}
+	den, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, fmt.Errorf("error parsing framerate denominator: %w", err)
+	}
+
+	if den == 0 {
+		// If numerator and denominator are 0 return 0.0 for the FPS
+		// 0/0 can be valid for a video track i.e. mjpeg
+		if num == 0 {
+			return 0, nil
+		}
+
+		// If only denominator is 0 then the framerate is invalid
+		return 0, errors.New("invalid framerate denominator 0")
+	}
+
+	return float64(num) / float64(den), nil
 }

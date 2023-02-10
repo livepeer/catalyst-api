@@ -133,6 +133,9 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 	if err != nil {
 		return nil, fmt.Errorf("error copying input file to S3: %w", err)
 	}
+	if size <= 0 {
+		return nil, fmt.Errorf("zero bytes found for source: %s", args.InputFile)
+	}
 
 	presignedInputFileURL, err := mc.s3.PresignS3(mc.s3TransferBucket.Host, mcInputRelPath)
 	if err != nil {
@@ -146,6 +149,14 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 		return nil, fmt.Errorf("error probing MP4 input file from S3: %w", err)
 	}
 	log.Log(args.RequestID, "probe succeeded", "s3url", mc.s3TransferBucket.JoinPath(mcInputRelPath))
+	videoTrack, err := inputVideoProbe.GetVideoTrack()
+	if err != nil {
+		return nil, fmt.Errorf("no video track found in input video: %w", err)
+	}
+	if videoTrack.FPS <= 0 {
+		// unsupported, includes things like motion jpegs
+		return nil, fmt.Errorf("invalid framerate: %f", videoTrack.FPS)
+	}
 
 	if inputVideoProbe.SizeBytes > maxInputFileSizeBytes {
 		return nil, fmt.Errorf("input file %d bytes was greater than %d bytes", inputVideoProbe.SizeBytes, maxInputFileSizeBytes)
