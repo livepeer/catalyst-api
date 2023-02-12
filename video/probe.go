@@ -16,8 +16,7 @@ type Prober interface {
 	ProbeFile(url string) (InputVideo, error)
 }
 
-type Probe struct {
-}
+type Probe struct{}
 
 func (p Probe) ProbeFile(url string) (iv InputVideo, err error) {
 	var data *ffprobe.ProbeData
@@ -39,11 +38,20 @@ func (p Probe) ProbeFile(url string) (iv InputVideo, err error) {
 }
 
 func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
-	// parse bitrate
+	// check for a valid video stream
 	videoStream := probeData.FirstVideoStream()
 	if videoStream == nil {
-		return InputVideo{}, errors.New("error probing mp4 input file from s3: no video stream found")
+		return InputVideo{}, errors.New("error checking for video: no video stream found")
 	}
+	// check for unsupported video stream(s)
+	if strings.ToLower(videoStream.CodecName) == "mjpeg" || strings.ToLower(videoStream.CodecName) == "jpeg" {
+		return InputVideo{}, fmt.Errorf("error checking for video: %s is not supported", videoStream.CodecName)
+	}
+	// We rely on this being present to get required information about the input video, so error out if it isn't
+	if probeData.Format == nil {
+		return InputVideo{}, fmt.Errorf("error parsing input video: format information missing")
+	}
+	// parse bitrate
 	bitRateValue := videoStream.BitRate
 	if bitRateValue == "" {
 		bitRateValue = probeData.Format.BitRate
