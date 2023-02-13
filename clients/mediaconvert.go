@@ -75,6 +75,7 @@ type MediaConvert struct {
 	client                                AWSMediaConvertClient
 	s3                                    S3
 	probe                                 video.Prober
+	sourceUpload                          *SourceUpload
 }
 
 func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) {
@@ -102,13 +103,16 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 	}
 
 	client := mediaconvert.New(sess)
+	s3Client := &S3Client{s3.New(s3Sess)}
+	probe := video.Probe{}
 	return &MediaConvert{
 		role:                opts.Role,
 		s3TransferBucket:    opts.S3TransferBucket,
 		osTransferBucketURL: osTransferBucket,
 		client:              client,
-		s3:                  &S3Client{s3.New(s3Sess)},
-		probe:               video.Probe{},
+		s3:                  s3Client,
+		probe:               probe,
+		sourceUpload:        &SourceUpload{s3Client, probe},
 	}, nil
 }
 
@@ -128,44 +132,10 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 	// AWS MediaConvert adds the .m3u8 to the end of the output file name
 	mcOutputRelPath := path.Join("output", targetDir, "index")
 
-	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", mc.s3TransferBucket.JoinPath(mcInputRelPath), "filename", mcInputRelPath)
-	size, err := copyFile(ctx, args.InputFile.String(), mc.osTransferBucketURL.String(), mcInputRelPath, args.RequestID)
+	mcArgs, err := mc.sourceUpload.Upload(args, mc.osTransferBucketURL.JoinPath(mcInputRelPath))
 	if err != nil {
-		return nil, fmt.Errorf("error copying input file to S3: %w", err)
+		return nil, err
 	}
-	if size <= 0 {
-		return nil, fmt.Errorf("zero bytes found for source: %s", args.InputFile)
-	}
-
-	presignedInputFileURL, err := mc.s3.PresignS3(mc.s3TransferBucket.Host, mcInputRelPath)
-	if err != nil {
-		return nil, fmt.Errorf("error creating s3 url: %w", err)
-	}
-
-	log.Log(args.RequestID, "starting probe", "s3url", mc.s3TransferBucket.JoinPath(mcInputRelPath))
-	inputVideoProbe, err := mc.probe.ProbeFile(presignedInputFileURL)
-	if err != nil {
-		log.Log(args.RequestID, "probe failed", "s3url", mc.s3TransferBucket.JoinPath(mcInputRelPath), "err", err)
-		return nil, fmt.Errorf("error probing MP4 input file from S3: %w", err)
-	}
-	log.Log(args.RequestID, "probe succeeded", "s3url", mc.s3TransferBucket.JoinPath(mcInputRelPath))
-	videoTrack, err := inputVideoProbe.GetVideoTrack()
-	if err != nil {
-		return nil, fmt.Errorf("no video track found in input video: %w", err)
-	}
-	if videoTrack.FPS <= 0 {
-		// unsupported, includes things like motion jpegs
-		return nil, fmt.Errorf("invalid framerate: %f", videoTrack.FPS)
-	}
-
-	if inputVideoProbe.SizeBytes > maxInputFileSizeBytes {
-		return nil, fmt.Errorf("input file %d bytes was greater than %d bytes", inputVideoProbe.SizeBytes, maxInputFileSizeBytes)
-	}
-
-	args.CollectSourceSize(size)
-	mcArgs := args
-	mcArgs.InputFileInfo = inputVideoProbe
-	mcArgs.InputFile = mc.s3TransferBucket.JoinPath(mcInputRelPath)
 	mcArgs.HLSOutputFile = mc.s3TransferBucket.JoinPath(mcOutputRelPath)
 
 	if len(mcArgs.Profiles) == 0 {
@@ -469,7 +439,7 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
-func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (int64, error) {
+func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	writtenBytes := ByteAccumulatorWriter{count: 0}
@@ -527,7 +497,7 @@ func copyDir(source, dest *url.URL, args TranscodeJobArgs) error {
 				if err := ctx.Err(); err != nil {
 					return err
 				}
-				_, err := copyFile(ctx, source.JoinPath(file).String(), dest.String(), file, args.RequestID)
+				_, err := CopyFile(ctx, source.JoinPath(file).String(), dest.String(), file, args.RequestID)
 				args.CollectTranscodedSegment()
 				if err != nil {
 					return err
