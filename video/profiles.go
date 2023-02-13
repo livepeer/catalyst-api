@@ -93,11 +93,11 @@ func GetPlaybackProfiles(iv InputVideo) ([]EncodedProfile, error) {
 		profiles = []EncodedProfile{lowBitrateProfile(video)}
 	}
 	profiles = append(profiles, EncodedProfile{
-		Name:    strconv.FormatInt(video.Height, 10) + "p0",
+		Name:    strconv.FormatInt(nearestEven(video.Height), 10) + "p0",
 		Bitrate: video.Bitrate,
 		FPS:     0,
-		Width:   video.Width,
-		Height:  video.Height,
+		Width:   nearestEven(video.Width),
+		Height:  nearestEven(video.Height),
 	})
 	return profiles, nil
 }
@@ -113,9 +113,13 @@ func lowBitrateProfile(video InputTrack) EncodedProfile {
 		Name:    "low-bitrate",
 		FPS:     0,
 		Bitrate: bitrate,
-		Width:   video.Width,
-		Height:  video.Height,
+		Width:   nearestEven(video.Width),
+		Height:  nearestEven(video.Height),
 	}
+}
+
+func nearestEven(input int64) int64 {
+	return input + (input & 1)
 }
 
 type EncodedProfile struct {
