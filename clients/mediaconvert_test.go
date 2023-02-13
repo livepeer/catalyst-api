@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,7 +33,7 @@ func TestOnlyS3URLsToAWSClient(t *testing.T) {
 	awsStub := &stubMediaConvertClient{
 		createJob: func(input *mediaconvert.CreateJobInput) (*mediaconvert.CreateJobOutput, error) {
 			// check that only an s3:// URL is sent to AWS client
-			require.Equal("s3://thebucket/input/1234/video", *input.Settings.Inputs[0].FileInput)
+			require.True(strings.HasPrefix(*input.Settings.Inputs[0].FileInput, "s3://"))
 			require.Equal("s3://thebucket/output/1234/index", *input.Settings.OutputGroups[0].OutputGroupSettings.HlsGroupSettings.Destination)
 			return nil, errors.New("secret error")
 		},
@@ -342,7 +343,7 @@ func Test_FramerateCheck(t *testing.T) {
 			}
 			mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
 			defer cleanup()
-			mc.probe = stubFFprobe{
+			mc.sourceUpload.Probe = stubFFprobe{
 				Bitrate:  1000000,
 				Duration: 60,
 				FPS:      tt.fps,
@@ -410,7 +411,7 @@ func Test_MP4OutDurationCheck(t *testing.T) {
 			}
 			mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
 			defer cleanup()
-			mc.probe = stubFFprobe{
+			mc.sourceUpload.Probe = stubFFprobe{
 				Bitrate:  1000000,
 				Duration: tt.duration,
 				FPS:      30,
@@ -491,12 +492,15 @@ func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *Med
 		require.NoError(t, inputFile.Close())
 	}
 
+	s3Client := &stubS3Client{}
+	probe := video.Probe{}
 	mc = &MediaConvert{
 		s3TransferBucket:    mustParseURL(t, "s3://thebucket"),
 		osTransferBucketURL: mustParseURL(t, "file://"+transferDir),
 		client:              awsStub,
-		s3:                  &stubS3Client{transferDir},
-		probe:               video.Probe{},
+		s3:                  s3Client,
+		probe:               probe,
+		sourceUpload:        &SourceUpload{s3Client, probe},
 	}
 	return
 }
@@ -526,12 +530,10 @@ func (s *stubMediaConvertClient) GetJob(input *mediaconvert.GetJobInput) (*media
 	return s.getJob(input)
 }
 
-type stubS3Client struct {
-	transferDir string
-}
+type stubS3Client struct{}
 
 func (s *stubS3Client) PresignS3(_, key string) (string, error) {
-	return s.transferDir + "/" + key, nil
+	return key, nil
 }
 
 func (s *stubS3Client) GetObject(bucket, key string) (*s3.GetObjectOutput, error) {
