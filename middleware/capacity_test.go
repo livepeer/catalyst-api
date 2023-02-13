@@ -42,7 +42,7 @@ func TestItErrorsWhenNoCapacityAvailable(t *testing.T) {
 	coordinator := pipeline.NewStubCoordinatorOpts(pipeline.StrategyCatalystDominance, nil, pipeMist, nil)
 
 	// Create a lot of in-flight jobs
-	for x := 0; x < 5; x++ {
+	for x := 0; x < 8; x++ {
 		coordinator.StartUploadJob(pipeline.UploadJobPayload{
 			RequestID: fmt.Sprintf("request-%d", x),
 		})
