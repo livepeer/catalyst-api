@@ -19,6 +19,7 @@ type TranscodeJobArgs struct {
 	// Input File info used to by transcoder provider(s) to set transcode options
 	InputFileInfo video.InputVideo
 	Profiles      []video.EncodedProfile
+	AutoMP4       bool
 
 	// Collect size of an asset
 	CollectSourceSize        func(size int64)

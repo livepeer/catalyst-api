@@ -25,6 +25,7 @@ type UploadVODRequestOutputLocationOutputs struct {
 	SourceMp4          bool `json:"source_mp4"`
 	SourceSegments     bool `json:"source_segments"`
 	TranscodedSegments bool `json:"transcoded_segments"`
+	AutoMP4            bool `json:"auto_mp4"`
 }
 
 type UploadVODRequestOutputLocation struct {
@@ -77,13 +78,13 @@ func (r UploadVODRequest) getSourceOutputURL() (*url.URL, error) {
 	return nil, nil
 }
 
-func (r UploadVODRequest) getTargetURL() (*url.URL, error) {
+func (r UploadVODRequest) getTargetOutput() (UploadVODRequestOutputLocation, error) {
 	for _, o := range r.OutputLocations {
 		if o.Outputs.TranscodedSegments {
-			return url.Parse(o.URL)
+			return o, nil
 		}
 	}
-	return nil, fmt.Errorf("no output_location with transcoded_segments")
+	return UploadVODRequestOutputLocation{}, fmt.Errorf("no output_location with transcoded_segments")
 }
 
 func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
@@ -127,7 +128,11 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 
 	// Create a separate subdirectory for the source segments
 	// Use the output directory specified in request as the output directory of transcoded renditions
-	targetURL, err := uploadVODRequest.getTargetURL()
+	targetOutput, err := uploadVODRequest.getTargetOutput()
+	if err != nil {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+	}
+	targetURL, err := url.Parse(targetOutput.URL)
 	if err != nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 	}
@@ -161,6 +166,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		RequestID:        requestID,
 		Profiles:         uploadVODRequest.Profiles,
 		PipelineStrategy: uploadVODRequest.PipelineStrategy,
+		AutoMP4:          targetOutput.Outputs.AutoMP4,
 	})
 
 	respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})

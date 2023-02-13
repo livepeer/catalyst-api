@@ -60,6 +60,7 @@ type UploadJobPayload struct {
 	RequestID             string
 	Profiles              []video.EncodedProfile
 	PipelineStrategy      Strategy
+	AutoMP4               bool
 }
 
 // UploadJobResult is the object returned by the successful execution of an
