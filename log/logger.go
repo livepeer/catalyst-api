@@ -69,10 +69,16 @@ func redactKeyvals(keyvals ...interface{}) []interface{} {
 		if i%2 == 1 {
 			k, v := keyvals[i-1], keyvals[i]
 			res = append(res, k)
-			s, ok := v.(string)
-			if ok {
+			switch s := v.(type) {
+			case string:
 				res = append(res, RedactURL(s))
-			} else {
+			case url.URL:
+				res = append(res, s.Redacted())
+			case *url.URL:
+				if s != nil {
+					res = append(res, s.Redacted())
+				}
+			default:
 				res = append(res, v)
 			}
 		}
@@ -82,7 +88,7 @@ func redactKeyvals(keyvals ...interface{}) []interface{} {
 
 func RedactURL(str string) string {
 	strLower := strings.ToLower(str)
-	if !strings.HasPrefix(strLower, "s3+http") && !strings.HasPrefix(strLower, "http") {
+	if !strings.HasPrefix(strLower, "s3+http") && !strings.HasPrefix(strLower, "http") && !strings.HasPrefix(strLower, "s3") {
 		return str
 	}
 
