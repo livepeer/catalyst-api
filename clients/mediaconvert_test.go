@@ -343,7 +343,7 @@ func Test_FramerateCheck(t *testing.T) {
 			}
 			mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
 			defer cleanup()
-			mc.sourceUpload.Probe = stubFFprobe{
+			mc.inputCopy.Probe = stubFFprobe{
 				Bitrate:  1000000,
 				Duration: 60,
 				FPS:      tt.fps,
@@ -411,7 +411,7 @@ func Test_MP4OutDurationCheck(t *testing.T) {
 			}
 			mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
 			defer cleanup()
-			mc.sourceUpload.Probe = stubFFprobe{
+			mc.inputCopy.Probe = stubFFprobe{
 				Bitrate:  1000000,
 				Duration: tt.duration,
 				FPS:      30,
@@ -500,7 +500,7 @@ func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *Med
 		client:              awsStub,
 		s3:                  s3Client,
 		probe:               probe,
-		sourceUpload:        &SourceUpload{s3Client, probe},
+		inputCopy:           &InputCopy{s3Client, probe},
 	}
 	return
 }
