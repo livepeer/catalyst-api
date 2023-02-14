@@ -10,12 +10,13 @@ import (
 	"github.com/livepeer/catalyst-api/video"
 )
 
-type SourceUpload struct {
+type InputCopy struct {
 	S3    S3
 	Probe video.Prober
 }
 
-func (s *SourceUpload) Upload(args TranscodeJobArgs, s3HTTPTransferURL *url.URL) (TranscodeJobArgs, error) {
+// CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
+func (s *InputCopy) CopyInputToS3(args TranscodeJobArgs, s3HTTPTransferURL *url.URL) (TranscodeJobArgs, error) {
 	if s3HTTPTransferURL == nil {
 		return TranscodeJobArgs{}, errors.New("s3HTTPTransferURL was nil")
 	}

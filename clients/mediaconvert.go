@@ -75,7 +75,7 @@ type MediaConvert struct {
 	client                                AWSMediaConvertClient
 	s3                                    S3
 	probe                                 video.Prober
-	sourceUpload                          *SourceUpload
+	inputCopy                             *InputCopy
 }
 
 func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) {
@@ -112,7 +112,7 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 		client:              client,
 		s3:                  s3Client,
 		probe:               probe,
-		sourceUpload:        &SourceUpload{s3Client, probe},
+		inputCopy:           &InputCopy{s3Client, probe},
 	}, nil
 }
 
@@ -132,7 +132,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 	// AWS MediaConvert adds the .m3u8 to the end of the output file name
 	mcOutputRelPath := path.Join("output", targetDir, "index")
 
-	mcArgs, err := mc.sourceUpload.Upload(args, mc.osTransferBucketURL.JoinPath(mcInputRelPath))
+	mcArgs, err := mc.inputCopy.CopyInputToS3(args, mc.osTransferBucketURL.JoinPath(mcInputRelPath))
 	if err != nil {
 		return nil, err
 	}
