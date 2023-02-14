@@ -566,9 +566,9 @@ func contains[T comparable](v T, list []T) bool {
 
 func newRetryableHttpClient() *http.Client {
 	client := retryablehttp.NewClient()
-	client.RetryMax = 2                          // Retry a maximum of this+1 times
+	client.RetryMax = 5                          // Retry a maximum of this+1 times
 	client.RetryWaitMin = 200 * time.Millisecond // Wait at least this long between retries
-	client.RetryWaitMax = 1 * time.Second        // Wait at most this long between retries (exponential backoff)
+	client.RetryWaitMax = 5 * time.Second        // Wait at most this long between retries (exponential backoff)
 	client.HTTPClient = &http.Client{
 		// Give up on requests that take more than this long - the file is probably too big for us to process locally if it takes this long
 		// or something else has gone wrong and the request is hanging
