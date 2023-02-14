@@ -88,7 +88,7 @@ func redactKeyvals(keyvals ...interface{}) []interface{} {
 
 func RedactURL(str string) string {
 	strLower := strings.ToLower(str)
-	if !strings.HasPrefix(strLower, "s3+http") && !strings.HasPrefix(strLower, "http") && !strings.HasPrefix(strLower, "s3") {
+	if !strings.HasPrefix(strLower, "http") && !strings.HasPrefix(strLower, "s3") {
 		return str
 	}
 
