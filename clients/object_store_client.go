@@ -118,7 +118,8 @@ func PublishDriverSession(osUrl string, relPath string) (string, error) {
 
 	var videoUrl string
 	err = backoff.Retry(func() error {
-		videoUrl, err = osDriver.Publish(context.Background())
+		var baseUrl string
+		baseUrl, err = osDriver.Publish(context.Background())
 		if err == drivers.ErrNotSupported {
 			// driver does not support Publish(), video will be accessible with osUrl
 			videoUrl = osUrl
@@ -127,6 +128,7 @@ func PublishDriverSession(osUrl string, relPath string) (string, error) {
 			// error while publishing the video
 			return err
 		}
+		videoUrl, err = url.JoinPath(baseUrl, relPath)
 		return nil
 	}, backoff.WithMaxRetries(newExponentialBackOffExecutor(), 5))
 
@@ -135,7 +137,7 @@ func PublishDriverSession(osUrl string, relPath string) (string, error) {
 	}
 
 	// driver supports Publish() and returned a video url, return it joined with the relative path
-	return url.JoinPath(videoUrl, relPath)
+	return videoUrl, nil
 }
 
 func newExponentialBackOffExecutor() *backoff.ExponentialBackOff {
