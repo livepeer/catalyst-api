@@ -40,7 +40,7 @@ func TestItRejectsWhenMJPEGVideoTrackPresent(t *testing.T) {
 	require.ErrorContains(t, err, "jpeg is not supported")
 }
 
-func TestItRejectsWhenVideoBitrateMissing(t *testing.T) {
+func TestItRejectsWhenFormatMissing(t *testing.T) {
 	_, err := parseProbeOutput(&ffprobe.ProbeData{
 		Streams: []*ffprobe.Stream{
 			{
@@ -49,4 +49,16 @@ func TestItRejectsWhenVideoBitrateMissing(t *testing.T) {
 		},
 	})
 	require.ErrorContains(t, err, "format information missing")
+}
+
+func TestItRejectsWhenVideoBitrateMissing(t *testing.T) {
+	_, err := parseProbeOutput(&ffprobe.ProbeData{
+		Streams: []*ffprobe.Stream{
+			{
+				CodecType: "video",
+			},
+		},
+		Format: &ffprobe.Format{},
+	})
+	require.ErrorContains(t, err, "bitrate field not found")
 }
