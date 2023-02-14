@@ -481,7 +481,7 @@ func copyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 
 	content := io.TeeReader(c, &writtenBytes)
 
-	err = UploadToOSURL(destOSBaseURL, filename, content, 30*time.Minute)
+	err = UploadToOSURL(destOSBaseURL, filename, content, 5*time.Minute)
 	if err != nil {
 		return writtenBytes.count, fmt.Errorf("upload error: %w", err)
 	}
