@@ -15,7 +15,7 @@ import (
 	"github.com/livepeer/go-tools/drivers"
 )
 
-var maxRetryInterval = 1 * time.Second
+var maxRetryInterval = 5 * time.Second
 
 func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 	storageDriver, err := drivers.ParseOSURL(osURL, true)
@@ -77,7 +77,7 @@ func UploadToOSURL(osURL, filename string, data io.Reader, timeout time.Duration
 	})
 
 	start := time.Now()
-	err = backoff.Retry(writeOperation, backoff.WithMaxRetries(newExponentialBackOffExecutor(), 2))
+	err = backoff.Retry(writeOperation, backoff.WithMaxRetries(newExponentialBackOffExecutor(), 5))
 	if err != nil {
 		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(url, "write").Inc()
 		return fmt.Errorf("failed to write file %q to OS URL %q: %s", filename, log.RedactURL(osURL), err)
@@ -115,16 +115,29 @@ func PublishDriverSession(osUrl string, relPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	videoUrl, err := osDriver.Publish(context.Background())
-	if err == drivers.ErrNotSupported {
-		// driver does not support Publish(), video will be accessible with osUrl
-		return osUrl, nil
-	} else if err != nil {
-		// error while publishing the video
-		return "", err
+
+	var videoUrl string
+	err = backoff.Retry(func() error {
+		var baseUrl string
+		baseUrl, err = osDriver.Publish(context.Background())
+		if err == drivers.ErrNotSupported {
+			// driver does not support Publish(), video will be accessible with osUrl
+			videoUrl = osUrl
+			return nil
+		} else if err != nil {
+			// error while publishing the video
+			return err
+		}
+		videoUrl, err = url.JoinPath(baseUrl, relPath)
+		return nil
+	}, backoff.WithMaxRetries(newExponentialBackOffExecutor(), 5))
+
+	if err != nil {
+		return "", fmt.Errorf("failed to publish video, err: %v", err)
 	}
+
 	// driver supports Publish() and returned a video url, return it joined with the relative path
-	return url.JoinPath(videoUrl, relPath)
+	return videoUrl, nil
 }
 
 func newExponentialBackOffExecutor() *backoff.ExponentialBackOff {
