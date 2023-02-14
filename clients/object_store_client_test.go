@@ -148,7 +148,7 @@ func TestItFailsAfterMaxSavesRetriesReached(t *testing.T) {
 	err := UploadToOSURL(os.TempDir(), "name", bytes.NewReader([]byte("foo")), 1*time.Second)
 
 	require.Error(t, err)
-	require.Equal(t, 3, retries)
+	require.Equal(t, 6, retries)
 }
 
 func TestPublishDriverSession(t *testing.T) {
