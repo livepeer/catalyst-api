@@ -15,6 +15,8 @@ import (
 	"github.com/livepeer/go-tools/drivers"
 )
 
+const MAX_COPY_FILE_DURATION = 30 * time.Minute
+
 type InputCopy struct {
 	S3    S3
 	Probe video.Prober
@@ -82,7 +84,7 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 
 	content := io.TeeReader(c, &writtenBytes)
 
-	err = UploadToOSURL(destOSBaseURL, filename, content, 5*time.Minute)
+	err = UploadToOSURL(destOSBaseURL, filename, content, MAX_COPY_FILE_DURATION)
 	if err != nil {
 		return writtenBytes.count, fmt.Errorf("upload error: %w", err)
 	}
