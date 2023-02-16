@@ -23,7 +23,7 @@ func (p Probe) ProbeFile(url string) (iv InputVideo, err error) {
 	operation := func() error {
 		probeCtx, probeCancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer probeCancel()
-		data, err = ffprobe.ProbeURL(probeCtx, url)
+		data, err = ffprobe.ProbeURL(probeCtx, url, "-loglevel", "error")
 		return err
 	}
 
