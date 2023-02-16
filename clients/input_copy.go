@@ -33,6 +33,7 @@ func (s *InputCopy) CopyInputToS3(args TranscodeJobArgs, s3HTTPTransferURL *url.
 	if size <= 0 {
 		return TranscodeJobArgs{}, fmt.Errorf("zero bytes found for source: %s", args.InputFile)
 	}
+	log.Log(args.RequestID, "Copied", "bytes", size, "source", args.InputFile, "dest", s3URL)
 	args.CollectSourceSize(size)
 
 	presignedInputFileURL, err := s.S3.PresignS3(s3URL.Host, s3URL.Path)
