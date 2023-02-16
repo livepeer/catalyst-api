@@ -91,6 +91,7 @@ func DownloadDStorageFromGatewayList(u string, requestID string) (io.ReadCloser,
 
 func downloadDStorageResourceFromSingleGateway(gateway *url.URL, resourceId, requestID string) io.ReadCloser {
 	fullURL := gateway.JoinPath(resourceId).String()
+	log.Log(requestID, "downloading from gateway", "resourceID", resourceId, "url", fullURL)
 	resp, err := http.DefaultClient.Get(fullURL)
 
 	if err != nil {
