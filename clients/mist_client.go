@@ -102,8 +102,13 @@ func (mc *MistClient) PushStart(streamName, targetURL string) error {
 }
 
 func (mc *MistClient) DeleteStream(streamName string) error {
-	c := commandDeleteStream(streamName)
-	return wrapErr(validateDeleteStream(mc.sendCommand(c)), streamName)
+	// Need to send both 'deletestream' and 'nuke_stream' in order to remove stream with all configuration and processes
+	deleteErr := wrapErr(validateDeleteStream(mc.sendCommand(commandDeleteStream(streamName))), streamName)
+	nukeErr := wrapErr(validateNukeStream(mc.sendCommand(commandNukeStream(streamName))), streamName)
+	if deleteErr != nil || nukeErr != nil {
+		return fmt.Errorf("deleting stream failed, 'deletestream' command err: %v, 'nuke_stream' command err: %v", deleteErr, nukeErr)
+	}
+	return nil
 }
 
 func (mc *MistClient) CreateDTSH(requestID, source, destination string) error {
@@ -300,6 +305,16 @@ func commandDeleteStream(name string) deleteStreamCommand {
 	}
 }
 
+type nukeStreamCommand struct {
+	Nukestream string `json:"nuke_stream"`
+}
+
+func commandNukeStream(name string) nukeStreamCommand {
+	return nukeStreamCommand{
+		Nukestream: name,
+	}
+}
+
 type pushStartCommand struct {
 	PushStart PushStart `json:"push_start"`
 }
@@ -405,6 +420,11 @@ func validatePushStart(resp string, err error) error {
 }
 
 func validateDeleteStream(resp string, err error) error {
+	// nothing other than auth to validate, Mist always returns the same response
+	return validateAuth(resp, err)
+}
+
+func validateNukeStream(resp string, err error) error {
 	// nothing other than auth to validate, Mist always returns the same response
 	return validateAuth(resp, err)
 }
