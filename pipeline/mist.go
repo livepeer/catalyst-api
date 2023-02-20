@@ -323,10 +323,10 @@ func targetURLToMistTargetURL(targetURL url.URL) (string, error) {
 func (m *mist) HandleStreamUnloadTrigger(p StreamUnloadPayload) (*HandlerOutput, error) {
 	// Try to clean up the trigger and stream from Mist. If these fail then we only log, since we still want to do any
 	// further cleanup stages and callbacks
-	//defer func() {
-	//	if err := m.MistClient.DeleteStream(p.StreamName); err != nil {
-	//		log.LogNoRequestID("Failed to delete stream", err)
-	//	}
-	//}()
+	defer func() {
+		if err := m.MistClient.DeleteStream(p.StreamName); err != nil {
+			log.LogNoRequestID("Failed to delete stream", err)
+		}
+	}()
 	return nil, nil
 }
