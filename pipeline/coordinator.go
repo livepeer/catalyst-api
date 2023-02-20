@@ -77,6 +77,11 @@ type RecordingEndPayload struct {
 	WrittenBytes              int
 }
 
+// StreamUnloadPayload is the required payload from a stream unload trigger.
+type StreamUnloadPayload struct {
+	StreamName string
+}
+
 // PushsEndPayload is the required payload from a push end trigger.
 type PushEndPayload struct {
 	StreamName     string
@@ -122,7 +127,7 @@ type Coordinator struct {
 	strategy     Strategy
 	statusClient clients.TranscodeStatusClient
 
-	pipeMist, pipeExternal Handler
+	PipeMist, pipeExternal Handler
 
 	Jobs      *cache.Cache[*JobInfo]
 	MetricsDB *sql.DB
@@ -150,7 +155,7 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 	return &Coordinator{
 		strategy:     strategy,
 		statusClient: statusClient,
-		pipeMist:     &mist{MistClient: mistClient, SourceOutputUrl: sourceOutputUrl},
+		PipeMist:     &mist{MistClient: mistClient, SourceOutputUrl: sourceOutputUrl},
 		pipeExternal: &external{extTranscoder},
 		Jobs:         cache.New[*JobInfo](),
 		MetricsDB:    metricsDB,
@@ -177,7 +182,7 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 	return &Coordinator{
 		strategy:     strategy,
 		statusClient: statusClient,
-		pipeMist:     pipeMist,
+		PipeMist:     pipeMist,
 		pipeExternal: pipeExternal,
 		Jobs:         cache.New[*JobInfo](),
 	}
@@ -194,19 +199,19 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 	}
 	switch strategy {
 	case StrategyCatalystDominance:
-		c.startOneUploadJob(p, c.pipeMist, true, false)
+		c.startOneUploadJob(p, c.PipeMist, true, false)
 	case StrategyExternalDominance:
 		c.startOneUploadJob(p, c.pipeExternal, true, false)
 	case StrategyBackgroundExternal:
-		c.startOneUploadJob(p, c.pipeMist, true, false)
+		c.startOneUploadJob(p, c.PipeMist, true, false)
 		c.startOneUploadJob(p, c.pipeExternal, false, false)
 	case StrategyBackgroundMist:
 		c.startOneUploadJob(p, c.pipeExternal, true, false)
-		c.startOneUploadJob(p, c.pipeMist, false, false)
+		c.startOneUploadJob(p, c.PipeMist, false, false)
 	case StrategyFallbackExternal:
 		// nolint:errcheck
 		go recovered(func() (t bool, e error) {
-			success := <-c.startOneUploadJob(p, c.pipeMist, true, true)
+			success := <-c.startOneUploadJob(p, c.PipeMist, true, true)
 			if !success {
 				c.startOneUploadJob(p, c.pipeExternal, true, false)
 			}
@@ -278,6 +283,18 @@ func (c *Coordinator) TriggerRecordingEnd(p RecordingEndPayload) {
 	})
 }
 
+// TriggerStreamUnload handles STREAM_UNLOAD trigger from mist.
+func (c *Coordinator) TriggerStreamUnload(p StreamUnloadPayload) {
+	si := c.Jobs.Get(p.StreamName)
+	if si == nil {
+		log.LogNoRequestID("STREAM_UNLOAD trigger invoked for unknown stream", "stream_name", p.StreamName)
+		return
+	}
+	c.runHandlerAsync(si, func() (*HandlerOutput, error) {
+		return si.handler.HandleStreamUnloadTrigger(p)
+	})
+}
+
 // TriggerPushEnd handles PUSH_END trigger from mist.
 func (c *Coordinator) TriggerPushEnd(p PushEndPayload) {
 	si := c.Jobs.Get(p.StreamName)
@@ -294,7 +311,7 @@ func (c *Coordinator) InFlightMistPipelineJobs() int {
 	keys := c.Jobs.GetKeys()
 	count := 0
 	for _, k := range keys {
-		if c.Jobs.Get(k).handler == c.pipeMist {
+		if c.Jobs.Get(k).handler == c.PipeMist {
 			count++
 		}
 	}

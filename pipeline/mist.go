@@ -150,11 +150,11 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 
 	// Try to clean up the trigger and stream from Mist. If these fail then we only log, since we still want to do any
 	// further cleanup stages and callbacks
-	defer func() {
-		if err := m.MistClient.DeleteStream(p.StreamName); err != nil {
-			log.LogError(requestID, "Failed to delete stream in triggerRecordingEndSegmenting", err)
-		}
-	}()
+	//defer func() {
+	//	if err := m.MistClient.DeleteStream(p.StreamName); err != nil {
+	//		log.LogError(requestID, "Failed to delete stream in triggerRecordingEndSegmenting", err)
+	//	}
+	//}()
 
 	// Let Studio know that we've almost finished the Segmenting phase
 	job.ReportProgress(clients.TranscodeStatusPreparing, 0.9)
@@ -318,4 +318,15 @@ func targetURLToMistTargetURL(targetURL url.URL) (string, error) {
 	segmentingTargetURL.RawQuery = queryValues.Encode()
 
 	return segmentingTargetURL.String(), nil
+}
+
+func (m *mist) HandleStreamUnloadTrigger(p StreamUnloadPayload) (*HandlerOutput, error) {
+	// Try to clean up the trigger and stream from Mist. If these fail then we only log, since we still want to do any
+	// further cleanup stages and callbacks
+	//defer func() {
+	//	if err := m.MistClient.DeleteStream(p.StreamName); err != nil {
+	//		log.LogNoRequestID("Failed to delete stream", err)
+	//	}
+	//}()
+	return nil, nil
 }

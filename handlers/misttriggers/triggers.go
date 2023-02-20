@@ -17,6 +17,7 @@ const (
 	TRIGGER_PUSH_END       = "PUSH_END"
 	TRIGGER_PUSH_OUT_START = "PUSH_OUT_START"
 	TRIGGER_RECORDING_END  = "RECORDING_END"
+	TRIGGER_STREAM_UNLOAD  = "STREAM_UNLOAD"
 )
 
 type MistCallbackHandlersCollection struct {
@@ -49,6 +50,8 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 			d.TriggerPushEnd(w, req, payload)
 		case TRIGGER_RECORDING_END:
 			d.TriggerRecordingEnd(w, req, payload)
+		case TRIGGER_STREAM_UNLOAD:
+			d.TriggerStreamUnload(w, req, payload)
 		default:
 			errors.WriteHTTPBadRequest(w, "Unsupported X-Trigger", fmt.Errorf("unknown trigger '%s'", triggerName))
 			return

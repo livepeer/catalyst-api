@@ -25,6 +25,8 @@ type Handler interface {
 	// Handle the recording_end trigger in case a mist stream is created (only
 	// used for segmenting today).
 	HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*HandlerOutput, error)
+	// Handle the stream_unload trigger.
+	HandleStreamUnloadTrigger(p StreamUnloadPayload) (*HandlerOutput, error)
 	// Handle the push_end trigger in case a mist stream is created (only used for
 	// segmenting today).
 	HandlePushEndTrigger(job *JobInfo, p PushEndPayload) (*HandlerOutput, error)
@@ -50,6 +52,7 @@ type StubHandler struct {
 	name                      string
 	handleStartUploadJob      func(job *JobInfo) (*HandlerOutput, error)
 	handleRecordingEndTrigger func(job *JobInfo, p RecordingEndPayload) (*HandlerOutput, error)
+	handleStreamUnloadTrigger func(p StreamUnloadPayload) (*HandlerOutput, error)
 	handlePushEndTrigger      func(job *JobInfo, p PushEndPayload) (*HandlerOutput, error)
 }
 
@@ -83,6 +86,13 @@ func (h *StubHandler) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayl
 		return nil, errors.New("not implemented")
 	}
 	return h.handleRecordingEndTrigger(job, p)
+}
+
+func (h *StubHandler) HandleStreamUnloadTrigger(p StreamUnloadPayload) (*HandlerOutput, error) {
+	if h.handleStreamUnloadTrigger == nil {
+		return nil, errors.New("not implemented")
+	}
+	return h.handleStreamUnloadTrigger(p)
 }
 
 func (h *StubHandler) HandlePushEndTrigger(job *JobInfo, p PushEndPayload) (*HandlerOutput, error) {
