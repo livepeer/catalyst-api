@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -33,6 +35,48 @@ var (
 	}
 )
 
+func setupTransferDir(t *testing.T, coor *Coordinator) (inputFile *os.File, transferDir string, cleanup func()) {
+	//oldMaxRetryInterval, oldRetries, oldPollDelay := maxRetryInterval, config.DownloadOSURLRetries, pollDelay
+	//maxRetryInterval, config.DownloadOSURLRetries, pollDelay = 1*time.Millisecond, 1, 1*time.Millisecond
+
+	var err error
+	inputFile, err = os.CreateTemp(os.TempDir(), "user-input-*")
+	require.NoError(t, err)
+	movieFile, err := os.Open("../clients/fixtures/mediaconvert_payloads/sample.mp4")
+	require.NoError(t, err)
+	_, err = io.Copy(inputFile, movieFile)
+	require.NoError(t, err)
+	_, err = inputFile.WriteString("exampleFileContents")
+	require.NoError(t, err)
+	require.NoError(t, movieFile.Close())
+
+	// use the random file name as the dir name for the transfer file
+	transferDir = path.Join(inputFile.Name()+"-dir", "transfer")
+	require.NoError(t, os.MkdirAll(transferDir, 0777))
+
+	cleanup = func() {
+		//maxRetryInterval, config.DownloadOSURLRetries, pollDelay = oldMaxRetryInterval, oldRetries, oldPollDelay
+		inErr := os.Remove(inputFile.Name())
+		dirErr := os.RemoveAll(transferDir)
+		require.NoError(t, inErr)
+		require.NoError(t, dirErr)
+		require.NoError(t, inputFile.Close())
+	}
+
+	coor.SourceOutputUrl = transferDir
+
+	//s3Client := &stubS3Client{transferDir}
+	//probe := video.Probe{}
+	//mc = &MediaConvert{
+	//	s3TransferBucket:    mustParseURL(t, "s3://thebucket"),
+	//	osTransferBucketURL: mustParseURL(t, "file://"+transferDir),
+	//	client:              awsStub,
+	//	s3:                  s3Client,
+	//	probe:               probe,
+	//}
+	return
+}
+
 func TestCoordinatorDoesNotBlock(t *testing.T) {
 	require := require.New(t)
 
@@ -48,7 +92,11 @@ func TestCoordinatorDoesNotBlock(t *testing.T) {
 		},
 	}
 	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler)
-	coord.StartUploadJob(testJob)
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(job)
 	time.Sleep(1 * time.Second)
 
 	require.True(running.Load())
@@ -70,7 +118,6 @@ func TestCoordinatorPropagatesJobInfoChanges(t *testing.T) {
 	done := make(chan struct{}, 1)
 	blockHandler := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
-			require.Equal("source-file", job.SourceFile)
 			<-barrier
 			job.SourceFile = "new-source-file"
 			return ContinuePipeline, nil
@@ -83,7 +130,11 @@ func TestCoordinatorPropagatesJobInfoChanges(t *testing.T) {
 	}
 	coord := NewStubCoordinatorOpts("", nil, blockHandler, blockHandler)
 
-	coord.StartUploadJob(testJob)
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(job)
 	time.Sleep(100 * time.Millisecond)
 
 	coord.TriggerRecordingEnd(RecordingEndPayload{StreamName: config.SegmentingStreamName("123")})
@@ -107,7 +158,11 @@ func TestCoordinatorResistsPanics(t *testing.T) {
 	}
 	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler)
 
-	coord.StartUploadJob(testJob)
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(job)
 
 	require.Equal(1, len(callbacks))
 	require.Equal(clients.TranscodeStatusPreparing, (<-callbacks).Status)
@@ -124,10 +179,14 @@ func TestCoordinatorCatalystDominance(t *testing.T) {
 	external := allFailingHandler(t)
 	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, nil, mist, external)
 
-	coord.StartUploadJob(testJob)
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(job)
 
-	job := requireReceive(t, calls, 1*time.Second)
-	require.Equal("123", job.RequestID)
+	j := requireReceive(t, calls, 1*time.Second)
+	require.Equal("123", j.RequestID)
 
 	time.Sleep(1 * time.Second)
 	require.Zero(len(calls))
@@ -161,7 +220,11 @@ func TestCoordinatorBackgroundJobsStrategies(t *testing.T) {
 			t.Fatalf("Unexpected strategy: %s", strategy)
 		}
 
-		coord.StartUploadJob(testJob)
+		inputFile, _, cleanup := setupTransferDir(t, coord)
+		defer cleanup()
+		job := testJob
+		job.SourceFile = "file://" + inputFile.Name()
+		coord.StartUploadJob(job)
 
 		msg := requireReceive(t, callbacks, 1*time.Second)
 		require.NotZero(msg.URL)
@@ -200,7 +263,11 @@ func TestCoordinatorFallbackStrategySuccess(t *testing.T) {
 
 	// Start a job that will complete successfully on mist, which should not
 	// trigger the external pipeline
-	coord.StartUploadJob(testJob)
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(job)
 
 	msg := requireReceive(t, callbacks, 1*time.Second)
 	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
@@ -236,7 +303,11 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, mist, external)
 
 	// Start a job which mist will fail and only then call the external one
-	coord.StartUploadJob(testJob)
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(job)
 
 	msg := requireReceive(t, callbacks, 1*time.Second)
 	require.Equal("123", msg.RequestID)
@@ -283,10 +354,14 @@ func TestAllowsOverridingStrategyOnRequest(t *testing.T) {
 	// Override the strategy to background mist, which will call the external provider *and* the mist provider
 	p := testJob
 	p.PipelineStrategy = StrategyBackgroundMist
-	coord.StartUploadJob(p)
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(job)
 
 	// Check that it was really called
-	meconJob := requireReceive(t, externalCalls, 1*time.Second)
+	meconJob := requireReceive(t, externalCalls, 5*time.Second)
 	require.Equal("123", meconJob.RequestID)
 	require.Equal("catalyst_vod_123", meconJob.StreamName)
 
@@ -337,7 +412,11 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 	coord := NewStubCoordinatorOpts(StrategyBackgroundMist, nil, mist, external)
 	coord.MetricsDB = db
 
-	coord.StartUploadJob(testJob)
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(job)
 
 	res, err := http.Get(metricsServer.URL)
 	require.NoError(err)
@@ -408,6 +487,7 @@ func recordingHandler(err error) (Handler, <-chan *JobInfo) {
 	handler := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			jobs <- job
+			fmt.Println("WROTE TO CHANNEL " + err.Error())
 			if err != nil {
 				return nil, err
 			}

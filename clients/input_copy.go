@@ -50,8 +50,18 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, s3URL, osTransfer
 	}
 	log.Log(requestID, "Copied", "bytes", size)
 
-	// TODO generate presigned url
-	signedURL = s3URL.String()
+	driver, err := drivers.ParseOSURL(osTransferURL.String(), true)
+	if err != nil {
+		err = fmt.Errorf("failed to parse OS url: %w", err)
+		return
+	}
+
+	sess := driver.NewSession("")
+	signedURL, err = sess.Presign("", 60*time.Minute)
+	if err != nil {
+		err = fmt.Errorf("failed to generate signed url: %w", err)
+		return
+	}
 	log.AddContext(requestID, "presigned", signedURL)
 
 	log.Log(requestID, "starting probe")
