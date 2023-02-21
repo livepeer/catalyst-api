@@ -131,7 +131,3 @@ func newExponentialBackOffExecutor() *backoff.ExponentialBackOff {
 
 	return backOff
 }
-
-var makeOperation = func(fn func() error) func() error {
-	return fn
-}

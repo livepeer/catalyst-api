@@ -92,11 +92,6 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 		content := io.TeeReader(c, &byteAccWriter)
 
 		return UploadToOSURL(destOSBaseURL, filename, content, MAX_COPY_FILE_DURATION)
-		if err != nil {
-			return fmt.Errorf("upload error: %w", err)
-		}
-
-		return nil
 	}, RETRY_BACKOFF)
 	return
 }
