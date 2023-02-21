@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	xerrors "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/video"
@@ -16,6 +17,8 @@ import (
 )
 
 const MAX_COPY_FILE_DURATION = 30 * time.Minute
+
+var RETRY_BACKOFF = backoff.WithMaxRetries(newExponentialBackOffExecutor(), 5)
 
 type InputCopy struct {
 	S3    S3
@@ -72,24 +75,25 @@ func (s *InputCopy) CopyInputToS3(args TranscodeJobArgs, s3HTTPTransferURL *url.
 	return args, nil
 }
 
-func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (int64, error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-	defer cancel()
-	writtenBytes := ByteAccumulatorWriter{count: 0}
-	c, err := getFile(ctx, sourceURL, requestID)
-	if err != nil {
-		return writtenBytes.count, fmt.Errorf("download error: %w", err)
-	}
-	defer c.Close()
+func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
+	err = backoff.Retry(func() error {
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+		defer cancel()
 
-	content := io.TeeReader(c, &writtenBytes)
+		byteAccWriter := ByteAccumulatorWriter{count: 0}
+		defer func() { writtenBytes = byteAccWriter.count }()
 
-	err = UploadToOSURL(destOSBaseURL, filename, content, MAX_COPY_FILE_DURATION)
-	if err != nil {
-		return writtenBytes.count, fmt.Errorf("upload error: %w", err)
-	}
+		c, err := getFile(ctx, sourceURL, requestID)
+		if err != nil {
+			return fmt.Errorf("download error: %w", err)
+		}
+		defer c.Close()
 
-	return writtenBytes.count, nil
+		content := io.TeeReader(c, &byteAccWriter)
+
+		return UploadToOSURL(destOSBaseURL, filename, content, MAX_COPY_FILE_DURATION)
+	}, RETRY_BACKOFF)
+	return
 }
 
 func getFile(ctx context.Context, url, requestID string) (io.ReadCloser, error) {

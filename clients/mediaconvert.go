@@ -21,6 +21,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const MAX_COPY_DIR_DURATION = 2 * time.Hour
+
 var pollDelay = 10 * time.Second
 var retryableHttpClient = newRetryableHttpClient()
 
@@ -406,7 +408,7 @@ func output(container, name string, height, maxBitrate int64) *mediaconvert.Outp
 }
 
 func copyDir(source, dest *url.URL, args TranscodeJobArgs) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), MAX_COPY_DIR_DURATION)
 	defer cancel()
 	eg, ctx := errgroup.WithContext(ctx)
 
@@ -518,7 +520,7 @@ func newRetryableHttpClient() *http.Client {
 	client.HTTPClient = &http.Client{
 		// Give up on requests that take more than this long - the file is probably too big for us to process locally if it takes this long
 		// or something else has gone wrong and the request is hanging
-		Timeout: MAX_COPY_DURATION,
+		Timeout: MAX_COPY_FILE_DURATION,
 	}
 
 	return client.StandardClient()

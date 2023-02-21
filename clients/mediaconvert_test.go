@@ -15,7 +15,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/mediaconvert"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/video"
 	"github.com/stretchr/testify/require"
 )
@@ -465,8 +464,8 @@ func loadFixture(t *testing.T, expectedPath, actual string) string {
 }
 
 func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *MediaConvert, inputFile *os.File, transferDir string, cleanup func()) {
-	oldMaxRetryInterval, oldRetries, oldPollDelay := maxRetryInterval, config.DownloadOSURLRetries, pollDelay
-	maxRetryInterval, config.DownloadOSURLRetries, pollDelay = 1*time.Millisecond, 1, 1*time.Millisecond
+	oldMaxRetryInterval, oldPollDelay := maxRetryInterval, pollDelay
+	maxRetryInterval, pollDelay = 1*time.Millisecond, 1*time.Millisecond
 
 	var err error
 	inputFile, err = os.CreateTemp(os.TempDir(), "user-input-*")
@@ -484,7 +483,7 @@ func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *Med
 	require.NoError(t, os.MkdirAll(transferDir, 0777))
 
 	cleanup = func() {
-		maxRetryInterval, config.DownloadOSURLRetries, pollDelay = oldMaxRetryInterval, oldRetries, oldPollDelay
+		maxRetryInterval, pollDelay = oldMaxRetryInterval, oldPollDelay
 		inErr := os.Remove(inputFile.Name())
 		dirErr := os.RemoveAll(transferDir)
 		require.NoError(t, inErr)

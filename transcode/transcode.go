@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/log"
@@ -17,6 +18,8 @@ import (
 )
 
 const UPLOAD_TIMEOUT = 5 * time.Minute
+
+var transcodeRetryBackoff = backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10)
 
 type TranscodeSegmentRequest struct {
 	SourceFile        string                 `json:"source_location"`
@@ -156,32 +159,39 @@ func transcodeSegment(
 	targetOSURL *url.URL,
 	transcodedStats []*RenditionStats,
 ) error {
-	rc, err := clients.DownloadOSURL(segment.Input.URL)
-	if err != nil {
-		return fmt.Errorf("failed to download source segment %q: %s", segment.Input, err)
-	}
-
 	start := time.Now()
 
 	var tr clients.TranscodeResult
-	// If an AccessToken is provided via the request for transcode, then use remote Broadcasters.
-	// Otherwise, use the local harcoded Broadcaster.
-	if transcodeRequest.AccessToken != "" {
-		creds := clients.Credentials{
-			AccessToken:  transcodeRequest.AccessToken,
-			CustomAPIURL: transcodeRequest.TranscodeAPIUrl,
-		}
-		broadcasterClient, _ := clients.NewRemoteBroadcasterClient(creds)
-		// TODO: failed to run TranscodeSegmentWithRemoteBroadcaster: CreateStream(): http POST(https://origin.livepeer.com/api/stream) returned 422 422 Unprocessable Entity
-		tr, err = broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(rc, int64(segment.Index), transcodeProfiles, streamName, segment.Input.DurationMillis)
+	err := backoff.Retry(func() error {
+		rc, err := clients.DownloadOSURL(segment.Input.URL)
 		if err != nil {
-			return fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
+			return fmt.Errorf("failed to download source segment %q: %s", segment.Input, err)
 		}
-	} else {
-		tr, err = LocalBroadcasterClient.TranscodeSegment(rc, int64(segment.Index), transcodeProfiles, segment.Input.DurationMillis, manifestID)
-		if err != nil {
-			return fmt.Errorf("failed to run TranscodeSegment: %s", err)
+
+		// If an AccessToken is provided via the request for transcode, then use remote Broadcasters.
+		// Otherwise, use the local harcoded Broadcaster.
+		if transcodeRequest.AccessToken != "" {
+			creds := clients.Credentials{
+				AccessToken:  transcodeRequest.AccessToken,
+				CustomAPIURL: transcodeRequest.TranscodeAPIUrl,
+			}
+			broadcasterClient, _ := clients.NewRemoteBroadcasterClient(creds)
+			// TODO: failed to run TranscodeSegmentWithRemoteBroadcaster: CreateStream(): http POST(https://origin.livepeer.com/api/stream) returned 422 422 Unprocessable Entity
+			tr, err = broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(rc, int64(segment.Index), transcodeProfiles, streamName, segment.Input.DurationMillis)
+			if err != nil {
+				return fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
+			}
+		} else {
+			tr, err = LocalBroadcasterClient.TranscodeSegment(rc, int64(segment.Index), transcodeProfiles, segment.Input.DurationMillis, manifestID)
+			if err != nil {
+				return fmt.Errorf("failed to run TranscodeSegment: %s", err)
+			}
 		}
+		return nil
+	}, transcodeRetryBackoff)
+
+	if err != nil {
+		return err
 	}
 
 	duration := time.Since(start)
@@ -198,7 +208,9 @@ func transcodeSegment(
 			return fmt.Errorf("error building rendition segment URL %q: %s", targetRenditionURL, err)
 		}
 
-		err = clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), UPLOAD_TIMEOUT)
+		err = backoff.Retry(func() error {
+			return clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), UPLOAD_TIMEOUT)
+		}, clients.RETRY_BACKOFF)
 		if err != nil {
 			return fmt.Errorf("failed to upload master playlist: %s", err)
 		}

@@ -16,20 +16,22 @@ import (
 const SCHEME_IPFS = "ipfs"
 const SCHEME_ARWEAVE = "ar"
 
-const MAX_COPY_DURATION = 20 * time.Minute
+var dstorageRetryBackoff = backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 2)
 
 func CopyDStorageToS3(url, s3URL string, requestID string) error {
-	content, err := DownloadDStorageFromGatewayList(url, requestID)
-	if err != nil {
-		return err
-	}
+	return backoff.Retry(func() error {
+		content, err := DownloadDStorageFromGatewayList(url, requestID)
+		if err != nil {
+			return err
+		}
 
-	err = UploadToOSURL(s3URL, "", content, MAX_COPY_DURATION)
-	if err != nil {
-		return err
-	}
+		err = UploadToOSURL(s3URL, "", content, MAX_COPY_FILE_DURATION)
+		if err != nil {
+			return err
+		}
 
-	return nil
+		return nil
+	}, dstorageRetryBackoff)
 }
 
 func DownloadDStorageFromGatewayList(u string, requestID string) (io.ReadCloser, error) {
@@ -68,25 +70,14 @@ func DownloadDStorageFromGatewayList(u string, requestID string) (io.ReadCloser,
 		}
 	}
 
-	var opContent io.ReadCloser
-	downloadOperation := func() error {
-		for _, gateway := range gateways {
-			opContent = downloadDStorageResourceFromSingleGateway(gateway, resourceID, requestID)
-			if opContent != nil {
-				return nil
-			}
+	for _, gateway := range gateways {
+		opContent := downloadDStorageResourceFromSingleGateway(gateway, resourceID, requestID)
+		if opContent != nil {
+			return opContent, nil
 		}
-
-		return fmt.Errorf("failed to fetch %s from any of the gateways", u)
 	}
 
-	retryStrategy := backoff.NewConstantBackOff(1 * time.Second)
-	err = backoff.Retry(downloadOperation, backoff.WithMaxRetries(retryStrategy, 2))
-	if err != nil {
-		return nil, err
-	} else {
-		return opContent, nil
-	}
+	return nil, fmt.Errorf("failed to fetch %s from any of the gateways", u)
 }
 
 func downloadDStorageResourceFromSingleGateway(gateway *url.URL, resourceId, requestID string) io.ReadCloser {
