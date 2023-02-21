@@ -16,7 +16,7 @@ import (
 const SCHEME_IPFS = "ipfs"
 const SCHEME_ARWEAVE = "ar"
 
-var dstorageRetryBackoff = backoff.NewConstantBackOff(1 * time.Second)
+var dstorageRetryBackoff = backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 2)
 
 func CopyDStorageToS3(url, s3URL string, requestID string) error {
 	return backoff.Retry(func() error {
