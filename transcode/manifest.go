@@ -25,7 +25,7 @@ func DownloadRenditionManifest(sourceManifestOSURL string) (m3u8.MediaPlaylist, 
 		}
 		playlist, playlistType, err = m3u8.DecodeFrom(rc, true)
 		return err
-	}, clients.DOWNLOAD_RETRY_BACKOFF)
+	}, transcodeRetryBackoff)
 	if err != nil {
 		return m3u8.MediaPlaylist{}, fmt.Errorf("error downloading manifest: %s", err)
 	}

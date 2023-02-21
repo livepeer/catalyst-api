@@ -19,6 +19,8 @@ import (
 
 const UPLOAD_TIMEOUT = 5 * time.Minute
 
+var transcodeRetryBackoff = backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), config.DownloadOSURLRetries)
+
 type TranscodeSegmentRequest struct {
 	SourceFile        string                 `json:"source_location"`
 	CallbackURL       string                 `json:"callback_url"`
@@ -186,7 +188,7 @@ func transcodeSegment(
 			}
 		}
 		return nil
-	}, clients.DOWNLOAD_RETRY_BACKOFF)
+	}, transcodeRetryBackoff)
 
 	if err != nil {
 		return err

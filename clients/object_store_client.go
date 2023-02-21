@@ -10,14 +10,11 @@ import (
 	"github.com/livepeer/catalyst-api/log"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/go-tools/drivers"
 )
 
 var maxRetryInterval = 5 * time.Second
-
-var DOWNLOAD_RETRY_BACKOFF = backoff.WithMaxRetries(newConstantBackOffExecutor(), config.DownloadOSURLRetries)
 
 func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 	storageDriver, err := drivers.ParseOSURL(osURL, true)
@@ -133,10 +130,6 @@ func newExponentialBackOffExecutor() *backoff.ExponentialBackOff {
 	backOff.MaxInterval = maxRetryInterval
 
 	return backOff
-}
-
-func newConstantBackOffExecutor() *backoff.ConstantBackOff {
-	return backoff.NewConstantBackOff(maxRetryInterval)
 }
 
 var makeOperation = func(fn func() error) func() error {
