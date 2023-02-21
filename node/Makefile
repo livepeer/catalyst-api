@@ -185,5 +185,5 @@ test-local: docker-local
 
 .PHONY: test-unit
 unit-test:
-	go generate github.com/livepeer/catalyst/cmd/catalyst-node/...
+	go generate github.com/livepeer/catalyst-api/node/cmd/catalyst-node/...
 	go test --covermode=atomic --coverprofile=coverage.out $(shell go list ./... | grep -v 'test/e2e')

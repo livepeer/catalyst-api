@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/catalyst-api/mapic/apis/mist"
+	census "github.com/livepeer/catalyst-api/mapic/internal/metrics"
 	"github.com/livepeer/go-api-client"
 	"github.com/livepeer/livepeer-data/pkg/data"
 	"github.com/livepeer/livepeer-data/pkg/event"
-	"github.com/livepeer/stream-tester/apis/mist"
-	census "github.com/livepeer/stream-tester/internal/metrics"
 	"golang.org/x/sync/errgroup"
 )
 

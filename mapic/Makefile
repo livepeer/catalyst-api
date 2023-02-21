@@ -1,10 +1,10 @@
 SHELL=/bin/bash
 GO_BUILD_DIR?=build/
-ldflags := -X 'github.com/livepeer/stream-tester/model.Version=$(shell git describe --dirty)'
+ldflags := -X 'github.com/livepeer/catalyst-api/mapic/model.Version=$(shell git describe --dirty)'
 
 all: streamtester loadtester testdriver lapi mapi recordtester connector
 
-# ldflags := -X 'github.com/livepeer/stream-tester/model.Version=$(shell git describe --dirty)' -X 'github.com/livepeer/stream-tester/model.IProduction=true'
+# ldflags := -X 'github.com/livepeer/catalyst-api/mapic/model.Version=$(shell git describe --dirty)' -X 'github.com/livepeer/catalyst-api/mapic/model.IProduction=true'
 
 .PHONY: streamtester
 streamtester:

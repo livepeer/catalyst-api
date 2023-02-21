@@ -14,9 +14,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/livepeer/catalyst/cmd/catalyst-node/balancer"
-	"github.com/livepeer/catalyst/cmd/catalyst-node/cluster"
-	accesscontrol "github.com/livepeer/catalyst/cmd/catalyst-node/handlers/access-control"
+	"github.com/livepeer/catalyst-api/node/cmd/catalyst-node/balancer"
+	"github.com/livepeer/catalyst-api/node/cmd/catalyst-node/cluster"
+	accesscontrol "github.com/livepeer/catalyst-api/node/cmd/catalyst-node/handlers/access-control"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
 	glog "github.com/magicsong/color-glog"
 	"github.com/peterbourgon/ff/v3"

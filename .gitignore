@@ -15,3 +15,6 @@ build/
 test/app
 test/minio
 *.log
+
+# mock files always end up in a directory named /mocks/
+mocks/

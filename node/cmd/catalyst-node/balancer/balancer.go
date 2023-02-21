@@ -13,7 +13,7 @@ import (
 	"os/exec"
 	"sync"
 
-	"github.com/livepeer/catalyst/cmd/catalyst-node/cluster"
+	"github.com/livepeer/catalyst-api/node/cmd/catalyst-node/cluster"
 	glog "github.com/magicsong/color-glog"
 )
 

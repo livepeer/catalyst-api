@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/golang/glog"
-	"github.com/livepeer/stream-tester/model"
+	"github.com/livepeer/catalyst-api/mapic/model"
 )
 
 // NewRequest creates new HTTP Request object and adds own User Agent

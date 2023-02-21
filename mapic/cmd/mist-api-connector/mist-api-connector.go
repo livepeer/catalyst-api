@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	mistapi "github.com/livepeer/catalyst-api/mapic/apis/mist"
+	"github.com/livepeer/catalyst-api/mapic/internal/app/mistapiconnector"
+	"github.com/livepeer/catalyst-api/mapic/internal/metrics"
+	"github.com/livepeer/catalyst-api/mapic/internal/utils"
+	"github.com/livepeer/catalyst-api/mapic/model"
 	"github.com/livepeer/go-api-client"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
-	mistapi "github.com/livepeer/stream-tester/apis/mist"
-	"github.com/livepeer/stream-tester/internal/app/mistapiconnector"
-	"github.com/livepeer/stream-tester/internal/metrics"
-	"github.com/livepeer/stream-tester/internal/utils"
-	"github.com/livepeer/stream-tester/model"
 	"github.com/peterbourgon/ff"
 )
 

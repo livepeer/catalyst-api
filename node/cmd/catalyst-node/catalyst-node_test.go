@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	mockbalancer "github.com/livepeer/catalyst/cmd/catalyst-node/balancer/mocks"
-	"github.com/livepeer/catalyst/cmd/catalyst-node/cluster"
-	mockcluster "github.com/livepeer/catalyst/cmd/catalyst-node/cluster/mocks"
+	mockbalancer "github.com/livepeer/catalyst-api/node/cmd/catalyst-node/balancer/mocks"
+	"github.com/livepeer/catalyst-api/node/cmd/catalyst-node/cluster"
+	mockcluster "github.com/livepeer/catalyst-api/node/cmd/catalyst-node/cluster/mocks"
 	"github.com/stretchr/testify/require"
 )
 
