@@ -157,32 +157,39 @@ func transcodeSegment(
 	targetOSURL *url.URL,
 	transcodedStats []*RenditionStats,
 ) error {
-	rc, err := clients.DownloadOSURL(segment.Input.URL)
-	if err != nil {
-		return fmt.Errorf("failed to download source segment %q: %s", segment.Input, err)
-	}
-
 	start := time.Now()
 
 	var tr clients.TranscodeResult
-	// If an AccessToken is provided via the request for transcode, then use remote Broadcasters.
-	// Otherwise, use the local harcoded Broadcaster.
-	if transcodeRequest.AccessToken != "" {
-		creds := clients.Credentials{
-			AccessToken:  transcodeRequest.AccessToken,
-			CustomAPIURL: transcodeRequest.TranscodeAPIUrl,
-		}
-		broadcasterClient, _ := clients.NewRemoteBroadcasterClient(creds)
-		// TODO: failed to run TranscodeSegmentWithRemoteBroadcaster: CreateStream(): http POST(https://origin.livepeer.com/api/stream) returned 422 422 Unprocessable Entity
-		tr, err = broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(rc, int64(segment.Index), transcodeProfiles, streamName, segment.Input.DurationMillis)
+	err := backoff.Retry(func() error {
+		rc, err := clients.DownloadOSURL(segment.Input.URL)
 		if err != nil {
-			return fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
+			return fmt.Errorf("failed to download source segment %q: %s", segment.Input, err)
 		}
-	} else {
-		tr, err = LocalBroadcasterClient.TranscodeSegment(rc, int64(segment.Index), transcodeProfiles, segment.Input.DurationMillis, manifestID)
-		if err != nil {
-			return fmt.Errorf("failed to run TranscodeSegment: %s", err)
+
+		// If an AccessToken is provided via the request for transcode, then use remote Broadcasters.
+		// Otherwise, use the local harcoded Broadcaster.
+		if transcodeRequest.AccessToken != "" {
+			creds := clients.Credentials{
+				AccessToken:  transcodeRequest.AccessToken,
+				CustomAPIURL: transcodeRequest.TranscodeAPIUrl,
+			}
+			broadcasterClient, _ := clients.NewRemoteBroadcasterClient(creds)
+			// TODO: failed to run TranscodeSegmentWithRemoteBroadcaster: CreateStream(): http POST(https://origin.livepeer.com/api/stream) returned 422 422 Unprocessable Entity
+			tr, err = broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(rc, int64(segment.Index), transcodeProfiles, streamName, segment.Input.DurationMillis)
+			if err != nil {
+				return fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
+			}
+		} else {
+			tr, err = LocalBroadcasterClient.TranscodeSegment(rc, int64(segment.Index), transcodeProfiles, segment.Input.DurationMillis, manifestID)
+			if err != nil {
+				return fmt.Errorf("failed to run TranscodeSegment: %s", err)
+			}
 		}
+		return nil
+	}, clients.DOWNLOAD_RETRY_BACKOFF)
+
+	if err != nil {
+		return err
 	}
 
 	duration := time.Since(start)

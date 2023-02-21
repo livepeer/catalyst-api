@@ -15,16 +15,19 @@ import (
 const MASTER_MANIFEST_FILENAME = "index.m3u8"
 
 func DownloadRenditionManifest(sourceManifestOSURL string) (m3u8.MediaPlaylist, error) {
-	// Download the manifest
-	rc, err := clients.DownloadOSURL(sourceManifestOSURL)
+	var playlist m3u8.Playlist
+	var playlistType m3u8.ListType
+
+	err := backoff.Retry(func() error {
+		rc, err := clients.DownloadOSURL(sourceManifestOSURL)
+		if err != nil {
+			return err
+		}
+		playlist, playlistType, err = m3u8.DecodeFrom(rc, true)
+		return err
+	}, clients.DOWNLOAD_RETRY_BACKOFF)
 	if err != nil {
 		return m3u8.MediaPlaylist{}, fmt.Errorf("error downloading manifest: %s", err)
-	}
-
-	// Parse the manifest
-	playlist, playlistType, err := m3u8.DecodeFrom(rc, true)
-	if err != nil {
-		return m3u8.MediaPlaylist{}, fmt.Errorf("error decoding manifest: %s", err)
 	}
 
 	// We shouldn't ever receive Master playlists from the previous section

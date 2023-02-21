@@ -17,31 +17,26 @@ import (
 
 var maxRetryInterval = 5 * time.Second
 
+var DOWNLOAD_RETRY_BACKOFF = backoff.WithMaxRetries(newConstantBackOffExecutor(), config.DownloadOSURLRetries)
+
 func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 	storageDriver, err := drivers.ParseOSURL(osURL, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse OS URL %q: %s", log.RedactURL(osURL), err)
 	}
 
-	var fileInfoReader *drivers.FileInfoReader
-	var retries = -1
-	var url string
-	readOperation := makeOperation(func() error {
-		var err error
-		retries++
-		sess := storageDriver.NewSession("")
-		info := sess.GetInfo()
-		if info == nil {
-			url = ""
-		} else {
-			url = info.S3Info.Host
-		}
-		fileInfoReader, err = sess.ReadData(context.Background(), "")
-		return err
-	})
-
 	start := time.Now()
-	err = backoff.Retry(readOperation, backoff.WithMaxRetries(newConstantBackOffExecutor(), config.DownloadOSURLRetries))
+
+	sess := storageDriver.NewSession("")
+	info := sess.GetInfo()
+	var url string
+	if info == nil {
+		url = ""
+	} else {
+		url = info.S3Info.Host
+	}
+	fileInfoReader, err := sess.ReadData(context.Background(), "")
+
 	if err != nil {
 		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(url, "read").Inc()
 		return nil, fmt.Errorf("failed to read from OS URL %q: %s", log.RedactURL(osURL), err)
@@ -50,7 +45,6 @@ func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 	duration := time.Since(start)
 
 	metrics.Metrics.ObjectStoreClient.RequestDuration.WithLabelValues(url, "read").Observe(duration.Seconds())
-	metrics.Metrics.ObjectStoreClient.RetryCount.WithLabelValues(url, "read").Set(float64(retries))
 
 	return fileInfoReader.Body, nil
 }
