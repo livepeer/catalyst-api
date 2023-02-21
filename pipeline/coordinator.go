@@ -62,7 +62,7 @@ type UploadJobPayload struct {
 	PipelineStrategy      Strategy
 	AutoMP4               bool
 	InputFileInfo         video.InputVideo
-	TransferURL           *url.URL
+	SignedSourceURL       string
 }
 
 // UploadJobResult is the object returned by the successful execution of an
@@ -154,7 +154,7 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 	return &Coordinator{
 		strategy:     strategy,
 		statusClient: statusClient,
-		pipeMist:     &mist{MistClient: mistClient},
+		pipeMist:     &mist{MistClient: mistClient, SourceOutputUrl: sourceOutputURL},
 		pipeExternal: &external{extTranscoder},
 		Jobs:         cache.New[*JobInfo](),
 		MetricsDB:    metricsDB,
@@ -199,12 +199,12 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 // This has the main logic regarding the pipeline strategy. It starts jobs and
 // handles processing the response and triggering a fallback if appropriate.
 func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
+	// A bit hacky - this is effectively a dummy job object to allow us to reuse the runHandlerAsync and
+	// progress reporting logic. The real job objects still get created in startOneUploadJob().
 	si := &JobInfo{
 		UploadJobPayload: p,
-		//StreamName:       streamName,
-		statusClient: c.statusClient,
-		startTime:    time.Now(),
-		//result:           make(chan bool, 1),
+		statusClient:     c.statusClient,
+		startTime:        time.Now(),
 
 		numProfiles:    len(p.Profiles),
 		state:          "segmenting",
@@ -218,29 +218,21 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 			return nil, fmt.Errorf("error parsing source as url: %w", err)
 		}
 
-		var sourceOutputUrl *url.URL
-		perRequestPath, err := url.JoinPath(c.SourceOutputUrl, si.RequestID, "index.m3u8")
+		sourceOutputUrl, err := url.Parse(c.SourceOutputUrl)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
 		}
-		if sourceOutputUrl, err = url.Parse(perRequestPath); err != nil {
-			return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
-		}
-		p.TransferURL = sourceOutputUrl
-
-		newSourceURL, err := inSameDirectory(*sourceOutputUrl, MIST_SEGMENTING_SUBDIR, path.Base(sourceURL.Path))
-		if err != nil {
-			return nil, fmt.Errorf("cannot create location for source copy: %w", err)
-		}
-		log.AddContext(si.RequestID, "new_source_url", newSourceURL.String())
+		newSourceURL := sourceOutputUrl.JoinPath("transfer", si.RequestID, path.Base(sourceURL.Path))
 
 		inputVideoProbe, signedURL, err := c.InputCopy.CopyInputToS3(si.RequestID, sourceURL, newSourceURL)
 		if err != nil {
 			return nil, fmt.Errorf("error copying input to storage: %w", err)
 		}
-		p.SourceFile = signedURL
+		p.SourceFile = newSourceURL.String()
+		p.SignedSourceURL = signedURL
 		p.InputFileInfo = inputVideoProbe
-		//return nil, fmt.Errorf("nope")
+		log.AddContext(si.RequestID, "new_source_url", newSourceURL)
+		log.AddContext(si.RequestID, "signed_url", signedURL)
 
 		c.startUploadJob(p)
 		return nil, nil
@@ -371,7 +363,7 @@ func (c *Coordinator) runHandlerAsync(job *JobInfo, handler func() (*HandlerOutp
 		defer job.mu.Unlock()
 
 		out, err := recovered(handler)
-		if err != nil || !out.Continue {
+		if err != nil || (out != nil && !out.Continue) {
 			c.finishJob(job, out, err)
 		}
 		// dummy

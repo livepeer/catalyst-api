@@ -1,8 +1,6 @@
 package pipeline
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"testing"
 
@@ -43,57 +41,6 @@ func Test_inSameDirectory(t *testing.T) {
 			got, err := inSameDirectory(*base, tc.args.paths...)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got.String())
-		})
-	}
-}
-
-func Test_isVideo(t *testing.T) {
-	tests := []struct {
-		name        string
-		contentType string
-		want        bool
-	}{
-		{
-			name:        "mp4 video",
-			contentType: "video/mp4; foo=bar",
-			want:        true,
-		},
-		{
-			name:        "no params",
-			contentType: "video/mp4",
-			want:        true,
-		},
-		{
-			name:        "unknown video",
-			contentType: "video; foo=bar",
-			want:        true,
-		},
-		{
-			name:        "not a video",
-			contentType: "foo/bar; video=bar",
-			want:        false,
-		},
-		{
-			name:        "empty content type",
-			contentType: "",
-			want:        true,
-		},
-		{
-			name:        "empty content type with params",
-			contentType: "; foo=bar",
-			want:        true,
-		},
-	}
-	for _, tc := range tests {
-		tt := tc
-		t.Run(tt.name, func(t *testing.T) {
-			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, http.MethodHead, r.Method)
-				w.Header().Add("content-type", tt.contentType)
-				w.WriteHeader(http.StatusOK)
-			}))
-			defer ts.Close()
-			require.Equal(t, tc.want, isVideo("", ts.URL))
 		})
 	}
 }

@@ -3,8 +3,6 @@ package pipeline
 import (
 	"fmt"
 	"math"
-	"mime"
-	"net/http"
 	"net/url"
 	"path"
 	"path/filepath"
@@ -85,27 +83,6 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	job.ReportProgress(clients.TranscodeStatusPreparing, 0.3)
 	return ContinuePipeline, nil
-}
-
-var defaultHttpClient = &http.Client{Timeout: 5 * time.Second}
-
-func isVideo(requestID, source string) bool {
-	resp, err := defaultHttpClient.Head(source)
-	if err != nil {
-		log.Log(requestID, "failed to get headers", "err", err.Error())
-		return true // fail open on errors
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		log.Log(requestID, "bad status code", "status", resp.StatusCode)
-		return true // fail open
-	}
-	contentType := resp.Header.Get("Content-Type")
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	if err != nil {
-		log.Log(requestID, "media type parsing failed", "err", err.Error())
-		return true // fail open on errors
-	}
-	return strings.Contains(mediaType, "video")
 }
 
 func (m *mist) processUploadVOD(streamName, sourceURL, targetURL string) error {

@@ -38,9 +38,6 @@ var (
 )
 
 func setupTransferDir(t *testing.T, coor *Coordinator) (inputFile *os.File, transferDir string, cleanup func()) {
-	//oldMaxRetryInterval, oldRetries, oldPollDelay := maxRetryInterval, config.DownloadOSURLRetries, pollDelay
-	//maxRetryInterval, config.DownloadOSURLRetries, pollDelay = 1*time.Millisecond, 1, 1*time.Millisecond
-
 	var err error
 	inputFile, err = os.CreateTemp(os.TempDir(), "user-input-*")
 	require.NoError(t, err)
@@ -57,7 +54,6 @@ func setupTransferDir(t *testing.T, coor *Coordinator) (inputFile *os.File, tran
 	require.NoError(t, os.MkdirAll(transferDir, 0777))
 
 	cleanup = func() {
-		//maxRetryInterval, config.DownloadOSURLRetries, pollDelay = oldMaxRetryInterval, oldRetries, oldPollDelay
 		inErr := os.Remove(inputFile.Name())
 		dirErr := os.RemoveAll(transferDir)
 		require.NoError(t, inErr)
@@ -66,16 +62,6 @@ func setupTransferDir(t *testing.T, coor *Coordinator) (inputFile *os.File, tran
 	}
 
 	coor.SourceOutputUrl = transferDir
-
-	//s3Client := &stubS3Client{transferDir}
-	//probe := video.Probe{}
-	//mc = &MediaConvert{
-	//	s3TransferBucket:    mustParseURL(t, "s3://thebucket"),
-	//	osTransferBucketURL: mustParseURL(t, "file://"+transferDir),
-	//	client:              awsStub,
-	//	s3:                  s3Client,
-	//	probe:               probe,
-	//}
 	return
 }
 
@@ -418,7 +404,7 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 	defer cleanup()
 	job := testJob
 	job.SourceFile = "file://" + inputFile.Name()
-	sourceFile := path.Join(transferDir, "123/source/"+filepath.Base(inputFile.Name()))
+	sourceFile := path.Join(transferDir, "transfer/123/"+filepath.Base(inputFile.Name()))
 
 	dbMock.
 		ExpectExec("insert into \"vod_completed\".*").
@@ -537,7 +523,7 @@ func Test_InputCopiedToTransferLocation(t *testing.T) {
 	require.Equal(clients.TranscodeStatusCompleted, msg.Status)
 
 	// Check that the file was copied to the osTransferBucketURL folder
-	transferInput := path.Join(transferDir, "123/source/"+filepath.Base(f.Name()))
+	transferInput := path.Join(transferDir, "/transfer/123/"+filepath.Base(f.Name()))
 	require.Equal(transferInput, actualTransferInput)
 	content, err := os.Open(transferInput)
 	require.NoError(err)

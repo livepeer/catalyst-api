@@ -35,10 +35,8 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 		err = errors.New("osTransferURL was nil")
 		return
 	}
-	log.AddContext(requestID, "source", inputFile.String())
-	log.AddContext(requestID, "dest", osTransferURL.String())
 
-	log.Log(requestID, "Copying input file to S3")
+	log.Log(requestID, "Copying input file to S3", "source", inputFile.String(), "dest", osTransferURL.String(), "presigned", signedURL)
 	size, err := CopyFile(context.Background(), inputFile.String(), osTransferURL.String(), "", requestID)
 	if err != nil {
 		err = fmt.Errorf("error copying input file to S3: %w", err)
@@ -48,22 +46,21 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 		err = fmt.Errorf("zero bytes found for source: %s", inputFile)
 		return
 	}
-	log.Log(requestID, "Copied", "bytes", size)
+	log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", osTransferURL.String(), "presigned", signedURL)
 
 	signedURL, err = signURL(osTransferURL)
 	if err != nil {
 		return
 	}
-	log.AddContext(requestID, "presigned", signedURL)
 
-	log.Log(requestID, "starting probe")
+	log.Log(requestID, "starting probe", "source", inputFile.String(), "dest", osTransferURL.String(), "presigned", signedURL)
 	inputVideoProbe, err = s.Probe.ProbeFile(signedURL)
 	if err != nil {
-		log.Log(requestID, "probe failed", "err", err)
+		log.Log(requestID, "probe failed", "err", err, "source", inputFile.String(), "dest", osTransferURL.String(), "presigned", signedURL)
 		err = fmt.Errorf("error probing MP4 input file from S3: %w", err)
 		return
 	}
-	log.Log(requestID, "probe succeeded")
+	log.Log(requestID, "probe succeeded", "source", inputFile.String(), "dest", osTransferURL.String(), "presigned", signedURL)
 	videoTrack, err := inputVideoProbe.GetVideoTrack()
 	if err != nil {
 		err = fmt.Errorf("no video track found in input video: %w", err)
