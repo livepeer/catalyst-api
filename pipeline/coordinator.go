@@ -128,7 +128,7 @@ type Coordinator struct {
 
 	Jobs            *cache.Cache[*JobInfo]
 	MetricsDB       *sql.DB
-	inputCopy       *clients.InputCopy
+	InputCopy       clients.InputCopier
 	SourceOutputUrl string
 }
 
@@ -158,7 +158,7 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 		pipeExternal: &external{extTranscoder},
 		Jobs:         cache.New[*JobInfo](),
 		MetricsDB:    metricsDB,
-		inputCopy: &clients.InputCopy{
+		InputCopy: &clients.InputCopy{
 			Probe: video.Probe{},
 		},
 		SourceOutputUrl: sourceOutputURL,
@@ -188,7 +188,7 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 		pipeMist:     pipeMist,
 		pipeExternal: pipeExternal,
 		Jobs:         cache.New[*JobInfo](),
-		inputCopy: &clients.InputCopy{
+		InputCopy: &clients.InputCopy{
 			Probe: video.Probe{},
 		},
 	}
@@ -234,19 +234,11 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		}
 		log.AddContext(si.RequestID, "new_source_url", newSourceURL.String())
 
-		// TODO needs to be presigned GCS, for now bucket is public so this works
-		httpURL := &url.URL{
-			Scheme: "https",
-			Host:   newSourceURL.Host,
-			Path:   newSourceURL.Path,
-		}
-
-		inputVideoProbe, signedURL, err := c.inputCopy.CopyInputToS3(si.RequestID, sourceURL, httpURL, newSourceURL)
+		inputVideoProbe, signedURL, err := c.InputCopy.CopyInputToS3(si.RequestID, sourceURL, newSourceURL)
 		if err != nil {
 			return nil, fmt.Errorf("error copying input to storage: %w", err)
 		}
 		p.SourceFile = signedURL
-
 		p.InputFileInfo = inputVideoProbe
 		//return nil, fmt.Errorf("nope")
 

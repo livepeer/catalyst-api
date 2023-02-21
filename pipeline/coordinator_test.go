@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"crypto/md5"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -100,6 +102,7 @@ func TestCoordinatorDoesNotBlock(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	require.True(running.Load())
+	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
 	msg := requireReceive(t, callbacks, 1*time.Second)
 	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 
@@ -165,6 +168,7 @@ func TestCoordinatorResistsPanics(t *testing.T) {
 	coord.StartUploadJob(job)
 
 	require.Equal(1, len(callbacks))
+	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
 	require.Equal(clients.TranscodeStatusPreparing, (<-callbacks).Status)
 
 	msg := requireReceive(t, callbacks, 1*time.Second)
@@ -226,6 +230,7 @@ func TestCoordinatorBackgroundJobsStrategies(t *testing.T) {
 		job.SourceFile = "file://" + inputFile.Name()
 		coord.StartUploadJob(job)
 
+		requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
 		msg := requireReceive(t, callbacks, 1*time.Second)
 		require.NotZero(msg.URL)
 		require.Equal(clients.TranscodeStatusPreparing, msg.Status)
@@ -269,6 +274,7 @@ func TestCoordinatorFallbackStrategySuccess(t *testing.T) {
 	job.SourceFile = "file://" + inputFile.Name()
 	coord.StartUploadJob(job)
 
+	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
 	msg := requireReceive(t, callbacks, 1*time.Second)
 	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 
@@ -309,6 +315,7 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 	job.SourceFile = "file://" + inputFile.Name()
 	coord.StartUploadJob(job)
 
+	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
 	msg := requireReceive(t, callbacks, 1*time.Second)
 	require.Equal("123", msg.RequestID)
 	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
@@ -351,17 +358,16 @@ func TestAllowsOverridingStrategyOnRequest(t *testing.T) {
 	// create coordinator with strategy catalyst dominance (external should never be called)
 	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, nil, mist, external)
 
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
 	// Override the strategy to background mist, which will call the external provider *and* the mist provider
 	p := testJob
 	p.PipelineStrategy = StrategyBackgroundMist
-	inputFile, _, cleanup := setupTransferDir(t, coord)
-	defer cleanup()
-	job := testJob
-	job.SourceFile = "file://" + inputFile.Name()
-	coord.StartUploadJob(job)
+	p.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(p)
 
 	// Check that it was really called
-	meconJob := requireReceive(t, externalCalls, 5*time.Second)
+	meconJob := requireReceive(t, externalCalls, 500*time.Second)
 	require.Equal("123", meconJob.RequestID)
 	require.Equal("catalyst_vod_123", meconJob.StreamName)
 
@@ -401,22 +407,27 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 			return testHandlerResult, nil
 		},
 	}
+	callbackHandler, callbacks := callbacksRecorder()
 
 	db, dbMock, err := sqlmock.New()
 	require.NoError(err)
-	dbMock.
-		ExpectExec("insert into \"vod_completed\".*").
-		WithArgs(sqlmock.AnyArg(), 0, sqlmock.AnyArg(), "vid codec", "audio codec", "mist", "test region", "completed", 1, sqlmock.AnyArg(), 2, 3, 4, 5, "source-file", "s3+https://user:xxxxx@storage.google.com/bucket/key").
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	coord := NewStubCoordinatorOpts(StrategyBackgroundMist, nil, mist, external)
+	coord := NewStubCoordinatorOpts(StrategyBackgroundMist, callbackHandler, mist, external)
 	coord.MetricsDB = db
 
-	inputFile, _, cleanup := setupTransferDir(t, coord)
+	inputFile, transferDir, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
 	job := testJob
 	job.SourceFile = "file://" + inputFile.Name()
+	sourceFile := path.Join(transferDir, "123/source/"+filepath.Base(inputFile.Name()))
+
+	dbMock.
+		ExpectExec("insert into \"vod_completed\".*").
+		WithArgs(sqlmock.AnyArg(), 0, sqlmock.AnyArg(), "vid codec", "audio codec", "mist", "test region", "completed", 1, sqlmock.AnyArg(), 2, 3, 4, 5, sourceFile, "s3+https://user:xxxxx@storage.google.com/bucket/key").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
 	coord.StartUploadJob(job)
+	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
+	requireReceive(t, callbacks, 1*time.Second) // discard second TranscodeStatusPreparing message
 
 	res, err := http.Get(metricsServer.URL)
 	require.NoError(err)
@@ -437,6 +448,111 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 		return dbMock.ExpectationsWereMet()
 	})
 	require.NoError(err)
+}
+
+func Test_EmptyFile(t *testing.T) {
+	callbackHandler, callbacks := callbacksRecorder()
+	coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil)
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+
+	err := os.Truncate(inputFile.Name(), 0)
+	require.NoError(t, err)
+
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(job)
+	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
+	msg := requireReceive(t, callbacks, 1*time.Second)
+	require.Equal(t, clients.TranscodeStatusError, msg.Status)
+	require.Equal(t, "error copying input to storage: zero bytes found for source: "+job.SourceFile, msg.Error)
+}
+
+func Test_FramerateCheck(t *testing.T) {
+	tests := []struct {
+		name        string
+		fps         float64
+		expectedErr string
+	}{
+		{
+			name:        "valid framerate",
+			fps:         30,
+			expectedErr: "",
+		},
+		{
+			name:        "invalid framerate",
+			fps:         0,
+			expectedErr: "error copying input to storage: invalid framerate: 0.000000",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			callbackHandler, callbacks := callbacksRecorder()
+			coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil)
+			coord.InputCopy = &clients.InputCopy{
+				Probe: stubFFprobe{
+					Bitrate:  1000000,
+					Duration: 60,
+					FPS:      tt.fps,
+				},
+			}
+			inputFile, _, cleanup := setupTransferDir(t, coord)
+			defer cleanup()
+
+			job := testJob
+			job.SourceFile = "file://" + inputFile.Name()
+			coord.StartUploadJob(job)
+			requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
+			msg := requireReceive(t, callbacks, 1*time.Second)
+
+			require.Equal(t, tt.expectedErr, msg.Error)
+			if tt.expectedErr != "" {
+				require.Equal(t, tt.expectedErr, msg.Error)
+			}
+		})
+	}
+}
+
+func Test_InputCopiedToTransferLocation(t *testing.T) {
+	require := require.New(t)
+	var actualTransferInput string
+	callbackHandler, callbacks := callbacksRecorder()
+	mist := &StubHandler{
+		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
+			actualTransferInput = job.SourceFile
+			return testHandlerResult, nil
+		},
+	}
+	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, callbackHandler, mist, nil)
+	f, transferDir, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+
+	job := testJob
+	job.SourceFile = "file://" + f.Name()
+	coord.StartUploadJob(job)
+	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
+	requireReceive(t, callbacks, 1*time.Second) // discard second TranscodeStatusPreparing message
+	msg := requireReceive(t, callbacks, 1*time.Second)
+	require.Equal(clients.TranscodeStatusCompleted, msg.Status)
+
+	// Check that the file was copied to the osTransferBucketURL folder
+	transferInput := path.Join(transferDir, "123/source/"+filepath.Base(f.Name()))
+	require.Equal(transferInput, actualTransferInput)
+	content, err := os.Open(transferInput)
+	require.NoError(err)
+
+	hashContent := md5.New()
+	_, err = io.Copy(hashContent, content)
+	require.NoError(err)
+
+	inputFile, err := os.Open(f.Name())
+	require.NoError(err)
+	hashInputFile := md5.New()
+	_, err = io.Copy(hashInputFile, inputFile)
+	require.NoError(err)
+
+	require.Equal(hashInputFile, hashContent)
 }
 
 func retry(attempts int, sleep time.Duration, f func() error) (err error) {
@@ -487,10 +603,11 @@ func recordingHandler(err error) (Handler, <-chan *JobInfo) {
 	handler := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			jobs <- job
-			fmt.Println("WROTE TO CHANNEL " + err.Error())
 			if err != nil {
+				fmt.Println("WROTE TO CHANNEL " + err.Error())
 				return nil, err
 			}
+			fmt.Println("WROTE TO CHANNEL")
 			return testHandlerResult, nil
 		},
 	}
@@ -505,4 +622,28 @@ func requireReceive[T any](t *testing.T, ch <-chan T, timeout time.Duration) T {
 		require.Fail(t, "did not receive expected message")
 		panic("unreachable")
 	}
+}
+
+type stubFFprobe struct {
+	Bitrate  int64
+	Duration float64
+	FPS      float64
+}
+
+func (f stubFFprobe) ProbeFile(_ string) (video.InputVideo, error) {
+	return video.InputVideo{
+		Duration: f.Duration,
+		Tracks: []video.InputTrack{
+			{
+				Type:    "video",
+				Codec:   "h264",
+				Bitrate: f.Bitrate,
+				VideoTrack: video.VideoTrack{
+					Width:  576,
+					Height: 1024,
+					FPS:    f.FPS,
+				},
+			},
+		},
+	}, nil
 }

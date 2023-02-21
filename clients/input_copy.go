@@ -20,18 +20,18 @@ const MAX_COPY_FILE_DURATION = 30 * time.Minute
 
 var RETRY_BACKOFF = backoff.WithMaxRetries(newExponentialBackOffExecutor(), 5)
 
+type InputCopier interface {
+	CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL) (video.InputVideo, string, error)
+}
+
 type InputCopy struct {
 	S3    S3
 	Probe video.Prober
 }
 
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
-func (s *InputCopy) CopyInputToS3(requestID string, inputFile, s3URL, osTransferURL *url.URL) (inputVideoProbe video.InputVideo, signedURL string, err error) {
+func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL) (inputVideoProbe video.InputVideo, signedURL string, err error) {
 	if osTransferURL == nil {
-		err = errors.New("osTransferURL was nil")
-		return
-	}
-	if s3URL == nil {
 		err = errors.New("osTransferURL was nil")
 		return
 	}
@@ -50,16 +50,8 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, s3URL, osTransfer
 	}
 	log.Log(requestID, "Copied", "bytes", size)
 
-	driver, err := drivers.ParseOSURL(osTransferURL.String(), true)
+	signedURL, err = signURL(osTransferURL)
 	if err != nil {
-		err = fmt.Errorf("failed to parse OS url: %w", err)
-		return
-	}
-
-	sess := driver.NewSession("")
-	signedURL, err = sess.Presign("", 60*time.Minute)
-	if err != nil {
-		err = fmt.Errorf("failed to generate signed url: %w", err)
 		return
 	}
 	log.AddContext(requestID, "presigned", signedURL)
@@ -88,6 +80,23 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, s3URL, osTransfer
 		return
 	}
 	return
+}
+
+func signURL(u *url.URL) (string, error) {
+	if u.Scheme == "" || u.Scheme == "file" { // not compatible with presigning
+		return u.String(), nil
+	}
+	driver, err := drivers.ParseOSURL(u.String(), true)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse OS url: %w", err)
+	}
+
+	sess := driver.NewSession("")
+	signedURL, err := sess.Presign("", 60*time.Minute)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate signed url: %w", err)
+	}
+	return signedURL, nil
 }
 
 func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
@@ -140,4 +149,10 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 		return nil, err
 	}
 	return resp.Body, nil
+}
+
+type StubInputCopy struct{}
+
+func (s *StubInputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL) (inputVideoProbe video.InputVideo, signedURL string, err error) {
+	return video.InputVideo{}, "", nil
 }
