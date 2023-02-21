@@ -60,24 +60,18 @@ func UploadToOSURL(osURL, filename string, data io.Reader, timeout time.Duration
 	if err != nil {
 		return fmt.Errorf("failed to parse OS URL %q: %s", log.RedactURL(osURL), err)
 	}
-
-	var retries = -1
-	var url string
-	writeOperation := makeOperation(func() error {
-		retries++
-		sess := storageDriver.NewSession("")
-		info := sess.GetInfo()
-		if info == nil {
-			url = ""
-		} else {
-			url = info.S3Info.Host
-		}
-		_, err := sess.SaveData(context.Background(), filename, data, nil, timeout)
-		return err
-	})
-
 	start := time.Now()
-	err = backoff.Retry(writeOperation, backoff.WithMaxRetries(newExponentialBackOffExecutor(), 5))
+
+	var url string
+	sess := storageDriver.NewSession("")
+	info := sess.GetInfo()
+	if info == nil {
+		url = ""
+	} else {
+		url = info.S3Info.Host
+	}
+	_, err = sess.SaveData(context.Background(), filename, data, nil, timeout)
+
 	if err != nil {
 		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(url, "write").Inc()
 		return fmt.Errorf("failed to write file %q to OS URL %q: %s", filename, log.RedactURL(osURL), err)
@@ -86,7 +80,6 @@ func UploadToOSURL(osURL, filename string, data io.Reader, timeout time.Duration
 	duration := time.Since(start)
 
 	metrics.Metrics.ObjectStoreClient.RequestDuration.WithLabelValues(url, "write").Observe(duration.Seconds())
-	metrics.Metrics.ObjectStoreClient.RetryCount.WithLabelValues(url, "write").Set(float64(retries))
 
 	return nil
 }

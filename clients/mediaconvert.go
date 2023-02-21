@@ -518,7 +518,7 @@ func newRetryableHttpClient() *http.Client {
 	client.HTTPClient = &http.Client{
 		// Give up on requests that take more than this long - the file is probably too big for us to process locally if it takes this long
 		// or something else has gone wrong and the request is hanging
-		Timeout: MAX_COPY_DURATION,
+		Timeout: DSTORAGE_MAX_COPY_DURATION,
 	}
 
 	return client.StandardClient()

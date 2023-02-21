@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/log"
@@ -198,7 +199,9 @@ func transcodeSegment(
 			return fmt.Errorf("error building rendition segment URL %q: %s", targetRenditionURL, err)
 		}
 
-		err = clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), UPLOAD_TIMEOUT)
+		err = backoff.Retry(func() error {
+			return clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), UPLOAD_TIMEOUT)
+		}, clients.RETRY_BACKOFF)
 		if err != nil {
 			return fmt.Errorf("failed to upload master playlist: %s", err)
 		}
