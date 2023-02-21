@@ -16,7 +16,7 @@ import (
 	"github.com/livepeer/go-tools/drivers"
 )
 
-const MAX_COPY_FILE_DURATION = 1 * time.Minute
+const MAX_COPY_FILE_DURATION = 30 * time.Minute
 
 var RETRY_BACKOFF = backoff.WithMaxRetries(newExponentialBackOffExecutor(), 5)
 

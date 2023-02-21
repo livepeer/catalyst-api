@@ -2,13 +2,13 @@ package clients
 
 import (
 	"fmt"
-	"github.com/cenkalti/backoff/v4"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/log"
 )
@@ -16,9 +16,7 @@ import (
 const SCHEME_IPFS = "ipfs"
 const SCHEME_ARWEAVE = "ar"
 
-const DSTORAGE_MAX_COPY_DURATION = 20 * time.Minute
-
-var DSTORAGE_RETRY_BACKOFF = backoff.NewConstantBackOff(1 * time.Second)
+var dstorageRetryBackoff = backoff.NewConstantBackOff(1 * time.Second)
 
 func CopyDStorageToS3(url, s3URL string, requestID string) error {
 	return backoff.Retry(func() error {
@@ -27,13 +25,13 @@ func CopyDStorageToS3(url, s3URL string, requestID string) error {
 			return err
 		}
 
-		err = UploadToOSURL(s3URL, "", content, DSTORAGE_MAX_COPY_DURATION)
+		err = UploadToOSURL(s3URL, "", content, MAX_COPY_FILE_DURATION)
 		if err != nil {
 			return err
 		}
 
 		return nil
-	}, DSTORAGE_RETRY_BACKOFF)
+	}, dstorageRetryBackoff)
 }
 
 func DownloadDStorageFromGatewayList(u string, requestID string) (io.ReadCloser, error) {
