@@ -21,13 +21,16 @@ func DownloadRenditionManifest(sourceManifestOSURL string) (m3u8.MediaPlaylist, 
 	err := backoff.Retry(func() error {
 		rc, err := clients.DownloadOSURL(sourceManifestOSURL)
 		if err != nil {
-			return err
+			return fmt.Errorf("error downloading manifest: %s", err)
 		}
 		playlist, playlistType, err = m3u8.DecodeFrom(rc, true)
-		return err
+		if err != nil {
+			return fmt.Errorf("error decoding manifest: %s", err)
+		}
+		return nil
 	}, transcodeRetryBackoff)
 	if err != nil {
-		return m3u8.MediaPlaylist{}, fmt.Errorf("error downloading manifest: %s", err)
+		return m3u8.MediaPlaylist{}, err
 	}
 
 	// We shouldn't ever receive Master playlists from the previous section
