@@ -21,6 +21,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const MAX_COPY_DIR_DURATION = 2 * time.Hour
+
 var pollDelay = 10 * time.Second
 var retryableHttpClient = newRetryableHttpClient()
 
@@ -406,7 +408,7 @@ func output(container, name string, height, maxBitrate int64) *mediaconvert.Outp
 }
 
 func copyDir(source, dest *url.URL, args TranscodeJobArgs) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), MAX_COPY_DIR_DURATION)
 	defer cancel()
 	eg, ctx := errgroup.WithContext(ctx)
 
