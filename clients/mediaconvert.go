@@ -161,8 +161,11 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 
 	mcOutputBaseDir := mc.osTransferBucketURL.JoinPath(mcOutputRelPath, "..")
 	ourOutputBaseDir := args.HLSOutputFile.JoinPath("..")
+	copyingStart := time.Now()
 	log.Log(args.RequestID, "Copying output files from S3", "source", mcOutputBaseDir, "dest", ourOutputBaseDir)
-	if err := copyDir(mcOutputBaseDir, ourOutputBaseDir, args); err != nil {
+	err = copyDir(mcOutputBaseDir, ourOutputBaseDir, args)
+	log.Log(args.RequestID, "Copying output files finished", "source", mcOutputBaseDir, "dest", ourOutputBaseDir, "duration", time.Since(copyingStart).Milliseconds())
+	if err != nil {
 		return nil, fmt.Errorf("error copying output files: %w", err)
 	}
 
@@ -439,7 +442,7 @@ func copyDir(source, dest *url.URL, args TranscodeJobArgs) error {
 		return nil
 	})
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 4; i++ {
 		eg.Go(func() error {
 			for file := range files {
 				if err := ctx.Err(); err != nil {
