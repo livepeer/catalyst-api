@@ -107,6 +107,10 @@ func GetPlaybackProfiles(iv InputVideo) ([]EncodedProfile, error) {
 	return profiles, nil
 }
 
+// When the input video's height and bitrate combo is too low to meet the default ABR ladder we output a low bitrate
+// profile as well as the profile matching the input video to achieve at least some ABR playback.
+// 50% of the input video's bitrate was found to give a decent experience. We also then check that this isn't below
+// some sensible minimum values.
 func lowBitrateProfile(video InputTrack) EncodedProfile {
 	bitrate := int64(float64(video.Bitrate) * (1.0 / 2.0))
 	if bitrate < MinVideoBitrate && video.Bitrate > MinVideoBitrate {
