@@ -6,8 +6,9 @@ import (
 )
 
 const (
-	MIN_VIDEO_BITRATE          = 100_000
-	ABSOLUTE_MIN_VIDEO_BITRATE = 5_000
+	MinVideoBitrate         = 100_000
+	AbsoluteMinVideoBitrate = 5_000
+	MaxVideoBitrate         = 288_000_000
 )
 
 type InputVideo struct {
@@ -92,9 +93,13 @@ func GetPlaybackProfiles(iv InputVideo) ([]EncodedProfile, error) {
 	if len(profiles) == 0 {
 		profiles = []EncodedProfile{lowBitrateProfile(video)}
 	}
+	videoBitrate := video.Bitrate
+	if videoBitrate > MaxVideoBitrate {
+		videoBitrate = MaxVideoBitrate
+	}
 	profiles = append(profiles, EncodedProfile{
 		Name:    strconv.FormatInt(nearestEven(video.Height), 10) + "p0",
-		Bitrate: video.Bitrate,
+		Bitrate: videoBitrate,
 		FPS:     0,
 		Width:   nearestEven(video.Width),
 		Height:  nearestEven(video.Height),
@@ -102,12 +107,16 @@ func GetPlaybackProfiles(iv InputVideo) ([]EncodedProfile, error) {
 	return profiles, nil
 }
 
+// When the input video's height and bitrate combo is too low to meet the default ABR ladder we output a low bitrate
+// profile as well as the profile matching the input video to achieve at least some ABR playback.
+// 50% of the input video's bitrate was found to give a decent experience. We also then check that this isn't below
+// some sensible minimum values.
 func lowBitrateProfile(video InputTrack) EncodedProfile {
 	bitrate := int64(float64(video.Bitrate) * (1.0 / 2.0))
-	if bitrate < MIN_VIDEO_BITRATE && video.Bitrate > MIN_VIDEO_BITRATE {
-		bitrate = MIN_VIDEO_BITRATE
-	} else if bitrate < ABSOLUTE_MIN_VIDEO_BITRATE {
-		bitrate = ABSOLUTE_MIN_VIDEO_BITRATE
+	if bitrate < MinVideoBitrate && video.Bitrate > MinVideoBitrate {
+		bitrate = MinVideoBitrate
+	} else if bitrate < AbsoluteMinVideoBitrate {
+		bitrate = AbsoluteMinVideoBitrate
 	}
 	return EncodedProfile{
 		Name:    "low-bitrate",
