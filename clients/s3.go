@@ -1,8 +1,6 @@
 package clients
 
 import (
-	"time"
-
 	"github.com/aws/aws-sdk-go/service/s3"
 )
 
@@ -20,7 +18,7 @@ func (c *S3Client) PresignS3(bucket, key string) (string, error) {
 		Bucket: &bucket,
 		Key:    &key,
 	})
-	return req.Presign(60 * time.Minute)
+	return req.Presign(PresignDuration)
 }
 
 func (c *S3Client) GetObject(bucket, key string) (*s3.GetObjectOutput, error) {

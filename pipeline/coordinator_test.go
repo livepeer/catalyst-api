@@ -454,21 +454,38 @@ func Test_EmptyFile(t *testing.T) {
 	require.Equal(t, "error copying input to storage: zero bytes found for source: "+job.SourceFile, msg.Error)
 }
 
-func Test_FramerateCheck(t *testing.T) {
+func Test_ProbeErrors(t *testing.T) {
 	tests := []struct {
 		name        string
 		fps         float64
+		assetType   string
+		size        int64
+		probeErr    error
 		expectedErr string
 	}{
 		{
-			name:        "valid framerate",
-			fps:         30,
+			name:        "valid",
 			expectedErr: "",
 		},
 		{
 			name:        "invalid framerate",
-			fps:         0,
-			expectedErr: "error copying input to storage: invalid framerate: 0.000000",
+			fps:         -1,
+			expectedErr: "error copying input to storage: invalid framerate: -1.000000",
+		},
+		{
+			name:        "audio only",
+			assetType:   "audio",
+			expectedErr: "error copying input to storage: no video track found in input video: no video tracks found",
+		},
+		{
+			name:        "filesize greater than max",
+			size:        clients.MaxInputFileSizeBytes + 1,
+			expectedErr: "error copying input to storage: input file 10737418241 bytes was greater than 10737418240 bytes",
+		},
+		{
+			name:        "probe error",
+			probeErr:    errors.New("probe failed"),
+			expectedErr: "error copying input to storage: error probing MP4 input file from S3: probe failed",
 		},
 	}
 
@@ -478,9 +495,10 @@ func Test_FramerateCheck(t *testing.T) {
 			coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil)
 			coord.InputCopy = &clients.InputCopy{
 				Probe: stubFFprobe{
-					Bitrate:  1000000,
-					Duration: 60,
-					FPS:      tt.fps,
+					FPS:  tt.fps,
+					Type: tt.assetType,
+					Size: tt.size,
+					Err:  tt.probeErr,
 				},
 			}
 			inputFile, _, cleanup := setupTransferDir(t, coord)
@@ -493,9 +511,6 @@ func Test_FramerateCheck(t *testing.T) {
 			msg := requireReceive(t, callbacks, 1*time.Second)
 
 			require.Equal(t, tt.expectedErr, msg.Error)
-			if tt.expectedErr != "" {
-				require.Equal(t, tt.expectedErr, msg.Error)
-			}
 		})
 	}
 }
@@ -614,14 +629,27 @@ type stubFFprobe struct {
 	Bitrate  int64
 	Duration float64
 	FPS      float64
+	Type     string
+	Size     int64
+	Err      error
 }
 
 func (f stubFFprobe) ProbeFile(_ string) (video.InputVideo, error) {
+	if f.Err != nil {
+		return video.InputVideo{}, f.Err
+	}
+	if f.Type == "" {
+		f.Type = "video"
+	}
+	if f.FPS == 0 {
+		f.FPS = 30
+	}
 	return video.InputVideo{
-		Duration: f.Duration,
+		Duration:  f.Duration,
+		SizeBytes: f.Size,
 		Tracks: []video.InputTrack{
 			{
-				Type:    "video",
+				Type:    f.Type,
 				Codec:   "h264",
 				Bitrate: f.Bitrate,
 				VideoTrack: video.VideoTrack{

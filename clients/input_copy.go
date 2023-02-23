@@ -17,6 +17,8 @@ import (
 )
 
 const MAX_COPY_FILE_DURATION = 30 * time.Minute
+const MaxInputFileSizeBytes = 10 * 1024 * 1024 * 1024 // 10 GiB
+const PresignDuration = 10 * time.Minute
 
 var RETRY_BACKOFF = backoff.WithMaxRetries(newExponentialBackOffExecutor(), 5)
 
@@ -36,7 +38,7 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 		return
 	}
 
-	log.Log(requestID, "Copying input file to S3", "source", inputFile.String(), "dest", osTransferURL.String(), "presigned", signedURL)
+	log.Log(requestID, "Copying input file to S3", "source", inputFile.String(), "dest", osTransferURL.String())
 	size, err := CopyFile(context.Background(), inputFile.String(), osTransferURL.String(), "", requestID)
 	if err != nil {
 		err = fmt.Errorf("error copying input file to S3: %w", err)
@@ -46,21 +48,21 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 		err = fmt.Errorf("zero bytes found for source: %s", inputFile)
 		return
 	}
-	log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", osTransferURL.String(), "presigned", signedURL)
+	log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", osTransferURL.String())
 
 	signedURL, err = signURL(osTransferURL)
 	if err != nil {
 		return
 	}
 
-	log.Log(requestID, "starting probe", "source", inputFile.String(), "dest", osTransferURL.String(), "presigned", signedURL)
+	log.Log(requestID, "starting probe", "source", inputFile.String(), "dest", osTransferURL.String())
 	inputVideoProbe, err = s.Probe.ProbeFile(signedURL)
 	if err != nil {
-		log.Log(requestID, "probe failed", "err", err, "source", inputFile.String(), "dest", osTransferURL.String(), "presigned", signedURL)
+		log.Log(requestID, "probe failed", "err", err, "source", inputFile.String(), "dest", osTransferURL.String())
 		err = fmt.Errorf("error probing MP4 input file from S3: %w", err)
 		return
 	}
-	log.Log(requestID, "probe succeeded", "source", inputFile.String(), "dest", osTransferURL.String(), "presigned", signedURL)
+	log.Log(requestID, "probe succeeded", "source", inputFile.String(), "dest", osTransferURL.String())
 	videoTrack, err := inputVideoProbe.GetVideoTrack()
 	if err != nil {
 		err = fmt.Errorf("no video track found in input video: %w", err)
@@ -72,8 +74,8 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 		return
 	}
 
-	if inputVideoProbe.SizeBytes > maxInputFileSizeBytes {
-		err = fmt.Errorf("input file %d bytes was greater than %d bytes", inputVideoProbe.SizeBytes, maxInputFileSizeBytes)
+	if inputVideoProbe.SizeBytes > MaxInputFileSizeBytes {
+		err = fmt.Errorf("input file %d bytes was greater than %d bytes", inputVideoProbe.SizeBytes, MaxInputFileSizeBytes)
 		return
 	}
 	return
@@ -89,7 +91,7 @@ func signURL(u *url.URL) (string, error) {
 	}
 
 	sess := driver.NewSession("")
-	signedURL, err := sess.Presign("", 60*time.Minute)
+	signedURL, err := sess.Presign("", PresignDuration)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate signed url: %w", err)
 	}
