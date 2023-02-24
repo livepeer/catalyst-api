@@ -22,7 +22,6 @@ import (
 	"github.com/livepeer/go-api-client"
 	"github.com/livepeer/livepeer-data/pkg/data"
 	"github.com/livepeer/livepeer-data/pkg/event"
-	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 const streamPlaybackPrefix = "playback_"
@@ -124,7 +123,7 @@ type (
 		sendAudio                 string
 		baseStreamName            string
 		streamInfo                map[string]*streamInfo // public key to info
-		producer                  *event.AMQPProducer
+		producer                  event.AMQPProducer
 		nodeID                    string
 		ownRegion                 string
 		mistStreamSource          string
@@ -138,7 +137,7 @@ func NewMac(opts MacOptions) (IMac, error) {
 		opts.BalancerHost = opts.BalancerHost + ":8042" // must set default port for Mist's Load Balancer
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	var producer *event.AMQPProducer
+	var producer event.AMQPProducer
 	if opts.AMQPUrl != "" {
 		pu, err := url.Parse(opts.AMQPUrl)
 		if err != nil {
@@ -147,7 +146,7 @@ func NewMac(opts MacOptions) (IMac, error) {
 		}
 
 		glog.Infof("Creating AMQP producer with url=%s", pu.Redacted())
-		setup := func(c *amqp.Channel) error {
+		setup := func(c event.AMQPChanSetup) error {
 			if err := c.ExchangeDeclarePassive(webhooksExchangeName, "topic", true, false, false, false, nil); err != nil {
 				glog.Warningf("mist-api-connector: Webhooks exchange does not exist. exchange=%s err=%v", webhooksExchangeName, err)
 			}
