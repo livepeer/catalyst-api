@@ -1,6 +1,10 @@
 package config
 
-import "net/url"
+import (
+	"flag"
+	"net/url"
+	"strings"
+)
 
 type Cli struct {
 	Port                      int
@@ -16,4 +20,40 @@ type Cli struct {
 	MetricsDBConnectionString string
 	ImportIPFSGatewayURLs     []*url.URL
 	ImportArweaveGatewayURLs  []*url.URL
+}
+
+func parseURL(s string, dest **url.URL) error {
+	u, err := url.Parse(s)
+	if err != nil {
+		return err
+	}
+	if _, err = url.ParseQuery(u.RawQuery); err != nil {
+		return err
+	}
+	*dest = u
+	return nil
+}
+
+func URLVarFlag(fs *flag.FlagSet, dest **url.URL, name, value, usage string) {
+	fs.Func(name, usage, func(s string) error {
+		return parseURL(s, dest)
+	})
+}
+
+func URLSliceVarFlag(fs *flag.FlagSet, dest *[]*url.URL, name, value, usage string) {
+	fs.Func(name, usage, func(s string) error {
+		return parseURLs(s, dest)
+	})
+}
+
+func parseURLs(s string, dest *[]*url.URL) error {
+	strs := strings.Split(s, ",")
+	urls := make([]*url.URL, len(strs))
+	for i, str := range strs {
+		if err := parseURL(str, &urls[i]); err != nil {
+			return err
+		}
+	}
+	*dest = urls
+	return nil
 }
