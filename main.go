@@ -5,9 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -38,8 +36,8 @@ func main() {
 	fs.StringVar(&cli.VodPipelineStrategy, "vod-pipeline-strategy", string(pipeline.StrategyCatalystDominance), "Which strategy to use for the VOD pipeline")
 	fs.StringVar(&cli.RecordingCallback, "recording", "http://recording.livepeer.com/recording/status", "Callback URL for recording start&stop events")
 	fs.StringVar(&cli.MetricsDBConnectionString, "metrics-db-connection-string", "", "Connection string to use for the metrics Postgres DB. Takes the form: host=X port=X user=X password=X dbname=X")
-	URLSliceVarFlag(fs, &cli.ImportIPFSGatewayURLs, "import-ipfs-gateway-urls", "https://vod-import-gtw.mypinata.cloud/ipfs/?pinataGatewayToken={{secrets.LP_PINATA_GATEWAY_TOKEN}},https://w3s.link/ipfs/,https://ipfs.io/ipfs/,https://cloudflare-ipfs.com/ipfs/", "Comma delimited ordered list of IPFS gateways (includes /ipfs/ suffix) to import assets from")
-	URLSliceVarFlag(fs, &cli.ImportArweaveGatewayURLs, "import-arweave-gateway-urls", "https://arweave.net/", "Comma delimited ordered list of arweave gateways")
+	config.URLSliceVarFlag(fs, &cli.ImportIPFSGatewayURLs, "import-ipfs-gateway-urls", "https://vod-import-gtw.mypinata.cloud/ipfs/?pinataGatewayToken={{secrets.LP_PINATA_GATEWAY_TOKEN}},https://w3s.link/ipfs/,https://ipfs.io/ipfs/,https://cloudflare-ipfs.com/ipfs/", "Comma delimited ordered list of IPFS gateways (includes /ipfs/ suffix) to import assets from")
+	config.URLSliceVarFlag(fs, &cli.ImportArweaveGatewayURLs, "import-arweave-gateway-urls", "https://arweave.net/", "Comma delimited ordered list of arweave gateways")
 
 	// special parameters
 	mistJson := fs.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
@@ -103,40 +101,4 @@ func main() {
 	if err := api.ListenAndServe(cli.Port, cli.APIToken, vodEngine); err != nil {
 		log.Fatal(err)
 	}
-}
-
-func parseURL(s string, dest **url.URL) error {
-	u, err := url.Parse(s)
-	if err != nil {
-		return err
-	}
-	if _, err = url.ParseQuery(u.RawQuery); err != nil {
-		return err
-	}
-	*dest = u
-	return nil
-}
-
-func URLVarFlag(fs *flag.FlagSet, dest **url.URL, name, value, usage string) {
-	fs.Func(name, usage, func(s string) error {
-		return parseURL(s, dest)
-	})
-}
-
-func URLSliceVarFlag(fs *flag.FlagSet, dest *[]*url.URL, name, value, usage string) {
-	fs.Func(name, usage, func(s string) error {
-		return parseURLs(s, dest)
-	})
-}
-
-func parseURLs(s string, dest *[]*url.URL) error {
-	strs := strings.Split(s, ",")
-	urls := make([]*url.URL, len(strs))
-	for i, str := range strs {
-		if err := parseURL(str, &urls[i]); err != nil {
-			return err
-		}
-	}
-	*dest = urls
-	return nil
 }
