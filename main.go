@@ -14,6 +14,7 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/pipeline"
+	lpapi "github.com/livepeer/go-api-client"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
 	"github.com/peterbourgon/ff"
 )
@@ -26,6 +27,7 @@ func main() {
 
 	// catalyst-api parameters
 	fs.IntVar(&cli.Port, "port", 4949, "Port to listen on")
+	fs.StringVar(&cli.Host, "host", "0.0.0.0", "Hostname to bind to")
 	fs.IntVar(&cli.MistPort, "mist-port", 4242, "Port to connect to Mist")
 	fs.IntVar(&cli.MistHttpPort, "mist-http-port", 8080, "Port Mist is listening for HTTP connections")
 	fs.StringVar(&cli.APIToken, "api-token", "IAmAuthorized", "Auth header value for API access")
@@ -39,9 +41,25 @@ func main() {
 	config.URLSliceVarFlag(fs, &cli.ImportIPFSGatewayURLs, "import-ipfs-gateway-urls", "https://vod-import-gtw.mypinata.cloud/ipfs/?pinataGatewayToken={{secrets.LP_PINATA_GATEWAY_TOKEN}},https://w3s.link/ipfs/,https://ipfs.io/ipfs/,https://cloudflare-ipfs.com/ipfs/", "Comma delimited ordered list of IPFS gateways (includes /ipfs/ suffix) to import assets from")
 	config.URLSliceVarFlag(fs, &cli.ImportArweaveGatewayURLs, "import-arweave-gateway-urls", "https://arweave.net/", "Comma delimited ordered list of arweave gateways")
 
+	// mist-api-connector parameters
+	fs.StringVar(&cli.OwnUri, "own-uri", "http://localhost:4949", "URL at wich service will be accessible by MistServer for callbacks")
+	fs.StringVar(&cli.MistHost, "mist-host", "127.0.0.1", "Hostname of the Mist server")
+	fs.StringVar(&cli.MistUser, "mist-user", "", "username of MistServer")
+	fs.StringVar(&cli.MistPassword, "mist-password", "", "password of MistServer")
+	fs.DurationVar(&cli.MistConnectTimeout, "mist-connect-timeout", 5*time.Minute, "Max time to wait attempting to connect to Mist server")
+	fs.StringVar(&cli.MistStreamSource, "mist-stream-source", "push://", "Stream source we should use for created Mist stream")
+	fs.StringVar(&cli.MistHardcodedBroadcasters, "mist-hardcoded-broadcasters", "", "Hardcoded broadcasters for use by MistProcLivepeer")
+	config.InvertedBoolFlag(fs, &cli.MistScrapeMetrics, "mist-scrape-metrics", true, "Scrape statistics from MistServer and publish to RabbitMQ")
+	fs.StringVar(&cli.MistSendAudio, "send-audio", "record", "when should we send audio?  {always|never|record}")
+	fs.StringVar(&cli.MistBaseStreamName, "mist-base-stream-name", "", "Base stream name to be used in wildcard-based routing scheme")
+	fs.StringVar(&cli.APIServer, "api-server", lpapi.ProdServer, "Livepeer API server to use")
+	fs.StringVar(&cli.AMQPURL, "amqp-url", "", "RabbitMQ url")
+	fs.StringVar(&cli.OwnRegion, "own-region", "", "Identifier of the region where the service is running, used for mapping external data back to current region")
+
 	// special parameters
 	mistJson := fs.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
 	verbosity := fs.String("v", "", "Log verbosity.  {4|5|6}")
+	_ = fs.String("config", "", "config file (optional)")
 
 	ff.Parse(fs, os.Args[1:],
 		ff.WithConfigFileFlag("config"),
@@ -72,9 +90,9 @@ func main() {
 	}()
 
 	mist := &clients.MistClient{
-		ApiUrl:          fmt.Sprintf("http://localhost:%d/api2", cli.MistPort),
-		HttpReqUrl:      fmt.Sprintf("http://localhost:%d", cli.MistHttpPort),
-		TriggerCallback: fmt.Sprintf("http://localhost:%d/api/mist/trigger", cli.Port),
+		ApiUrl:          fmt.Sprintf("http://%s:%d/api2", cli.MistHost, cli.MistPort),
+		HttpReqUrl:      fmt.Sprintf("http://%s:%d", cli.MistHost, cli.MistHttpPort),
+		TriggerCallback: fmt.Sprintf("%s/api/mist/trigger", cli.OwnUri),
 	}
 
 	// Kick off the callback client, to send job update messages on a regular interval
@@ -98,7 +116,8 @@ func main() {
 	}
 
 	// Start the HTTP API server
-	if err := api.ListenAndServe(cli.Port, cli.APIToken, vodEngine); err != nil {
+	// todo: add cli.Host
+	if err := api.ListenAndServe(cli.Host, cli.Port, cli.APIToken, vodEngine); err != nil {
 		log.Fatal(err)
 	}
 }
