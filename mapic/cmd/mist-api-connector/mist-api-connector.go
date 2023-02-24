@@ -52,15 +52,6 @@ func main() {
 	amqpUrl := fs.String("amqp-url", "", "RabbitMQ url")
 	ownRegion := fs.String("own-region", "", "Identifier of the region where the service is running, used for mapping external data back to current region")
 	_ = fs.String("config", "", "config file (optional)")
-	// Below are some deprecated flags.
-	// Keep them around for backward compatibility on deploys.
-	_ = fs.String("etcd-endpoints", "", "DEPRECATED")
-	_ = fs.String("etcd-cacert", "", "DEPRECATED")
-	_ = fs.String("etcd-cert", "", "DEPRECATED")
-	_ = fs.String("etcd-key", "", "DEPRECATED")
-
-	consulPrefix := fs.String("consul-prefix", "", "DEPRECATED - use --route-prefix")
-	consulMistURL := fs.String("consul-mist-url", "", "DEPRECATED - use --route-mist-url")
 
 	ff.Parse(fs, os.Args[1:],
 		ff.WithConfigFileFlag("config"),
@@ -79,15 +70,6 @@ func main() {
 	fmt.Println("mist-api-connector version: " + model.Version)
 	fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 	fmt.Printf("Hostname %s OS %s IPs %v\n", hostName, runtime.GOOS, utils.GetIPs())
-
-	if *routePrefix == "" && *consulPrefix != "" {
-		glog.Warningln("--consul-prefix is deprecated, use --route-prefix instead")
-		routePrefix = consulPrefix
-	}
-	if *mistURL == "" && *consulMistURL != "" {
-		glog.Warningln("--consul-mist-url is deprecated, use --route-mist-url instead")
-		mistURL = consulMistURL
-	}
 
 	var mapi *mistapi.API
 	mcreds := strings.Split(*mistCreds, ":")

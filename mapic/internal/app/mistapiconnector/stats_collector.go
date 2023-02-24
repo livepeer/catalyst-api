@@ -25,12 +25,12 @@ type metricsCollector struct {
 	nodeID, ownRegion string
 	mapi              *mist.API
 	lapi              *api.Client
-	producer          *event.AMQPProducer
+	producer          event.AMQPProducer
 	amqpExchange      string
 	infoProvider
 }
 
-func startMetricsCollector(ctx context.Context, period time.Duration, nodeID, ownRegion string, mapi *mist.API, lapi *api.Client, producer *event.AMQPProducer, amqpExchange string, infop infoProvider) {
+func startMetricsCollector(ctx context.Context, period time.Duration, nodeID, ownRegion string, mapi *mist.API, lapi *api.Client, producer event.AMQPProducer, amqpExchange string, infop infoProvider) {
 	mc := &metricsCollector{nodeID, ownRegion, mapi, lapi, producer, amqpExchange, infop}
 	mc.collectMetricsLogged(ctx, period)
 	go mc.mainLoop(ctx, period)
