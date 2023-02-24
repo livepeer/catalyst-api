@@ -13,8 +13,8 @@ import (
 	"github.com/livepeer/catalyst-api/pipeline"
 )
 
-func ListenAndServe(apiPort int, apiToken string, vodEngine *pipeline.Coordinator) error {
-	listen := fmt.Sprintf("0.0.0.0:%d", apiPort)
+func ListenAndServe(apiHost string, apiPort int, apiToken string, vodEngine *pipeline.Coordinator) error {
+	listen := fmt.Sprintf("%s:%d", apiHost, apiPort)
 	router := NewCatalystAPIRouter(vodEngine, apiToken)
 
 	log.LogNoRequestID(
