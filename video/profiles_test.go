@@ -103,6 +103,22 @@ func TestGetPlaybackProfiles(t *testing.T) {
 				{Name: "240p0", Width: 400, Height: 240, Bitrate: 517099},
 			},
 		},
+		{
+			name: "input with excessively high bitrate",
+			track: InputTrack{
+				Type:    "video",
+				Bitrate: 500_000_000,
+				VideoTrack: VideoTrack{
+					Width:  1920,
+					Height: 1080,
+				},
+			},
+			want: []EncodedProfile{
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 1_000_000},
+				{Name: "720p0", Width: 1280, Height: 720, Bitrate: 4_000_000},
+				{Name: "1080p0", Width: 1920, Height: 1080, Bitrate: MaxVideoBitrate},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
