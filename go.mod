@@ -134,7 +134,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-kit/log v0.2.1
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
-	github.com/grafov/m3u8 v0.11.1
+	github.com/grafov/m3u8 v0.11.2
 	github.com/hashicorp/go-retryablehttp v0.7.2
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
