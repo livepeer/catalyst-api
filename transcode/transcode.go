@@ -109,9 +109,20 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// transcodedStats hold actual info from transcoded results within requested constraints (this usually differs from requested profiles)
 	transcodedStats := statsFromProfiles(transcodeProfiles)
 
+	renditionList := video.TRenditionList{RenditionSegmentTable: make(map[string]*video.TSegmentList)}
+	// only populate video.TRenditionList map if MP4 is enabled via override or short-form video detection
+	if transcodeRequest.GenerateMP4 {
+		for _, profile := range transcodeProfiles {
+			renditionList.AddRenditionSegment(profile.Name,
+				&video.TSegmentList{
+					SegmentDataTable: make(map[int][]byte),
+				})
+		}
+	}
+
 	var jobs *ParallelTranscoding
 	jobs = NewParallelTranscoding(sourceSegmentURLs, func(segment segmentInfo) error {
-		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, targetTranscodedRenditionOutputURL, transcodedStats)
+		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, targetTranscodedRenditionOutputURL, transcodedStats, &renditionList)
 		segmentsCount++
 		if err != nil {
 			return err
@@ -129,6 +140,20 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, err
 	}
 
+	// TODO: remove this in follow-up PR to write files to disk for transmuxing
+	/*
+		if transcodeRequest.GenerateMP4 {
+			for rlist, slist := range renditionList.RenditionSegmentTable {
+				table := slist.SegmentDataTable
+				for s, d := range table {
+					fmt.Println("debug-segments:", rlist, ":", strconv.Itoa(s)+".ts", "size:", len(d))
+				}
+				for _, k := range slist.GetSortedSegments() {
+					fmt.Println("debug-segments:", k, len(slist.SegmentDataTable[k]))
+				}
+			}
+		}
+	*/
 	// Build the manifests and push them to storage
 	manifestURL, err := GenerateAndUploadManifests(sourceManifest, targetTranscodedRenditionOutputURL.String(), transcodedStats)
 	if err != nil {
@@ -157,6 +182,7 @@ func transcodeSegment(
 	transcodeProfiles []video.EncodedProfile,
 	targetOSURL *url.URL,
 	transcodedStats []*RenditionStats,
+	renditionList *video.TRenditionList,
 ) error {
 	start := time.Now()
 
@@ -207,12 +233,20 @@ func transcodeSegment(
 			return fmt.Errorf("error building rendition segment URL %q: %s", targetRenditionURL, err)
 		}
 
+		if transcodeRequest.GenerateMP4 {
+			// get inner segments table from outer rendition table
+			segmentsList := renditionList.GetSegmentList(transcodedSegment.Name)
+			// add new entry for segment # and corresponding byte stream
+			segmentsList.AddSegmentData(segment.Index, transcodedSegment.MediaData)
+		}
+
 		err = backoff.Retry(func() error {
 			return clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), UPLOAD_TIMEOUT)
 		}, clients.UploadRetryBackoff())
 		if err != nil {
 			return fmt.Errorf("failed to upload master playlist: %s", err)
 		}
+
 		// bitrate calculation
 		transcodedStats[renditionIndex].Bytes += int64(len(transcodedSegment.MediaData))
 		transcodedStats[renditionIndex].DurationMs += float64(segment.Input.DurationMillis)
