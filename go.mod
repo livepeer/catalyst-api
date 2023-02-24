@@ -31,7 +31,7 @@ require (
 	github.com/pquerna/cachecontrol v0.1.0
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/common v0.39.0 // indirect
-	github.com/rabbitmq/amqp091-go v1.6.0
+	github.com/rabbitmq/amqp091-go v1.6.0 // indirect
 	github.com/rabbitmq/rabbitmq-stream-go-client v1.0.2 // indirect
 	github.com/stretchr/testify v1.8.2
 	github.com/u2takey/ffmpeg-go v0.4.1
