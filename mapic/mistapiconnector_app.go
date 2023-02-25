@@ -7,18 +7,16 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/mapic/apis/mist"
-	"github.com/livepeer/catalyst-api/mapic/internal/metrics"
-	"github.com/livepeer/catalyst-api/mapic/internal/utils"
+	"github.com/livepeer/catalyst-api/mapic/metrics"
 	"github.com/livepeer/catalyst-api/mapic/model"
+	"github.com/livepeer/catalyst-api/mapic/utils"
 	"github.com/livepeer/go-api-client"
 	"github.com/livepeer/livepeer-data/pkg/data"
 	"github.com/livepeer/livepeer-data/pkg/event"
@@ -41,8 +39,8 @@ const eventMultistreamDisconnected = "multistream.disconnected"
 type (
 	// IMac creates new Mist API Connector application
 	IMac interface {
+		AddRoutes(router *httprouter.Router)
 		SetupTriggers(ownURI string) error
-		StartServer(bindAddr string) error
 		SrvShutCh() chan error
 	}
 
@@ -609,63 +607,65 @@ func (mc *mac) triggerPushEnd(w http.ResponseWriter, r *http.Request, lines []st
 	return true
 }
 
-func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		w.Write([]byte("false"))
-		return
-	}
-	b, err := io.ReadAll(r.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("false"))
-		return
-	}
-	bs := string(b)
-	lines := strings.Split(bs, "\n")
-	trigger := r.Header.Get("X-Trigger")
-	if trigger == "" {
-		glog.Errorf("Trigger not defined in request %s", bs)
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("false"))
-		return
-	}
-	mistVersion := r.Header.Get("X-Version")
-	if mistVersion == "" {
-		mistVersion = r.UserAgent()
-	}
-	glog.V(model.VERBOSE).Infof("Got request (%s) mist=%s (%d lines): `%s`", trigger, mistVersion, len(lines), strings.Join(lines, `\n`))
-	// glog.V(model.VERBOSE).Infof("User agent: %s", r.UserAgent())
-	// glog.V(model.VERBOSE).Infof("Mist version: %s", r.Header.Get("X-Version"))
-	started := time.Now()
-	doLogRequestEnd := false
-	defer func(s time.Time, t string) {
-		if doLogRequestEnd {
-			took := time.Since(s)
-			glog.V(model.VERBOSE).Infof("Request %s ended in %s", t, took)
-			metrics.TriggerDuration(t, took)
+func (mc *mac) handleDefaultStreamTrigger() httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			w.Write([]byte("false"))
+			return
 		}
-	}(started, trigger)
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("false"))
+			return
+		}
+		bs := string(b)
+		lines := strings.Split(bs, "\n")
+		trigger := r.Header.Get("X-Trigger")
+		if trigger == "" {
+			glog.Errorf("Trigger not defined in request %s", bs)
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("false"))
+			return
+		}
+		mistVersion := r.Header.Get("X-Version")
+		if mistVersion == "" {
+			mistVersion = r.UserAgent()
+		}
+		glog.V(model.VERBOSE).Infof("Got request (%s) mist=%s (%d lines): `%s`", trigger, mistVersion, len(lines), strings.Join(lines, `\n`))
+		// glog.V(model.VERBOSE).Infof("User agent: %s", r.UserAgent())
+		// glog.V(model.VERBOSE).Infof("Mist version: %s", r.Header.Get("X-Version"))
+		started := time.Now()
+		doLogRequestEnd := false
+		defer func(s time.Time, t string) {
+			if doLogRequestEnd {
+				took := time.Since(s)
+				glog.V(model.VERBOSE).Infof("Request %s ended in %s", t, took)
+				metrics.TriggerDuration(t, took)
+			}
+		}(started, trigger)
 
-	switch trigger {
-	case "DEFAULT_STREAM":
-		doLogRequestEnd = mc.triggerDefaultStream(w, r, lines, trigger)
-	case "LIVE_BANDWIDTH":
-		doLogRequestEnd = mc.triggerLiveBandwidth(w, r)
-	case "CONN_CLOSE":
-		doLogRequestEnd = mc.triggerConnClose(w, r, lines, bs)
-	case "PUSH_REWRITE":
-		doLogRequestEnd = mc.triggerPushRewrite(w, r, lines, bs)
-	case "LIVE_TRACK_LIST":
-		doLogRequestEnd = mc.triggerLiveTrackList(w, r, lines, bs)
-	case "PUSH_OUT_START":
-		doLogRequestEnd = mc.triggerPushOutStart(w, r, lines, bs)
-	case "PUSH_END":
-		doLogRequestEnd = mc.triggerPushEnd(w, r, lines, bs)
-	default:
-		glog.Errorf("Got unsupported trigger: '%s'", trigger)
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("false"))
+		switch trigger {
+		case "DEFAULT_STREAM":
+			doLogRequestEnd = mc.triggerDefaultStream(w, r, lines, trigger)
+		case "LIVE_BANDWIDTH":
+			doLogRequestEnd = mc.triggerLiveBandwidth(w, r)
+		case "CONN_CLOSE":
+			doLogRequestEnd = mc.triggerConnClose(w, r, lines, bs)
+		case "PUSH_REWRITE":
+			doLogRequestEnd = mc.triggerPushRewrite(w, r, lines, bs)
+		case "LIVE_TRACK_LIST":
+			doLogRequestEnd = mc.triggerLiveTrackList(w, r, lines, bs)
+		case "PUSH_OUT_START":
+			doLogRequestEnd = mc.triggerPushOutStart(w, r, lines, bs)
+		case "PUSH_END":
+			doLogRequestEnd = mc.triggerPushEnd(w, r, lines, bs)
+		default:
+			glog.Errorf("Got unsupported trigger: '%s'", trigger)
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("false"))
+		}
 	}
 }
 
@@ -740,32 +740,10 @@ func (mc *mac) handleHealthcheck(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (mc *mac) webServerHandlers() *http.ServeMux {
-	mux := http.NewServeMux()
-	utils.AddPProfHandlers(mux)
-	mux.Handle("/metrics", metrics.Exporter)
-
-	mux.HandleFunc("/_healthz", mc.handleHealthcheck)
-	mux.HandleFunc("/", mc.handleDefaultStreamTrigger)
-	return mux
-}
-
-func (mc *mac) StartServer(bindAddr string) error {
-	mux := mc.webServerHandlers()
-	mc.srv = &http.Server{
-		Addr:    bindAddr,
-		Handler: mux,
-	}
-	mc.startSignalHandler()
-
-	glog.Info("Web server listening on ", bindAddr)
-	err := mc.srv.ListenAndServe()
-	if err == http.ErrServerClosed {
-		glog.Infof("Normal shutdown")
-	} else {
-		glog.Warningf("Server shut down with err=%v", err)
-	}
-	return err
+func (mc *mac) AddRoutes(router *httprouter.Router) {
+	// mux.Handle("/metrics", metrics.Exporter)
+	// mux.HandleFunc("/_healthz", mc.handleHealthcheck)
+	router.POST("/mapic", mc.handleDefaultStreamTrigger())
 }
 
 func (mc *mac) addTrigger(triggers mist.TriggersMap, name, ownURI, def, params string, sync bool) bool {
@@ -862,23 +840,6 @@ func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *str
 			glog.Infof("Started multistream to target. targetId=%s stream=%s url=%s", wildcardPlaybackID, targetRef.ID, pushURL)
 		}(info.stream.Multistream.Targets[i])
 	}
-}
-
-func (mc *mac) startSignalHandler() {
-	exitc := make(chan os.Signal, 1)
-	signal.Notify(exitc, syscall.SIGTERM, syscall.SIGINT)
-	go func() {
-		gotSig := <-exitc
-		switch gotSig {
-		case syscall.SIGINT:
-			glog.Infof("Got Ctrl-C, shutting down")
-		case syscall.SIGTERM:
-			glog.Infof("Got SIGTERM, shutting down")
-		default:
-			glog.Infof("Got signal %d, shutting down", gotSig)
-		}
-		mc.shutdown()
-	}()
 }
 
 func (mc *mac) getPushUrl(stream *api.Stream, targetRef *api.MultistreamTargetRef) (*api.MultistreamTarget, string, error) {
