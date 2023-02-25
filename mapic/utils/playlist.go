@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/livepeer/catalyst-api/mapic/internal/utils/uhttp"
 	"github.com/livepeer/catalyst-api/mapic/model"
+	"github.com/livepeer/catalyst-api/mapic/utils/uhttp"
 	"github.com/livepeer/m3u8"
 )
 

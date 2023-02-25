@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/livepeer/catalyst-api/mapic/internal/utils/uhttp"
+	"github.com/livepeer/catalyst-api/mapic/utils/uhttp"
 )
 
 // ErrNotFound not found
