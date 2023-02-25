@@ -8,7 +8,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/mapic/apis/mist"
-	census "github.com/livepeer/catalyst-api/mapic/internal/metrics"
+	census "github.com/livepeer/catalyst-api/mapic/metrics"
 	"github.com/livepeer/go-api-client"
 	"github.com/livepeer/livepeer-data/pkg/data"
 	"github.com/livepeer/livepeer-data/pkg/event"

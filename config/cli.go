@@ -35,6 +35,7 @@ type Cli struct {
 	MetricsDBConnectionString string
 	ImportIPFSGatewayURLs     []*url.URL
 	ImportArweaveGatewayURLs  []*url.URL
+	Node                      string
 }
 
 func parseURL(s string, dest **url.URL) error {

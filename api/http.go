@@ -1,32 +1,14 @@
 package api
 
 import (
-	"fmt"
-	"net/http"
-
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
-	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/catalyst-api/pipeline"
 )
 
-func ListenAndServe(apiHost string, apiPort int, apiToken string, vodEngine *pipeline.Coordinator) error {
-	listen := fmt.Sprintf("%s:%d", apiHost, apiPort)
-	router := NewCatalystAPIRouter(vodEngine, apiToken)
-
-	log.LogNoRequestID(
-		"Starting Catalyst API!",
-		"version", config.Version,
-		"host", listen,
-	)
-	return http.ListenAndServe(listen, router)
-}
-
-func NewCatalystAPIRouter(vodEngine *pipeline.Coordinator, apiToken string) *httprouter.Router {
-	router := httprouter.New()
+func AddRoutes(router *httprouter.Router, vodEngine *pipeline.Coordinator, apiToken string) *httprouter.Router {
 	withLogging := middleware.LogRequest()
 	withAuth := middleware.IsAuthorized
 	withCapacityChecking := middleware.HasCapacity
