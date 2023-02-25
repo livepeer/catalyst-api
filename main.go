@@ -4,14 +4,18 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
-	"log"
+	"net/http"
 	"os"
 	"time"
 
+	"github.com/golang/glog"
+	"github.com/julienschmidt/httprouter"
 	_ "github.com/lib/pq"
 	"github.com/livepeer/catalyst-api/api"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/log"
+	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/pipeline"
 	lpapi "github.com/livepeer/go-api-client"
@@ -56,6 +60,9 @@ func main() {
 	fs.StringVar(&cli.AMQPURL, "amqp-url", "", "RabbitMQ url")
 	fs.StringVar(&cli.OwnRegion, "own-region", "", "Identifier of the region where the service is running, used for mapping external data back to current region")
 
+	// catalyst-node parameters
+	fs.StringVar(&cli.Node, "node", "", "Name of this node within the cluster")
+
 	// special parameters
 	mistJson := fs.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
 	verbosity := fs.String("v", "", "Log verbosity.  {4|5|6}")
@@ -86,7 +93,7 @@ func main() {
 	)
 
 	go func() {
-		log.Fatal(metrics.ListenAndServe(cli.PromPort))
+		glog.Fatal(metrics.ListenAndServe(cli.PromPort))
 	}()
 
 	mist := &clients.MistClient{
@@ -102,22 +109,36 @@ func main() {
 	if cli.MetricsDBConnectionString != "" {
 		metricsDB, err = sql.Open("postgres", cli.MetricsDBConnectionString)
 		if err != nil {
-			log.Fatalf("Error creating postgres metrics connection: %v", err)
+			glog.Fatalf("Error creating postgres metrics connection: %v", err)
 		}
 	} else {
-		log.Println("Postgres metrics connection string was not set, postgres metrics are disabled.")
+		glog.Info("Postgres metrics connection string was not set, postgres metrics are disabled.")
 	}
 
 	// Start the "co-ordinator" that determines whether to send jobs to the Catalyst transcoding pipeline
 	// or an external one
 	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), mist, cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB)
 	if err != nil {
-		log.Fatalf("Error creating VOD pipeline coordinator: %v", err)
+		glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 	}
+
+	router := httprouter.New()
+
+	mapic := mistapiconnector.StartMapic(&cli)
+	api.AddRoutes(router, vodEngine, cli.APIToken)
+	mapic.AddRoutes(router)
+
+	listen := fmt.Sprintf("%s:%d", cli.Host, cli.Port)
+
+	log.LogNoRequestID(
+		"Starting Catalyst API!",
+		"version", config.Version,
+		"host", listen,
+	)
 
 	// Start the HTTP API server
 	// todo: add cli.Host
-	if err := api.ListenAndServe(cli.Host, cli.Port, cli.APIToken, vodEngine); err != nil {
-		log.Fatal(err)
+	if err := http.ListenAndServe(listen, router); err != nil {
+		glog.Fatal(err)
 	}
 }

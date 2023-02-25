@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/livepeer/catalyst-api/mapic/internal/utils/uhttp"
 	"github.com/livepeer/catalyst-api/mapic/model"
+	"github.com/livepeer/catalyst-api/mapic/utils/uhttp"
 )
 
 const httpTimeout = 2 * time.Second
