@@ -6,6 +6,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/grafov/m3u8"
@@ -28,7 +29,7 @@ func DownloadRenditionManifest(sourceManifestOSURL string) (m3u8.MediaPlaylist, 
 			return fmt.Errorf("error decoding manifest: %s", err)
 		}
 		return nil
-	}, transcodeRetryBackoff)
+	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10))
 	if err != nil {
 		return m3u8.MediaPlaylist{}, err
 	}
