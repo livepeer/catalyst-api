@@ -20,8 +20,6 @@ const MAX_COPY_FILE_DURATION = 30 * time.Minute
 const MaxInputFileSizeBytes = 10 * 1024 * 1024 * 1024 // 10 GiB
 const PresignDuration = 10 * time.Minute
 
-var RETRY_BACKOFF = backoff.WithMaxRetries(newExponentialBackOffExecutor(), 5)
-
 type InputCopier interface {
 	CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL) (video.InputVideo, string, error)
 }
@@ -115,7 +113,7 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 		content := io.TeeReader(c, &byteAccWriter)
 
 		return UploadToOSURL(destOSBaseURL, filename, content, MAX_COPY_FILE_DURATION)
-	}, RETRY_BACKOFF)
+	}, RetryBackoff())
 	return
 }
 
@@ -154,4 +152,8 @@ type StubInputCopy struct{}
 
 func (s *StubInputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL) (inputVideoProbe video.InputVideo, signedURL string, err error) {
 	return video.InputVideo{}, "", nil
+}
+
+func RetryBackoff() backoff.BackOff {
+	return backoff.WithMaxRetries(newExponentialBackOffExecutor(), 5)
 }

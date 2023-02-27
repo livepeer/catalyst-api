@@ -138,7 +138,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		renditionManifestBaseURL := fmt.Sprintf("%s/%s", targetOSURL, profile.Name)
 		err = backoff.Retry(func() error {
 			return clients.UploadToOSURL(renditionManifestBaseURL, manifestFilename, strings.NewReader(renditionPlaylist.String()), UPLOAD_TIMEOUT)
-		}, clients.RETRY_BACKOFF)
+		}, clients.RetryBackoff())
 		if err != nil {
 			return "", fmt.Errorf("failed to upload rendition playlist: %s", err)
 		}
@@ -152,7 +152,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 
 	err := backoff.Retry(func() error {
 		return clients.UploadToOSURL(targetOSURL, MASTER_MANIFEST_FILENAME, strings.NewReader(masterPlaylist.String()), UPLOAD_TIMEOUT)
-	}, clients.RETRY_BACKOFF)
+	}, clients.RetryBackoff())
 	if err != nil {
 		return "", fmt.Errorf("failed to upload master playlist: %s", err)
 	}

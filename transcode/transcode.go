@@ -210,7 +210,7 @@ func transcodeSegment(
 
 		err = backoff.Retry(func() error {
 			return clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), UPLOAD_TIMEOUT)
-		}, clients.RETRY_BACKOFF)
+		}, clients.RetryBackoff())
 		if err != nil {
 			return fmt.Errorf("failed to upload master playlist: %s", err)
 		}
