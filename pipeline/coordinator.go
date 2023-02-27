@@ -39,6 +39,11 @@ const (
 	StrategyFallbackExternal Strategy = "fallback_external"
 )
 
+const (
+	// Only mp4s of maxMP4OutDuration will have MP4s generated for each rendition
+	maxMP4OutDuration = 2 * time.Minute
+)
+
 func (s Strategy) IsValid() bool {
 	switch s {
 	case StrategyCatalystDominance, StrategyExternalDominance, StrategyBackgroundExternal, StrategyBackgroundMist, StrategyFallbackExternal:
@@ -61,6 +66,7 @@ type UploadJobPayload struct {
 	Profiles              []video.EncodedProfile
 	PipelineStrategy      Strategy
 	AutoMP4               bool
+	GenerateMP4           bool
 	InputFileInfo         video.InputVideo
 	SignedSourceURL       string
 }
@@ -231,6 +237,12 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		p.SourceFile = newSourceURL.String()
 		p.SignedSourceURL = signedURL
 		p.InputFileInfo = inputVideoProbe
+		p.GenerateMP4 = func(automp4 bool, duration float64) bool {
+			if automp4 && duration <= maxMP4OutDuration.Seconds() {
+				return true
+			}
+			return false
+		}(p.AutoMP4, p.InputFileInfo.Duration)
 		log.AddContext(si.RequestID, "new_source_url", newSourceURL)
 		log.AddContext(si.RequestID, "signed_url", signedURL)
 

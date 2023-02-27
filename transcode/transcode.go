@@ -39,6 +39,7 @@ type TranscodeSegmentRequest struct {
 	SourceStreamInfo clients.MistStreamInfo                 `json:"-"`
 	RequestID        string                                 `json:"-"`
 	ReportProgress   func(clients.TranscodeStatus, float64) `json:"-"`
+	GenerateMP4      bool
 }
 
 var LocalBroadcasterClient clients.BroadcasterClient
