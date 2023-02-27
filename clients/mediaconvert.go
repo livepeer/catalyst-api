@@ -28,7 +28,6 @@ var retryableHttpClient = newRetryableHttpClient()
 
 const (
 	rateLimitedPollDelay = 15 * time.Second
-	maxMP4OutDuration    = 2 * time.Minute
 	mp4OutFilePrefix     = "static"
 )
 
@@ -138,7 +137,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 	}
 
 	// only output MP4s for short videos, with duration less than maxMP4OutDuration
-	if args.AutoMP4 && mcArgs.InputFileInfo.Duration <= maxMP4OutDuration.Seconds() {
+	if args.GenerateMP4 {
 		// sets the mp4 path to be the same as HLS except for the suffix being "static"
 		// resulting files look something like https://storage.googleapis.com/bucket/25afy0urw3zu2476/static360p0.mp4
 		mcArgs.MP4OutputLocation = mc.s3TransferBucket.JoinPath(path.Join("output", targetDir, mp4OutFilePrefix))

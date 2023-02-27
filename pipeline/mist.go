@@ -150,6 +150,7 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 		TargetURL:         job.TargetURL.String(),
 		RequestID:         requestID,
 		ReportProgress:    job.ReportProgress,
+		GenerateMP4:       job.GenerateMP4,
 	}
 
 	var audioCodec = ""
