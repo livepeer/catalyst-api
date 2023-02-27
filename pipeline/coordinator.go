@@ -61,6 +61,8 @@ type UploadJobPayload struct {
 	Profiles              []video.EncodedProfile
 	PipelineStrategy      Strategy
 	AutoMP4               bool
+	InputFileInfo         video.InputVideo
+	SignedSourceURL       string
 }
 
 // UploadJobResult is the object returned by the successful execution of an
@@ -124,12 +126,14 @@ type Coordinator struct {
 
 	pipeMist, pipeExternal Handler
 
-	Jobs      *cache.Cache[*JobInfo]
-	MetricsDB *sql.DB
+	Jobs            *cache.Cache[*JobInfo]
+	MetricsDB       *sql.DB
+	InputCopy       clients.InputCopier
+	SourceOutputUrl string
 }
 
 func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
-	sourceOutputUrl, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB) (*Coordinator, error) {
+	sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB) (*Coordinator, error) {
 
 	if !strategy.IsValid() {
 		return nil, fmt.Errorf("invalid strategy: %s", strategy)
@@ -150,10 +154,14 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 	return &Coordinator{
 		strategy:     strategy,
 		statusClient: statusClient,
-		pipeMist:     &mist{MistClient: mistClient, SourceOutputUrl: sourceOutputUrl},
+		pipeMist:     &mist{MistClient: mistClient, SourceOutputUrl: sourceOutputURL},
 		pipeExternal: &external{extTranscoder},
 		Jobs:         cache.New[*JobInfo](),
 		MetricsDB:    metricsDB,
+		InputCopy: &clients.InputCopy{
+			Probe: video.Probe{},
+		},
+		SourceOutputUrl: sourceOutputURL,
 	}, nil
 }
 
@@ -180,6 +188,9 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 		pipeMist:     pipeMist,
 		pipeExternal: pipeExternal,
 		Jobs:         cache.New[*JobInfo](),
+		InputCopy: &clients.InputCopy{
+			Probe: video.Probe{},
+		},
 	}
 }
 
@@ -188,6 +199,46 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 // This has the main logic regarding the pipeline strategy. It starts jobs and
 // handles processing the response and triggering a fallback if appropriate.
 func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
+	// A bit hacky - this is effectively a dummy job object to allow us to reuse the runHandlerAsync and
+	// progress reporting logic. The real job objects still get created in startOneUploadJob().
+	si := &JobInfo{
+		UploadJobPayload: p,
+		statusClient:     c.statusClient,
+		startTime:        time.Now(),
+
+		numProfiles:    len(p.Profiles),
+		state:          "segmenting",
+		catalystRegion: os.Getenv("MY_REGION"),
+	}
+	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
+
+	c.runHandlerAsync(si, func() (*HandlerOutput, error) {
+		sourceURL, err := url.Parse(si.SourceFile)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing source as url: %w", err)
+		}
+
+		sourceOutputUrl, err := url.Parse(c.SourceOutputUrl)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
+		}
+		newSourceURL := sourceOutputUrl.JoinPath("transfer", si.RequestID, path.Base(sourceURL.Path))
+
+		inputVideoProbe, signedURL, err := c.InputCopy.CopyInputToS3(si.RequestID, sourceURL, newSourceURL)
+		if err != nil {
+			return nil, fmt.Errorf("error copying input to storage: %w", err)
+		}
+		p.SourceFile = newSourceURL.String()
+		p.SignedSourceURL = signedURL
+		p.InputFileInfo = inputVideoProbe
+		log.AddContext(si.RequestID, "new_source_url", newSourceURL)
+		log.AddContext(si.RequestID, "signed_url", signedURL)
+
+		c.startUploadJob(p)
+		return nil, nil
+	})
+}
+func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 	strategy := c.strategy
 	if p.PipelineStrategy.IsValid() {
 		strategy = p.PipelineStrategy
@@ -312,7 +363,7 @@ func (c *Coordinator) runHandlerAsync(job *JobInfo, handler func() (*HandlerOutp
 		defer job.mu.Unlock()
 
 		out, err := recovered(handler)
-		if err != nil || !out.Continue {
+		if err != nil || (out != nil && !out.Continue) {
 			c.finishJob(job, out, err)
 		}
 		// dummy

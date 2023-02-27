@@ -5,8 +5,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/pipeline"
 	"github.com/stretchr/testify/require"
 )
@@ -40,6 +42,7 @@ func TestItErrorsWhenNoCapacityAvailable(t *testing.T) {
 	pipeMist, release := pipeline.NewBlockingStubHandler()
 	defer release()
 	coordinator := pipeline.NewStubCoordinatorOpts(pipeline.StrategyCatalystDominance, nil, pipeMist, nil)
+	coordinator.InputCopy = &clients.StubInputCopy{}
 
 	// Create a lot of in-flight jobs
 	for x := 0; x < 8; x++ {
@@ -47,6 +50,7 @@ func TestItErrorsWhenNoCapacityAvailable(t *testing.T) {
 			RequestID: fmt.Sprintf("request-%d", x),
 		})
 	}
+	time.Sleep(1 * time.Second)
 
 	// Set up the HTTP handler
 	handler := HasCapacity(coordinator, next)

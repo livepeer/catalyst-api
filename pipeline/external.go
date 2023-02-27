@@ -20,7 +20,8 @@ func (m *external) Name() string {
 }
 
 func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
-	sourceFileUrl, err := url.Parse(job.SourceFile)
+	job.sourceBytes = job.InputFileInfo.SizeBytes
+	sourceFileUrl, err := url.Parse(job.SignedSourceURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid source file URL: %w", err)
 	}
@@ -42,6 +43,7 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		CollectTranscodedSegment: func() {
 			job.transcodedSegments++
 		},
+		InputFileInfo: job.InputFileInfo,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("external transcoder error: %w", err)
