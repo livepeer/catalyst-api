@@ -14,7 +14,7 @@ require (
 	github.com/livepeer/livepeer-data v0.6.4
 	github.com/minio/madmin-go v1.7.5
 	github.com/prometheus/client_golang v1.14.0
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.2
 	github.com/xeipuuv/gojsonschema v1.2.0
 	golang.org/x/sync v0.1.0
 	gopkg.in/vansante/go-ffprobe.v2 v2.1.1
