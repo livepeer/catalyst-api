@@ -18,7 +18,7 @@ import (
 
 const MAX_COPY_FILE_DURATION = 30 * time.Minute
 const MaxInputFileSizeBytes = 10 * 1024 * 1024 * 1024 // 10 GiB
-const PresignDuration = 10 * time.Minute
+const PresignDuration = 60 * time.Minute
 
 type InputCopier interface {
 	CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL) (video.InputVideo, string, error)
