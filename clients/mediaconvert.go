@@ -135,7 +135,6 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 			return nil, fmt.Errorf("failed to get playback profiles: %w", err)
 		}
 	}
-
 	// only output MP4s for short videos, with duration less than maxMP4OutDuration
 	if args.GenerateMP4 {
 		// sets the mp4 path to be the same as HLS except for the suffix being "static"
