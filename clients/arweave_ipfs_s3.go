@@ -29,7 +29,7 @@ func CopyDStorageToS3(url, s3URL string, requestID string) error {
 		}
 
 		return nil
-	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 2))
+	}, DStorageRetryBackoff())
 }
 
 func DownloadDStorageFromGatewayList(u string, requestID string) (io.ReadCloser, error) {
@@ -125,4 +125,8 @@ func parseDStorageGatewayURL(u *url.URL) (string, string, string) {
 	}
 
 	return "", "", ""
+}
+
+func DStorageRetryBackoff() backoff.BackOff {
+	return backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 2)
 }

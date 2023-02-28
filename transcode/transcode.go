@@ -186,7 +186,7 @@ func transcodeSegment(
 			}
 		}
 		return nil
-	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10))
+	}, TranscodeRetryBackoff())
 
 	if err != nil {
 		return err
@@ -208,7 +208,7 @@ func transcodeSegment(
 
 		err = backoff.Retry(func() error {
 			return clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), UPLOAD_TIMEOUT)
-		}, clients.RetryBackoff())
+		}, clients.UploadRetryBackoff())
 		if err != nil {
 			return fmt.Errorf("failed to upload master playlist: %s", err)
 		}
@@ -273,4 +273,8 @@ type RenditionStats struct {
 	DurationMs       float64
 	ManifestLocation string
 	BitsPerSecond    uint32
+}
+
+func TranscodeRetryBackoff() backoff.BackOff {
+	return backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10)
 }

@@ -6,7 +6,6 @@ import (
 	"path"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/grafov/m3u8"
@@ -29,7 +28,7 @@ func DownloadRenditionManifest(sourceManifestOSURL string) (m3u8.MediaPlaylist, 
 			return fmt.Errorf("error decoding manifest: %s", err)
 		}
 		return nil
-	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10))
+	}, TranscodeRetryBackoff())
 	if err != nil {
 		return m3u8.MediaPlaylist{}, err
 	}
@@ -139,7 +138,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		renditionManifestBaseURL := fmt.Sprintf("%s/%s", targetOSURL, profile.Name)
 		err = backoff.Retry(func() error {
 			return clients.UploadToOSURL(renditionManifestBaseURL, manifestFilename, strings.NewReader(renditionPlaylist.String()), UPLOAD_TIMEOUT)
-		}, clients.RetryBackoff())
+		}, clients.UploadRetryBackoff())
 		if err != nil {
 			return "", fmt.Errorf("failed to upload rendition playlist: %s", err)
 		}
@@ -153,7 +152,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 
 	err := backoff.Retry(func() error {
 		return clients.UploadToOSURL(targetOSURL, MASTER_MANIFEST_FILENAME, strings.NewReader(masterPlaylist.String()), UPLOAD_TIMEOUT)
-	}, clients.RetryBackoff())
+	}, clients.UploadRetryBackoff())
 	if err != nil {
 		return "", fmt.Errorf("failed to upload master playlist: %s", err)
 	}
