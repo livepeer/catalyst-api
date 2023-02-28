@@ -16,8 +16,6 @@ import (
 const SCHEME_IPFS = "ipfs"
 const SCHEME_ARWEAVE = "ar"
 
-var dstorageRetryBackoff = backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 2)
-
 func CopyDStorageToS3(url, s3URL string, requestID string) error {
 	return backoff.Retry(func() error {
 		content, err := DownloadDStorageFromGatewayList(url, requestID)
@@ -31,7 +29,7 @@ func CopyDStorageToS3(url, s3URL string, requestID string) error {
 		}
 
 		return nil
-	}, dstorageRetryBackoff)
+	}, DStorageRetryBackoff())
 }
 
 func DownloadDStorageFromGatewayList(u string, requestID string) (io.ReadCloser, error) {
@@ -127,4 +125,8 @@ func parseDStorageGatewayURL(u *url.URL) (string, string, string) {
 	}
 
 	return "", "", ""
+}
+
+func DStorageRetryBackoff() backoff.BackOff {
+	return backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 2)
 }

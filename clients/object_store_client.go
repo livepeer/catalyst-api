@@ -131,3 +131,7 @@ func newExponentialBackOffExecutor() *backoff.ExponentialBackOff {
 
 	return backOff
 }
+
+func UploadRetryBackoff() backoff.BackOff {
+	return backoff.WithMaxRetries(newExponentialBackOffExecutor(), 5)
+}
