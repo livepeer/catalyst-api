@@ -13,6 +13,7 @@ import (
 	"github.com/livepeer/catalyst-api/api"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/pipeline"
 	"github.com/livepeer/catalyst-api/pprof"
@@ -27,6 +28,7 @@ func main() {
 	mistJson := flag.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
 	promPort := flag.Int("prom-port", 2112, "Prometheus metrics port")
 	pprofPort := flag.Int("pprof-port", 6061, "Pprof listen port")
+	debugPort := flag.Int("pprof-port", 6062, "Debug endpoint listen port")
 	sourceOutputUrl := flag.String("source-output", "", "URL for the video source segments used if source_segments is not defined in the upload request")
 	externalTranscoderUrl := flag.String("external-transcoder", "", "URL for the external transcoder to be used by the pipeline coordinator. Only 1 implementation today for AWS MediaConvert which should be in the format: mediaconvert://key-id:key-secret@endpoint-host?region=aws-region&role=iam-role&s3_aux_bucket=s3://bucket")
 	vodPipelineStrategy := flag.String("vod-pipeline-strategy", string(pipeline.StrategyCatalystDominance), "Which strategy to use for the VOD pipeline")
@@ -78,6 +80,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 	}
+	go func() {
+		log.Println(handlers.DebugEndpointListenAndServe(*debugPort, vodEngine))
+	}()
 
 	// Start the HTTP API server
 	if err := api.ListenAndServe(*port, *apiToken, vodEngine); err != nil {
