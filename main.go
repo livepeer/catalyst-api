@@ -97,15 +97,6 @@ func parseURL(s string, dest **url.URL) error {
 	return nil
 }
 
-func URLVarFlag(fs *flag.FlagSet, dest **url.URL, name, value, usage string) {
-	if err := parseURL(value, dest); err != nil {
-		panic(err)
-	}
-	fs.Func(name, usage, func(s string) error {
-		return parseURL(s, dest)
-	})
-}
-
 func URLSliceVarFlag(dest *[]*url.URL, name, value, usage string) {
 	if err := parseURLs(value, dest); err != nil {
 		panic(err)

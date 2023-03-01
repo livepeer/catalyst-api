@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -47,7 +48,7 @@ func DownloadDStorageFromGatewayList(u string, requestID string) (io.ReadCloser,
 		resourceID = dStorageURL.Host
 	} else if dStorageURL.Scheme == SCHEME_IPFS {
 		gateways = config.ImportIPFSGatewayURLs
-		resourceID = dStorageURL.Host
+		resourceID = path.Join(dStorageURL.Host, dStorageURL.Path)
 	} else {
 		var gateway, dStorageType string
 		resourceID, gateway, dStorageType = parseDStorageGatewayURL(dStorageURL)
