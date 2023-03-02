@@ -1,10 +1,13 @@
 package transcode
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +21,7 @@ import (
 )
 
 const UPLOAD_TIMEOUT = 5 * time.Minute
+const TRANSMUX_STORAGE_DIR = "/tmp/transmux_stage"
 
 type TranscodeSegmentRequest struct {
 	SourceFile        string                 `json:"source_location"`
@@ -140,20 +144,6 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, err
 	}
 
-	// TODO: remove this in follow-up PR to write files to disk for transmuxing
-	/*
-		if transcodeRequest.GenerateMP4 {
-			for rlist, slist := range renditionList.RenditionSegmentTable {
-				table := slist.SegmentDataTable
-				for s, d := range table {
-					fmt.Println("debug-segments:", rlist, ":", strconv.Itoa(s)+".ts", "size:", len(d))
-				}
-				for _, k := range slist.GetSortedSegments() {
-					fmt.Println("debug-segments:", k, len(slist.SegmentDataTable[k]))
-				}
-			}
-		}
-	*/
 	// Build the manifests and push them to storage
 	manifestURL, err := GenerateAndUploadManifests(sourceManifest, targetTranscodedRenditionOutputURL.String(), transcodedStats)
 	if err != nil {
@@ -163,6 +153,68 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	playbackBaseURL, err := clients.PublishDriverSession(targetTranscodedRenditionOutputURL.String(), tout.Path)
 	if err != nil {
 		return outputs, segmentsCount, err
+	}
+
+	// Transmux received segments from T into a single mp4
+	if transcodeRequest.GenerateMP4 {
+		for rendition, segments := range renditionList.RenditionSegmentTable {
+			// a. create folder to hold transmux-ed files in local storage temporarily
+			err := os.MkdirAll(TRANSMUX_STORAGE_DIR, 0700)
+			if err != nil && !os.IsExist(err) {
+				log.Log(transcodeRequest.RequestID, "failed to create temp dir for transmuxing", "dir", TRANSMUX_STORAGE_DIR, "err", err)
+				return outputs, segmentsCount, err
+			}
+
+			// b. create a single .ts file for a given rendition by concatenating all segments in order
+			concatTsFileName := filepath.Join(TRANSMUX_STORAGE_DIR, transcodeRequest.RequestID+"_"+rendition+".ts")
+			defer os.Remove(concatTsFileName)
+			totalBytes, err := video.ConcatTS(concatTsFileName, segments)
+			if err != nil {
+				log.Log(transcodeRequest.RequestID, "error concatenating .ts", "file", concatTsFileName, "err", err)
+				continue
+			}
+
+			// c. Verify the total bytes written for the single .ts file for a given rendition matches the total # of bytes we received from T
+			renditionIndex := getProfileIndex(transcodeProfiles, rendition)
+			var rendBytesWritten int64 = -1
+			for _, v := range transcodedStats {
+				if v.Name == rendition {
+					rendBytesWritten = v.Bytes
+				}
+			}
+			if rendBytesWritten != totalBytes {
+				log.Log(transcodeRequest.RequestID, "bytes written does not match", "file", concatTsFileName, "bytes expected", transcodedStats[renditionIndex].Bytes, "bytes written", totalBytes)
+				break
+			}
+
+			// d. Transmux the single .ts file into an .mp4 file
+			mp4OutputFileName := concatTsFileName[:len(concatTsFileName)-len(filepath.Ext(concatTsFileName))] + ".mp4"
+			err = video.MuxTStoMP4(concatTsFileName, mp4OutputFileName)
+			if err != nil {
+				log.Log(transcodeRequest.RequestID, "error transmuxing", "err", err)
+				continue
+			}
+
+			// e. Upload mp4 output file
+			mp4OutputFile, err := os.Open(mp4OutputFileName)
+			defer os.Remove(mp4OutputFileName)
+			if err != nil {
+				log.Log(transcodeRequest.RequestID, "error opening mp4", "file", mp4OutputFileName, "err", err)
+				break
+			}
+
+			targetMP4URL, err := url.JoinPath(targetTranscodedRenditionOutputURL.String(), rendition)
+			if err != nil {
+				log.Log(transcodeRequest.RequestID, "error building url for MP4 output", "url", targetMP4URL, "err", err)
+			}
+
+			err = backoff.Retry(func() error {
+				return clients.UploadToOSURL(targetMP4URL, filepath.Base(mp4OutputFile.Name()), bufio.NewReader(mp4OutputFile), UPLOAD_TIMEOUT)
+			}, clients.UploadRetryBackoff())
+			if err != nil {
+				log.Log(transcodeRequest.RequestID, "failed to upload mp4", "file", mp4OutputFile.Name())
+			}
+		}
 	}
 
 	manifestURL = strings.ReplaceAll(manifestURL, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
