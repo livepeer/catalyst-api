@@ -228,7 +228,7 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 	if args.MP4OutputLocation != nil {
 		mp4Out = args.MP4OutputLocation.String()
 	}
-	payload := createJobPayload(args.InputFile.String(), args.HLSOutputFile.String(), mp4Out, mc.role, accelerated, args.Profiles)
+	payload := createJobPayload(args.InputFile.String(), args.HLSOutputFile.String(), mp4Out, mc.role, accelerated, args.Profiles, args.SegmentSizeSecs)
 	job, err := mc.client.CreateJob(payload)
 	if err != nil {
 		return fmt.Errorf("error creting mediaconvert job: %w", err)
@@ -288,7 +288,7 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 	}
 }
 
-func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, accelerated bool, profiles []video.EncodedProfile) *mediaconvert.CreateJobInput {
+func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, accelerated bool, profiles []video.EncodedProfile, segmentSizeSecs int64) *mediaconvert.CreateJobInput {
 	var acceleration *mediaconvert.AccelerationSettings
 	if accelerated {
 		acceleration = &mediaconvert.AccelerationSettings{
@@ -312,7 +312,7 @@ func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, acce
 					},
 				},
 			},
-			OutputGroups: outputGroups(hlsOutputFile, mp4OutputFile, profiles),
+			OutputGroups: outputGroups(hlsOutputFile, mp4OutputFile, profiles, segmentSizeSecs),
 			TimecodeConfig: &mediaconvert.TimecodeConfig{
 				Source: aws.String("ZEROBASED"),
 			},
@@ -322,7 +322,7 @@ func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, acce
 	}
 }
 
-func outputGroups(hlsOutputFile, mp4OutputFile string, profiles []video.EncodedProfile) []*mediaconvert.OutputGroup {
+func outputGroups(hlsOutputFile, mp4OutputFile string, profiles []video.EncodedProfile, segmentSizeSecs int64) []*mediaconvert.OutputGroup {
 	groups := []*mediaconvert.OutputGroup{
 		{
 			Name: aws.String("Apple HLS"),
@@ -330,7 +330,7 @@ func outputGroups(hlsOutputFile, mp4OutputFile string, profiles []video.EncodedP
 				HlsGroupSettings: &mediaconvert.HlsGroupSettings{
 					Destination:      aws.String(hlsOutputFile),
 					MinSegmentLength: aws.Int64(0),
-					SegmentLength:    aws.Int64(10),
+					SegmentLength:    aws.Int64(segmentSizeSecs),
 				},
 				Type: aws.String("HLS_GROUP_SETTINGS"),
 			},

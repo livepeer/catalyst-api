@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/mediaconvert"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/video"
 	"github.com/stretchr/testify/require"
 )
@@ -234,7 +235,7 @@ func Test_createJobPayload(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actual := createJobPayload(inputFile, hlsOutputFile, tt.args.mp4OutputFile, role, tt.args.accelerated, tt.args.profiles)
+			actual := createJobPayload(inputFile, hlsOutputFile, tt.args.mp4OutputFile, role, tt.args.accelerated, tt.args.profiles, config.DefaultSegmentSizeSecs)
 			require.NotNil(t, actual)
 			require.Equal(t, loadFixture(t, tt.want, actual.String()), actual.String())
 		})

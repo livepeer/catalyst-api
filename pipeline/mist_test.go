@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,12 +50,12 @@ func TestItConvertsS3TargetURLToMistTargetURLCorrectly(t *testing.T) {
 	initialTargetURL, err := url.Parse("s3+https://abc:def@storage.googleapis.com/a/b/c/index.m3u8")
 	require.NoError(t, err)
 
-	mistTargetURL, err := targetURLToMistTargetURL(*initialTargetURL)
+	mistTargetURL, err := targetURLToMistTargetURL(*initialTargetURL, config.DefaultSegmentSizeSecs)
 	require.NoError(t, err)
 
 	require.Equal(
 		t,
-		"s3+https://abc:def@storage.googleapis.com/a/b/c/source/$currentMediaTime.ts?m3u8=index.m3u8&split=5",
+		"s3+https://abc:def@storage.googleapis.com/a/b/c/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10",
 		mistTargetURL,
 	)
 }
@@ -63,12 +64,12 @@ func TestItConvertsLocalPathToMistTargetCorrectly(t *testing.T) {
 	initialTargetURL, err := url.Parse("/a/b/c/index.m3u8")
 	require.NoError(t, err)
 
-	mistTargetURL, err := targetURLToMistTargetURL(*initialTargetURL)
+	mistTargetURL, err := targetURLToMistTargetURL(*initialTargetURL, config.DefaultSegmentSizeSecs)
 	require.NoError(t, err)
 
 	require.Equal(
 		t,
-		"/a/b/c/source/$currentMediaTime.ts?m3u8=index.m3u8&split=5",
+		"/a/b/c/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10",
 		mistTargetURL,
 	)
 }
