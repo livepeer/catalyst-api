@@ -77,3 +77,8 @@ jobs:
       - name: Run cucumber tests
         run: |
           go test -v test/cucumber_test.go
+      - name: Upload logs
+        uses: actions/upload-artifact@v3
+        with:
+          name: cucumber-logs
+          path: test/logs 
