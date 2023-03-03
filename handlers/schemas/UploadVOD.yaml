@@ -2,6 +2,7 @@ type: "object"
 properties:
   url:
     type: "string"
+    format: "uri"
   callback_url:
     type: "string"
     format: "uri"

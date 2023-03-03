@@ -36,14 +36,14 @@ func (s *StepContext) CreatePostRequest(endpoint, payload string) error {
 
 	if payload == "a valid upload vod request" {
 		req := DefaultUploadRequest
-		req.URL = sourceFile.Name()
+		req.URL = "file://" + sourceFile.Name()
 		if payload, err = req.ToJSON(); err != nil {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}
 	}
 	if payload == "a valid upload vod request with a custom segment size" {
 		req := DefaultUploadRequest
-		req.URL = sourceFile.Name()
+		req.URL = "file://" + sourceFile.Name()
 		req.TargetSegmentSizeSecs = 3
 		if payload, err = req.ToJSON(); err != nil {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)

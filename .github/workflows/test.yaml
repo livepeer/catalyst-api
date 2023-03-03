@@ -90,4 +90,4 @@ jobs:
         if: failure()
         with:
           name: cucumber-logs
-          path: test/logs 
+          path: test/logs
