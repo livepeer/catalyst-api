@@ -132,6 +132,10 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	if uploadVODRequest.TargetSegmentSizeSecs <= 0 {
 		uploadVODRequest.TargetSegmentSizeSecs = config.DefaultSegmentSizeSecs
 	}
+	// Check that the override isn't too big
+	if uploadVODRequest.TargetSegmentSizeSecs >= config.MaxSegmentSizeSecs {
+		uploadVODRequest.TargetSegmentSizeSecs = config.MaxSegmentSizeSecs
+	}
 	log.AddContext(requestID, "target_segment_size_secs", uploadVODRequest.TargetSegmentSizeSecs)
 
 	// Create a separate subdirectory for the source segments

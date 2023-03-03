@@ -26,6 +26,9 @@ var RecordingCallback string = "http://127.0.0.1:8008/recording/status"
 // Default segment size to produce for HLS streaming
 const DefaultSegmentSizeSecs = 10
 
+// Maximum segment size to allow people to override to
+const MaxSegmentSizeSecs = 20
+
 // Somewhat arbitrary and conservative number of maximum Catalyst VOD jobs in the system
 // at one time. We can look at more sophisticated strategies for calculating capacity in
 // the future.
