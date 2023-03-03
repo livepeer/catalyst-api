@@ -89,7 +89,7 @@ type InvertedBool struct {
 }
 
 func (f *InvertedBool) String() string {
-	return "foo"
+	return fmt.Sprint(*f.Value)
 }
 
 func (f *InvertedBool) IsBoolFlag() bool {
