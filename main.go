@@ -67,16 +67,22 @@ func main() {
 	verbosity := fs.String("v", "", "Log verbosity.  {4|5|6}")
 	_ = fs.String("config", "", "config file (optional)")
 
-	ff.Parse(fs, os.Args[1:],
+	err := ff.Parse(fs, os.Args[1:],
 		ff.WithConfigFileFlag("config"),
 		ff.WithConfigFileParser(ff.PlainParser),
 		ff.WithEnvVarPrefix("CATALYST_API"),
 	)
+	if err != nil {
+		glog.Fatalf("error parsing cli: %s", err)
+	}
+	if len(fs.Args()) > 0 {
+		glog.Fatalf("unexpected extra arguments on command line: %v", fs.Args())
+	}
 	flag.CommandLine.Parse(nil)
 	vFlag.Value.Set(*verbosity)
 
 	if *mistJson {
-		mistconnector.PrintMistConfigJson("catalyst-api", "HTTP API server for translating Catalyst API requests into Mist calls", "Catalyst API", config.Version, flag.CommandLine)
+		mistconnector.PrintMistConfigJson("catalyst-api", "HTTP API server for translating Catalyst API requests into Mist calls", "Catalyst API", config.Version, fs)
 		return
 	}
 
@@ -88,7 +94,6 @@ func main() {
 
 	var (
 		metricsDB *sql.DB
-		err       error
 	)
 
 	go func() {
@@ -136,7 +141,6 @@ func main() {
 	)
 
 	// Start the HTTP API server
-	// todo: add cli.Host
 	if err := http.ListenAndServe(listen, router); err != nil {
 		glog.Fatal(err)
 	}
