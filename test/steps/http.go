@@ -35,10 +35,19 @@ func (s *StepContext) CreatePostRequest(endpoint, payload string) error {
 	}
 
 	if payload == "a valid upload vod request" {
-		payload = s.getDefaultUploadRequestPayload(sourceFile.Name())
+		req := DefaultUploadRequest
+		req.URL = sourceFile.Name()
+		if payload, err = req.ToJSON(); err != nil {
+			return fmt.Errorf("failed to build upload request JSON: %s", err)
+		}
 	}
 	if payload == "a valid upload vod request with a custom segment size" {
-		payload = s.getCustomSegmentSizeUploadRequestPayload(sourceFile.Name())
+		req := DefaultUploadRequest
+		req.URL = sourceFile.Name()
+		req.TargetSegmentSizeSecs = 3
+		if payload, err = req.ToJSON(); err != nil {
+			return fmt.Errorf("failed to build upload request JSON: %s", err)
+		}
 	}
 	if payload == "an invalid upload vod request" {
 		payload = "{}"
@@ -58,41 +67,6 @@ func (s *StepContext) CreatePostRequest(endpoint, payload string) error {
 
 func (s *StepContext) SetAuthHeaders() {
 	s.authHeaders = "Bearer IAmAuthorized"
-}
-
-func (s *StepContext) getDefaultUploadRequestPayload(sourceFilename string) string {
-	return fmt.Sprintf(`{
-		"url": "%s",
-		"callback_url": "http://localhost:3000/cb",
-		"output_locations": [
-			{
-				"type": "object_store",
-				"url": "memory://localhost/output.m3u8",
- 				"outputs": {
-					"source_segments": true,
-					"transcoded_segments": true
-				}
-			}
-		]
-	}`, sourceFilename)
-}
-
-func (s *StepContext) getCustomSegmentSizeUploadRequestPayload(sourceFilename string) string {
-	return fmt.Sprintf(`{
-		"url": "%s",
-		"callback_url": "http://localhost:3000/cb",
-		"target_segment_size_secs": 3,
-		"output_locations": [
-			{
-				"type": "object_store",
-				"url": "memory://localhost/output.m3u8",
- 				"outputs": {
-					"source_segments": true,
-					"transcoded_segments": true
-				}
-			}
-		]
-	}`, sourceFilename)
 }
 
 func (s *StepContext) SetTimeout(timeoutSecs int64) {
