@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
 	"time"
@@ -29,9 +30,14 @@ func main() {
 	fs := flag.NewFlagSet("catalyst-api", flag.ExitOnError)
 	cli := config.Cli{}
 
+	// listen addresses
+	config.AddrFlag(fs, &cli.HTTPAddress, "http-addr", "0.0.0.0:4949", "Address to bind for external-facing Catalyst HTTP handling")
+	config.AddrFlag(fs, &cli.HTTPInternalAddress, "http-internal-addr", "127.0.0.1:4948", "Address to bind for internal privileged HTTP commands")
+	config.AddrFlag(fs, &cli.ClusterAddress, "cluster-addr", "0.0.0.0:9935", "Address to bind Serf network listeners to. To use an IPv6 address, specify [::1] or [::1]:7946.")
+	config.AddrFlag(fs, &cli.ClusterAdvertiseAddress, "cluster-advertise-addr", "0.0.0.0:9935", "Address to advertise to the other cluster members")
+	config.AddrFlag(fs, &cli.RPCAddr, "rpc-addr", "127.0.0.1:7373", "Address to bind the Serf RPC listener.")
+
 	// catalyst-api parameters
-	fs.IntVar(&cli.Port, "port", 4949, "Port to listen on")
-	fs.StringVar(&cli.Host, "host", "0.0.0.0", "Hostname to bind to")
 	fs.IntVar(&cli.MistPort, "mist-port", 4242, "Port to connect to Mist")
 	fs.IntVar(&cli.MistHttpPort, "mist-http-port", 8080, "Port Mist is listening for HTTP connections")
 	fs.StringVar(&cli.APIToken, "api-token", "IAmAuthorized", "Auth header value for API access")
@@ -60,7 +66,18 @@ func main() {
 	fs.StringVar(&cli.OwnRegion, "own-region", "", "Identifier of the region where the service is running, used for mapping external data back to current region")
 
 	// catalyst-node parameters
-	fs.StringVar(&cli.Node, "node", "", "Name of this node within the cluster")
+	fs.StringVar(&cli.NodeName, "node", "", "Name of this node within the cluster")
+	fs.StringVar(&cli.BalancerArgs, "balancer-args", "", "arguments passed to MistUtilLoad")
+	fs.StringVar(&cli.NodeHost, "node-host", "", "Hostname this node should handle requests for. Requests on any other domain will trigger a redirect. Useful as a 404 handler to send users to another node.")
+	fs.Float64Var(&cli.NodeLatitude, "node-latitude", 0, "Latitude of this Catalyst node. Used for load balancing.")
+	fs.Float64Var(&cli.NodeLongitude, "node-longitude", 0, "Longitude of this Catalyst node. Used for load balancing.")
+	config.CommaSliceFlag(fs, &cli.RedirectPrefixes, "redirect-prefixes", []string{}, "Set of valid prefixes of playback id which are handled by mistserver")
+	config.CommaMapFlag(fs, &cli.Tags, "tags", map[string]string{"node": "media"}, "Serf tags for Catalyst nodes")
+	fs.IntVar(&cli.MistLoadBalancerPort, "mist-load-balancer-port", rand.Intn(10000)+40000, "MistUtilLoad port (default random)")
+	fs.StringVar(&cli.MistLoadBalancerTemplate, "mist-load-balancer-template", "http://%s:4242", "template for specifying the host that should be queried for Prometheus stat output for this node")
+	config.CommaSliceFlag(fs, &cli.RetryJoin, "retry-join", []string{}, "An agent to join with. This flag be specified multiple times. Does not exit on failure like -join, used to retry until success.")
+	fs.StringVar(&cli.EncryptKey, "encrypt", "", "Key for encrypting network traffic within Serf. Must be a base64-encoded 32-byte key.")
+	fs.StringVar(&cli.GateURL, "gate-url", "http://localhost:3004/api/access-control/gate", "Address to contact playback gating API for access control verification")
 
 	// special parameters
 	mistJson := fs.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
@@ -103,7 +120,7 @@ func main() {
 	mist := &clients.MistClient{
 		ApiUrl:          fmt.Sprintf("http://%s:%d/api2", cli.MistHost, cli.MistPort),
 		HttpReqUrl:      fmt.Sprintf("http://%s:%d", cli.MistHost, cli.MistHttpPort),
-		TriggerCallback: fmt.Sprintf("%s/api/mist/trigger", cli.OwnUrl()),
+		TriggerCallback: fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL()),
 	}
 
 	// Kick off the callback client, to send job update messages on a regular interval
@@ -132,16 +149,14 @@ func main() {
 	api.AddRoutes(router, vodEngine, cli.APIToken)
 	mapic.AddRoutes(router)
 
-	listen := fmt.Sprintf("%s:%d", cli.Host, cli.Port)
-
 	log.LogNoRequestID(
 		"Starting Catalyst API!",
 		"version", config.Version,
-		"host", listen,
+		"host", cli.HTTPAddress,
 	)
 
 	// Start the HTTP API server
-	if err := http.ListenAndServe(listen, router); err != nil {
+	if err := http.ListenAndServe(cli.HTTPAddress, router); err != nil {
 		glog.Fatal(err)
 	}
 }
