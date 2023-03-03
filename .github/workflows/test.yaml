@@ -79,6 +79,7 @@ jobs:
           go test -v test/cucumber_test.go
       - name: Upload logs
         uses: actions/upload-artifact@v3
+        if: failure()
         with:
           name: cucumber-logs
           path: test/logs 
