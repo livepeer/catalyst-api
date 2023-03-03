@@ -46,7 +46,6 @@ func main() {
 	config.URLSliceVarFlag(fs, &cli.ImportArweaveGatewayURLs, "import-arweave-gateway-urls", "https://arweave.net/", "Comma delimited ordered list of arweave gateways")
 
 	// mist-api-connector parameters
-	fs.StringVar(&cli.OwnUri, "own-uri", "http://localhost:4949", "URL at wich service will be accessible by MistServer for callbacks")
 	fs.StringVar(&cli.MistHost, "mist-host", "127.0.0.1", "Hostname of the Mist server")
 	fs.StringVar(&cli.MistUser, "mist-user", "", "username of MistServer")
 	fs.StringVar(&cli.MistPassword, "mist-password", "", "password of MistServer")
@@ -99,7 +98,7 @@ func main() {
 	mist := &clients.MistClient{
 		ApiUrl:          fmt.Sprintf("http://%s:%d/api2", cli.MistHost, cli.MistPort),
 		HttpReqUrl:      fmt.Sprintf("http://%s:%d", cli.MistHost, cli.MistHttpPort),
-		TriggerCallback: fmt.Sprintf("%s/api/mist/trigger", cli.OwnUri),
+		TriggerCallback: fmt.Sprintf("%s/api/mist/trigger", cli.OwnUrl()),
 	}
 
 	// Kick off the callback client, to send job update messages on a regular interval
