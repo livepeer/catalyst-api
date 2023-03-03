@@ -3,14 +3,18 @@ package config
 import (
 	"flag"
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"time"
 )
 
 type Cli struct {
-	Port                      int
-	Host                      string
+	HTTPAddress               string
+	HTTPInternalAddress       string
+	ClusterAddress            string
+	ClusterAdvertiseAddress   string
+	RPCAddr                   string
 	MistHost                  string
 	MistUser                  string
 	MistPassword              string
@@ -22,6 +26,8 @@ type Cli struct {
 	MistScrapeMetrics         bool
 	MistSendAudio             string
 	MistBaseStreamName        string
+	MistLoadBalancerPort      int
+	MistLoadBalancerTemplate  string
 	AMQPURL                   string
 	OwnRegion                 string
 	PromPort                  int
@@ -34,12 +40,45 @@ type Cli struct {
 	MetricsDBConnectionString string
 	ImportIPFSGatewayURLs     []*url.URL
 	ImportArweaveGatewayURLs  []*url.URL
-	Node                      string
+	NodeName                  string
+	BalancerArgs              string
+	NodeHost                  string
+	NodeLatitude              float64
+	NodeLongitude             float64
+	RedirectPrefixes          []string
+	Tags                      map[string]string
+	RetryJoin                 []string
+	EncryptKey                string
+	GateURL                   string
 }
 
-// Return our own URL for callback purposes given our address and port
-func (cli *Cli) OwnUrl() string {
-	return fmt.Sprintf("http://127.0.0.1:%d", cli.Port)
+// Return our own URL for callback trigger purposes
+func (cli *Cli) OwnInternalURL() string {
+	//  No errors because we know it's valid from AddrFlag
+	host, port, _ := net.SplitHostPort(cli.HTTPInternalAddress)
+	ip := net.ParseIP(host)
+	if ip.IsUnspecified() {
+		host = "127.0.0.1"
+	}
+	addr := net.JoinHostPort(host, port)
+	return fmt.Sprintf("http://%s", addr)
+}
+
+// still a string, but validates the provided value is some kind of coherent host:port
+func AddrFlag(fs *flag.FlagSet, dest *string, name, value, usage string) {
+	*dest = value
+	fs.Func(name, usage, func(s string) error {
+		host, _, err := net.SplitHostPort(s)
+		if err != nil {
+			return err
+		}
+		ip := net.ParseIP(host)
+		if ip == nil {
+			return fmt.Errorf("invalid address: %s", s)
+		}
+		*dest = s
+		return nil
+	})
 }
 
 func parseURL(s string, dest **url.URL) error {
@@ -82,6 +121,42 @@ func parseURLs(s string, dest *[]*url.URL) error {
 	}
 	*dest = urls
 	return nil
+}
+
+// handles -foo=value1,value2,value3
+func CommaSliceFlag(fs *flag.FlagSet, dest *[]string, name string, value []string, usage string) {
+	*dest = value
+	fs.Func(name, usage, func(s string) error {
+		split := strings.Split(s, ",")
+		if len(split) == 1 && split[0] == "" {
+			*dest = []string{}
+			return nil
+		}
+		*dest = split
+		return nil
+	})
+}
+
+// handles -foo=key1=value1,key2=value2
+func CommaMapFlag(fs *flag.FlagSet, dest *map[string]string, name string, value map[string]string, usage string) {
+	*dest = value
+	fs.Func(name, usage, func(s string) error {
+		output := map[string]string{}
+		if s == "" {
+			*dest = output
+			return nil
+		}
+		for _, pair := range strings.Split(s, ",") {
+			kv := strings.Split(pair, "=")
+			if len(kv) != 2 {
+				return fmt.Errorf("failed to parse keypairs, -%s=k1=v1,k2=v2 format required, got %s", name, SEGMENTING_PREFIX)
+			}
+			k, v := kv[0], kv[1]
+			output[k] = v
+		}
+		*dest = output
+		return nil
+	})
 }
 
 type InvertedBool struct {
