@@ -41,7 +41,7 @@ func StartMapic(cli *config.Cli) IMac {
 	if err != nil {
 		glog.Fatalf("Error creating mist-api-connector %v", err)
 	}
-	if err := mc.SetupTriggers(cli.OwnUri); err != nil {
+	if err := mc.SetupTriggers(cli.OwnUrl() + "/mapic"); err != nil {
 		glog.Fatal(err)
 	}
 	return mc

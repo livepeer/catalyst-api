@@ -23,7 +23,6 @@ type Cli struct {
 	MistSendAudio             string
 	MistBaseStreamName        string
 	AMQPURL                   string
-	OwnUri                    string
 	OwnRegion                 string
 	PromPort                  int
 	APIToken                  string
@@ -36,6 +35,11 @@ type Cli struct {
 	ImportIPFSGatewayURLs     []*url.URL
 	ImportArweaveGatewayURLs  []*url.URL
 	Node                      string
+}
+
+// Return our own URL for callback purposes given our address and port
+func (cli *Cli) OwnUrl() string {
+	return fmt.Sprintf("http://127.0.0.1:%d", cli.Port)
 }
 
 func parseURL(s string, dest **url.URL) error {
