@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/mediaconvert"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/video"
 	"github.com/stretchr/testify/require"
 )
@@ -234,7 +235,7 @@ func Test_createJobPayload(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actual := createJobPayload(inputFile, hlsOutputFile, tt.args.mp4OutputFile, role, tt.args.accelerated, tt.args.profiles)
+			actual := createJobPayload(inputFile, hlsOutputFile, tt.args.mp4OutputFile, role, tt.args.accelerated, tt.args.profiles, config.DefaultSegmentSizeSecs)
 			require.NotNil(t, actual)
 			require.Equal(t, loadFixture(t, tt.want, actual.String()), actual.String())
 		})
@@ -245,22 +246,24 @@ func Test_MP4OutDurationCheck(t *testing.T) {
 	require := require.New(t)
 
 	tests := []struct {
-		name     string
-		duration float64
-		outputs  []string
+		name        string
+		duration    float64
+		outputs     []string
+		generatemp4 bool
 	}{
 		{
-			name:     "hls and mp4",
-			duration: 120,
-			outputs:  []string{"hls", "mp4"},
+			name:        "hls and mp4",
+			duration:    120,
+			outputs:     []string{"hls", "mp4"},
+			generatemp4: true,
 		},
 		{
-			name:     "hls only",
-			duration: 121,
-			outputs:  []string{"hls"},
+			name:        "hls only",
+			duration:    121,
+			outputs:     []string{"hls"},
+			generatemp4: false,
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			awsStub := &stubMediaConvertClient{
@@ -277,11 +280,10 @@ func Test_MP4OutDurationCheck(t *testing.T) {
 			defer cleanup()
 			iv := inputVideo
 			iv.Duration = tt.duration
-
 			_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
 				InputFile:     mustParseURL(t, "file://"+f.Name()),
 				HLSOutputFile: mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
-				AutoMP4:       true,
+				GenerateMP4:   tt.generatemp4,
 				InputFileInfo: iv,
 			})
 			require.Error(err)
