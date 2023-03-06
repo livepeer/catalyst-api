@@ -12,6 +12,8 @@ properties:
     type: "string"
   hardcodedBroadcasters:
     type: "string"
+  target_segment_size_secs:
+    type: "integer"
   pipeline_strategy:
     type: string
     description:

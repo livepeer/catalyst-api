@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,7 +17,6 @@ import (
 )
 
 const MIST_SEGMENTING_SUBDIR = "source"
-const TARGET_SEGMENT_LENGTH_SECS = "5"
 
 type mist struct {
 	MistClient      clients.MistAPIClient
@@ -55,7 +55,7 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	}
 	job.SegmentingTargetURL = segmentingTargetURL.String()
 
-	mistTargetURL, err := targetURLToMistTargetURL(*sourceOutputUrl)
+	mistTargetURL, err := targetURLToMistTargetURL(*sourceOutputUrl, job.TargetSegmentSizeSecs)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create mistTargetURL: %w", err)
 	}
@@ -259,7 +259,7 @@ func inSameDirectory(base url.URL, paths ...string) (*url.URL, error) {
 // and give it to Mist in the form:
 //
 //	s3+https://xyz:xyz@storage.googleapis.com/a/b/c/seg_$currentMediaTime.ts?m3u8=index.m3u8&split=5
-func targetURLToMistTargetURL(targetURL url.URL) (string, error) {
+func targetURLToMistTargetURL(targetURL url.URL, targetSegmentLengthSecs int64) (string, error) {
 	targetManifestFilename := path.Base(targetURL.Path)
 	segmentingTargetURL, err := inSameDirectory(targetURL, MIST_SEGMENTING_SUBDIR, "$currentMediaTime.ts")
 	if err != nil {
@@ -268,7 +268,7 @@ func targetURLToMistTargetURL(targetURL url.URL) (string, error) {
 
 	queryValues := segmentingTargetURL.Query()
 	queryValues.Add("m3u8", targetManifestFilename)
-	queryValues.Add("split", TARGET_SEGMENT_LENGTH_SECS)
+	queryValues.Add("split", strconv.FormatInt(targetSegmentLengthSecs, 10))
 	segmentingTargetURL.RawQuery = queryValues.Encode()
 
 	return segmentingTargetURL.String(), nil

@@ -65,6 +65,7 @@ type UploadJobPayload struct {
 	RequestID             string
 	Profiles              []video.EncodedProfile
 	PipelineStrategy      Strategy
+	TargetSegmentSizeSecs int64
 	AutoMP4               bool
 	GenerateMP4           bool
 	InputFileInfo         video.InputVideo
@@ -106,16 +107,17 @@ type JobInfo struct {
 	startTime    time.Time
 	result       chan bool
 
-	sourceBytes        int64
-	sourceSegments     int
-	sourceDurationMs   int64
-	sourceCodecVideo   string
-	sourceCodecAudio   string
-	transcodedSegments int
-	pipeline           string
-	catalystRegion     string
-	numProfiles        int
-	state              string
+	sourceBytes           int64
+	sourceSegments        int
+	sourceDurationMs      int64
+	sourceCodecVideo      string
+	sourceCodecAudio      string
+	transcodedSegments    int
+	targetSegmentSizeSecs int64
+	pipeline              string
+	catalystRegion        string
+	numProfiles           int
+	state                 string
 }
 
 func (j *JobInfo) ReportProgress(stage clients.TranscodeStatus, completionRatio float64) {
@@ -312,11 +314,12 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		startTime:        time.Now(),
 		result:           make(chan bool, 1),
 
-		pipeline:           pipeline,
-		numProfiles:        len(p.Profiles),
-		state:              "segmenting",
-		transcodedSegments: 0,
-		catalystRegion:     os.Getenv("MY_REGION"),
+		pipeline:              pipeline,
+		numProfiles:           len(p.Profiles),
+		state:                 "segmenting",
+		transcodedSegments:    0,
+		targetSegmentSizeSecs: p.TargetSegmentSizeSecs,
+		catalystRegion:        os.Getenv("MY_REGION"),
 	}
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 
