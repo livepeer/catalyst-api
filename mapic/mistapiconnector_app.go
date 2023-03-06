@@ -44,7 +44,6 @@ type (
 	// IMac creates new Mist API Connector application
 	IMac interface {
 		SetupTriggers(ownURI string) error
-		SrvShutCh() chan error
 		HandleDefaultStreamTrigger() httprouter.Handle
 		Start(ctx context.Context) error
 	}
@@ -114,8 +113,6 @@ type (
 		mapi                      *mist.API
 		lapi                      *api.Client
 		balancerHost              string
-		srv                       *http.Server
-		srvShutCh                 chan error
 		mu                        sync.RWMutex
 		createStreamLock          sync.Mutex
 		mistHot                   string
@@ -897,17 +894,6 @@ func (mc *mac) getPushUrl(stream *api.Stream, targetRef *api.MultistreamTargetRe
 	return target, fmt.Sprintf("%s%svideo=%s&audio=%s", target.URL, join, videoSelector, audioSelector), nil
 }
 
-func (mc *mac) shutdown() {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	err := mc.srv.Shutdown(ctx)
-	glog.Infof("Done shutting down server with err=%v", err)
-
-	mc.cancel()
-	mc.srvShutCh <- err
-}
-
 func (mc *mac) getStreamInfoLogged(playbackID string) (*streamInfo, bool) {
 	info, err := mc.getStreamInfo(playbackID)
 	if err != nil {
@@ -964,10 +950,6 @@ func (mc *mac) getStreamInfo(playbackID string) (*streamInfo, error) {
 	mc.mu.Unlock()
 
 	return info, nil
-}
-
-func (mc *mac) SrvShutCh() chan error {
-	return mc.srvShutCh
 }
 
 func (tl *trackList) CountVideoTracks() int {

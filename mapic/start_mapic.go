@@ -12,7 +12,6 @@ func NewMapic(cli *config.Cli) IMac {
 		checkBandwidth:            false,
 		streamInfo:                make(map[string]*streamInfo),
 		baseStreamName:            cli.MistBaseStreamName,
-		srvShutCh:                 make(chan error),
 		ownRegion:                 cli.OwnRegion,
 		mistStreamSource:          cli.MistStreamSource,
 		mistHardcodedBroadcasters: cli.MistHardcodedBroadcasters,
