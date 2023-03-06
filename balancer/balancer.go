@@ -3,6 +3,7 @@ package balancer
 //go:generate mockgen -source=./balancer.go -destination=./mocks/balancer.go
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,14 +14,13 @@ import (
 	"os/exec"
 	"sync"
 
+	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/cluster"
-	glog "github.com/magicsong/color-glog"
 )
 
 type Balancer interface {
-	Start() error
+	Start(ctx context.Context) error
 	UpdateMembers(members []cluster.Node) error
-	Kill()
 	GetBestNode(redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error)
 	QueryMistForClosestNodeSource(playbackID, lat, lon, prefix string, source bool) (string, error)
 }
@@ -47,8 +47,8 @@ func NewBalancer(config *Config) Balancer {
 }
 
 // start this load balancer instance, execing MistUtilLoad if necessary
-func (b *BalancerImpl) Start() error {
-	return b.execBalancer(b.config.Args)
+func (b *BalancerImpl) Start(ctx context.Context) error {
+	return b.execBalancer(ctx, b.config.Args)
 }
 
 func (b *BalancerImpl) UpdateMembers(members []cluster.Node) error {
@@ -169,12 +169,9 @@ func (b *BalancerImpl) getMistLoadBalancerServers() (map[string]interface{}, err
 	return mistResponse, nil
 }
 
-func (b *BalancerImpl) Kill() {
-	glog.Infof("killing MistUtilLoad")
-	b.cmd.Process.Kill()
-}
-
-func (b *BalancerImpl) execBalancer(balancerArgs []string) error {
+func (b *BalancerImpl) execBalancer(ctx context.Context, balancerArgs []string) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	args := append(balancerArgs, "-p", fmt.Sprintf("%d", b.config.MistUtilLoadPort))
 	glog.Infof("Running MistUtilLoad with %v", args)
 	b.cmd = exec.Command("MistUtilLoad", args...)
@@ -187,9 +184,19 @@ func (b *BalancerImpl) execBalancer(balancerArgs []string) error {
 		return err
 	}
 
-	err = b.cmd.Wait()
+	go func() {
+		defer cancel()
+		err = b.cmd.Wait()
+	}()
 
-	return err
+	<-ctx.Done()
+
+	if err != nil {
+		return err
+	}
+
+	glog.Infof("killing MistUtilLoad")
+	return b.cmd.Process.Kill()
 }
 
 func (b *BalancerImpl) queryMistForClosestNode(playbackID, lat, lon, prefix string) (string, error) {

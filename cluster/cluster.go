@@ -9,9 +9,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/golang/glog"
 	serfclient "github.com/hashicorp/serf/client"
 	"github.com/hashicorp/serf/cmd/serf/command/agent"
-	glog "github.com/magicsong/color-glog"
 	"github.com/mitchellh/cli"
 	"github.com/mitchellh/mapstructure"
 )
