@@ -33,6 +33,25 @@ func TestAddrFlag(t *testing.T) {
 	require.Error(t, err2)
 }
 
+func TestSpaceSlice(t *testing.T) {
+	fs := flag.NewFlagSet("cli-test", flag.PanicOnError)
+	var single, multi, keepDefault, setEmpty []string
+	SpaceSliceFlag(fs, &single, "single", []string{}, "")
+	SpaceSliceFlag(fs, &multi, "multi", []string{}, "")
+	SpaceSliceFlag(fs, &keepDefault, "default", []string{"one", "two", "three"}, "")
+	SpaceSliceFlag(fs, &setEmpty, "empty", []string{"foo"}, "")
+	err := fs.Parse([]string{
+		"-single=one",
+		"-multi=one two three",
+		"-empty=",
+	})
+	require.NoError(t, err)
+	require.Equal(t, single, []string{"one"})
+	require.Equal(t, multi, []string{"one", "two", "three"})
+	require.Equal(t, keepDefault, []string{"one", "two", "three"})
+	require.Equal(t, setEmpty, []string{})
+}
+
 func TestCommaSlice(t *testing.T) {
 	fs := flag.NewFlagSet("cli-test", flag.PanicOnError)
 	var single, multi, keepDefault, setEmpty []string

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
-	glog "github.com/magicsong/color-glog"
+	"github.com/golang/glog"
 	"github.com/pquerna/cachecontrol/cacheobject"
 )
 
