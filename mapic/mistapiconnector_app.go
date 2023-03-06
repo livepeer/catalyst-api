@@ -3,8 +3,10 @@ package mistapiconnector
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,7 +15,9 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/mapic/apis/mist"
+	mistapi "github.com/livepeer/catalyst-api/mapic/apis/mist"
 	"github.com/livepeer/catalyst-api/mapic/metrics"
 	"github.com/livepeer/catalyst-api/mapic/model"
 	"github.com/livepeer/catalyst-api/mapic/utils"
@@ -39,9 +43,10 @@ const eventMultistreamDisconnected = "multistream.disconnected"
 type (
 	// IMac creates new Mist API Connector application
 	IMac interface {
-		AddRoutes(router *httprouter.Router)
 		SetupTriggers(ownURI string) error
 		SrvShutCh() chan error
+		HandleDefaultStreamTrigger() httprouter.Handle
+		Start(ctx context.Context) error
 	}
 
 	pushStatus struct {
@@ -126,21 +131,40 @@ type (
 		ownRegion                 string
 		mistStreamSource          string
 		mistHardcodedBroadcasters string
+		config                    *config.Cli
 	}
 )
 
 // NewMac ...
-func NewMac(opts MacOptions) (IMac, error) {
-	if opts.BalancerHost != "" && !strings.Contains(opts.BalancerHost, ":") {
-		opts.BalancerHost = opts.BalancerHost + ":8042" // must set default port for Mist's Load Balancer
+func (mc *mac) Start(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	// todo: you're not supposed to store these...
+	mc.ctx = ctx
+	mc.cancel = cancel
+
+	lapi, _ := api.NewAPIClientGeolocated(api.ClientOptions{
+		Server:      mc.config.APIServer,
+		AccessToken: mc.config.APIToken,
+	})
+	mc.lapi = lapi
+
+	mapi := mistapi.NewMist(mc.config.MistHost, mc.config.MistUser, mc.config.MistPassword, mc.config.APIToken, uint(mc.config.MistPort))
+	ensureLoggedIn(mapi, mc.config.MistConnectTimeout)
+	mc.mapi = mapi
+	metrics.InitCensus(mc.config.NodeName, model.Version, "mistconnector")
+
+	if err := mc.SetupTriggers(mc.config.OwnInternalURL() + "/mapic"); err != nil {
+		return err
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	if mc.balancerHost != "" && !strings.Contains(mc.balancerHost, ":") {
+		mc.balancerHost = mc.balancerHost + ":8042" // must set default port for Mist's Load Balancer
+	}
 	var producer event.AMQPProducer
-	if opts.AMQPUrl != "" {
-		pu, err := url.Parse(opts.AMQPUrl)
+	if mc.config.AMQPURL != "" {
+		pu, err := url.Parse(mc.config.AMQPURL)
 		if err != nil {
-			cancel()
-			return nil, fmt.Errorf("error parsing AMQP url err=%w", err)
+			return fmt.Errorf("error parsing AMQP url err=%w", err)
 		}
 
 		glog.Infof("Creating AMQP producer with url=%s", pu.Redacted())
@@ -150,39 +174,41 @@ func NewMac(opts MacOptions) (IMac, error) {
 			}
 			return c.ExchangeDeclare(ownExchangeName, "topic", true, false, false, false, nil)
 		}
-		producer, err = event.NewAMQPProducer(opts.AMQPUrl, event.NewAMQPConnectFunc(setup))
+		producer, err = event.NewAMQPProducer(mc.config.AMQPURL, event.NewAMQPConnectFunc(setup))
 		if err != nil {
-			cancel()
-			return nil, err
+			return err
 		}
+		mc.producer = producer
 	} else {
 		glog.Infof("AMQP url is empty!")
 	}
-	mc := &mac{
-		nodeID:                    opts.NodeID,
-		mistHot:                   opts.MistHost,
-		mapi:                      opts.MistAPI,
-		lapi:                      opts.LivepeerAPI,
-		checkBandwidth:            opts.CheckBandwidth,
-		balancerHost:              opts.BalancerHost,
-		streamInfo:                make(map[string]*streamInfo),
-		routePrefix:               opts.RoutePrefix,
-		mistURL:                   opts.MistURL,
-		playbackDomain:            opts.PlaybackDomain,
-		sendAudio:                 opts.SendAudio,
-		baseStreamName:            opts.BaseStreamName,
-		srvShutCh:                 make(chan error),
-		ctx:                       ctx,
-		cancel:                    cancel,
-		producer:                  producer,
-		ownRegion:                 opts.OwnRegion,
-		mistStreamSource:          opts.MistStreamSource,
-		mistHardcodedBroadcasters: opts.MistHardcodedBroadcasters,
+	if producer != nil && mc.config.MistScrapeMetrics {
+		startMetricsCollector(ctx, statsCollectionPeriod, mc.nodeID, mc.ownRegion, mapi, lapi, producer, ownExchangeName, mc)
 	}
-	if producer != nil && !opts.NoMistScrapeMetrics {
-		startMetricsCollector(ctx, statsCollectionPeriod, opts.NodeID, opts.OwnRegion, opts.MistAPI, opts.LivepeerAPI, producer, ownExchangeName, mc)
+	<-ctx.Done()
+	return nil
+}
+
+func ensureLoggedIn(mapi *mistapi.API, timeout time.Duration) {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for {
+		err := mapi.Login()
+		if err == nil {
+			return
+		}
+
+		var netErr net.Error
+		if !errors.As(err, &netErr) {
+			glog.Fatalf("Fatal non-network error logging to mist. err=%q", err)
+		}
+		select {
+		case <-deadline.C:
+			glog.Fatalf("Failed to login to mist after %s. err=%q", timeout, netErr)
+		case <-time.After(1 * time.Second):
+			glog.Errorf("Retrying after network error logging to mist. err=%q", netErr)
+		}
 	}
-	return mc, nil
 }
 
 // LivepeerProfiles2MistProfiles converts Livepeer's API profiles to Mist's ones
@@ -607,7 +633,7 @@ func (mc *mac) triggerPushEnd(w http.ResponseWriter, r *http.Request, lines []st
 	return true
 }
 
-func (mc *mac) handleDefaultStreamTrigger() httprouter.Handle {
+func (mc *mac) HandleDefaultStreamTrigger() httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		if r.Method != "POST" {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -738,12 +764,6 @@ func (mc *mac) handleHealthcheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-}
-
-func (mc *mac) AddRoutes(router *httprouter.Router) {
-	// mux.Handle("/metrics", metrics.Exporter)
-	// mux.HandleFunc("/_healthz", mc.handleHealthcheck)
-	router.POST("/mapic", mc.handleDefaultStreamTrigger())
 }
 
 func (mc *mac) addTrigger(triggers mist.TriggersMap, name, ownURI, def, params string, sync bool) bool {
