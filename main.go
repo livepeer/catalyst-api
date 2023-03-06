@@ -1,27 +1,28 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"flag"
 	"fmt"
 	"math/rand"
-	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/julienschmidt/httprouter"
 	_ "github.com/lib/pq"
 	"github.com/livepeer/catalyst-api/api"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
-	"github.com/livepeer/catalyst-api/log"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/pipeline"
 	lpapi "github.com/livepeer/go-api-client"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
 	"github.com/peterbourgon/ff"
+	"golang.org/x/sync/errgroup"
 )
 
 func main() {
@@ -143,20 +144,41 @@ func main() {
 		glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 	}
 
-	router := httprouter.New()
+	// Initialize root context; cancelling this prompts all components to shut down cleanly
+	group, ctx := errgroup.WithContext(context.Background())
 
-	mapic := mistapiconnector.StartMapic(&cli)
-	api.AddRoutes(router, vodEngine, cli.APIToken)
-	mapic.AddRoutes(router)
+	mapic := mistapiconnector.NewMapic(&cli)
 
-	log.LogNoRequestID(
-		"Starting Catalyst API!",
-		"version", config.Version,
-		"host", cli.HTTPAddress,
-	)
+	group.Go(func() error {
+		return handleSignals(ctx)
+	})
 
-	// Start the HTTP API server
-	if err := http.ListenAndServe(cli.HTTPAddress, router); err != nil {
-		glog.Fatal(err)
+	group.Go(func() error {
+		return api.ListenAndServe(ctx, cli.HTTPAddress, cli.APIToken, vodEngine)
+	})
+
+	group.Go(func() error {
+		return api.ListenAndServeInternal(ctx, cli.HTTPInternalAddress, mapic)
+	})
+
+	group.Go(func() error {
+		return mapic.Start(ctx)
+	})
+
+	err = group.Wait()
+	glog.Infof("Shutdown complete. Reason for shutdown: %s", err)
+}
+
+func handleSignals(ctx context.Context) error {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
+	for {
+		select {
+		case s := <-c:
+			glog.Errorf("caught signal=%v, attempting clean shutdown", s)
+			return fmt.Errorf("caught signal=%v", s)
+		case <-ctx.Done():
+			return nil
+		}
 	}
 }
