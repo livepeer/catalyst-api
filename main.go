@@ -14,6 +14,7 @@ import (
 	"github.com/golang/glog"
 	_ "github.com/lib/pq"
 	"github.com/livepeer/catalyst-api/api"
+	"github.com/livepeer/catalyst-api/balancer"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
@@ -68,7 +69,7 @@ func main() {
 
 	// catalyst-node parameters
 	fs.StringVar(&cli.NodeName, "node", "", "Name of this node within the cluster")
-	fs.StringVar(&cli.BalancerArgs, "balancer-args", "", "arguments passed to MistUtilLoad")
+	config.SpaceSliceFlag(fs, &cli.BalancerArgs, "balancer-args", []string{}, "arguments passed to MistUtilLoad")
 	fs.StringVar(&cli.NodeHost, "node-host", "", "Hostname this node should handle requests for. Requests on any other domain will trigger a redirect. Useful as a 404 handler to send users to another node.")
 	fs.Float64Var(&cli.NodeLatitude, "node-latitude", 0, "Latitude of this Catalyst node. Used for load balancing.")
 	fs.Float64Var(&cli.NodeLongitude, "node-longitude", 0, "Longitude of this Catalyst node. Used for load balancing.")
@@ -144,10 +145,17 @@ func main() {
 		glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 	}
 
+	mapic := mistapiconnector.NewMapic(&cli)
+
+	// Start balancer
+	bal := balancer.NewBalancer(&balancer.Config{
+		Args:                     cli.BalancerArgs,
+		MistUtilLoadPort:         uint32(cli.MistLoadBalancerPort),
+		MistLoadBalancerTemplate: cli.MistLoadBalancerTemplate,
+	})
+
 	// Initialize root context; cancelling this prompts all components to shut down cleanly
 	group, ctx := errgroup.WithContext(context.Background())
-
-	mapic := mistapiconnector.NewMapic(&cli)
 
 	group.Go(func() error {
 		return handleSignals(ctx)
@@ -163,6 +171,10 @@ func main() {
 
 	group.Go(func() error {
 		return mapic.Start(ctx)
+	})
+
+	group.Go(func() error {
+		return bal.Start(ctx)
 	})
 
 	err = group.Wait()

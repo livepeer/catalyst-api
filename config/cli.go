@@ -42,7 +42,7 @@ type Cli struct {
 	ImportIPFSGatewayURLs     []*url.URL
 	ImportArweaveGatewayURLs  []*url.URL
 	NodeName                  string
-	BalancerArgs              string
+	BalancerArgs              []string
 	NodeHost                  string
 	NodeLatitude              float64
 	NodeLongitude             float64
@@ -150,6 +150,20 @@ func CommaMapFlag(fs *flag.FlagSet, dest *map[string]string, name string, value 
 			output[k] = v
 		}
 		*dest = output
+		return nil
+	})
+}
+
+// handles -balancer-args="-foo six -bar=seven"
+func SpaceSliceFlag(fs *flag.FlagSet, dest *[]string, name string, value []string, usage string) {
+	*dest = value
+	fs.Func(name, usage, func(s string) error {
+		split := strings.Split(s, " ")
+		if len(split) == 1 && split[0] == "" {
+			*dest = []string{}
+			return nil
+		}
+		*dest = split
 		return nil
 	})
 }
