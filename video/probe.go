@@ -77,7 +77,7 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 	iv := InputVideo{
 		Tracks: []InputTrack{
 			{
-				Type:    "video",
+				Type:    TrackTypeVideo,
 				Codec:   videoStream.CodecName,
 				Bitrate: bitrate,
 				VideoTrack: VideoTrack{
@@ -90,8 +90,29 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 		Duration:  probeData.Format.Duration().Seconds(),
 		SizeBytes: size,
 	}
+	iv = addAudioTrack(probeData, iv)
 
 	return iv, nil
+}
+
+func addAudioTrack(probeData *ffprobe.ProbeData, iv InputVideo) InputVideo {
+	audioTrack := probeData.FirstAudioStream()
+	if audioTrack == nil {
+		return iv
+	}
+
+	bitrate, _ := strconv.ParseInt(audioTrack.BitRate, 10, 64)
+	iv.Tracks = append(iv.Tracks, InputTrack{
+		Type:    TrackTypeAudio,
+		Codec:   audioTrack.CodecName,
+		Bitrate: bitrate,
+		AudioTrack: AudioTrack{
+			Channels:   audioTrack.Channels,
+			SampleBits: audioTrack.BitsPerSample,
+		},
+	})
+
+	return iv
 }
 
 // function taken from task-runner task/probe.go

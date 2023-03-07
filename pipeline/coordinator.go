@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -257,6 +258,8 @@ func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 	if p.PipelineStrategy.IsValid() {
 		strategy = p.PipelineStrategy
 	}
+	strategy = checkMistCompatibleCodecs(strategy, p.InputFileInfo)
+
 	switch strategy {
 	case StrategyCatalystDominance:
 		c.startOneUploadJob(p, c.pipeMist, true, false)
@@ -278,6 +281,20 @@ func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 			return
 		})
 	}
+}
+
+func checkMistCompatibleCodecs(strategy Strategy, iv video.InputVideo) Strategy {
+	if strategy == StrategyCatalystDominance {
+		return strategy
+	}
+	for _, track := range iv.Tracks {
+		if track.Type == video.TrackTypeVideo && strings.ToLower(track.Codec) != "h264" {
+			return StrategyExternalDominance
+		} else if track.Type == video.TrackTypeAudio && strings.ToLower(track.Codec) != "aac" {
+			return StrategyExternalDominance
+		}
+	}
+	return strategy
 }
 
 // Starts a single upload job with specified pipeline Handler. If the job is
