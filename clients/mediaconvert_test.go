@@ -301,13 +301,21 @@ func TestProbe(t *testing.T) {
 		Duration: 16.254,
 		Tracks: []video.InputTrack{
 			{
-				Type:    "video",
+				Type:    video.TrackTypeVideo,
 				Codec:   "h264",
 				Bitrate: 1234521,
 				VideoTrack: video.VideoTrack{
 					Width:  576,
 					Height: 1024,
 					FPS:    30,
+				},
+			},
+			{
+				Type:    video.TrackTypeAudio,
+				Codec:   "aac",
+				Bitrate: 128248,
+				AudioTrack: video.AudioTrack{
+					Channels: 2,
 				},
 			},
 		},

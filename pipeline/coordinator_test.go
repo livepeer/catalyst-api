@@ -661,3 +661,114 @@ func (f stubFFprobe) ProbeFile(_ string) (video.InputVideo, error) {
 		},
 	}, nil
 }
+
+func Test_checkMistCompatibleCodecs(t *testing.T) {
+	type args struct {
+		strategy Strategy
+		iv       video.InputVideo
+	}
+	inCompatibleVideoAndAudio := video.InputVideo{
+		Tracks: []video.InputTrack{
+			{
+				Codec: "HEVC",
+				Type:  video.TrackTypeVideo,
+			},
+			{
+				Codec: "ac-3",
+				Type:  video.TrackTypeAudio,
+			},
+		},
+	}
+	inCompatibleVideo := video.InputVideo{
+		Tracks: []video.InputTrack{
+			{
+				Codec: "HEVC",
+				Type:  video.TrackTypeVideo,
+			},
+			{
+				Codec: "aac",
+				Type:  video.TrackTypeAudio,
+			},
+		},
+	}
+	compatibleVideoAndAudio := video.InputVideo{
+		Tracks: []video.InputTrack{
+			{
+				Codec: "h264",
+				Type:  video.TrackTypeVideo,
+			},
+			{
+				Codec: "aac",
+				Type:  video.TrackTypeAudio,
+			},
+		},
+	}
+	tests := []struct {
+		name string
+		args args
+		want Strategy
+	}{
+		{
+			name: "catalyst dominance",
+			args: args{
+				strategy: StrategyCatalystDominance,
+				iv:       inCompatibleVideoAndAudio,
+			},
+			want: StrategyCatalystDominance,
+		},
+		{
+			name: "catalyst dominance",
+			args: args{
+				strategy: StrategyCatalystDominance,
+				iv:       inCompatibleVideo,
+			},
+			want: StrategyCatalystDominance,
+		},
+		{
+			name: "incompatible with mist - StrategyBackgroundMist",
+			args: args{
+				strategy: StrategyBackgroundMist,
+				iv:       inCompatibleVideoAndAudio,
+			},
+			want: StrategyExternalDominance,
+		},
+		{
+			name: "incompatible with mist - StrategyBackgroundMist",
+			args: args{
+				strategy: StrategyBackgroundMist,
+				iv:       inCompatibleVideo,
+			},
+			want: StrategyExternalDominance,
+		},
+		{
+			name: "compatible with mist - StrategyBackgroundMist",
+			args: args{
+				strategy: StrategyBackgroundMist,
+				iv:       compatibleVideoAndAudio,
+			},
+			want: StrategyBackgroundMist,
+		},
+		{
+			name: "incompatible with mist - StrategyFallbackExternal",
+			args: args{
+				strategy: StrategyFallbackExternal,
+				iv:       inCompatibleVideo,
+			},
+			want: StrategyExternalDominance,
+		},
+		{
+			name: "compatible with mist - StrategyFallbackExternal",
+			args: args{
+				strategy: StrategyFallbackExternal,
+				iv:       compatibleVideoAndAudio,
+			},
+			want: StrategyFallbackExternal,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := checkMistCompatibleCodecs(tt.args.strategy, tt.args.iv)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}

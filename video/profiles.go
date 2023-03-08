@@ -9,6 +9,8 @@ const (
 	MinVideoBitrate         = 100_000
 	AbsoluteMinVideoBitrate = 5_000
 	MaxVideoBitrate         = 288_000_000
+	TrackTypeVideo          = "video"
+	TrackTypeAudio          = "audio"
 )
 
 type InputVideo struct {
@@ -23,7 +25,7 @@ type InputVideo struct {
 // If no video tracks present, returns an error
 func (i InputVideo) GetVideoTrack() (InputTrack, error) {
 	for _, t := range i.Tracks {
-		if t.Type == "video" {
+		if t.Type == TrackTypeVideo {
 			return t, nil
 		}
 	}
