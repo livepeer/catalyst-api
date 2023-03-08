@@ -50,18 +50,6 @@ func NewCatalystAPIRouter(vodEngine *pipeline.Coordinator, apiToken string) *htt
 		),
 	)
 
-	router.POST("/api/transcode/file",
-		withLogging(
-			withAuth(
-				apiToken,
-				withCapacityChecking(
-					vodEngine,
-					catalystApiHandlers.TranscodeSegment(),
-				),
-			),
-		),
-	)
-
 	// Endpoint to receive "Triggers" (callbacks) from Mist
 	router.POST("/api/mist/trigger", withLogging(mistCallbackHandlers.Trigger()))
 
