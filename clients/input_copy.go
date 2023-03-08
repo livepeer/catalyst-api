@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -112,7 +113,11 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 
 		content := io.TeeReader(c, &byteAccWriter)
 
-		return UploadToOSURL(destOSBaseURL, filename, content, MAX_COPY_FILE_DURATION)
+		err = UploadToOSURL(destOSBaseURL, filename, content, MAX_COPY_FILE_DURATION)
+		if err != nil {
+			log.Log(requestID, "Copy attempt failed", "source", sourceURL, "dest", path.Join(destOSBaseURL, filename), "err", err)
+		}
+		return err
 	}, UploadRetryBackoff())
 	return
 }
