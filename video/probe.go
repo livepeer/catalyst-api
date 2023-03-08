@@ -37,7 +37,7 @@ func (p Probe) ProbeFile(url string) (iv InputVideo, err error) {
 	return parseProbeOutput(data)
 }
 
-func parseProbeOutput(probeData *ffprobe.ProbeData) (iv InputVideo, err error) {
+func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 	// check for a valid video stream
 	videoStream := probeData.FirstVideoStream()
 	if videoStream == nil {
@@ -56,7 +56,10 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (iv InputVideo, err error) {
 	if bitRateValue == "" {
 		bitRateValue = probeData.Format.BitRate
 	}
-	var bitrate int64
+	var (
+		bitrate int64
+		err     error
+	)
 	if bitRateValue == "" {
 		bitrate = DefaultProfile720p.Bitrate
 	} else {
@@ -76,7 +79,7 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (iv InputVideo, err error) {
 		return InputVideo{}, fmt.Errorf("error parsing fps numerator from probed data: %w", err)
 	}
 	// format file stats into InputVideo
-	iv = InputVideo{
+	iv := InputVideo{
 		Tracks: []InputTrack{
 			{
 				Type:    TrackTypeVideo,
