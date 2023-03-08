@@ -56,12 +56,17 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 	if bitRateValue == "" {
 		bitRateValue = probeData.Format.BitRate
 	}
+	var (
+		bitrate int64
+		err     error
+	)
 	if bitRateValue == "" {
-		return InputVideo{}, fmt.Errorf("error probing: bitrate field not found")
-	}
-	bitrate, err := strconv.ParseInt(bitRateValue, 10, 64)
-	if err != nil {
-		return InputVideo{}, fmt.Errorf("error parsing bitrate from probed data: %w", err)
+		bitrate = DefaultProfile720p.Bitrate
+	} else {
+		bitrate, err = strconv.ParseInt(bitRateValue, 10, 64)
+		if err != nil {
+			return InputVideo{}, fmt.Errorf("error parsing bitrate from probed data: %w", err)
+		}
 	}
 	// parse filesize
 	size, err := strconv.ParseInt(probeData.Format.Size, 10, 64)

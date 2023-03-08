@@ -60,23 +60,23 @@ type InputTrack struct {
 	AudioTrack
 }
 
-// DefaultTranscodeProfiles defines the default set of encoding profiles to use when none are specified
-var DefaultTranscodeProfiles = []EncodedProfile{
-	{
-		Name:    "360p0",
-		FPS:     0,
-		Bitrate: 1_000_000,
-		Width:   640,
-		Height:  360,
-	},
-	{
-		Name:    "720p0",
-		FPS:     0,
-		Bitrate: 4_000_000,
-		Width:   1280,
-		Height:  720,
-	},
+var DefaultProfile360p = EncodedProfile{
+	Name:    "360p0",
+	FPS:     0,
+	Bitrate: 1_000_000,
+	Width:   640,
+	Height:  360,
 }
+var DefaultProfile720p = EncodedProfile{
+	Name:    "720p0",
+	FPS:     0,
+	Bitrate: 4_000_000,
+	Width:   1280,
+	Height:  720,
+}
+
+// DefaultTranscodeProfiles defines the default set of encoding profiles to use when none are specified
+var DefaultTranscodeProfiles = []EncodedProfile{DefaultProfile360p, DefaultProfile720p}
 
 func GetPlaybackProfiles(iv InputVideo) ([]EncodedProfile, error) {
 	video, err := iv.GetVideoTrack()
