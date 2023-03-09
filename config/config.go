@@ -35,7 +35,7 @@ const MaxSegmentSizeSecs = 20
 const MAX_JOBS_IN_FLIGHT = 8
 
 // The maximum allowed input file size
-const MaxInputFileSizeBytes = 30 * 1024 * 1024 * 1024 // 10 GiB
+const MaxInputFileSizeBytes = 30 * 1024 * 1024 * 1024 // 30 GiB
 
 var TranscodingParallelJobs int = 2
 
