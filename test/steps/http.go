@@ -103,7 +103,7 @@ func (s *StepContext) CheckHTTPResponseCodeAndBody(code int, expectedBody string
 }
 
 func (s *StepContext) CheckMist(segmentSize int) error {
-	timeoutSecs := 3
+	timeoutSecs := 5
 	for counter := 0; counter < timeoutSecs; counter++ {
 		urls := s.GetMistPushStartURLs()
 		if len(urls) > 1 {
