@@ -135,3 +135,20 @@ func newExponentialBackOffExecutor() *backoff.ExponentialBackOff {
 func UploadRetryBackoff() backoff.BackOff {
 	return backoff.WithMaxRetries(newExponentialBackOffExecutor(), 5)
 }
+
+func SignURL(u *url.URL) (string, error) {
+	if u.Scheme == "" || u.Scheme == "file" { // not compatible with presigning
+		return u.String(), nil
+	}
+	driver, err := drivers.ParseOSURL(u.String(), true)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse OS url: %w", err)
+	}
+
+	sess := driver.NewSession("")
+	signedURL, err := sess.Presign("", PresignDuration)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate signed url: %w", err)
+	}
+	return signedURL, nil
+}

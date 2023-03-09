@@ -162,3 +162,20 @@ type OutputVideoFile struct {
 	Height    int64  `json:"height,omitempty"`
 	Bitrate   int64  `json:"bitrate,omitempty"`
 }
+
+func PopulateOutput(probe Prober, outputURL string, videoFile OutputVideoFile) (OutputVideoFile, error) {
+	outputVideoProbe, err := probe.ProbeFile(outputURL)
+	if err != nil {
+		return OutputVideoFile{}, fmt.Errorf("error probing output file from S3: %w", err)
+
+	}
+	videoFile.SizeBytes = outputVideoProbe.SizeBytes
+	videoTrack, err := outputVideoProbe.GetVideoTrack()
+	if err != nil {
+		return OutputVideoFile{}, fmt.Errorf("no video track found in output video: %w", err)
+	}
+	videoFile.Height = videoTrack.Height
+	videoFile.Width = videoTrack.Width
+	videoFile.Bitrate = videoTrack.Bitrate
+	return videoFile, nil
+}

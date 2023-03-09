@@ -49,7 +49,7 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 	}
 	log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", osTransferURL.String())
 
-	signedURL, err = signURL(osTransferURL)
+	signedURL, err = SignURL(osTransferURL)
 	if err != nil {
 		return
 	}
@@ -78,23 +78,6 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 		return
 	}
 	return
-}
-
-func signURL(u *url.URL) (string, error) {
-	if u.Scheme == "" || u.Scheme == "file" { // not compatible with presigning
-		return u.String(), nil
-	}
-	driver, err := drivers.ParseOSURL(u.String(), true)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse OS url: %w", err)
-	}
-
-	sess := driver.NewSession("")
-	signedURL, err := sess.Presign("", PresignDuration)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate signed url: %w", err)
-	}
-	return signedURL, nil
 }
 
 func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
