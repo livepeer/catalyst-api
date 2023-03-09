@@ -155,6 +155,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, err
 	}
 
+	var mp4Outputs []video.OutputVideoFile
 	// Transmux received segments from T into a single mp4
 	if transcodeRequest.GenerateMP4 {
 		for rendition, segments := range renditionList.RenditionSegmentTable {
@@ -203,17 +204,30 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				break
 			}
 
-			targetMP4URL, err := url.JoinPath(targetTranscodedRenditionOutputURL.String(), rendition)
-			if err != nil {
-				log.Log(transcodeRequest.RequestID, "error building url for MP4 output", "url", targetMP4URL, "err", err)
-			}
-
+			targetMP4URL := targetTranscodedRenditionOutputURL.JoinPath(rendition, filepath.Base(mp4OutputFile.Name()))
 			err = backoff.Retry(func() error {
-				return clients.UploadToOSURL(targetMP4URL, filepath.Base(mp4OutputFile.Name()), bufio.NewReader(mp4OutputFile), UPLOAD_TIMEOUT)
+				return clients.UploadToOSURL(targetMP4URL.String(), "", bufio.NewReader(mp4OutputFile), UPLOAD_TIMEOUT)
 			}, clients.UploadRetryBackoff())
 			if err != nil {
 				log.Log(transcodeRequest.RequestID, "failed to upload mp4", "file", mp4OutputFile.Name())
+				break
 			}
+
+			mp4PlaybackURL := strings.ReplaceAll(targetMP4URL.String(), targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
+			mp4Out := video.OutputVideoFile{
+				Type:     "mp4",
+				Location: mp4PlaybackURL,
+			}
+			signedURL, err := clients.SignURL(targetMP4URL)
+			if err != nil {
+				return outputs, segmentsCount, fmt.Errorf("failed to create signed url for %s: %w", targetMP4URL, err)
+			}
+			mp4Out, err = video.PopulateOutput(video.Probe{}, signedURL, mp4Out)
+			if err != nil {
+				return outputs, segmentsCount, err
+			}
+
+			mp4Outputs = append(mp4Outputs, mp4Out)
 		}
 	}
 
@@ -223,6 +237,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		videoManifestURL := strings.ReplaceAll(rendition.ManifestLocation, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
 		output.Videos = append(output.Videos, video.OutputVideoFile{Location: videoManifestURL, SizeBytes: rendition.Bytes})
 	}
+	output.MP4Outputs = mp4Outputs
 	outputs = []video.OutputVideo{output}
 	// Return outputs for .dtsh file creation
 	return outputs, segmentsCount, nil

@@ -200,19 +200,10 @@ func (mc *MediaConvert) outputVideoFiles(mcArgs TranscodeJobArgs, ourOutputBaseD
 			if err != nil {
 				return nil, fmt.Errorf("error creating s3 url: %w", err)
 			}
-			outputVideoProbe, err := mc.probe.ProbeFile(presignedOutputFileURL)
+			videoFile, err = video.PopulateOutput(mc.probe, presignedOutputFileURL, videoFile)
 			if err != nil {
-				return nil, fmt.Errorf("error probing output file from S3: %w", err)
-
+				return nil, err
 			}
-			videoFile.SizeBytes = outputVideoProbe.SizeBytes
-			videoTrack, err := outputVideoProbe.GetVideoTrack()
-			if err != nil {
-				return nil, fmt.Errorf("no video track found in output video: %w", err)
-			}
-			videoFile.Height = videoTrack.Height
-			videoFile.Width = videoTrack.Width
-			videoFile.Bitrate = videoTrack.Bitrate
 		}
 		files = append(files, videoFile)
 	}
