@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/livepeer/catalyst-api/config"
 	xerrors "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/video"
@@ -18,7 +19,6 @@ import (
 )
 
 const MAX_COPY_FILE_DURATION = 30 * time.Minute
-const MaxInputFileSizeBytes = 10 * 1024 * 1024 * 1024 // 10 GiB
 const PresignDuration = 24 * time.Hour
 
 type InputCopier interface {
@@ -73,8 +73,8 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 		return
 	}
 
-	if inputVideoProbe.SizeBytes > MaxInputFileSizeBytes {
-		err = fmt.Errorf("input file %d bytes was greater than %d bytes", inputVideoProbe.SizeBytes, MaxInputFileSizeBytes)
+	if inputVideoProbe.SizeBytes > config.MaxInputFileSizeBytes {
+		err = fmt.Errorf("input file %d bytes was greater than %d bytes", inputVideoProbe.SizeBytes, config.MaxInputFileSizeBytes)
 		return
 	}
 	return

@@ -479,8 +479,8 @@ func Test_ProbeErrors(t *testing.T) {
 		},
 		{
 			name:        "filesize greater than max",
-			size:        clients.MaxInputFileSizeBytes + 1,
-			expectedErr: "error copying input to storage: input file 10737418241 bytes was greater than 10737418240 bytes",
+			size:        config.MaxInputFileSizeBytes + 1,
+			expectedErr: "error copying input to storage: input file 32212254721 bytes was greater than 32212254720 bytes",
 		},
 		{
 			name:        "probe error",
