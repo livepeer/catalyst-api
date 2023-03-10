@@ -20,7 +20,7 @@ import (
 
 type Balancer interface {
 	Start(ctx context.Context) error
-	UpdateMembers(members []cluster.Node) error
+	UpdateMembers(members []cluster.Member) error
 	GetBestNode(redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error)
 	QueryMistForClosestNodeSource(playbackID, lat, lon, prefix string, source bool) (string, error)
 }
@@ -51,7 +51,7 @@ func (b *BalancerImpl) Start(ctx context.Context) error {
 	return b.execBalancer(ctx, b.config.Args)
 }
 
-func (b *BalancerImpl) UpdateMembers(members []cluster.Node) error {
+func (b *BalancerImpl) UpdateMembers(members []cluster.Member) error {
 	balancedServers, err := b.getMistLoadBalancerServers()
 
 	if err != nil {

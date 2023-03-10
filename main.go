@@ -16,6 +16,7 @@ import (
 	"github.com/livepeer/catalyst-api/api"
 	"github.com/livepeer/catalyst-api/balancer"
 	"github.com/livepeer/catalyst-api/clients"
+	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/metrics"
@@ -36,7 +37,7 @@ func main() {
 	config.AddrFlag(fs, &cli.HTTPAddress, "http-addr", "0.0.0.0:4949", "Address to bind for external-facing Catalyst HTTP handling")
 	config.AddrFlag(fs, &cli.HTTPInternalAddress, "http-internal-addr", "127.0.0.1:4948", "Address to bind for internal privileged HTTP commands")
 	config.AddrFlag(fs, &cli.ClusterAddress, "cluster-addr", "0.0.0.0:9935", "Address to bind Serf network listeners to. To use an IPv6 address, specify [::1] or [::1]:7946.")
-	config.AddrFlag(fs, &cli.ClusterAdvertiseAddress, "cluster-advertise-addr", "0.0.0.0:9935", "Address to advertise to the other cluster members")
+	fs.StringVar(&cli.ClusterAdvertiseAddress, "cluster-advertise-addr", "0.0.0.0", "Address to advertise to the other cluster members")
 	config.AddrFlag(fs, &cli.RPCAddr, "rpc-addr", "127.0.0.1:7373", "Address to bind the Serf RPC listener.")
 
 	// catalyst-api parameters
@@ -154,6 +155,8 @@ func main() {
 		MistLoadBalancerTemplate: cli.MistLoadBalancerTemplate,
 	})
 
+	c := cluster.NewCluster(&cli)
+
 	// Initialize root context; cancelling this prompts all components to shut down cleanly
 	group, ctx := errgroup.WithContext(context.Background())
 
@@ -177,8 +180,29 @@ func main() {
 		return bal.Start(ctx)
 	})
 
+	group.Go(func() error {
+		return c.Start(ctx)
+	})
+
+	group.Go(func() error {
+		return reconcileBalancer(ctx, bal, c)
+	})
+
 	err = group.Wait()
 	glog.Infof("Shutdown complete. Reason for shutdown: %s", err)
+}
+
+// Eventually this will be the main loop of the state machine, but we just have one variable right now.
+func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Cluster) error {
+	memberCh := c.MemberChan()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case list := <-memberCh:
+			bal.UpdateMembers(list)
+		}
+	}
 }
 
 func handleSignals(ctx context.Context) error {
