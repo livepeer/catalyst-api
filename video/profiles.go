@@ -23,9 +23,12 @@ type InputVideo struct {
 // Finds the video track from the list of input video tracks
 // If multiple video tracks present, returns the first one
 // If no video tracks present, returns an error
-func (i InputVideo) GetVideoTrack() (InputTrack, error) {
+func (i InputVideo) GetTrack(trackType string) (InputTrack, error) {
+	if trackType != TrackTypeVideo && trackType != TrackTypeAudio {
+		return InputTrack{}, fmt.Errorf("invalid track type - must be '%s' or '%s'", TrackTypeVideo, TrackTypeAudio)
+	}
 	for _, t := range i.Tracks {
-		if t.Type == TrackTypeVideo {
+		if t.Type == trackType {
 			return t, nil
 		}
 	}
@@ -79,7 +82,7 @@ var DefaultProfile720p = EncodedProfile{
 var DefaultTranscodeProfiles = []EncodedProfile{DefaultProfile360p, DefaultProfile720p}
 
 func GetPlaybackProfiles(iv InputVideo) ([]EncodedProfile, error) {
-	video, err := iv.GetVideoTrack()
+	video, err := iv.GetTrack(TrackTypeVideo)
 	if err != nil {
 		return nil, fmt.Errorf("no video track found in input video: %w", err)
 	}
@@ -170,7 +173,7 @@ func PopulateOutput(probe Prober, outputURL string, videoFile OutputVideoFile) (
 
 	}
 	videoFile.SizeBytes = outputVideoProbe.SizeBytes
-	videoTrack, err := outputVideoProbe.GetVideoTrack()
+	videoTrack, err := outputVideoProbe.GetTrack(TrackTypeVideo)
 	if err != nil {
 		return OutputVideoFile{}, fmt.Errorf("no video track found in output video: %w", err)
 	}

@@ -62,21 +62,23 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 		return
 	}
 	log.Log(requestID, "probe succeeded", "source", inputFile.String(), "dest", osTransferURL.String())
-	videoTrack, err := inputVideoProbe.GetVideoTrack()
+	videoTrack, err := inputVideoProbe.GetTrack(video.TrackTypeVideo)
 	if err != nil {
 		err = fmt.Errorf("no video track found in input video: %w", err)
 		return
 	}
+	audioTrack, _ := inputVideoProbe.GetTrack(video.TrackTypeAudio)
 	if videoTrack.FPS <= 0 {
 		// unsupported, includes things like motion jpegs
 		err = fmt.Errorf("invalid framerate: %f", videoTrack.FPS)
 		return
 	}
-
 	if inputVideoProbe.SizeBytes > config.MaxInputFileSizeBytes {
 		err = fmt.Errorf("input file %d bytes was greater than %d bytes", inputVideoProbe.SizeBytes, config.MaxInputFileSizeBytes)
 		return
 	}
+	log.Log(requestID, "probed video track:", "codec", videoTrack.Codec, "bitrate", videoTrack.Bitrate, "duration", videoTrack.DurationSec, "w", videoTrack.Width, "h", videoTrack.Height, "pix-format", videoTrack.PixelFormat, "FPS", videoTrack.FPS)
+	log.Log(requestID, "probed audio track", "codec", audioTrack.Codec, "bitrate", audioTrack.Bitrate, "duration", audioTrack.DurationSec, "channels", audioTrack.Channels)
 	return
 }
 

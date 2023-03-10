@@ -64,7 +64,7 @@ func TestDefaultBitrate(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	track, err := iv.GetVideoTrack()
+	track, err := iv.GetTrack(TrackTypeVideo)
 	require.NoError(t, err)
 	require.Equal(t, DefaultProfile720p.Bitrate, track.Bitrate)
 }
