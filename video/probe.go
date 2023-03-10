@@ -105,7 +105,6 @@ func addAudioTrack(probeData *ffprobe.ProbeData, iv InputVideo) InputVideo {
 	if audioTrack == nil {
 		return iv
 	}
-
 	bitrate, _ := strconv.ParseInt(audioTrack.BitRate, 10, 64)
 	iv.Tracks = append(iv.Tracks, InputTrack{
 		Type:    TrackTypeAudio,
