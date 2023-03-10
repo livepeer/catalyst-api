@@ -25,6 +25,7 @@ type UploadVODRequestOutputLocationOutputs struct {
 	SourceMp4          bool `json:"source_mp4"`
 	SourceSegments     bool `json:"source_segments"`
 	TranscodedSegments bool `json:"transcoded_segments"`
+	ForceMP4           bool `json:"force_mp4"`
 	AutoMP4            bool `json:"auto_mp4"`
 }
 
@@ -178,6 +179,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		RequestID:             requestID,
 		Profiles:              uploadVODRequest.Profiles,
 		PipelineStrategy:      uploadVODRequest.PipelineStrategy,
+		ForceMP4:              targetOutput.Outputs.ForceMP4,
 		AutoMP4:               targetOutput.Outputs.AutoMP4,
 		TargetSegmentSizeSecs: uploadVODRequest.TargetSegmentSizeSecs,
 	})
