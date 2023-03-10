@@ -68,6 +68,7 @@ type UploadJobPayload struct {
 	PipelineStrategy      Strategy
 	TargetSegmentSizeSecs int64
 	AutoMP4               bool
+	ForceMP4              bool
 	GenerateMP4           bool
 	InputFileInfo         video.InputVideo
 	SignedSourceURL       string
@@ -240,12 +241,12 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		p.SourceFile = newSourceURL.String()
 		p.SignedSourceURL = signedURL
 		p.InputFileInfo = inputVideoProbe
-		p.GenerateMP4 = func(automp4 bool, duration float64) bool {
-			if automp4 && duration <= maxMP4OutDuration.Seconds() {
+		p.GenerateMP4 = func(forcemp4, automp4 bool, duration float64) bool {
+			if forcemp4 || (automp4 && duration <= maxMP4OutDuration.Seconds()) {
 				return true
 			}
 			return false
-		}(p.AutoMP4, p.InputFileInfo.Duration)
+		}(p.ForceMP4, p.AutoMP4, p.InputFileInfo.Duration)
 		log.AddContext(si.RequestID, "new_source_url", newSourceURL)
 		log.AddContext(si.RequestID, "signed_url", signedURL)
 
