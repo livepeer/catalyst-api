@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"net"
@@ -65,6 +66,11 @@ func (cli *Cli) OwnInternalURL() string {
 	return fmt.Sprintf("http://%s", addr)
 }
 
+// EncryptBytes returns the encryption key configured.
+func (cli *Cli) EncryptBytes() ([]byte, error) {
+	return base64.StdEncoding.DecodeString(cli.EncryptKey)
+}
+
 // still a string, but validates the provided value is some kind of coherent host:port
 func AddrFlag(fs *flag.FlagSet, dest *string, name, value, usage string) {
 	*dest = value
@@ -119,6 +125,20 @@ func parseURLs(s string, dest *[]*url.URL) error {
 }
 
 // handles -foo=value1,value2,value3
+func SpaceSliceFlag(fs *flag.FlagSet, dest *[]string, name string, value []string, usage string) {
+	*dest = value
+	fs.Func(name, usage, func(s string) error {
+		split := strings.Split(s, " ")
+		if len(split) == 1 && split[0] == "" {
+			*dest = []string{}
+			return nil
+		}
+		*dest = split
+		return nil
+	})
+}
+
+// handles -foo=value1,value2,value3
 func CommaSliceFlag(fs *flag.FlagSet, dest *[]string, name string, value []string, usage string) {
 	*dest = value
 	fs.Func(name, usage, func(s string) error {
@@ -150,20 +170,6 @@ func CommaMapFlag(fs *flag.FlagSet, dest *map[string]string, name string, value 
 			output[k] = v
 		}
 		*dest = output
-		return nil
-	})
-}
-
-// handles -balancer-args="-foo six -bar=seven"
-func SpaceSliceFlag(fs *flag.FlagSet, dest *[]string, name string, value []string, usage string) {
-	*dest = value
-	fs.Func(name, usage, func(s string) error {
-		split := strings.Split(s, " ")
-		if len(split) == 1 && split[0] == "" {
-			*dest = []string{}
-			return nil
-		}
-		*dest = split
 		return nil
 	})
 }
