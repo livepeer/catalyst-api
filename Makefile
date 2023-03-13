@@ -32,6 +32,7 @@ run:
 
 .PHONY: test
 test:
+	go generate ./...
 	go test -race ./...
 
 .PHONY: tidy
