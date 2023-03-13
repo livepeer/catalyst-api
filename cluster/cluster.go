@@ -1,6 +1,6 @@
 package cluster
 
-//go:generate mockgen -source=./cluster.go -destination=./mocks/cluster.go
+//go:generate mockgen -source=./cluster.go -destination=../mocks/cluster/cluster.go
 
 import (
 	"context"
@@ -129,6 +129,11 @@ func (c *ClusterImpl) MemberChan() chan []Member {
 
 // Given a dtsc:// or https:// url, resolve the proper address of the node via serf tags
 func (c *ClusterImpl) ResolveNodeURL(streamURL string) (string, error) {
+	return ResolveNodeURL(c, streamURL)
+}
+
+// Separated here to be more easily fed mocks for testing
+func ResolveNodeURL(c Cluster, streamURL string) (string, error) {
 	u, err := url.Parse(streamURL)
 	if err != nil {
 		return "", err

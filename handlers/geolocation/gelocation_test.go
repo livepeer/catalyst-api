@@ -1,4 +1,4 @@
-package main
+package geolocation
 
 import (
 	"fmt"
@@ -8,9 +8,11 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	mockbalancer "github.com/livepeer/catalyst-api/node/cmd/catalyst-node/balancer/mocks"
-	"github.com/livepeer/catalyst-api/node/cmd/catalyst-node/cluster"
-	mockcluster "github.com/livepeer/catalyst-api/node/cmd/catalyst-node/cluster/mocks"
+	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/cluster"
+	"github.com/livepeer/catalyst-api/config"
+	mockbalancer "github.com/livepeer/catalyst-api/mocks/balancer"
+	mockcluster "github.com/livepeer/catalyst-api/mocks/cluster"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,7 +21,7 @@ const (
 	playbackID      = "abc_XYZ-123"
 )
 
-var fakeSerfMember = cluster.Node{
+var fakeSerfMember = cluster.Member{
 	Name: "fake-serf-member",
 	Tags: map[string]string{
 		"http":  fmt.Sprintf("http://%s", closestNodeAddr),
@@ -102,7 +104,7 @@ func getHLSURLsWithSeg(proto, host, seg, query string) []string {
 	return urls
 }
 
-func mockNode(t *testing.T) *Node {
+func mockHandlers(t *testing.T) *GeolocationHandlersCollection {
 	ctrl := gomock.NewController(t)
 	mb := mockbalancer.NewMockBalancer(ctrl)
 	mc := mockcluster.NewMockCluster(ctrl)
@@ -115,16 +117,24 @@ func mockNode(t *testing.T) *Node {
 		Member(map[string]string{}, "alive", closestNodeAddr).
 		AnyTimes().
 		Return(fakeSerfMember, nil)
-	n := &Node{
+
+	mc.EXPECT().
+		ResolveNodeURL(gomock.Any()).DoAndReturn(func(streamURL string) (string, error) {
+		return cluster.ResolveNodeURL(mc, streamURL)
+	}).
+		AnyTimes()
+	coll := GeolocationHandlersCollection{
 		Balancer: mb,
 		Cluster:  mc,
-		Config:   &Config{},
+		Config: config.Cli{
+			RedirectPrefixes: prefixes[:],
+		},
 	}
-	return n
+	return &coll
 }
 
 func TestRedirectHandler404(t *testing.T) {
-	n := mockNode(t)
+	n := mockHandlers(t)
 
 	path := fmt.Sprintf("/hls/%s/index.m3u8", playbackID)
 
@@ -141,7 +151,7 @@ func TestRedirectHandler404(t *testing.T) {
 }
 
 func TestRedirectHandlerHLS_Correct(t *testing.T) {
-	n := mockNode(t)
+	n := mockHandlers(t)
 
 	path := fmt.Sprintf("/hls/%s/index.m3u8", playbackID)
 
@@ -158,7 +168,7 @@ func TestRedirectHandlerHLS_Correct(t *testing.T) {
 }
 
 func TestRedirectHandlerHLSVOD_Correct(t *testing.T) {
-	n := mockNode(t)
+	n := mockHandlers(t)
 
 	n.Balancer.(*mockbalancer.MockBalancer).EXPECT().
 		GetBestNode(prefixes[:], playbackID, "", "", "vod").
@@ -193,7 +203,7 @@ func TestRedirectHandlerHLSVOD_Correct(t *testing.T) {
 }
 
 func TestRedirectHandlerHLS_SegmentInPath(t *testing.T) {
-	n := mockNode(t)
+	n := mockHandlers(t)
 
 	seg := "4_1"
 	getParams := "mTrack=0&iMsn=4&sessId=1274784345"
@@ -206,7 +216,7 @@ func TestRedirectHandlerHLS_SegmentInPath(t *testing.T) {
 }
 
 func TestRedirectHandlerHLS_InvalidPath(t *testing.T) {
-	n := mockNode(t)
+	n := mockHandlers(t)
 
 	requireReq(t, "/hls").result(n).hasStatus(http.StatusNotFound)
 	requireReq(t, "/hls").result(n).hasStatus(http.StatusNotFound)
@@ -216,7 +226,7 @@ func TestRedirectHandlerHLS_InvalidPath(t *testing.T) {
 }
 
 func TestRedirectHandlerJS_Correct(t *testing.T) {
-	n := mockNode(t)
+	n := mockHandlers(t)
 
 	path := fmt.Sprintf("/json_%s.js", playbackID)
 
@@ -233,7 +243,7 @@ func TestRedirectHandlerJS_Correct(t *testing.T) {
 }
 
 func TestNodeHostRedirect(t *testing.T) {
-	n := mockNode(t)
+	n := mockHandlers(t)
 	n.Config.NodeHost = "right-host"
 
 	// Success case; get past the redirect handler and 404
@@ -260,7 +270,7 @@ func TestNodeHostRedirect(t *testing.T) {
 }
 
 func TestNodeHostPortRedirect(t *testing.T) {
-	n := mockNode(t)
+	n := mockHandlers(t)
 	n.Config.NodeHost = "right-host:20443"
 
 	requireReq(t, "http://wrong-host/any/path").
@@ -311,12 +321,9 @@ func (hr httpReq) withHeader(key, value string) httpReq {
 	return hr
 }
 
-func (hr httpReq) result(n *Node) httpCheck {
-	if n == nil {
-		n = &Node{}
-	}
+func (hr httpReq) result(geo *GeolocationHandlersCollection) httpCheck {
 	rr := httptest.NewRecorder()
-	n.redirectHandler(prefixes[:], n.Config.NodeHost).ServeHTTP(rr, hr.Request)
+	geo.RedirectHandler()(rr, hr.Request, httprouter.Params{})
 	return httpCheck{hr.T, rr}
 }
 
