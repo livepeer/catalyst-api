@@ -165,11 +165,11 @@ func main() {
 	})
 
 	group.Go(func() error {
-		return api.ListenAndServe(ctx, cli.HTTPAddress, cli.APIToken, vodEngine)
+		return api.ListenAndServe(ctx, cli, bal, c)
 	})
 
 	group.Go(func() error {
-		return api.ListenAndServeInternal(ctx, cli.HTTPInternalAddress, mapic)
+		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c)
 	})
 
 	group.Go(func() error {

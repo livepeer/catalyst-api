@@ -253,7 +253,7 @@ func (n *Node) redirectHandler(redirectPrefixes []string, nodeHost string) http.
 
 		rPath := fmt.Sprintf(pathTmpl, fullPlaybackID)
 		rURL := fmt.Sprintf("%s://%s%s?%s", protocol(r), bestNode, rPath, r.URL.RawQuery)
-		rURL, err = n.resolveNodeURL(rURL)
+		rURL, err = c.Cluster.ResolveNodeURL(rURL)
 		if err != nil {
 			glog.Errorf("failed to resolve node URL playbackID=%s err=%s", playbackID, err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -300,35 +300,6 @@ func (n *Node) streamSourceHandler(lat, lon float64) http.Handler {
 		glog.V(7).Infof("replying to Mist STREAM_SOURCE request=%s response=%s", streamName, outURL)
 		w.Write([]byte(outURL))
 	})
-}
-
-// Given a dtsc:// or https:// url, resolve the proper address of the node via serf tags
-func (n *Node) resolveNodeURL(streamURL string) (string, error) {
-	u, err := url.Parse(streamURL)
-	if err != nil {
-		return "", err
-	}
-	nodeName := u.Host
-	protocol := u.Scheme
-
-	member, err := n.Cluster.Member(map[string]string{}, "alive", nodeName)
-	if err != nil {
-		return "", err
-	}
-	addr, has := member.Tags[protocol]
-	if !has {
-		glog.V(7).Infof("no tag found, not tag resolving protocol=%s nodeName=%s", protocol, nodeName)
-		return streamURL, nil
-	}
-	u2, err := url.Parse(addr)
-	if err != nil {
-		err = fmt.Errorf("node has unparsable tag!! nodeName=%s protocol=%s tag=%s", nodeName, protocol, addr)
-		glog.Error(err)
-		return "", err
-	}
-	u2.Path = u.Path
-	u2.RawQuery = u.RawQuery
-	return u2.String(), nil
 }
 
 func parsePlus(plusString string) (string, string) {
