@@ -72,7 +72,7 @@ type UploadJobPayload struct {
 	GenerateMP4           bool
 	InputFileInfo         video.InputVideo
 	SignedSourceURL       string
-	InFallbackMode        bool 
+	InFallbackMode        bool
 }
 
 // UploadJobResult is the object returned by the successful execution of an
@@ -248,6 +248,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 			}
 			return false
 		}(p.ForceMP4, p.AutoMP4, p.InputFileInfo.Duration)
+
 		log.AddContext(si.RequestID, "new_source_url", newSourceURL)
 		log.AddContext(si.RequestID, "signed_url", signedURL)
 
@@ -330,6 +331,9 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		pipeline = "aws-mediaconvert"
 	}
 
+	videoTrack, _ := p.InputFileInfo.GetTrack(video.TrackTypeVideo)
+	audioTrack, _ := p.InputFileInfo.GetTrack(video.TrackTypeAudio)
+
 	si := &JobInfo{
 		UploadJobPayload: p,
 		StreamName:       streamName,
@@ -345,6 +349,8 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		transcodedSegments:    0,
 		targetSegmentSizeSecs: p.TargetSegmentSizeSecs,
 		catalystRegion:        os.Getenv("MY_REGION"),
+		sourceCodecVideo:      videoTrack.Codec,
+		sourceCodecAudio:      audioTrack.Codec,
 	}
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 
