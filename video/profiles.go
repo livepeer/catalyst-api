@@ -32,7 +32,7 @@ func (i InputVideo) GetTrack(trackType string) (InputTrack, error) {
 			return t, nil
 		}
 	}
-	return InputTrack{}, fmt.Errorf("no video tracks found")
+	return InputTrack{}, fmt.Errorf("no '%s' tracks found", trackType)
 }
 
 type VideoTrack struct {
