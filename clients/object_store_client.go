@@ -36,7 +36,7 @@ func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 
 	if err != nil {
 		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(url, "read").Inc()
-		return nil, fmt.Errorf("failed to read from OS URL %q: %s", log.RedactURL(osURL), err)
+		return nil, fmt.Errorf("failed to read from OS URL %q: %w", log.RedactURL(osURL), err)
 	}
 
 	duration := time.Since(start)
