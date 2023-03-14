@@ -72,6 +72,7 @@ type UploadJobPayload struct {
 	GenerateMP4           bool
 	InputFileInfo         video.InputVideo
 	SignedSourceURL       string
+	InFallbackMode        bool 
 }
 
 // UploadJobResult is the object returned by the successful execution of an
@@ -277,6 +278,7 @@ func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 		go recovered(func() (t bool, e error) {
 			success := <-c.startOneUploadJob(p, c.pipeMist, true, true)
 			if !success {
+				p.InFallbackMode = true
 				c.startOneUploadJob(p, c.pipeExternal, true, false)
 			}
 			return
@@ -495,8 +497,9 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
                             "source_bytes_count",
                             "source_duration",
                             "source_url",
-                            "target_url"
-                            ) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`
+                            "target_url",
+                            "in_fallback_mode"
+                            ) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`
 	_, err := c.MetricsDB.Exec(
 		insertDynStmt,
 		time.Now().Unix(),
@@ -515,6 +518,7 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
 		job.sourceDurationMs,
 		log.RedactURL(job.SourceFile),
 		targetURL,
+		job.InFallbackMode,
 	)
 	if err != nil {
 		log.LogError(job.RequestID, "error writing postgres metrics", err)

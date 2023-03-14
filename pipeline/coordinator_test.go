@@ -408,7 +408,7 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 
 	dbMock.
 		ExpectExec("insert into \"vod_completed\".*").
-		WithArgs(sqlmock.AnyArg(), 0, sqlmock.AnyArg(), "vid codec", "audio codec", "mist", "test region", "completed", 1, sqlmock.AnyArg(), 2, 3, 4, 5, sourceFile, "s3+https://user:xxxxx@storage.google.com/bucket/key").
+		WithArgs(sqlmock.AnyArg(), 0, sqlmock.AnyArg(), "vid codec", "audio codec", "mist", "test region", "completed", 1, sqlmock.AnyArg(), 2, 3, 4, 5, sourceFile, "s3+https://user:xxxxx@storage.google.com/bucket/key", false).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	coord.StartUploadJob(job)
@@ -475,7 +475,7 @@ func Test_ProbeErrors(t *testing.T) {
 		{
 			name:        "audio only",
 			assetType:   "audio",
-			expectedErr: "error copying input to storage: no video track found in input video: no video tracks found",
+			expectedErr: "error copying input to storage: no video track found in input video: no 'video' tracks found",
 		},
 		{
 			name:        "filesize greater than max",
