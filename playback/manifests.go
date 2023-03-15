@@ -24,7 +24,7 @@ type PlaybackRequest struct {
 	AccessKey  string
 }
 
-func Manifest(req PlaybackRequest) ([]byte, error) {
+func Manifest(req PlaybackRequest) (io.Reader, error) {
 	if req.AccessKey == "" {
 		return nil, fmt.Errorf("invalid request: %w", caterrs.EmptyAccessKeyError)
 	}
@@ -69,7 +69,7 @@ func Manifest(req PlaybackRequest) ([]byte, error) {
 		}
 	}
 
-	return p.Encode().Bytes(), nil
+	return p.Encode(), nil
 }
 
 func appendAccessKey(uri, accessKey string) (string, error) {

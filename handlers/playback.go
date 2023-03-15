@@ -37,8 +37,12 @@ func ManifestHandler() httprouter.Handle {
 			handleError(err, req, requestID, w)
 			return
 		}
+
 		w.Header().Set("content-type", "application/x-mpegurl")
-		writeResponse(req, requestID, w, manifest)
+		_, err = io.Copy(w, manifest)
+		if err != nil {
+			log.LogError(requestID, "failed to write response", err)
+		}
 	}
 }
 
@@ -93,12 +97,5 @@ func handleError(err error, req *http.Request, requestID string, w http.Response
 		catErrs.WriteHTTPUnauthorized(w, "denied", nil)
 	default:
 		catErrs.WriteHTTPInternalServerError(w, "internal server error", nil)
-	}
-}
-
-func writeResponse(req *http.Request, requestID string, w http.ResponseWriter, b []byte) {
-	_, err := w.Write(b)
-	if err != nil {
-		log.LogError(requestID, "failed to write response", err, "url", req.URL)
 	}
 }
