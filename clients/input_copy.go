@@ -18,7 +18,7 @@ import (
 	"github.com/livepeer/go-tools/drivers"
 )
 
-const MAX_COPY_FILE_DURATION = 30 * time.Minute
+const MAX_COPY_FILE_DURATION = 4 * time.Hour
 const PresignDuration = 24 * time.Hour
 
 type InputCopier interface {
@@ -142,4 +142,26 @@ type StubInputCopy struct{}
 
 func (s *StubInputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL) (inputVideoProbe video.InputVideo, signedURL string, err error) {
 	return video.InputVideo{}, "", nil
+}
+
+// Helper method to set the file copy timeout dynamically based on the size of what we're copying
+func CalculateFileCopyTimeout(fileSizeBytes int) time.Duration {
+	// We'll always set at least this conservative timeout to account for slow connections, regardless of file size
+	minTimeout := 1 * time.Hour
+
+	// Anything that takes this long has probably gone wrong (regardless of input size) and is taking up server/network resources
+	maxTimeout := 8 * time.Hour
+
+	// Use a conservative formula of 1Gb == 30 minutes
+	fileSizeGigabytes := fileSizeBytes / 1024 / 1024
+	calculatedTimeout := time.Duration(fileSizeGigabytes*30) * time.Minute
+
+	if minTimeout > calculatedTimeout {
+		return minTimeout
+	}
+	if maxTimeout < calculatedTimeout {
+		return maxTimeout
+	}
+
+	return calculatedTimeout
 }
