@@ -1,7 +1,6 @@
 package playback
 
 import (
-	"fmt"
 	"io"
 	"net/url"
 	"os"
@@ -76,7 +75,6 @@ func TestManifest(t *testing.T) {
 				require.ErrorContains(t, err, tt.expectedErr)
 			} else {
 				require.NoError(t, err)
-				fmt.Println(got)
 				expectedFile, err := os.ReadFile(path.Join(wd, "../test/fixtures/responses", tt.expected))
 				require.NoError(t, err)
 				gotBytes, err := io.ReadAll(got)
