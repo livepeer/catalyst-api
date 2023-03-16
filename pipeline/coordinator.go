@@ -262,6 +262,7 @@ func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 		strategy = p.PipelineStrategy
 	}
 	strategy = checkMistCompatibleCodecs(strategy, p.InputFileInfo)
+	log.AddContext(p.RequestID, "strategy", strategy)
 
 	switch strategy {
 	case StrategyCatalystDominance:
@@ -280,6 +281,7 @@ func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 			success := <-c.startOneUploadJob(p, c.pipeMist, true, true)
 			if !success {
 				p.InFallbackMode = true
+				log.Log(p.RequestID, "Entering fallback pipeline")
 				c.startOneUploadJob(p, c.pipeExternal, true, false)
 			}
 			return
