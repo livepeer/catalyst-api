@@ -167,6 +167,10 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			}
 
 			// b. create a single .ts file for a given rendition by concatenating all segments in order
+			if rendition == "low-bitrate" {
+				// skip mp4 generation for low-bitrate profile
+				continue
+			}
 			concatTsFileName := filepath.Join(TRANSMUX_STORAGE_DIR, transcodeRequest.RequestID+"_"+rendition+".ts")
 			defer os.Remove(concatTsFileName)
 			totalBytes, err := video.ConcatTS(concatTsFileName, segments)
