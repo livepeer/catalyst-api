@@ -18,6 +18,14 @@ import (
 var maxRetryInterval = 5 * time.Second
 
 func DownloadOSURL(osURL string) (io.ReadCloser, error) {
+	fileInfoReader, err := GetOSURL(osURL)
+	if err != nil {
+		return nil, err
+	}
+	return fileInfoReader.Body, nil
+}
+
+func GetOSURL(osURL string) (*drivers.FileInfoReader, error) {
 	storageDriver, err := drivers.ParseOSURL(osURL, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse OS URL %q: %s", log.RedactURL(osURL), err)
@@ -44,7 +52,7 @@ func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 
 	metrics.Metrics.ObjectStoreClient.RequestDuration.WithLabelValues(url, "read").Observe(duration.Seconds())
 
-	return fileInfoReader.Body, nil
+	return fileInfoReader, nil
 }
 
 func UploadToOSURL(osURL, filename string, data io.Reader, timeout time.Duration) error {

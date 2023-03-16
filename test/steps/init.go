@@ -20,6 +20,11 @@ func (s *StepContext) StartStudioAPI(listen string) error {
 	router.POST("/cb", func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 		_, _ = io.WriteString(w, "")
 	})
+	router.POST("/api/access-control/gate", func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+		s.GateAPICallCount++
+		w.Header().Set("Cache-Control", "max-age=600, stale-while-revalidate=900")
+		w.WriteHeader(s.GateAPIStatus)
+	})
 
 	s.Studio = http.Server{Addr: listen, Handler: router}
 	go func() {

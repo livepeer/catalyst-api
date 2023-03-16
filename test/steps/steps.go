@@ -19,6 +19,8 @@ type StepContext struct {
 	Mist                  http.Server
 	Studio                http.Server
 	MinioAdmin            *madmin.AdminClient
+	GateAPIStatus         int
+	GateAPICallCount      int
 }
 
 var mistPushStartURLMutex sync.Mutex

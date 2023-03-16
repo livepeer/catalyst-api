@@ -177,6 +177,22 @@ func (s *StepContext) SetRequestPayload(payload string) {
 	s.pendingRequestPayload = payload
 }
 
+func (s *StepContext) SetGateAPIResponse(allow string) {
+	s.GateAPICallCount = 0
+	if allow == "allow" {
+		s.GateAPIStatus = 200
+		return
+	}
+	s.GateAPIStatus = 401
+}
+
+func (s *StepContext) CheckGateAPICallCount(expectedCount int) error {
+	if s.GateAPICallCount != expectedCount {
+		return fmt.Errorf("expected %d Gate API calls, got %d", expectedCount, s.GateAPICallCount)
+	}
+	return nil
+}
+
 func (s *StepContext) CheckRecordedMetrics(metricsType string) error {
 	var url = s.BaseInternalURL + "/metrics"
 

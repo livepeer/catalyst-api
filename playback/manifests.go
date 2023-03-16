@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"path"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -13,29 +13,43 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	caterrs "github.com/livepeer/catalyst-api/errors"
+	"github.com/livepeer/go-tools/drivers"
 )
 
-const ManifestKeyParam = "tkn"
+const KeyParam = "accessKey"
 
-type PlaybackRequest struct {
+type Request struct {
 	RequestID  string
 	PlaybackID string
 	File       string
 	AccessKey  string
 }
 
-func Manifest(req PlaybackRequest) (io.Reader, error) {
+type Response struct {
+	Body        io.ReadCloser
+	ContentType string
+}
+
+func Handle(req Request) (*Response, error) {
+	f, err := osFetch(req.PlaybackID, req.File)
+	if err != nil {
+		return nil, err
+	}
+
+	if !strings.HasSuffix(req.File, ".m3u8") {
+		return &Response{
+			Body:        f.Body,
+			ContentType: f.ContentType,
+		}, nil
+	}
+	// don't close the body for non-manifest files where we return above as we simply proxying the body back
+	defer f.Body.Close()
+
 	if req.AccessKey == "" {
 		return nil, fmt.Errorf("invalid request: %w", caterrs.EmptyAccessKeyError)
 	}
 
-	reader, err := osFetch(req.PlaybackID, req.File)
-	if err != nil {
-		return nil, err
-	}
-	defer reader.Close()
-
-	p, listType, err := m3u8.DecodeFrom(reader, true)
+	p, listType, err := m3u8.DecodeFrom(f.Body, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read manifest contents: %w", err)
 	}
@@ -52,7 +66,6 @@ func Manifest(req PlaybackRequest) (io.Reader, error) {
 			}
 		}
 	case m3u8.MEDIA:
-		dir := path.Dir(req.File)
 		mediaPl := p.(*m3u8.MediaPlaylist)
 		for _, segment := range mediaPl.Segments {
 			if segment == nil {
@@ -62,14 +75,13 @@ func Manifest(req PlaybackRequest) (io.Reader, error) {
 			if err != nil {
 				return nil, err
 			}
-			if path.IsAbs(segment.URI) {
-				continue
-			}
-			segment.URI = path.Join("/media/hls", req.PlaybackID, dir, segment.URI)
 		}
 	}
 
-	return p.Encode(), nil
+	return &Response{
+		Body:        io.NopCloser(p.Encode()),
+		ContentType: f.ContentType,
+	}, nil
 }
 
 func appendAccessKey(uri, accessKey string) (string, error) {
@@ -78,20 +90,20 @@ func appendAccessKey(uri, accessKey string) (string, error) {
 		return "", fmt.Errorf("failed to parse variant uri: %w", err)
 	}
 	queryParams := variantURI.Query()
-	queryParams.Add(ManifestKeyParam, accessKey)
+	queryParams.Add(KeyParam, accessKey)
 	variantURI.RawQuery = queryParams.Encode()
 	return variantURI.String(), nil
 }
 
-func osFetch(playbackID, file string) (io.ReadCloser, error) {
+func osFetch(playbackID, file string) (*drivers.FileInfoReader, error) {
 	osURL := config.PrivateBucketURL.JoinPath("hls").JoinPath(playbackID).JoinPath(file)
-	reader, err := clients.DownloadOSURL(osURL.String())
+	f, err := clients.GetOSURL(osURL.String())
 	if err != nil {
 		var awsErr awserr.Error
 		if errors.As(err, &awsErr) && awsErr.Code() == s3.ErrCodeNoSuchKey {
 			return nil, fmt.Errorf("invalid request: %w %w", caterrs.ObjectNotFoundError, err)
 		}
-		return nil, fmt.Errorf("failed to get master manifest: %w", err)
+		return nil, fmt.Errorf("failed to get file for playback: %w", err)
 	}
-	return reader, nil
+	return f, nil
 }
