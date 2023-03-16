@@ -43,6 +43,10 @@ func WriteHTTPUnsupportedMediaType(w http.ResponseWriter, msg string, err error)
 	return writeHttpError(w, msg, http.StatusUnsupportedMediaType, err)
 }
 
+func WriteHTTPNotFound(w http.ResponseWriter, msg string, err error) APIError {
+	return writeHttpError(w, msg, http.StatusNotFound, err)
+}
+
 func WriteHTTPInternalServerError(w http.ResponseWriter, msg string, err error) APIError {
 	return writeHttpError(w, msg, http.StatusInternalServerError, err)
 }
@@ -71,3 +75,9 @@ func Unretriable(err error) error {
 func IsUnretriable(err error) bool {
 	return errors.As(err, &UnretriableError{})
 }
+
+var (
+	EmptyAccessKeyError = errors.New("EmptyAccessKeyError")
+	ObjectNotFoundError = errors.New("ObjectNotFoundError")
+	UnauthorisedError   = errors.New("UnauthorisedError")
+)

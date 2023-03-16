@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -142,6 +143,18 @@ func (s *StepContext) CheckHTTPResponseBody(expectedBody string) error {
 	}
 
 	return nil
+}
+
+func (s *StepContext) CheckHTTPResponseBodyFromFile(expectedBodyFilePath string) error {
+	file, err := os.Open(path.Join("fixtures", expectedBodyFilePath))
+	if err != nil {
+		return err
+	}
+	bytes, err := io.ReadAll(file)
+	if err != nil {
+		return err
+	}
+	return s.CheckHTTPResponseBody(string(bytes))
 }
 
 func (s *StepContext) SetRequestPayload(payload string) {
