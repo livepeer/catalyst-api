@@ -3,6 +3,7 @@ package video
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -167,10 +168,9 @@ type OutputVideoFile struct {
 }
 
 func PopulateOutput(probe Prober, outputURL string, videoFile OutputVideoFile) (OutputVideoFile, error) {
-	outputVideoProbe, err := probe.ProbeFile(outputURL)
+	outputVideoProbe, err := runProbe(probe, outputURL)
 	if err != nil {
 		return OutputVideoFile{}, fmt.Errorf("error probing output file from S3: %w", err)
-
 	}
 	videoFile.SizeBytes = outputVideoProbe.SizeBytes
 	videoTrack, err := outputVideoProbe.GetTrack(TrackTypeVideo)
@@ -181,4 +181,17 @@ func PopulateOutput(probe Prober, outputURL string, videoFile OutputVideoFile) (
 	videoFile.Width = videoTrack.Width
 	videoFile.Bitrate = videoTrack.Bitrate
 	return videoFile, nil
+}
+
+func runProbe(probe Prober, outputURL string) (InputVideo, error) {
+	outputVideoProbe, err := probe.ProbeFile(outputURL)
+	if err == nil {
+		return outputVideoProbe, nil
+	}
+
+	// ignore this probing error if found and re-run with fatal loglevel to obtain the probe data
+	if strings.Contains(strings.ToLower(err.Error()), "parametric stereo signaled to be not-present but was found in the bitstream") {
+		return probe.ProbeFile(outputURL, "-loglevel", "fatal")
+	}
+	return InputVideo{}, err
 }

@@ -13,17 +13,20 @@ import (
 )
 
 type Prober interface {
-	ProbeFile(url string) (InputVideo, error)
+	ProbeFile(url string, ffProbeOptions ...string) (InputVideo, error)
 }
 
 type Probe struct{}
 
-func (p Probe) ProbeFile(url string) (iv InputVideo, err error) {
+func (p Probe) ProbeFile(url string, ffProbeOptions ...string) (iv InputVideo, err error) {
+	if len(ffProbeOptions) == 0 {
+		ffProbeOptions = []string{"-loglevel", "error"}
+	}
 	var data *ffprobe.ProbeData
 	operation := func() error {
 		probeCtx, probeCancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer probeCancel()
-		data, err = ffprobe.ProbeURL(probeCtx, url, "-loglevel", "error")
+		data, err = ffprobe.ProbeURL(probeCtx, url, ffProbeOptions...)
 		return err
 	}
 
