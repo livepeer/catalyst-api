@@ -311,22 +311,22 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 
 	// External provider pipeline will trigger the initial preparing trigger as well
 	msg = requireReceive(t, callbacks, 1*time.Second)
-	require.Equal("123", msg.RequestID)
+	require.Equal("fb_123", msg.RequestID)
 	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 
 	meconJob := requireReceive(t, externalCalls, 1*time.Second)
-	require.Equal("123", meconJob.RequestID)
-	require.Equal(mistJob.StreamName, meconJob.StreamName)
+	require.Equal("fb_123", meconJob.RequestID)
+	require.Equal(config.SEGMENTING_PREFIX+"fb_123", meconJob.StreamName)
 
 	// Check that the progress reported in the fallback handler is still reported
 	msg = requireReceive(t, callbacks, 1*time.Second)
 	require.NotZero(msg.URL)
-	require.Equal("123", msg.RequestID)
+	require.Equal("fb_123", msg.RequestID)
 	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 	require.Equal(clients.OverallCompletionRatio(clients.TranscodeStatusPreparing, 0.2), msg.CompletionRatio)
 
 	msg = requireReceive(t, callbacks, 1*time.Second)
-	require.Equal("123", msg.RequestID)
+	require.Equal("fb_123", msg.RequestID)
 	require.Equal(clients.TranscodeStatusCompleted, msg.Status)
 
 	time.Sleep(1 * time.Second)
