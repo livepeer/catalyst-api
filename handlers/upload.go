@@ -129,6 +129,10 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	var requestID = config.RandomTrailer(8)
 	log.AddContext(requestID, "source", uploadVODRequest.Url)
 
+	if err := CheckSourceURLValid(uploadVODRequest.Url); err != nil {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+	}
+
 	// If the segment size isn't being overridden then use the default
 	if uploadVODRequest.TargetSegmentSizeSecs <= 0 {
 		uploadVODRequest.TargetSegmentSizeSecs = config.DefaultSegmentSizeSecs
@@ -196,4 +200,21 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	}
 
 	return true, errors.APIError{}
+}
+
+func CheckSourceURLValid(sourceURL string) error {
+	if sourceURL == "" {
+		return fmt.Errorf("empty source URL")
+	}
+
+	u, err := url.Parse(sourceURL)
+	if err != nil {
+		return err
+	}
+
+	if strings.HasSuffix(u.Hostname(), ".local") {
+		return fmt.Errorf(".local domains are not valid")
+	}
+
+	return nil
 }
