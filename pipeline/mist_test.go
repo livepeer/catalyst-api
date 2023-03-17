@@ -1,9 +1,11 @@
 package pipeline
 
 import (
+	"fmt"
 	"net/url"
 	"testing"
 
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/stretchr/testify/require"
 )
@@ -72,4 +74,70 @@ func TestItConvertsLocalPathToMistTargetCorrectly(t *testing.T) {
 		"/a/b/c/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10",
 		mistTargetURL,
 	)
+}
+
+func TestSegmentedVersusSourceDurationComparison(t *testing.T) {
+	type TestCase struct {
+		Name           string
+		SourceDuration int64
+		OutputDuration int64
+		ShouldSucceed  bool
+	}
+
+	testCases := []TestCase{
+		{
+			Name:           "Segmented Output Is Shorter Than Source",
+			SourceDuration: 1000,
+			OutputDuration: 1,
+			ShouldSucceed:  false,
+		},
+		{
+			Name:           "Segmented Output Is Longer Than Source",
+			SourceDuration: 1000,
+			OutputDuration: 1900,
+			ShouldSucceed:  true,
+		},
+		{
+			Name:           "Segmented Output Is Much Longer Than Source",
+			SourceDuration: 1000,
+			OutputDuration: 2500,
+			ShouldSucceed:  false,
+		},
+		{
+			Name:           "Segmented Output Is Slightly Shorter Than Source",
+			SourceDuration: 1000,
+			OutputDuration: 990,
+			ShouldSucceed:  true,
+		},
+		{
+			Name:           "Segmented Output Is Equal To Source",
+			SourceDuration: 1000,
+			OutputDuration: 1000,
+			ShouldSucceed:  true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.Name, func(t *testing.T) {
+			err := CheckSegmentedDurationWithinBounds(
+				clients.MistStreamInfo{
+					Meta: clients.MistStreamInfoMetadata{
+						Tracks: map[string]clients.MistStreamInfoTrack{
+							"video": {
+								Lastms: testCase.SourceDuration,
+							},
+						},
+					},
+				},
+				testCase.OutputDuration,
+			)
+
+			if testCase.ShouldSucceed {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, fmt.Sprintf("input video duration (%dms) does not match segmented video duration (%dms)", testCase.SourceDuration, testCase.OutputDuration))
+			}
+
+		})
+	}
 }
