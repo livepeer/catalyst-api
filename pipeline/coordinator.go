@@ -324,6 +324,9 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		// this will prevent the callbacks for this job from actually being sent
 		p.CallbackURL = ""
 	}
+	if p.InFallbackMode {
+		p.RequestID = fmt.Sprintf("fb_%s", p.RequestID)
+	}
 	streamName := config.SegmentingStreamName(p.RequestID)
 	log.AddContext(p.RequestID, "stream_name", streamName)
 	log.AddContext(p.RequestID, "handler", handler.Name())
