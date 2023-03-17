@@ -2,7 +2,6 @@ package pipeline
 
 import (
 	"fmt"
-	"math"
 	"net/url"
 	"path"
 	"path/filepath"
@@ -128,15 +127,9 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 	}
 
 	// Compare duration of source stream to the segmented stream to ensure the input file was completely segmented before attempting to transcode
-	var inputVideoLengthMillis int64
-	for track, trackInfo := range streamInfo.Meta.Tracks {
-		if strings.Contains(track, "video") {
-			inputVideoLengthMillis = trackInfo.Lastms
-		}
-	}
-	if math.Abs(float64(inputVideoLengthMillis-p.StreamMediaDurationMillis)) > 500 {
-		log.Log(requestID, "Input video duration does not match segmented video duration", "input_duration_ms", inputVideoLengthMillis, "segmented_duration_ms", p.StreamMediaDurationMillis)
-		return nil, fmt.Errorf("input video duration (%dms) does not match segmented video duration (%dms)", inputVideoLengthMillis, p.StreamMediaDurationMillis)
+	if err := CheckSegmentedDurationWithinBounds(streamInfo, p.StreamMediaDurationMillis); err != nil {
+		log.Log(requestID, "Segmented Video duration is not within acceptable bounds vs. source duration: %s", err)
+		return nil, fmt.Errorf("segmented Video duration is not within acceptable bounds vs. source duration: %s", err)
 	}
 
 	transcodeRequest := transcode.TranscodeSegmentRequest{
@@ -214,17 +207,6 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 
 	job.transcodedSegments = transcodedSegments
 
-	// TODO: CreateDTSH is hardcoded to call MistInMP4 - the call below requires a call to MistInHLS instead.
-	//	 Update this logic later as it's required for Mist playback.
-	/*
-		// prepare .dtsh headers for all rendition playlists
-		for _, output := range outputs {
-			if err := d.MistClient.CreateDTSH(output.Manifest); err != nil {
-				// should not block the ingestion flow or make it fail on error.
-				log.LogError(requestID, "CreateDTSH() for rendition failed", err, "destination", output.Manifest)
-			}
-		}
-	*/
 	return &HandlerOutput{
 		Result: &UploadJobResult{
 			InputVideo: inputInfo,
@@ -269,4 +251,22 @@ func targetURLToMistTargetURL(targetURL url.URL, targetSegmentLengthSecs int64) 
 	segmentingTargetURL.RawQuery = queryValues.Encode()
 
 	return segmentingTargetURL.String(), nil
+}
+
+func CheckSegmentedDurationWithinBounds(streamInfo clients.MistStreamInfo, segmentedDurationMillis int64) error {
+	var inputVideoLengthMillis int64
+	for track, trackInfo := range streamInfo.Meta.Tracks {
+		if strings.Contains(track, "video") {
+			inputVideoLengthMillis = trackInfo.Lastms
+		}
+	}
+
+	// We're more lenient (2x video length) if the segmented video is longer than the input
+	// If the output is shorter then it's more likely to be representative of an issue
+	if float64(inputVideoLengthMillis-segmentedDurationMillis) > 500 ||
+		float64(inputVideoLengthMillis-segmentedDurationMillis) < -float64(inputVideoLengthMillis) {
+		return fmt.Errorf("input video duration (%dms) does not match segmented video duration (%dms)", inputVideoLengthMillis, segmentedDurationMillis)
+	}
+
+	return nil
 }
