@@ -14,6 +14,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/glog"
+	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/pquerna/cachecontrol/cacheobject"
 )
 
@@ -36,17 +38,21 @@ type PlaybackAccessControlRequest struct {
 	Stream string `json:"stream"`
 }
 
+type AccessControlHandlersCollection struct {
+	Config config.Cli
+}
+
 const UserNewTrigger = "USER_NEW"
 
-func TriggerHandler(gateURL string) http.Handler {
+func (c *AccessControlHandlersCollection) TriggerHandler() httprouter.Handle {
 	playbackAccessControl := PlaybackAccessControl{
-		gateURL,
+		c.Config.GateURL,
 		&http.Client{},
 		make(map[string]map[string]*PlaybackAccessControlEntry),
 		sync.RWMutex{},
 	}
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		payload, err := io.ReadAll(r.Body)
 
 		if err != nil {
@@ -67,7 +73,7 @@ func TriggerHandler(gateURL string) http.Handler {
 			return
 		}
 
-	})
+	}
 }
 
 func handleUserNew(ac *PlaybackAccessControl, payload []byte) []byte {
