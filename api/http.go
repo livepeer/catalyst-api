@@ -52,7 +52,7 @@ func NewCatalystAPIRouter(cli config.Cli, bal balancer.Balancer, c cluster.Clust
 	}
 
 	// Handling incoming playback redirection requests
-	router.GET("/ok", withLogging(geoHandlers.RedirectHandler()))
+	router.GET("/", withLogging(geoHandlers.RedirectHandler()))
 
 	return router
 }
