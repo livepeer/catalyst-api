@@ -10,6 +10,7 @@ import (
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers"
+	"github.com/livepeer/catalyst-api/handlers/accesscontrol"
 	"github.com/livepeer/catalyst-api/handlers/geolocation"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/log"
@@ -58,6 +59,7 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	}
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
 	mistCallbackHandlers := &misttriggers.MistCallbackHandlersCollection{VODEngine: vodEngine}
+	accessControlHandlers := &accesscontrol.AccessControlHandlersCollection{Config: cli}
 
 	// Simple endpoint for healthchecks
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
@@ -67,6 +69,9 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 
 	// Endpoint for handling STREAM_SOURCE requests
 	router.POST("/STREAM_SOURCE", withLogging(geoHandlers.StreamSourceHandler()))
+
+	// Endpoint for handling USER_NEW requests
+	router.POST("/USER_NEW", withLogging(accessControlHandlers.TriggerHandler()))
 
 	// Public Catalyst API
 	router.POST("/api/vod",
