@@ -46,38 +46,6 @@ func ManifestHandler() httprouter.Handle {
 	}
 }
 
-func MediaHandler() httprouter.Handle {
-	return func(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
-		var requestID = config.RandomTrailer(8)
-		err := req.ParseForm()
-		if err != nil {
-			handleError(err, req, requestID, w)
-			return
-		}
-
-		key := req.Form.Get(playback.ManifestKeyParam)
-		if err := checkKey(key); err != nil {
-			handleError(err, req, requestID, w)
-			return
-		}
-		media, err := playback.Media(playback.PlaybackRequest{
-			RequestID:  requestID,
-			PlaybackID: params.ByName("playbackID"),
-			File:       params.ByName("file"),
-		})
-		if err != nil {
-			handleError(err, req, requestID, w)
-			return
-		}
-		defer media.Close()
-
-		_, err = io.Copy(w, media)
-		if err != nil {
-			log.LogError(requestID, "failed to write response", err)
-		}
-	}
-}
-
 // temporary hard coded check until real auth is implemented
 func checkKey(key string) error {
 	if key != "secretlpkey" {

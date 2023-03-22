@@ -57,13 +57,6 @@ func NewCatalystAPIRouter(vodEngine *pipeline.Coordinator, apiToken string) *htt
 		),
 	)
 
-	// Media endpoint
-	router.GET("/media/hls/:playbackID/*file",
-		withLogging(
-			handlers.MediaHandler(),
-		),
-	)
-
 	// Endpoint to receive "Triggers" (callbacks) from Mist
 	router.POST("/api/mist/trigger", withLogging(mistCallbackHandlers.Trigger()))
 
