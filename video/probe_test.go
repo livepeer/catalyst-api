@@ -51,14 +51,20 @@ func TestItRejectsWhenFormatMissing(t *testing.T) {
 	require.ErrorContains(t, err, "format information missing")
 }
 
-func TestItRejectsWhenVideoBitrateMissing(t *testing.T) {
-	_, err := parseProbeOutput(&ffprobe.ProbeData{
+func TestDefaultBitrate(t *testing.T) {
+	iv, err := parseProbeOutput(&ffprobe.ProbeData{
 		Streams: []*ffprobe.Stream{
 			{
 				CodecType: "video",
+				BitRate:   "",
 			},
 		},
-		Format: &ffprobe.Format{},
+		Format: &ffprobe.Format{
+			Size: "1",
+		},
 	})
-	require.ErrorContains(t, err, "bitrate field not found")
+	require.NoError(t, err)
+	track, err := iv.GetTrack(TrackTypeVideo)
+	require.NoError(t, err)
+	require.Equal(t, DefaultProfile720p.Bitrate, track.Bitrate)
 }

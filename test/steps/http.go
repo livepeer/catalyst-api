@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -103,7 +104,7 @@ func (s *StepContext) CheckHTTPResponseCodeAndBody(code int, expectedBody string
 }
 
 func (s *StepContext) CheckMist(segmentSize int) error {
-	timeoutSecs := 3
+	timeoutSecs := 5
 	for counter := 0; counter < timeoutSecs; counter++ {
 		urls := s.GetMistPushStartURLs()
 		if len(urls) > 1 {
@@ -142,6 +143,18 @@ func (s *StepContext) CheckHTTPResponseBody(expectedBody string) error {
 	}
 
 	return nil
+}
+
+func (s *StepContext) CheckHTTPResponseBodyFromFile(expectedBodyFilePath string) error {
+	file, err := os.Open(path.Join("fixtures", expectedBodyFilePath))
+	if err != nil {
+		return err
+	}
+	bytes, err := io.ReadAll(file)
+	if err != nil {
+		return err
+	}
+	return s.CheckHTTPResponseBody(string(bytes))
 }
 
 func (s *StepContext) SetRequestPayload(payload string) {

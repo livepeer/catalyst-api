@@ -34,12 +34,17 @@ const MaxSegmentSizeSecs = 20
 // the future.
 const MAX_JOBS_IN_FLIGHT = 8
 
+// The maximum allowed input file size
+const MaxInputFileSizeBytes = 30 * 1024 * 1024 * 1024 // 30 GiB
+
 var TranscodingParallelJobs int = 2
 
 var TranscodingParallelSleep time.Duration = 713 * time.Millisecond
 
 var DownloadOSURLRetries uint64 = 10
 
-var ImportIPFSGatewayURLs []*url.URL = []*url.URL{}
+var ImportIPFSGatewayURLs []*url.URL
 
-var ImportArweaveGatewayURLs []*url.URL = []*url.URL{}
+var ImportArweaveGatewayURLs []*url.URL
+
+var PrivateBucketURL *url.URL

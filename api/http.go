@@ -50,15 +50,10 @@ func NewCatalystAPIRouter(vodEngine *pipeline.Coordinator, apiToken string) *htt
 		),
 	)
 
-	router.POST("/api/transcode/file",
+	// Manifest endpoint
+	router.GET("/asset/hls/:playbackID/*file",
 		withLogging(
-			withAuth(
-				apiToken,
-				withCapacityChecking(
-					vodEngine,
-					catalystApiHandlers.TranscodeSegment(),
-				),
-			),
+			handlers.ManifestHandler(),
 		),
 	)
 

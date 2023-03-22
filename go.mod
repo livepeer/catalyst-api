@@ -1,20 +1,21 @@
 module github.com/livepeer/catalyst-api
 
-go 1.19
+go 1.20
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
-	github.com/aws/aws-sdk-go v1.44.208
+	github.com/aws/aws-sdk-go v1.44.214
 	github.com/cenkalti/backoff/v4 v4.2.0
 	github.com/cucumber/godog v0.12.5
 	github.com/google/uuid v1.3.0
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/lib/pq v1.10.7
-	github.com/livepeer/go-tools v0.2.8
+	github.com/livepeer/go-tools v0.2.9
 	github.com/livepeer/livepeer-data v0.6.4
 	github.com/minio/madmin-go v1.7.5
 	github.com/prometheus/client_golang v1.14.0
 	github.com/stretchr/testify v1.8.2
+	github.com/u2takey/ffmpeg-go v0.4.1
 	github.com/xeipuuv/gojsonschema v1.2.0
 	golang.org/x/sync v0.1.0
 	gopkg.in/vansante/go-ffprobe.v2 v2.1.1
@@ -106,6 +107,7 @@ require (
 	github.com/tinylib/msgp v1.1.7-0.20220719154719-f3635b96e483 // indirect
 	github.com/tklauser/go-sysconf v0.3.11 // indirect
 	github.com/tklauser/numcpus v0.6.0 // indirect
+	github.com/u2takey/go-utils v0.3.1 // indirect
 	github.com/whyrusleeping/cbor-gen v0.0.0-20230126041949-52956bd4c9aa // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	go.opencensus.io v0.23.0 // indirect

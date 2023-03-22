@@ -311,22 +311,22 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 
 	// External provider pipeline will trigger the initial preparing trigger as well
 	msg = requireReceive(t, callbacks, 1*time.Second)
-	require.Equal("123", msg.RequestID)
+	require.Equal("fb_123", msg.RequestID)
 	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 
 	meconJob := requireReceive(t, externalCalls, 1*time.Second)
-	require.Equal("123", meconJob.RequestID)
-	require.Equal(mistJob.StreamName, meconJob.StreamName)
+	require.Equal("fb_123", meconJob.RequestID)
+	require.Equal(config.SEGMENTING_PREFIX+"fb_123", meconJob.StreamName)
 
 	// Check that the progress reported in the fallback handler is still reported
 	msg = requireReceive(t, callbacks, 1*time.Second)
 	require.NotZero(msg.URL)
-	require.Equal("123", msg.RequestID)
+	require.Equal("fb_123", msg.RequestID)
 	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 	require.Equal(clients.OverallCompletionRatio(clients.TranscodeStatusPreparing, 0.2), msg.CompletionRatio)
 
 	msg = requireReceive(t, callbacks, 1*time.Second)
-	require.Equal("123", msg.RequestID)
+	require.Equal("fb_123", msg.RequestID)
 	require.Equal(clients.TranscodeStatusCompleted, msg.Status)
 
 	time.Sleep(1 * time.Second)
@@ -408,7 +408,7 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 
 	dbMock.
 		ExpectExec("insert into \"vod_completed\".*").
-		WithArgs(sqlmock.AnyArg(), 0, sqlmock.AnyArg(), "vid codec", "audio codec", "mist", "test region", "completed", 1, sqlmock.AnyArg(), 2, 3, 4, 5, sourceFile, "s3+https://user:xxxxx@storage.google.com/bucket/key").
+		WithArgs(sqlmock.AnyArg(), 0, sqlmock.AnyArg(), "vid codec", "audio codec", "mist", "test region", "completed", 1, sqlmock.AnyArg(), 2, 3, 4, 5, sourceFile, "s3+https://user:xxxxx@storage.google.com/bucket/key", false).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	coord.StartUploadJob(job)
@@ -475,12 +475,12 @@ func Test_ProbeErrors(t *testing.T) {
 		{
 			name:        "audio only",
 			assetType:   "audio",
-			expectedErr: "error copying input to storage: no video track found in input video: no video tracks found",
+			expectedErr: "error copying input to storage: no video track found in input video: no 'video' tracks found",
 		},
 		{
 			name:        "filesize greater than max",
-			size:        clients.MaxInputFileSizeBytes + 1,
-			expectedErr: "error copying input to storage: input file 10737418241 bytes was greater than 10737418240 bytes",
+			size:        config.MaxInputFileSizeBytes + 1,
+			expectedErr: "error copying input to storage: input file 32212254721 bytes was greater than 32212254720 bytes",
 		},
 		{
 			name:        "probe error",
@@ -634,7 +634,7 @@ type stubFFprobe struct {
 	Err      error
 }
 
-func (f stubFFprobe) ProbeFile(_ string) (video.InputVideo, error) {
+func (f stubFFprobe) ProbeFile(_ string, _ ...string) (video.InputVideo, error) {
 	if f.Err != nil {
 		return video.InputVideo{}, f.Err
 	}
@@ -660,4 +660,115 @@ func (f stubFFprobe) ProbeFile(_ string) (video.InputVideo, error) {
 			},
 		},
 	}, nil
+}
+
+func Test_checkMistCompatibleCodecs(t *testing.T) {
+	type args struct {
+		strategy Strategy
+		iv       video.InputVideo
+	}
+	inCompatibleVideoAndAudio := video.InputVideo{
+		Tracks: []video.InputTrack{
+			{
+				Codec: "HEVC",
+				Type:  video.TrackTypeVideo,
+			},
+			{
+				Codec: "ac-3",
+				Type:  video.TrackTypeAudio,
+			},
+		},
+	}
+	inCompatibleVideo := video.InputVideo{
+		Tracks: []video.InputTrack{
+			{
+				Codec: "HEVC",
+				Type:  video.TrackTypeVideo,
+			},
+			{
+				Codec: "aac",
+				Type:  video.TrackTypeAudio,
+			},
+		},
+	}
+	compatibleVideoAndAudio := video.InputVideo{
+		Tracks: []video.InputTrack{
+			{
+				Codec: "h264",
+				Type:  video.TrackTypeVideo,
+			},
+			{
+				Codec: "aac",
+				Type:  video.TrackTypeAudio,
+			},
+		},
+	}
+	tests := []struct {
+		name string
+		args args
+		want Strategy
+	}{
+		{
+			name: "catalyst dominance",
+			args: args{
+				strategy: StrategyCatalystDominance,
+				iv:       inCompatibleVideoAndAudio,
+			},
+			want: StrategyCatalystDominance,
+		},
+		{
+			name: "catalyst dominance",
+			args: args{
+				strategy: StrategyCatalystDominance,
+				iv:       inCompatibleVideo,
+			},
+			want: StrategyCatalystDominance,
+		},
+		{
+			name: "incompatible with mist - StrategyBackgroundMist",
+			args: args{
+				strategy: StrategyBackgroundMist,
+				iv:       inCompatibleVideoAndAudio,
+			},
+			want: StrategyExternalDominance,
+		},
+		{
+			name: "incompatible with mist - StrategyBackgroundMist",
+			args: args{
+				strategy: StrategyBackgroundMist,
+				iv:       inCompatibleVideo,
+			},
+			want: StrategyExternalDominance,
+		},
+		{
+			name: "compatible with mist - StrategyBackgroundMist",
+			args: args{
+				strategy: StrategyBackgroundMist,
+				iv:       compatibleVideoAndAudio,
+			},
+			want: StrategyBackgroundMist,
+		},
+		{
+			name: "incompatible with mist - StrategyFallbackExternal",
+			args: args{
+				strategy: StrategyFallbackExternal,
+				iv:       inCompatibleVideo,
+			},
+			want: StrategyExternalDominance,
+		},
+		{
+			name: "compatible with mist - StrategyFallbackExternal",
+			args: args{
+				strategy: StrategyFallbackExternal,
+				iv:       compatibleVideoAndAudio,
+			},
+			want: StrategyFallbackExternal,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := checkMistCompatibleCodecs(tt.args.strategy, tt.args.iv)
+			require.Equal(t, tt.want, got)
+		})
+	}
 }

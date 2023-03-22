@@ -7,9 +7,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/livepeer/catalyst-api/config"
 	xerrors "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/video"
@@ -17,7 +19,6 @@ import (
 )
 
 const MAX_COPY_FILE_DURATION = 30 * time.Minute
-const MaxInputFileSizeBytes = 10 * 1024 * 1024 * 1024 // 10 GiB
 const PresignDuration = 24 * time.Hour
 
 type InputCopier interface {
@@ -48,7 +49,7 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 	}
 	log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", osTransferURL.String())
 
-	signedURL, err = signURL(osTransferURL)
+	signedURL, err = SignURL(osTransferURL)
 	if err != nil {
 		return
 	}
@@ -61,39 +62,24 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 		return
 	}
 	log.Log(requestID, "probe succeeded", "source", inputFile.String(), "dest", osTransferURL.String())
-	videoTrack, err := inputVideoProbe.GetVideoTrack()
+	videoTrack, err := inputVideoProbe.GetTrack(video.TrackTypeVideo)
 	if err != nil {
 		err = fmt.Errorf("no video track found in input video: %w", err)
 		return
 	}
+	audioTrack, _ := inputVideoProbe.GetTrack(video.TrackTypeAudio)
 	if videoTrack.FPS <= 0 {
 		// unsupported, includes things like motion jpegs
 		err = fmt.Errorf("invalid framerate: %f", videoTrack.FPS)
 		return
 	}
-
-	if inputVideoProbe.SizeBytes > MaxInputFileSizeBytes {
-		err = fmt.Errorf("input file %d bytes was greater than %d bytes", inputVideoProbe.SizeBytes, MaxInputFileSizeBytes)
+	if inputVideoProbe.SizeBytes > config.MaxInputFileSizeBytes {
+		err = fmt.Errorf("input file %d bytes was greater than %d bytes", inputVideoProbe.SizeBytes, config.MaxInputFileSizeBytes)
 		return
 	}
+	log.Log(requestID, "probed video track:", "codec", videoTrack.Codec, "bitrate", videoTrack.Bitrate, "duration", videoTrack.DurationSec, "w", videoTrack.Width, "h", videoTrack.Height, "pix-format", videoTrack.PixelFormat, "FPS", videoTrack.FPS)
+	log.Log(requestID, "probed audio track", "codec", audioTrack.Codec, "bitrate", audioTrack.Bitrate, "duration", audioTrack.DurationSec, "channels", audioTrack.Channels)
 	return
-}
-
-func signURL(u *url.URL) (string, error) {
-	if u.Scheme == "" || u.Scheme == "file" { // not compatible with presigning
-		return u.String(), nil
-	}
-	driver, err := drivers.ParseOSURL(u.String(), true)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse OS url: %w", err)
-	}
-
-	sess := driver.NewSession("")
-	signedURL, err := sess.Presign("", PresignDuration)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate signed url: %w", err)
-	}
-	return signedURL, nil
 }
 
 func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
@@ -112,7 +98,11 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 
 		content := io.TeeReader(c, &byteAccWriter)
 
-		return UploadToOSURL(destOSBaseURL, filename, content, MAX_COPY_FILE_DURATION)
+		err = UploadToOSURL(destOSBaseURL, filename, content, MAX_COPY_FILE_DURATION)
+		if err != nil {
+			log.Log(requestID, "Copy attempt failed", "source", sourceURL, "dest", path.Join(destOSBaseURL, filename), "err", err)
+		}
+		return err
 	}, UploadRetryBackoff())
 	return
 }
