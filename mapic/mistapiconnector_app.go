@@ -132,7 +132,6 @@ type (
 	}
 )
 
-// NewMac ...
 func (mc *mac) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
