@@ -57,7 +57,7 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 
-	// Manifest endpoint
+	// Playback endpoint
 	router.GET("/asset/hls/:playbackID/*file",
 		withLogging(
 			withGatingCheck(

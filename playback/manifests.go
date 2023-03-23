@@ -23,6 +23,7 @@ type Request struct {
 	PlaybackID string
 	File       string
 	AccessKey  string
+	Range      string
 }
 
 type Response struct {
@@ -31,7 +32,7 @@ type Response struct {
 }
 
 func Handle(req Request) (*Response, error) {
-	f, err := osFetch(req.PlaybackID, req.File)
+	f, err := osFetch(req.PlaybackID, req.File, req.Range)
 	if err != nil {
 		return nil, err
 	}
@@ -95,9 +96,9 @@ func appendAccessKey(uri, accessKey string) (string, error) {
 	return variantURI.String(), nil
 }
 
-func osFetch(playbackID, file string) (*drivers.FileInfoReader, error) {
+func osFetch(playbackID, file, byteRange string) (*drivers.FileInfoReader, error) {
 	osURL := config.PrivateBucketURL.JoinPath("hls").JoinPath(playbackID).JoinPath(file)
-	f, err := clients.GetOSURL(osURL.String())
+	f, err := clients.GetOSURL(osURL.String(), byteRange)
 	if err != nil {
 		var awsErr awserr.Error
 		if errors.As(err, &awsErr) && awsErr.Code() == s3.ErrCodeNoSuchKey {

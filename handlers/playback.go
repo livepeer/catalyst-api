@@ -28,6 +28,7 @@ func PlaybackHandler() httprouter.Handle {
 			PlaybackID: params.ByName("playbackID"),
 			File:       params.ByName("file"),
 			AccessKey:  key,
+			Range:      req.Header.Get("range"),
 		})
 		if err != nil {
 			handleError(err, req, requestID, w)
