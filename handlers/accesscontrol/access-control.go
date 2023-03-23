@@ -13,17 +13,16 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/golang/glog"
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/config"
+	glog "github.com/magicsong/color-glog"
 	"github.com/pquerna/cachecontrol/cacheobject"
 )
 
-type PlaybackAccessControl struct {
-	gateURL string
-	*http.Client
-	cache map[string]map[string]*PlaybackAccessControlEntry
-	mutex sync.RWMutex
+type AccessControlHandlersCollection struct {
+	cache      map[string]map[string]*PlaybackAccessControlEntry
+	mutex      sync.RWMutex
+	gateClient GateAPICaller
 }
 
 type PlaybackAccessControlEntry struct {
@@ -33,25 +32,34 @@ type PlaybackAccessControlEntry struct {
 }
 
 type PlaybackAccessControlRequest struct {
-	Type   string `json:"type"`
-	Pub    string `json:"pub"`
-	Stream string `json:"stream"`
+	Type      string `json:"type"`
+	Pub       string `json:"pub"`
+	AccessKey string `json:"accessKey"`
+	Stream    string `json:"stream"`
 }
 
-type AccessControlHandlersCollection struct {
-	Config config.Cli
+type GateAPICaller interface {
+	QueryGate(body []byte) (bool, int32, int32, error)
+}
+
+type GateClient struct {
+	Client  *http.Client
+	gateURL string
 }
 
 const UserNewTrigger = "USER_NEW"
 
-func (c *AccessControlHandlersCollection) TriggerHandler() httprouter.Handle {
-	playbackAccessControl := PlaybackAccessControl{
-		c.Config.GateURL,
-		&http.Client{},
-		make(map[string]map[string]*PlaybackAccessControlEntry),
-		sync.RWMutex{},
+func NewAccessControlHandlersCollection(cli config.Cli) *AccessControlHandlersCollection {
+	return &AccessControlHandlersCollection{
+		cache: make(map[string]map[string]*PlaybackAccessControlEntry),
+		gateClient: &GateClient{
+			gateURL: cli.GateURL,
+			Client:  &http.Client{},
+		},
 	}
+}
 
+func (ac *AccessControlHandlersCollection) TriggerHandler() httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		payload, err := io.ReadAll(r.Body)
 
@@ -65,7 +73,7 @@ func (c *AccessControlHandlersCollection) TriggerHandler() httprouter.Handle {
 
 		switch triggerName {
 		case UserNewTrigger:
-			w.Write(handleUserNew(&playbackAccessControl, payload))
+			w.Write(ac.handleUserNew(payload))
 			return
 		default:
 			w.Write([]byte("false"))
@@ -76,7 +84,7 @@ func (c *AccessControlHandlersCollection) TriggerHandler() httprouter.Handle {
 	}
 }
 
-func handleUserNew(ac *PlaybackAccessControl, payload []byte) []byte {
+func (ac *AccessControlHandlersCollection) handleUserNew(payload []byte) []byte {
 	lines := strings.Split(string(payload), "\n")
 
 	if len(lines) != 6 {
@@ -104,7 +112,6 @@ func handleUserNew(ac *PlaybackAccessControl, payload []byte) []byte {
 		}
 
 		if playbackID != claims.Subject {
-
 			glog.Errorf("PlaybackId mismatch playbackId=%v != claimed=%v", playbackID, claims.Subject)
 			return []byte("false")
 		}
@@ -114,7 +121,13 @@ func handleUserNew(ac *PlaybackAccessControl, payload []byte) []byte {
 		pubKey = claims.PublicKey
 	}
 
-	playbackAccessControlAllowed, err := getPlaybackAccessControlInfo(ac, playbackID, pubKey)
+	body, err := json.Marshal(PlaybackAccessControlRequest{Type: "jwt", Pub: pubKey, Stream: playbackID})
+	if err != nil {
+		glog.Errorf("Unable to get playback access control info, JSON marshalling failed. playbackId=%v pubkey=%v", playbackID, pubKey)
+		return []byte("false")
+	}
+
+	playbackAccessControlAllowed, err := ac.GetPlaybackAccessControlInfo(playbackID, pubKey, body)
 	if err != nil {
 		glog.Errorf("Unable to get playback access control info for playbackId=%v pubkey=%v", playbackID, pubKey)
 		return []byte("false")
@@ -129,36 +142,65 @@ func handleUserNew(ac *PlaybackAccessControl, payload []byte) []byte {
 	return []byte("false")
 }
 
-func getPlaybackAccessControlInfo(ac *PlaybackAccessControl, playbackID, pubKey string) (bool, error) {
+func (ac *AccessControlHandlersCollection) IsAuthorized(reqURL *url.URL) (bool, error) {
+	acReq := PlaybackAccessControlRequest{}
+	cacheKey := ""
+	tkn := reqURL.Query().Get("tkn")
+	jwt := reqURL.Query().Get("jwt")
+	if tkn != "" {
+		acReq.Type = "accessKey"
+		acReq.AccessKey = tkn
+		cacheKey = tkn
+	} else if jwt != "" {
+		acReq.Type = "jwt"
+		// TODO reuse the jwt logic above
+		acReq.Pub = ""
+		cacheKey = acReq.Pub
+	} else {
+		// no auth method found
+		return false, nil
+	}
+	acReq.Stream = "" // TODO parse out playbackID from url path
+
+	body, err := json.Marshal(acReq)
+	if err != nil {
+		//glog.Errorf("Unable to get playback access control info, JSON marshalling failed. playbackId=%v pubkey=%v", playbackID, pubKey)
+		return false, nil
+	}
+
+	return ac.GetPlaybackAccessControlInfo(acReq.Stream, cacheKey, body)
+}
+
+func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(playbackID, cacheKey string, requestBody []byte) (bool, error) {
 	ac.mutex.RLock()
-	entry := ac.cache[playbackID][pubKey]
+	entry := ac.cache[playbackID][cacheKey]
 	ac.mutex.RUnlock()
 
 	if isExpired(entry) {
-		glog.Infof("Cache expired for playbackId=%v pubkey=%v", playbackID, pubKey)
-		err := cachePlaybackAccessControlInfo(ac, playbackID, pubKey)
+		glog.Infof("Cache expired for playbackId=%v cacheKey=%v", playbackID, cacheKey)
+		err := ac.cachePlaybackAccessControlInfo(playbackID, cacheKey, requestBody)
 		if err != nil {
 			return false, err
 		}
 	} else if isStale(entry) {
-		glog.Infof("Cache stale for playbackId=%v pubkey=%v\n", playbackID, pubKey)
+		glog.Infof("Cache stale for playbackId=%v cacheKey=%v\n", playbackID, cacheKey)
 		go func() {
 			ac.mutex.RLock()
-			stillStale := isStale(ac.cache[playbackID][pubKey])
+			stillStale := isStale(ac.cache[playbackID][cacheKey])
 			ac.mutex.RUnlock()
 			if stillStale {
-				cachePlaybackAccessControlInfo(ac, playbackID, pubKey)
+				ac.cachePlaybackAccessControlInfo(playbackID, cacheKey, requestBody)
 			}
 		}()
 	} else {
-		glog.Infof("Cache hit for playbackId=%v pubkey=%v", playbackID, pubKey)
+		glog.Infof("Cache hit for playbackId=%v cacheKey=%v", playbackID, cacheKey)
 	}
 
 	ac.mutex.RLock()
-	entry = ac.cache[playbackID][pubKey]
+	entry = ac.cache[playbackID][cacheKey]
 	ac.mutex.RUnlock()
 
-	glog.Infof("playbackId=%v pubkey=%v playback allowed=%v", playbackID, pubKey, entry.Allow)
+	glog.Infof("playbackId=%v cacheKey=%v playback allowed=%v", playbackID, cacheKey, entry.Allow)
 
 	return entry.Allow, nil
 }
@@ -171,13 +213,8 @@ func isStale(entry *PlaybackAccessControlEntry) bool {
 	return entry != nil && time.Now().After(entry.MaxAge) && !isExpired(entry)
 }
 
-func cachePlaybackAccessControlInfo(ac *PlaybackAccessControl, playbackID, pubKey string) error {
-	body, err := json.Marshal(PlaybackAccessControlRequest{"jwt", pubKey, playbackID})
-	if err != nil {
-		return err
-	}
-
-	allow, maxAge, stale, err := queryGate(ac, body)
+func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playbackID, cacheKey string, requestBody []byte) error {
+	allow, maxAge, stale, err := ac.gateClient.QueryGate(requestBody)
 	if err != nil {
 		return err
 	}
@@ -189,19 +226,19 @@ func cachePlaybackAccessControlInfo(ac *PlaybackAccessControl, playbackID, pubKe
 	if ac.cache[playbackID] == nil {
 		ac.cache[playbackID] = make(map[string]*PlaybackAccessControlEntry)
 	}
-	ac.cache[playbackID][pubKey] = &PlaybackAccessControlEntry{staleTime, maxAgeTime, allow}
+	ac.cache[playbackID][cacheKey] = &PlaybackAccessControlEntry{staleTime, maxAgeTime, allow}
 	return nil
 }
 
-var queryGate = func(ac *PlaybackAccessControl, body []byte) (bool, int32, int32, error) {
-	req, err := http.NewRequest("POST", ac.gateURL, bytes.NewReader(body))
+func (g *GateClient) QueryGate(body []byte) (bool, int32, int32, error) {
+	req, err := http.NewRequest("POST", g.gateURL, bytes.NewReader(body))
 	if err != nil {
 		return false, 0, 0, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
-	res, err := ac.Client.Do(req)
+	res, err := g.Client.Do(req)
 	if err != nil {
 		return false, 0, 0, err
 	}

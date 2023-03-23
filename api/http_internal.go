@@ -59,7 +59,7 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	}
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
 	mistCallbackHandlers := &misttriggers.MistCallbackHandlersCollection{VODEngine: vodEngine}
-	accessControlHandlers := &accesscontrol.AccessControlHandlersCollection{Config: cli}
+	accessControlHandlers := accesscontrol.NewAccessControlHandlersCollection(cli)
 
 	// Simple endpoint for healthchecks
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
