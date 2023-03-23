@@ -2,6 +2,7 @@ package accesscontrol
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,15 +11,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/config"
 	"github.com/stretchr/testify/require"
 )
-
-type MockClient struct {
-	StatusCode int
-	Body       []byte
-	*http.Client
-}
 
 const (
 	playbackID     = "1bbbqz6753hcli1t"
@@ -30,27 +24,40 @@ NWIfTiwJzlU7KoBtKlllSMinLtChRANCAATviEulFEu07Q8oxSg7ZbOZyU3NoCLM
 Tu9G76+QYCoNbQNbTLKgpa8mMUyqA2gYGMlt3fqy9s7xQWzOLJGDZe7K
 -----END PRIVATE KEY-----
 `
-	gateURL = "http://localhost:3000/api/access-control/gate"
 )
-
-var cli = config.Cli{GateURL: gateURL}
-var coll = AccessControlHandlersCollection{Config: cli}
 
 var expiration = time.Now().Add(time.Duration(1 * time.Hour))
 
-var allowAccess = func(ac *PlaybackAccessControl, body []byte) (bool, int32, int32, error) {
+type stubGateClient struct{}
+
+func (g *stubGateClient) QueryGate(body []byte) (bool, int32, int32, error) {
+	return queryGate(body)
+}
+
+var queryGate = func(body []byte) (bool, int32, int32, error) {
+	return false, 0, 0, errors.New("not implemented")
+}
+
+var allowAccess = func(body []byte) (bool, int32, int32, error) {
 	return true, 120, 300, nil
 }
 
-var denyAccess = func(ac *PlaybackAccessControl, body []byte) (bool, int32, int32, error) {
+var denyAccess = func(body []byte) (bool, int32, int32, error) {
 	return false, 120, 300, nil
+}
+
+func testTriggerHandler() httprouter.Handle {
+	return (&AccessControlHandlersCollection{
+		cache:      make(map[string]map[string]*PlaybackAccessControlEntry),
+		gateClient: &stubGateClient{},
+	}).TriggerHandler()
 }
 
 func TestAllowedAccessValidToken(t *testing.T) {
 	token, _ := craftToken(privateKey, publicKey, playbackID, expiration)
 	payload := []byte(fmt.Sprint(playbackID, "\n1\n2\n3\nhttp://localhost:8080/hls/", playbackID, "/index.m3u8?stream=", playbackID, "&jwt=", token, "\n5"))
 
-	result := executeFlow(payload, coll.TriggerHandler(), allowAccess)
+	result := executeFlow(payload, testTriggerHandler(), allowAccess)
 	require.Equal(t, "true", result)
 }
 
@@ -58,7 +65,7 @@ func TestAllowedAccessValidTokenWithPrefix(t *testing.T) {
 	token, _ := craftToken(privateKey, publicKey, playbackID, expiration)
 	payload := []byte(fmt.Sprint(plusPlaybackID, "\n1\n2\n3\nhttp://localhost:8080/hls/", plusPlaybackID, "/index.m3u8?stream=", plusPlaybackID, "&jwt=", token, "\n5"))
 
-	result := executeFlow(payload, coll.TriggerHandler(), allowAccess)
+	result := executeFlow(payload, testTriggerHandler(), allowAccess)
 	require.Equal(t, "true", result)
 }
 
@@ -66,7 +73,7 @@ func TestAllowdAccessAbsentToken(t *testing.T) {
 	token := ""
 	payload := []byte(fmt.Sprint(playbackID, "\n1\n2\n3\nhttp://localhost:8080/hls/", playbackID, "/index.m3u8?stream=", playbackID, "&jwt=", token, "\n5"))
 
-	result := executeFlow(payload, coll.TriggerHandler(), allowAccess)
+	result := executeFlow(payload, testTriggerHandler(), allowAccess)
 	require.Equal(t, "true", result)
 }
 
@@ -74,7 +81,7 @@ func TestDeniedAccessInvalidToken(t *testing.T) {
 	token := "x"
 	payload := []byte(fmt.Sprint(playbackID, "\n1\n2\n3\nhttp://localhost:8080/hls/", playbackID, "/index.m3u8?stream=", playbackID, "&jwt=", token, "\n5"))
 
-	result := executeFlow(payload, coll.TriggerHandler(), allowAccess)
+	result := executeFlow(payload, testTriggerHandler(), allowAccess)
 	require.Equal(t, "false", result)
 }
 
@@ -82,7 +89,7 @@ func TestDeniedAccess(t *testing.T) {
 	token, _ := craftToken(privateKey, publicKey, playbackID, expiration)
 	payload := []byte(fmt.Sprint(playbackID, "\n1\n2\n3\nhttp://localhost:8080/hls/", playbackID, "/index.m3u8?stream=", playbackID, "&jwt=", token, "\n5"))
 
-	result := executeFlow(payload, coll.TriggerHandler(), denyAccess)
+	result := executeFlow(payload, testTriggerHandler(), denyAccess)
 	require.Equal(t, "false", result)
 }
 
@@ -90,7 +97,7 @@ func TestDeniedAccessForMissingClaims(t *testing.T) {
 	token, _ := craftToken(privateKey, "", playbackID, expiration)
 	payload := []byte(fmt.Sprint(playbackID, "\n1\n2\n3\nhttp://localhost:8080/hls/", playbackID, "/index.m3u8?stream=", playbackID, "&jwt=", token, "\n5"))
 
-	result := executeFlow(payload, coll.TriggerHandler(), allowAccess)
+	result := executeFlow(payload, testTriggerHandler(), allowAccess)
 	require.Equal(t, "false", result)
 }
 
@@ -98,17 +105,17 @@ func TestExpiredToken(t *testing.T) {
 	token, _ := craftToken(privateKey, publicKey, playbackID, time.Now().Add(time.Second*-10))
 	payload := []byte(fmt.Sprint(playbackID, "\n1\n2\n3\nhttp://localhost:8080/hls/", playbackID, "/index.m3u8?stream=", playbackID, "&jwt=", token, "\n5"))
 
-	result := executeFlow(payload, coll.TriggerHandler(), allowAccess)
+	result := executeFlow(payload, testTriggerHandler(), allowAccess)
 	require.Equal(t, "false", result)
 }
 
 func TestCacheHit(t *testing.T) {
 	token, _ := craftToken(privateKey, publicKey, playbackID, expiration)
 	payload := []byte(fmt.Sprint(playbackID, "\n1\n2\n3\nhttp://localhost:8080/hls/", playbackID, "/index.m3u8?stream=", playbackID, "&jwt=", token, "\n5"))
-	handler := coll.TriggerHandler()
+	handler := testTriggerHandler()
 
 	var callCount = 0
-	var countableAllowAccess = func(ac *PlaybackAccessControl, body []byte) (bool, int32, int32, error) {
+	var countableAllowAccess = func(body []byte) (bool, int32, int32, error) {
 		callCount++
 		return true, 10, 20, nil
 	}
@@ -123,10 +130,10 @@ func TestCacheHit(t *testing.T) {
 func TestStaleCache(t *testing.T) {
 	token, _ := craftToken(privateKey, publicKey, playbackID, expiration)
 	payload := []byte(fmt.Sprint(playbackID, "\n1\n2\n3\nhttp://localhost:8080/hls/", playbackID, "/index.m3u8?stream=", playbackID, "&jwt=", token, "\n5"))
-	handler := coll.TriggerHandler()
+	handler := testTriggerHandler()
 
 	var callCount = 0
-	var countableAllowAccess = func(ac *PlaybackAccessControl, body []byte) (bool, int32, int32, error) {
+	var countableAllowAccess = func(body []byte) (bool, int32, int32, error) {
 		callCount++
 		return true, -10, 20, nil
 	}
@@ -156,10 +163,10 @@ func TestStaleCache(t *testing.T) {
 func TestInvalidCache(t *testing.T) {
 	token, _ := craftToken(privateKey, publicKey, playbackID, expiration)
 	payload := []byte(fmt.Sprint(playbackID, "\n1\n2\n3\nhttp://localhost:8080/hls/", playbackID, "/index.m3u8?stream=", playbackID, "&jwt=", token, "\n5"))
-	handler := coll.TriggerHandler()
+	handler := testTriggerHandler()
 
 	var callCount = 0
-	var countableAllowAccess = func(ac *PlaybackAccessControl, body []byte) (bool, int32, int32, error) {
+	var countableAllowAccess = func(body []byte) (bool, int32, int32, error) {
 		callCount++
 		return true, -10, -20, nil
 	}
@@ -170,7 +177,7 @@ func TestInvalidCache(t *testing.T) {
 	require.Equal(t, 2, callCount)
 }
 
-func executeFlow(payload []byte, handler httprouter.Handle, request func(ac *PlaybackAccessControl, body []byte) (bool, int32, int32, error)) string {
+func executeFlow(payload []byte, handler httprouter.Handle, request func(body []byte) (bool, int32, int32, error)) string {
 	original := queryGate
 	queryGate = request
 
