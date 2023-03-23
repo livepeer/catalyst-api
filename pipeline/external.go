@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"time"
 
@@ -20,7 +21,9 @@ func (m *external) Name() string {
 }
 
 func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
-	sourceFileUrl, err := url.Parse(job.SourceFile)
+	job.sourceBytes = job.InputFileInfo.SizeBytes
+	job.sourceDurationMs = int64(math.Round(job.InputFileInfo.Duration) * 1000)
+	sourceFileUrl, err := url.Parse(job.SignedSourceURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid source file URL: %w", err)
 	}
@@ -28,11 +31,12 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
 	defer cancel()
 	outputVideos, err := e.transcoder.Transcode(ctx, clients.TranscodeJobArgs{
-		RequestID:     job.RequestID,
-		InputFile:     sourceFileUrl,
-		HLSOutputFile: job.TargetURL,
-		Profiles:      job.Profiles,
-		AutoMP4:       job.AutoMP4,
+		RequestID:       job.RequestID,
+		SegmentSizeSecs: job.targetSegmentSizeSecs,
+		InputFile:       sourceFileUrl,
+		HLSOutputFile:   job.TargetURL,
+		Profiles:        job.Profiles,
+		GenerateMP4:     job.GenerateMP4,
 		ReportProgress: func(progress float64) {
 			job.ReportProgress(clients.TranscodeStatusTranscoding, progress)
 		},
@@ -42,6 +46,7 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		CollectTranscodedSegment: func() {
 			job.transcodedSegments++
 		},
+		InputFileInfo: job.InputFileInfo,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("external transcoder error: %w", err)

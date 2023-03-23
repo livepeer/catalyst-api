@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/go-tools/drivers"
 	"github.com/stretchr/testify/require"
 )
 
@@ -208,4 +209,40 @@ func TestItHandlesGatewayURLsAsSource(t *testing.T) {
 
 	// it cat fetch from provided gateway
 	require.Equal(t, "/ipfs/"+resourceId, requestedURLs[2])
+}
+
+func Test_IPFSResourceIDParsing(t *testing.T) {
+	drivers.Testing = true
+	tests := []struct {
+		name        string
+		url         string
+		expectedURL string
+	}{
+		{
+			name:        "simple resource ID",
+			url:         "ipfs://foo",
+			expectedURL: "/foo",
+		},
+		{
+			name:        "resource ID with path",
+			url:         "ipfs://foo/bar",
+			expectedURL: "/foo/bar",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, tt.expectedURL, r.URL.String())
+			}))
+			defer ts.Close()
+
+			gateway, err := url.Parse(ts.URL)
+			require.NoError(t, err)
+			config.ImportIPFSGatewayURLs = []*url.URL{gateway}
+
+			err = CopyDStorageToS3(tt.url, "memory://foo", "reqID")
+			require.NoError(t, err)
+		})
+	}
 }

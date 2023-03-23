@@ -61,6 +61,7 @@ func (s *StepContext) StartMist(listen string) error {
 				break
 			}
 		} else if push_start != nil {
+			s.AddMistPushStartURL(push_start.(map[string]interface{})["target"].(string))
 			_, _ = io.WriteString(w, `{"authorize":{"status":"OK"}}`)
 		}
 	})

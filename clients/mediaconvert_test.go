@@ -2,13 +2,11 @@ package clients
 
 import (
 	"context"
-	"crypto/md5"
 	"errors"
 	"io"
 	"net/url"
 	"os"
 	"path"
-	"strings"
 	"testing"
 	"time"
 
@@ -28,44 +26,18 @@ const dummyHlsPlaylist = `
 
 #EXT-X-ENDLIST`
 
-func TestOnlyS3URLsToAWSClient(t *testing.T) {
-	require := require.New(t)
-	awsStub := &stubMediaConvertClient{
-		createJob: func(input *mediaconvert.CreateJobInput) (*mediaconvert.CreateJobOutput, error) {
-			// check that only an s3:// URL is sent to AWS client
-			require.True(strings.HasPrefix(*input.Settings.Inputs[0].FileInput, "s3://"))
-			require.Equal("s3://thebucket/output/1234/index", *input.Settings.OutputGroups[0].OutputGroupSettings.HlsGroupSettings.Destination)
-			return nil, errors.New("secret error")
+var inputVideo = video.InputVideo{
+	Tracks: []video.InputTrack{{
+		Type:    "video",
+		Codec:   "",
+		Bitrate: 3000,
+		VideoTrack: video.VideoTrack{
+			Width:  1080,
+			Height: 7200,
 		},
-	}
-	mc, f, transferDir, cleanup := setupTestMediaConvert(t, awsStub)
-	defer cleanup()
-	sz, err := f.Stat()
-	require.NoError(err)
-
-	_, err = mc.Transcode(context.Background(), TranscodeJobArgs{
-		InputFile:     mustParseURL(t, "file://"+f.Name()),
-		HLSOutputFile: mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
-		CollectSourceSize: func(size int64) {
-			require.Equal(sz.Size(), int64(size))
-		},
-	})
-	require.ErrorContains(err, "secret error")
-	// Check that the file was copied to the osTransferBucketURL folder
-	content, err := os.Open(path.Join(transferDir, "input/1234/video"))
-	require.NoError(err)
-
-	hashContent := md5.New()
-	_, err = io.Copy(hashContent, content)
-	require.NoError(err)
-
-	inputFile, err := os.Open(f.Name())
-	require.NoError(err)
-	hashInputFile := md5.New()
-	_, err = io.Copy(hashInputFile, inputFile)
-	require.NoError(err)
-
-	require.Equal(hashInputFile, hashContent)
+		AudioTrack: video.AudioTrack{},
+	}},
+	Duration: 60_000,
 }
 
 func TestReportsMediaConvertProgress(t *testing.T) {
@@ -98,58 +70,18 @@ func TestReportsMediaConvertProgress(t *testing.T) {
 
 	reportProgressCalls := 0
 	_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
-		InputFile:         mustParseURL(t, "file://"+f.Name()),
-		HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
-		CollectSourceSize: func(size int64) {},
+		InputFile:     mustParseURL(t, "file://"+f.Name()),
+		HLSOutputFile: mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
 		ReportProgress: func(progress float64) {
 			reportProgressCalls++
 			require.InEpsilon(0.5, progress, 1e-9)
 		},
+		InputFileInfo: inputVideo,
 	})
 	require.ErrorContains(err, "done with this test")
 	require.Equal(1, createJobCalls)
 	require.Equal(2, getJobCalls)
 	require.Equal(1, reportProgressCalls)
-}
-
-func TestSendsOriginalURLToS3OnCopyError(t *testing.T) {
-	require := require.New(t)
-
-	awsStub := &stubMediaConvertClient{
-		createJob: func(input *mediaconvert.CreateJobInput) (*mediaconvert.CreateJobOutput, error) {
-			// check that the https? URL is sent to AWS client if the copy fails
-			require.Equal("http://localhost:3000/not-here.mp4", *input.Settings.Inputs[0].FileInput)
-			require.Equal("s3://thebucket/output/1234/index", *input.Settings.OutputGroups[0].OutputGroupSettings.HlsGroupSettings.Destination)
-			return nil, errors.New("secret error")
-		},
-	}
-	mc, _, transferDir, cleanup := setupTestMediaConvert(t, awsStub)
-	defer cleanup()
-
-	_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
-		// use a non existing HTTP endpoint for the file
-		InputFile:         mustParseURL(t, "http://localhost:3000/not-here.mp4"),
-		HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
-		CollectSourceSize: func(size int64) {},
-	})
-	require.ErrorContains(err, "error")
-
-	// Now check that it does NOT send the original URL to S3 if it's an OS URL
-	awsStub.createJob = func(input *mediaconvert.CreateJobInput) (*mediaconvert.CreateJobOutput, error) {
-		require.Fail("should not have been called")
-		return nil, errors.New("unreachable")
-	}
-	_, err = mc.Transcode(context.Background(), TranscodeJobArgs{
-		// use a non existing OS URL
-		InputFile:         mustParseURL(t, "s3+https://user:pwd@localhost:4321/bucket/no-minio-here.mp4"),
-		HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
-		CollectSourceSize: func(size int64) {},
-	})
-	require.ErrorContains(err, "download error")
-
-	// Check that no file was created to the osTransferBucketURL folder
-	_, err = os.Stat(path.Join(transferDir, "input/1234/video"))
-	require.ErrorContains(err, "no such file")
 }
 
 func TestRetriesOnAccelerationError(t *testing.T) {
@@ -190,9 +122,9 @@ func TestRetriesOnAccelerationError(t *testing.T) {
 
 	_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
 		// use a non existing HTTP endpoint for the file
-		InputFile:         mustParseURL(t, "file://"+inputFile.Name()),
-		HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
-		CollectSourceSize: func(size int64) {},
+		InputFile:     mustParseURL(t, "file://"+inputFile.Name()),
+		HLSOutputFile: mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
+		InputFileInfo: inputVideo,
 	})
 	require.ErrorContains(err, "done with this test")
 	require.Equal(2, createdJobs)
@@ -231,11 +163,6 @@ func TestCopiesMediaConvertOutputToFinalLocation(t *testing.T) {
 	}
 	mc, inputFile, transferDir, cleanup := setupTestMediaConvert(t, awsStub)
 	defer cleanup()
-	mc.probe = stubFFprobe{
-		Bitrate:  1000000,
-		Duration: 60,
-		FPS:      30,
-	}
 
 	outFile := path.Join(transferDir, "../out/index.m3u8")
 	defer os.RemoveAll(path.Dir(outFile))
@@ -245,9 +172,9 @@ func TestCopiesMediaConvertOutputToFinalLocation(t *testing.T) {
 	_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
 		InputFile:                mustParseURL(t, "file://"+inputFile.Name()),
 		HLSOutputFile:            mustParseURL(t, "file:/"+outFile),
-		CollectSourceSize:        func(size int64) {},
 		ReportProgress:           func(progress float64) {},
 		CollectTranscodedSegment: func() {},
+		InputFileInfo:            inputVideo,
 	})
 	require.NoError(err)
 	require.Equal(1, createJobCalls)
@@ -308,95 +235,35 @@ func Test_createJobPayload(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actual := createJobPayload(inputFile, hlsOutputFile, tt.args.mp4OutputFile, role, tt.args.accelerated, tt.args.profiles)
+			actual := createJobPayload(inputFile, hlsOutputFile, tt.args.mp4OutputFile, role, tt.args.accelerated, tt.args.profiles, config.DefaultSegmentSizeSecs)
 			require.NotNil(t, actual)
 			require.Equal(t, loadFixture(t, tt.want, actual.String()), actual.String())
 		})
 	}
 }
 
-func Test_FramerateCheck(t *testing.T) {
-	tests := []struct {
-		name        string
-		fps         float64
-		expectedErr error
-	}{
-		{
-			name:        "valid framerate",
-			fps:         30,
-			expectedErr: nil,
-		},
-		{
-			name:        "invalid framerate",
-			fps:         0,
-			expectedErr: errors.New("invalid framerate: 0.000000"),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			awsStub := &stubMediaConvertClient{
-				createJob: func(input *mediaconvert.CreateJobInput) (*mediaconvert.CreateJobOutput, error) {
-					// throw an error to end exit early as we only want to test the MC job input
-					return nil, errors.New("secret error")
-				},
-			}
-			mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
-			defer cleanup()
-			mc.inputCopy.Probe = stubFFprobe{
-				Bitrate:  1000000,
-				Duration: 60,
-				FPS:      tt.fps,
-			}
-
-			_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
-				InputFile:         mustParseURL(t, "file://"+f.Name()),
-				HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
-				CollectSourceSize: func(size int64) {},
-			})
-			if tt.expectedErr != nil {
-				require.EqualError(t, err, tt.expectedErr.Error())
-			}
-		})
-	}
-}
-
-func Test_EmptyFile(t *testing.T) {
-	mc, f, _, cleanup := setupTestMediaConvert(t, nil)
-	defer cleanup()
-
-	err := os.Truncate(f.Name(), 0)
-	require.NoError(t, err)
-
-	inputURL := mustParseURL(t, "file://"+f.Name())
-	_, err = mc.Transcode(context.Background(), TranscodeJobArgs{
-		InputFile:         inputURL,
-		HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
-		CollectSourceSize: func(size int64) {},
-	})
-	require.EqualError(t, err, "zero bytes found for source: "+inputURL.String())
-}
-
 func Test_MP4OutDurationCheck(t *testing.T) {
 	require := require.New(t)
 
 	tests := []struct {
-		name     string
-		duration float64
-		outputs  []string
+		name        string
+		duration    float64
+		outputs     []string
+		generatemp4 bool
 	}{
 		{
-			name:     "hls and mp4",
-			duration: 120,
-			outputs:  []string{"hls", "mp4"},
+			name:        "hls and mp4",
+			duration:    120,
+			outputs:     []string{"hls", "mp4"},
+			generatemp4: true,
 		},
 		{
-			name:     "hls only",
-			duration: 121,
-			outputs:  []string{"hls"},
+			name:        "hls only",
+			duration:    121,
+			outputs:     []string{"hls"},
+			generatemp4: false,
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			awsStub := &stubMediaConvertClient{
@@ -411,17 +278,13 @@ func Test_MP4OutDurationCheck(t *testing.T) {
 			}
 			mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
 			defer cleanup()
-			mc.inputCopy.Probe = stubFFprobe{
-				Bitrate:  1000000,
-				Duration: tt.duration,
-				FPS:      30,
-			}
-
+			iv := inputVideo
+			iv.Duration = tt.duration
 			_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
-				InputFile:         mustParseURL(t, "file://"+f.Name()),
-				HLSOutputFile:     mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
-				CollectSourceSize: func(size int64) {},
-				AutoMP4:           true,
+				InputFile:     mustParseURL(t, "file://"+f.Name()),
+				HLSOutputFile: mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
+				GenerateMP4:   tt.generatemp4,
+				InputFileInfo: iv,
 			})
 			require.Error(err)
 		})
@@ -438,13 +301,21 @@ func TestProbe(t *testing.T) {
 		Duration: 16.254,
 		Tracks: []video.InputTrack{
 			{
-				Type:    "video",
+				Type:    video.TrackTypeVideo,
 				Codec:   "h264",
 				Bitrate: 1234521,
 				VideoTrack: video.VideoTrack{
 					Width:  576,
 					Height: 1024,
 					FPS:    30,
+				},
+			},
+			{
+				Type:    video.TrackTypeAudio,
+				Codec:   "aac",
+				Bitrate: 128248,
+				AudioTrack: video.AudioTrack{
+					Channels: 2,
 				},
 			},
 		},
@@ -465,8 +336,8 @@ func loadFixture(t *testing.T, expectedPath, actual string) string {
 }
 
 func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *MediaConvert, inputFile *os.File, transferDir string, cleanup func()) {
-	oldMaxRetryInterval, oldRetries, oldPollDelay := maxRetryInterval, config.DownloadOSURLRetries, pollDelay
-	maxRetryInterval, config.DownloadOSURLRetries, pollDelay = 1*time.Millisecond, 1, 1*time.Millisecond
+	oldMaxRetryInterval, oldPollDelay := maxRetryInterval, pollDelay
+	maxRetryInterval, pollDelay = 1*time.Millisecond, 1*time.Millisecond
 
 	var err error
 	inputFile, err = os.CreateTemp(os.TempDir(), "user-input-*")
@@ -484,7 +355,7 @@ func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *Med
 	require.NoError(t, os.MkdirAll(transferDir, 0777))
 
 	cleanup = func() {
-		maxRetryInterval, config.DownloadOSURLRetries, pollDelay = oldMaxRetryInterval, oldRetries, oldPollDelay
+		maxRetryInterval, pollDelay = oldMaxRetryInterval, oldPollDelay
 		inErr := os.Remove(inputFile.Name())
 		dirErr := os.RemoveAll(transferDir)
 		require.NoError(t, inErr)
@@ -492,7 +363,7 @@ func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *Med
 		require.NoError(t, inputFile.Close())
 	}
 
-	s3Client := &stubS3Client{}
+	s3Client := &stubS3Client{transferDir}
 	probe := video.Probe{}
 	mc = &MediaConvert{
 		s3TransferBucket:    mustParseURL(t, "s3://thebucket"),
@@ -500,7 +371,6 @@ func setupTestMediaConvert(t *testing.T, awsStub AWSMediaConvertClient) (mc *Med
 		client:              awsStub,
 		s3:                  s3Client,
 		probe:               probe,
-		inputCopy:           &InputCopy{s3Client, probe},
 	}
 	return
 }
@@ -530,38 +400,16 @@ func (s *stubMediaConvertClient) GetJob(input *mediaconvert.GetJobInput) (*media
 	return s.getJob(input)
 }
 
-type stubS3Client struct{}
+type stubS3Client struct {
+	transferDir string
+}
 
 func (s *stubS3Client) PresignS3(_, key string) (string, error) {
-	return key, nil
+	return s.transferDir + "/" + key, nil
 }
 
 func (s *stubS3Client) GetObject(bucket, key string) (*s3.GetObjectOutput, error) {
 	return &s3.GetObjectOutput{
 		ContentLength: aws.Int64(123),
-	}, nil
-}
-
-type stubFFprobe struct {
-	Bitrate  int64
-	Duration float64
-	FPS      float64
-}
-
-func (f stubFFprobe) ProbeFile(_ string) (video.InputVideo, error) {
-	return video.InputVideo{
-		Duration: f.Duration,
-		Tracks: []video.InputTrack{
-			{
-				Type:    "video",
-				Codec:   "h264",
-				Bitrate: f.Bitrate,
-				VideoTrack: video.VideoTrack{
-					Width:  576,
-					Height: 1024,
-					FPS:    f.FPS,
-				},
-			},
-		},
 	}, nil
 }

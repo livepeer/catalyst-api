@@ -25,6 +25,7 @@ type UploadVODRequestOutputLocationOutputs struct {
 	SourceMp4          bool `json:"source_mp4"`
 	SourceSegments     bool `json:"source_segments"`
 	TranscodedSegments bool `json:"transcoded_segments"`
+	ForceMP4           bool `json:"force_mp4"`
 	AutoMP4            bool `json:"auto_mp4"`
 }
 
@@ -41,9 +42,11 @@ type UploadVODRequest struct {
 	OutputLocations []UploadVODRequestOutputLocation `json:"output_locations,omitempty"`
 	AccessToken     string                           `json:"accessToken"`
 	TranscodeAPIUrl string                           `json:"transcodeAPIUrl"`
+
 	// Forwarded to transcoding stage:
-	Profiles         []video.EncodedProfile `json:"profiles"`
-	PipelineStrategy pipeline.Strategy      `json:"pipeline_strategy"`
+	TargetSegmentSizeSecs int64                  `json:"target_segment_size_secs"`
+	Profiles              []video.EncodedProfile `json:"profiles"`
+	PipelineStrategy      pipeline.Strategy      `json:"pipeline_strategy"`
 }
 
 type UploadVODResponse struct {
@@ -126,6 +129,20 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	var requestID = config.RandomTrailer(8)
 	log.AddContext(requestID, "source", uploadVODRequest.Url)
 
+	if err := CheckSourceURLValid(uploadVODRequest.Url); err != nil {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+	}
+
+	// If the segment size isn't being overridden then use the default
+	if uploadVODRequest.TargetSegmentSizeSecs <= 0 {
+		uploadVODRequest.TargetSegmentSizeSecs = config.DefaultSegmentSizeSecs
+	}
+	// Check that the override isn't too big
+	if uploadVODRequest.TargetSegmentSizeSecs >= config.MaxSegmentSizeSecs {
+		uploadVODRequest.TargetSegmentSizeSecs = config.MaxSegmentSizeSecs
+	}
+	log.AddContext(requestID, "target_segment_size_secs", uploadVODRequest.TargetSegmentSizeSecs)
+
 	// Create a separate subdirectory for the source segments
 	// Use the output directory specified in request as the output directory of transcoded renditions
 	targetOutput, err := uploadVODRequest.getTargetOutput()
@@ -157,16 +174,18 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	// Once we're happy with the request, do the rest of the Segmenting stage asynchronously to allow us to
 	// from the API call and free up the HTTP connection
 	d.VODEngine.StartUploadJob(pipeline.UploadJobPayload{
-		SourceFile:       uploadVODRequest.Url,
-		CallbackURL:      uploadVODRequest.CallbackUrl,
-		SourceOutputURL:  sourceOutputURL,
-		TargetURL:        targetURL,
-		AccessToken:      uploadVODRequest.AccessToken,
-		TranscodeAPIUrl:  uploadVODRequest.TranscodeAPIUrl,
-		RequestID:        requestID,
-		Profiles:         uploadVODRequest.Profiles,
-		PipelineStrategy: uploadVODRequest.PipelineStrategy,
-		AutoMP4:          targetOutput.Outputs.AutoMP4,
+		SourceFile:            uploadVODRequest.Url,
+		CallbackURL:           uploadVODRequest.CallbackUrl,
+		SourceOutputURL:       sourceOutputURL,
+		TargetURL:             targetURL,
+		AccessToken:           uploadVODRequest.AccessToken,
+		TranscodeAPIUrl:       uploadVODRequest.TranscodeAPIUrl,
+		RequestID:             requestID,
+		Profiles:              uploadVODRequest.Profiles,
+		PipelineStrategy:      uploadVODRequest.PipelineStrategy,
+		ForceMP4:              targetOutput.Outputs.ForceMP4,
+		AutoMP4:               targetOutput.Outputs.AutoMP4,
+		TargetSegmentSizeSecs: uploadVODRequest.TargetSegmentSizeSecs,
 	})
 
 	respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})
@@ -181,4 +200,21 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	}
 
 	return true, errors.APIError{}
+}
+
+func CheckSourceURLValid(sourceURL string) error {
+	if sourceURL == "" {
+		return fmt.Errorf("empty source URL")
+	}
+
+	u, err := url.Parse(sourceURL)
+	if err != nil {
+		return err
+	}
+
+	if strings.HasSuffix(u.Hostname(), ".local") {
+		return fmt.Errorf(".local domains are not valid")
+	}
+
+	return nil
 }

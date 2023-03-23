@@ -1,23 +1,22 @@
 module github.com/livepeer/catalyst-api
 
-go 1.19
+go 1.20
 
 require (
 	cloud.google.com/go/storage v1.27.0 // indirect
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/DATA-DOG/go-sqlmock v1.5.0
-	github.com/aws/aws-sdk-go v1.44.201
+	github.com/aws/aws-sdk-go v1.44.226
 	github.com/cenkalti/backoff/v4 v4.2.0
 	github.com/cucumber/godog v0.12.5
 	github.com/golang-jwt/jwt/v4 v4.4.3
 	github.com/golang/glog v1.0.0
-	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/serf v0.9.8
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/lib/pq v1.10.7
 	github.com/livepeer/go-api-client v0.4.3
-	github.com/livepeer/go-tools v0.2.5
+	github.com/livepeer/go-tools v0.2.9
 	github.com/livepeer/joy4 v0.1.2-0.20220210094601-95e4d28f5f07
 	github.com/livepeer/livepeer-data v0.6.4
 	github.com/livepeer/m3u8 v0.11.1
@@ -34,12 +33,13 @@ require (
 	github.com/prometheus/common v0.39.0 // indirect
 	github.com/rabbitmq/amqp091-go v1.6.0
 	github.com/rabbitmq/rabbitmq-stream-go-client v1.0.2 // indirect
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.2
+	github.com/u2takey/ffmpeg-go v0.4.1
 	github.com/xeipuuv/gojsonschema v1.2.0
 	go.opencensus.io v0.23.0
-	golang.org/x/net v0.5.0 // indirect
+	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/sync v0.1.0
-	golang.org/x/text v0.6.0
+	golang.org/x/text v0.7.0
 	google.golang.org/api v0.102.0 // indirect
 	google.golang.org/grpc v1.50.1 // indirect
 	gopkg.in/vansante/go-ffprobe.v2 v2.1.1
@@ -161,6 +161,7 @@ require (
 	github.com/tklauser/go-sysconf v0.3.11 // indirect
 	github.com/tklauser/numcpus v0.6.0 // indirect
 	github.com/tomnomnom/linkheader v0.0.0-20180905144013-02ca5825eb80 // indirect
+	github.com/u2takey/go-utils v0.3.1 // indirect
 	github.com/whyrusleeping/cbor-gen v0.0.0-20230126041949-52956bd4c9aa // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	go.opentelemetry.io/otel v1.12.0 // indirect
@@ -171,7 +172,7 @@ require (
 	golang.org/x/crypto v0.5.0 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/oauth2 v0.3.0 // indirect
-	golang.org/x/sys v0.4.0 // indirect
+	golang.org/x/sys v0.5.0 // indirect
 	golang.org/x/tools v0.1.12 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/appengine v1.6.7 // indirect

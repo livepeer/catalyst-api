@@ -21,14 +21,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const MAX_COPY_DIR_DURATION = 2 * time.Hour
+
 var pollDelay = 10 * time.Second
 var retryableHttpClient = newRetryableHttpClient()
 
 const (
-	rateLimitedPollDelay  = 15 * time.Second
-	maxMP4OutDuration     = 2 * time.Minute
-	mp4OutFilePrefix      = "static"
-	maxInputFileSizeBytes = 10 * 1024 * 1024 * 1024 // 10 GiB
+	rateLimitedPollDelay = 15 * time.Second
+	mp4OutFilePrefix     = "static"
 )
 
 // https://docs.aws.amazon.com/mediaconvert/latest/ug/mediaconvert_error_codes.html
@@ -72,7 +72,6 @@ type MediaConvert struct {
 	client                                AWSMediaConvertClient
 	s3                                    S3
 	probe                                 video.Prober
-	inputCopy                             *InputCopy
 }
 
 func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) {
@@ -109,7 +108,6 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 		client:              client,
 		s3:                  s3Client,
 		probe:               probe,
-		inputCopy:           &InputCopy{s3Client, probe},
 	}, nil
 }
 
@@ -119,20 +117,16 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 //
 // It calls the input.ReportProgress function to report the progress of the job
 // during the polling loop.
-func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([]video.OutputVideo, error) {
+func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (outs []video.OutputVideo, err error) {
 	if path.Base(args.HLSOutputFile.Path) != "index.m3u8" {
 		return nil, fmt.Errorf("target URL must be an `index.m3u8` file, found %s", args.HLSOutputFile)
 	}
 	targetDir := getTargetDir(args)
 
-	mcInputRelPath := path.Join("input", targetDir, "video")
 	// AWS MediaConvert adds the .m3u8 to the end of the output file name
 	mcOutputRelPath := path.Join("output", targetDir, "index")
 
-	mcArgs, err := mc.inputCopy.CopyInputToS3(args, mc.osTransferBucketURL.JoinPath(mcInputRelPath))
-	if err != nil {
-		return nil, err
-	}
+	mcArgs := args
 	mcArgs.HLSOutputFile = mc.s3TransferBucket.JoinPath(mcOutputRelPath)
 
 	if len(mcArgs.Profiles) == 0 {
@@ -141,9 +135,8 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) ([
 			return nil, fmt.Errorf("failed to get playback profiles: %w", err)
 		}
 	}
-
 	// only output MP4s for short videos, with duration less than maxMP4OutDuration
-	if args.AutoMP4 && mcArgs.InputFileInfo.Duration <= maxMP4OutDuration.Seconds() {
+	if args.GenerateMP4 {
 		// sets the mp4 path to be the same as HLS except for the suffix being "static"
 		// resulting files look something like https://storage.googleapis.com/bucket/25afy0urw3zu2476/static360p0.mp4
 		mcArgs.MP4OutputLocation = mc.s3TransferBucket.JoinPath(path.Join("output", targetDir, mp4OutFilePrefix))
@@ -207,19 +200,10 @@ func (mc *MediaConvert) outputVideoFiles(mcArgs TranscodeJobArgs, ourOutputBaseD
 			if err != nil {
 				return nil, fmt.Errorf("error creating s3 url: %w", err)
 			}
-			outputVideoProbe, err := mc.probe.ProbeFile(presignedOutputFileURL)
+			videoFile, err = video.PopulateOutput(mc.probe, presignedOutputFileURL, videoFile)
 			if err != nil {
-				return nil, fmt.Errorf("error probing output file from S3: %w", err)
-
+				return nil, err
 			}
-			videoFile.SizeBytes = outputVideoProbe.SizeBytes
-			videoTrack, err := outputVideoProbe.GetVideoTrack()
-			if err != nil {
-				return nil, fmt.Errorf("no video track found in output video: %w", err)
-			}
-			videoFile.Height = videoTrack.Height
-			videoFile.Width = videoTrack.Width
-			videoFile.Bitrate = videoTrack.Bitrate
 		}
 		files = append(files, videoFile)
 	}
@@ -235,7 +219,7 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 	if args.MP4OutputLocation != nil {
 		mp4Out = args.MP4OutputLocation.String()
 	}
-	payload := createJobPayload(args.InputFile.String(), args.HLSOutputFile.String(), mp4Out, mc.role, accelerated, args.Profiles)
+	payload := createJobPayload(args.InputFile.String(), args.HLSOutputFile.String(), mp4Out, mc.role, accelerated, args.Profiles, args.SegmentSizeSecs)
 	job, err := mc.client.CreateJob(payload)
 	if err != nil {
 		return fmt.Errorf("error creting mediaconvert job: %w", err)
@@ -295,7 +279,7 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 	}
 }
 
-func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, accelerated bool, profiles []video.EncodedProfile) *mediaconvert.CreateJobInput {
+func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, accelerated bool, profiles []video.EncodedProfile, segmentSizeSecs int64) *mediaconvert.CreateJobInput {
 	var acceleration *mediaconvert.AccelerationSettings
 	if accelerated {
 		acceleration = &mediaconvert.AccelerationSettings{
@@ -319,7 +303,7 @@ func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, acce
 					},
 				},
 			},
-			OutputGroups: outputGroups(hlsOutputFile, mp4OutputFile, profiles),
+			OutputGroups: outputGroups(hlsOutputFile, mp4OutputFile, profiles, segmentSizeSecs),
 			TimecodeConfig: &mediaconvert.TimecodeConfig{
 				Source: aws.String("ZEROBASED"),
 			},
@@ -329,7 +313,7 @@ func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, acce
 	}
 }
 
-func outputGroups(hlsOutputFile, mp4OutputFile string, profiles []video.EncodedProfile) []*mediaconvert.OutputGroup {
+func outputGroups(hlsOutputFile, mp4OutputFile string, profiles []video.EncodedProfile, segmentSizeSecs int64) []*mediaconvert.OutputGroup {
 	groups := []*mediaconvert.OutputGroup{
 		{
 			Name: aws.String("Apple HLS"),
@@ -337,7 +321,7 @@ func outputGroups(hlsOutputFile, mp4OutputFile string, profiles []video.EncodedP
 				HlsGroupSettings: &mediaconvert.HlsGroupSettings{
 					Destination:      aws.String(hlsOutputFile),
 					MinSegmentLength: aws.Int64(0),
-					SegmentLength:    aws.Int64(10),
+					SegmentLength:    aws.Int64(segmentSizeSecs),
 				},
 				Type: aws.String("HLS_GROUP_SETTINGS"),
 			},
@@ -406,7 +390,7 @@ func output(container, name string, height, maxBitrate int64) *mediaconvert.Outp
 }
 
 func copyDir(source, dest *url.URL, args TranscodeJobArgs) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), MAX_COPY_DIR_DURATION)
 	defer cancel()
 	eg, ctx := errgroup.WithContext(ctx)
 
@@ -518,7 +502,7 @@ func newRetryableHttpClient() *http.Client {
 	client.HTTPClient = &http.Client{
 		// Give up on requests that take more than this long - the file is probably too big for us to process locally if it takes this long
 		// or something else has gone wrong and the request is hanging
-		Timeout: MAX_COPY_DURATION,
+		Timeout: MAX_COPY_FILE_DURATION,
 	}
 
 	return client.StandardClient()

@@ -1,14 +1,18 @@
 package transcode
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/log"
@@ -17,6 +21,7 @@ import (
 )
 
 const UPLOAD_TIMEOUT = 5 * time.Minute
+const TRANSMUX_STORAGE_DIR = "/tmp/transmux_stage"
 
 type TranscodeSegmentRequest struct {
 	SourceFile        string                 `json:"source_location"`
@@ -38,6 +43,7 @@ type TranscodeSegmentRequest struct {
 	SourceStreamInfo clients.MistStreamInfo                 `json:"-"`
 	RequestID        string                                 `json:"-"`
 	ReportProgress   func(clients.TranscodeStatus, float64) `json:"-"`
+	GenerateMP4      bool
 }
 
 var LocalBroadcasterClient clients.BroadcasterClient
@@ -107,9 +113,20 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// transcodedStats hold actual info from transcoded results within requested constraints (this usually differs from requested profiles)
 	transcodedStats := statsFromProfiles(transcodeProfiles)
 
+	renditionList := video.TRenditionList{RenditionSegmentTable: make(map[string]*video.TSegmentList)}
+	// only populate video.TRenditionList map if MP4 is enabled via override or short-form video detection
+	if transcodeRequest.GenerateMP4 {
+		for _, profile := range transcodeProfiles {
+			renditionList.AddRenditionSegment(profile.Name,
+				&video.TSegmentList{
+					SegmentDataTable: make(map[int][]byte),
+				})
+		}
+	}
+
 	var jobs *ParallelTranscoding
 	jobs = NewParallelTranscoding(sourceSegmentURLs, func(segment segmentInfo) error {
-		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, targetTranscodedRenditionOutputURL, transcodedStats)
+		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, targetTranscodedRenditionOutputURL, transcodedStats, &renditionList)
 		segmentsCount++
 		if err != nil {
 			return err
@@ -138,12 +155,93 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, err
 	}
 
+	var mp4Outputs []video.OutputVideoFile
+	// Transmux received segments from T into a single mp4
+	if transcodeRequest.GenerateMP4 {
+		for rendition, segments := range renditionList.RenditionSegmentTable {
+			// a. create folder to hold transmux-ed files in local storage temporarily
+			err := os.MkdirAll(TRANSMUX_STORAGE_DIR, 0700)
+			if err != nil && !os.IsExist(err) {
+				log.Log(transcodeRequest.RequestID, "failed to create temp dir for transmuxing", "dir", TRANSMUX_STORAGE_DIR, "err", err)
+				return outputs, segmentsCount, err
+			}
+
+			// b. create a single .ts file for a given rendition by concatenating all segments in order
+			if rendition == "low-bitrate" {
+				// skip mp4 generation for low-bitrate profile
+				continue
+			}
+			concatTsFileName := filepath.Join(TRANSMUX_STORAGE_DIR, transcodeRequest.RequestID+"_"+rendition+".ts")
+			defer os.Remove(concatTsFileName)
+			totalBytes, err := video.ConcatTS(concatTsFileName, segments)
+			if err != nil {
+				log.Log(transcodeRequest.RequestID, "error concatenating .ts", "file", concatTsFileName, "err", err)
+				continue
+			}
+
+			// c. Verify the total bytes written for the single .ts file for a given rendition matches the total # of bytes we received from T
+			renditionIndex := getProfileIndex(transcodeProfiles, rendition)
+			var rendBytesWritten int64 = -1
+			for _, v := range transcodedStats {
+				if v.Name == rendition {
+					rendBytesWritten = v.Bytes
+				}
+			}
+			if rendBytesWritten != totalBytes {
+				log.Log(transcodeRequest.RequestID, "bytes written does not match", "file", concatTsFileName, "bytes expected", transcodedStats[renditionIndex].Bytes, "bytes written", totalBytes)
+				break
+			}
+
+			// d. Transmux the single .ts file into an .mp4 file
+			mp4OutputFileName := concatTsFileName[:len(concatTsFileName)-len(filepath.Ext(concatTsFileName))] + ".mp4"
+			err = video.MuxTStoMP4(concatTsFileName, mp4OutputFileName)
+			if err != nil {
+				log.Log(transcodeRequest.RequestID, "error transmuxing", "err", err)
+				continue
+			}
+
+			// e. Upload mp4 output file
+			mp4OutputFile, err := os.Open(mp4OutputFileName)
+			defer os.Remove(mp4OutputFileName)
+			if err != nil {
+				log.Log(transcodeRequest.RequestID, "error opening mp4", "file", mp4OutputFileName, "err", err)
+				break
+			}
+
+			targetMP4URL := targetTranscodedRenditionOutputURL.JoinPath(rendition, filepath.Base(mp4OutputFile.Name()))
+			err = backoff.Retry(func() error {
+				return clients.UploadToOSURL(targetMP4URL.String(), "", bufio.NewReader(mp4OutputFile), UPLOAD_TIMEOUT)
+			}, clients.UploadRetryBackoff())
+			if err != nil {
+				log.Log(transcodeRequest.RequestID, "failed to upload mp4", "file", mp4OutputFile.Name())
+				break
+			}
+
+			mp4PlaybackURL := strings.ReplaceAll(targetMP4URL.String(), targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
+			mp4Out := video.OutputVideoFile{
+				Type:     "mp4",
+				Location: mp4PlaybackURL,
+			}
+			signedURL, err := clients.SignURL(targetMP4URL)
+			if err != nil {
+				return outputs, segmentsCount, fmt.Errorf("failed to create signed url for %s: %w", targetMP4URL, err)
+			}
+			mp4Out, err = video.PopulateOutput(video.Probe{}, signedURL, mp4Out)
+			if err != nil {
+				return outputs, segmentsCount, err
+			}
+
+			mp4Outputs = append(mp4Outputs, mp4Out)
+		}
+	}
+
 	manifestURL = strings.ReplaceAll(manifestURL, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
 	output := video.OutputVideo{Type: "object_store", Manifest: manifestURL}
 	for _, rendition := range transcodedStats {
 		videoManifestURL := strings.ReplaceAll(rendition.ManifestLocation, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
 		output.Videos = append(output.Videos, video.OutputVideoFile{Location: videoManifestURL, SizeBytes: rendition.Bytes})
 	}
+	output.MP4Outputs = mp4Outputs
 	outputs = []video.OutputVideo{output}
 	// Return outputs for .dtsh file creation
 	return outputs, segmentsCount, nil
@@ -155,33 +253,41 @@ func transcodeSegment(
 	transcodeProfiles []video.EncodedProfile,
 	targetOSURL *url.URL,
 	transcodedStats []*RenditionStats,
+	renditionList *video.TRenditionList,
 ) error {
-	rc, err := clients.DownloadOSURL(segment.Input.URL)
-	if err != nil {
-		return fmt.Errorf("failed to download source segment %q: %s", segment.Input, err)
-	}
-
 	start := time.Now()
 
 	var tr clients.TranscodeResult
-	// If an AccessToken is provided via the request for transcode, then use remote Broadcasters.
-	// Otherwise, use the local harcoded Broadcaster.
-	if transcodeRequest.AccessToken != "" {
-		creds := clients.Credentials{
-			AccessToken:  transcodeRequest.AccessToken,
-			CustomAPIURL: transcodeRequest.TranscodeAPIUrl,
-		}
-		broadcasterClient, _ := clients.NewRemoteBroadcasterClient(creds)
-		// TODO: failed to run TranscodeSegmentWithRemoteBroadcaster: CreateStream(): http POST(https://origin.livepeer.com/api/stream) returned 422 422 Unprocessable Entity
-		tr, err = broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(rc, int64(segment.Index), transcodeProfiles, streamName, segment.Input.DurationMillis)
+	err := backoff.Retry(func() error {
+		rc, err := clients.DownloadOSURL(segment.Input.URL)
 		if err != nil {
-			return fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
+			return fmt.Errorf("failed to download source segment %q: %s", segment.Input, err)
 		}
-	} else {
-		tr, err = LocalBroadcasterClient.TranscodeSegment(rc, int64(segment.Index), transcodeProfiles, segment.Input.DurationMillis, manifestID)
-		if err != nil {
-			return fmt.Errorf("failed to run TranscodeSegment: %s", err)
+
+		// If an AccessToken is provided via the request for transcode, then use remote Broadcasters.
+		// Otherwise, use the local harcoded Broadcaster.
+		if transcodeRequest.AccessToken != "" {
+			creds := clients.Credentials{
+				AccessToken:  transcodeRequest.AccessToken,
+				CustomAPIURL: transcodeRequest.TranscodeAPIUrl,
+			}
+			broadcasterClient, _ := clients.NewRemoteBroadcasterClient(creds)
+			// TODO: failed to run TranscodeSegmentWithRemoteBroadcaster: CreateStream(): http POST(https://origin.livepeer.com/api/stream) returned 422 422 Unprocessable Entity
+			tr, err = broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(rc, int64(segment.Index), transcodeProfiles, streamName, segment.Input.DurationMillis)
+			if err != nil {
+				return fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
+			}
+		} else {
+			tr, err = LocalBroadcasterClient.TranscodeSegment(rc, int64(segment.Index), transcodeProfiles, segment.Input.DurationMillis, manifestID)
+			if err != nil {
+				return fmt.Errorf("failed to run TranscodeSegment: %s", err)
+			}
 		}
+		return nil
+	}, TranscodeRetryBackoff())
+
+	if err != nil {
+		return err
 	}
 
 	duration := time.Since(start)
@@ -198,10 +304,20 @@ func transcodeSegment(
 			return fmt.Errorf("error building rendition segment URL %q: %s", targetRenditionURL, err)
 		}
 
-		err = clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), UPLOAD_TIMEOUT)
+		if transcodeRequest.GenerateMP4 {
+			// get inner segments table from outer rendition table
+			segmentsList := renditionList.GetSegmentList(transcodedSegment.Name)
+			// add new entry for segment # and corresponding byte stream
+			segmentsList.AddSegmentData(segment.Index, transcodedSegment.MediaData)
+		}
+
+		err = backoff.Retry(func() error {
+			return clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), UPLOAD_TIMEOUT)
+		}, clients.UploadRetryBackoff())
 		if err != nil {
 			return fmt.Errorf("failed to upload master playlist: %s", err)
 		}
+
 		// bitrate calculation
 		transcodedStats[renditionIndex].Bytes += int64(len(transcodedSegment.MediaData))
 		transcodedStats[renditionIndex].DurationMs += float64(segment.Input.DurationMillis)
@@ -263,4 +379,8 @@ type RenditionStats struct {
 	DurationMs       float64
 	ManifestLocation string
 	BitsPerSecond    uint32
+}
+
+func TranscodeRetryBackoff() backoff.BackOff {
+	return backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10)
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/livepeer/catalyst-api/log"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/go-tools/drivers"
 )
@@ -23,34 +22,26 @@ func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("failed to parse OS URL %q: %s", log.RedactURL(osURL), err)
 	}
 
-	var fileInfoReader *drivers.FileInfoReader
-	var retries = -1
-	var url string
-	readOperation := makeOperation(func() error {
-		var err error
-		retries++
-		sess := storageDriver.NewSession("")
-		info := sess.GetInfo()
-		if info == nil {
-			url = ""
-		} else {
-			url = info.S3Info.Host
-		}
-		fileInfoReader, err = sess.ReadData(context.Background(), "")
-		return err
-	})
-
 	start := time.Now()
-	err = backoff.Retry(readOperation, backoff.WithMaxRetries(newConstantBackOffExecutor(), config.DownloadOSURLRetries))
+
+	sess := storageDriver.NewSession("")
+	info := sess.GetInfo()
+	var url string
+	if info == nil {
+		url = ""
+	} else {
+		url = info.S3Info.Host
+	}
+	fileInfoReader, err := sess.ReadData(context.Background(), "")
+
 	if err != nil {
 		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(url, "read").Inc()
-		return nil, fmt.Errorf("failed to read from OS URL %q: %s", log.RedactURL(osURL), err)
+		return nil, fmt.Errorf("failed to read from OS URL %q: %w", log.RedactURL(osURL), err)
 	}
 
 	duration := time.Since(start)
 
 	metrics.Metrics.ObjectStoreClient.RequestDuration.WithLabelValues(url, "read").Observe(duration.Seconds())
-	metrics.Metrics.ObjectStoreClient.RetryCount.WithLabelValues(url, "read").Set(float64(retries))
 
 	return fileInfoReader.Body, nil
 }
@@ -60,24 +51,18 @@ func UploadToOSURL(osURL, filename string, data io.Reader, timeout time.Duration
 	if err != nil {
 		return fmt.Errorf("failed to parse OS URL %q: %s", log.RedactURL(osURL), err)
 	}
-
-	var retries = -1
-	var url string
-	writeOperation := makeOperation(func() error {
-		retries++
-		sess := storageDriver.NewSession("")
-		info := sess.GetInfo()
-		if info == nil {
-			url = ""
-		} else {
-			url = info.S3Info.Host
-		}
-		_, err := sess.SaveData(context.Background(), filename, data, nil, timeout)
-		return err
-	})
-
 	start := time.Now()
-	err = backoff.Retry(writeOperation, backoff.WithMaxRetries(newExponentialBackOffExecutor(), 5))
+
+	var url string
+	sess := storageDriver.NewSession("")
+	info := sess.GetInfo()
+	if info == nil {
+		url = ""
+	} else {
+		url = info.S3Info.Host
+	}
+	_, err = sess.SaveData(context.Background(), filename, data, nil, timeout)
+
 	if err != nil {
 		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(url, "write").Inc()
 		return fmt.Errorf("failed to write file %q to OS URL %q: %s", filename, log.RedactURL(osURL), err)
@@ -86,7 +71,6 @@ func UploadToOSURL(osURL, filename string, data io.Reader, timeout time.Duration
 	duration := time.Since(start)
 
 	metrics.Metrics.ObjectStoreClient.RequestDuration.WithLabelValues(url, "write").Observe(duration.Seconds())
-	metrics.Metrics.ObjectStoreClient.RetryCount.WithLabelValues(url, "write").Set(float64(retries))
 
 	return nil
 }
@@ -148,10 +132,23 @@ func newExponentialBackOffExecutor() *backoff.ExponentialBackOff {
 	return backOff
 }
 
-func newConstantBackOffExecutor() *backoff.ConstantBackOff {
-	return backoff.NewConstantBackOff(maxRetryInterval)
+func UploadRetryBackoff() backoff.BackOff {
+	return backoff.WithMaxRetries(newExponentialBackOffExecutor(), 5)
 }
 
-var makeOperation = func(fn func() error) func() error {
-	return fn
+func SignURL(u *url.URL) (string, error) {
+	if u.Scheme == "" || u.Scheme == "file" { // not compatible with presigning
+		return u.String(), nil
+	}
+	driver, err := drivers.ParseOSURL(u.String(), true)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse OS url: %w", err)
+	}
+
+	sess := driver.NewSession("")
+	signedURL, err := sess.Presign("", PresignDuration)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate signed url: %w", err)
+	}
+	return signedURL, nil
 }

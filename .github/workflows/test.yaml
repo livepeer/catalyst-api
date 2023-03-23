@@ -21,7 +21,7 @@ jobs:
 
       - name: Set up go
         id: go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v4
         with:
           go-version-file: go.mod
           cache: true
@@ -65,7 +65,7 @@ jobs:
 
       - name: Set up go
         id: go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v4
         with:
           go-version-file: go.mod
           cache: true
@@ -74,6 +74,20 @@ jobs:
       - name: Install go modules
         if: steps.go.outputs.cache-hit != 'true'
         run: go mod download
+
+      - name: Install dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: ffmpeg
+          version: 1.0
+
       - name: Run cucumber tests
         run: |
           go test -v test/cucumber_test.go
+
+      - name: Upload logs
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: cucumber-logs
+          path: test/logs

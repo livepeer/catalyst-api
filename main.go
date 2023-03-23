@@ -13,8 +13,10 @@ import (
 	"github.com/livepeer/catalyst-api/api"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/pipeline"
+	"github.com/livepeer/catalyst-api/pprof"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
 )
 
@@ -25,7 +27,10 @@ func main() {
 	apiToken := flag.String("api-token", "IAmAuthorized", "Auth header value for API access")
 	mistJson := flag.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
 	promPort := flag.Int("prom-port", 2112, "Prometheus metrics port")
+	pprofPort := flag.Int("pprof-port", 6061, "Pprof listen port")
+	debugPort := flag.Int("debug-port", 6062, "Debug endpoint listen port")
 	sourceOutputUrl := flag.String("source-output", "", "URL for the video source segments used if source_segments is not defined in the upload request")
+	URLVarFlag(&config.PrivateBucketURL, "private-bucket", "URL for the private media bucket")
 	externalTranscoderUrl := flag.String("external-transcoder", "", "URL for the external transcoder to be used by the pipeline coordinator. Only 1 implementation today for AWS MediaConvert which should be in the format: mediaconvert://key-id:key-secret@endpoint-host?region=aws-region&role=iam-role&s3_aux_bucket=s3://bucket")
 	vodPipelineStrategy := flag.String("vod-pipeline-strategy", string(pipeline.StrategyCatalystDominance), "Which strategy to use for the VOD pipeline")
 	flag.StringVar(&config.RecordingCallback, "recording", "http://recording.livepeer.com/recording/status", "Callback URL for recording start&stop events")
@@ -46,6 +51,9 @@ func main() {
 
 	go func() {
 		log.Fatal(metrics.ListenAndServe(*promPort))
+	}()
+	go func() {
+		log.Println(pprof.ListenAndServe(*pprofPort))
 	}()
 
 	mist := &clients.MistClient{
@@ -73,6 +81,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 	}
+	go func() {
+		log.Println(handlers.DebugEndpointListenAndServe(*debugPort, vodEngine))
+	}()
 
 	// Start the HTTP API server
 	if err := api.ListenAndServe(*port, *apiToken, vodEngine); err != nil {
@@ -92,21 +103,15 @@ func parseURL(s string, dest **url.URL) error {
 	return nil
 }
 
-func URLVarFlag(fs *flag.FlagSet, dest **url.URL, name, value, usage string) {
-	if err := parseURL(value, dest); err != nil {
-		panic(err)
-	}
-	fs.Func(name, usage, func(s string) error {
-		return parseURL(s, dest)
+func URLSliceVarFlag(dest *[]*url.URL, name, value, usage string) {
+	flag.Func(name, usage, func(s string) error {
+		return parseURLs(s, dest)
 	})
 }
 
-func URLSliceVarFlag(dest *[]*url.URL, name, value, usage string) {
-	if err := parseURLs(value, dest); err != nil {
-		panic(err)
-	}
+func URLVarFlag(dest **url.URL, name, usage string) {
 	flag.Func(name, usage, func(s string) error {
-		return parseURLs(s, dest)
+		return parseURL(s, dest)
 	})
 }
 

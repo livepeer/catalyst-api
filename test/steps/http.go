@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -21,10 +23,33 @@ func (s *StepContext) CreateGetRequest(endpoint string) error {
 }
 
 func (s *StepContext) CreatePostRequest(endpoint, payload string) error {
-	if payload == "a valid upload vod request" {
-		payload = s.getDefaultUploadRequestPayload()
+	sourceFile, err := os.CreateTemp(os.TempDir(), "source*.mp4")
+	if err != nil {
+		return fmt.Errorf("failed to create a source file: %s", err)
+	}
+	sourceBytes, err := os.ReadFile("fixtures/tiny.mp4")
+	if err != nil {
+		return fmt.Errorf("failed to read example source file: %s", err)
+	}
+	if _, err = sourceFile.Write(sourceBytes); err != nil {
+		return fmt.Errorf("failed to write to source file: %s", err)
 	}
 
+	if payload == "a valid upload vod request" {
+		req := DefaultUploadRequest
+		req.URL = "file://" + sourceFile.Name()
+		if payload, err = req.ToJSON(); err != nil {
+			return fmt.Errorf("failed to build upload request JSON: %s", err)
+		}
+	}
+	if payload == "a valid upload vod request with a custom segment size" {
+		req := DefaultUploadRequest
+		req.URL = "file://" + sourceFile.Name()
+		req.TargetSegmentSizeSecs = 3
+		if payload, err = req.ToJSON(); err != nil {
+			return fmt.Errorf("failed to build upload request JSON: %s", err)
+		}
+	}
 	if payload == "an invalid upload vod request" {
 		payload = "{}"
 	}
@@ -43,29 +68,6 @@ func (s *StepContext) CreatePostRequest(endpoint, payload string) error {
 
 func (s *StepContext) SetAuthHeaders() {
 	s.authHeaders = "Bearer IAmAuthorized"
-}
-
-func (s *StepContext) getDefaultUploadRequestPayload() string {
-	return `{
-		"url": "http://localhost/input",
-		"callback_url": "http://localhost:3000/cb",
-		"output_locations": [
-			{
-				"type": "object_store",
-				"url": "memory://localhost/output.m3u8",
- 				"outputs": {
-					"source_segments": true
-				}
-			},
-			{
-				"type": "pinata",
-				"pinata_access_key": "abc",
- 				"outputs": {
-					"transcoded_segments": true
-				}
-			}
-		]
-	}`
 }
 
 func (s *StepContext) SetTimeout(timeoutSecs int64) {
@@ -101,6 +103,26 @@ func (s *StepContext) CheckHTTPResponseCodeAndBody(code int, expectedBody string
 	return nil
 }
 
+func (s *StepContext) CheckMist(segmentSize int) error {
+	timeoutSecs := 5
+	for counter := 0; counter < timeoutSecs; counter++ {
+		urls := s.GetMistPushStartURLs()
+		if len(urls) > 1 {
+			return fmt.Errorf("received too many Mist segmenting requests (%d)", len(urls))
+		}
+		if len(urls) == 1 {
+			expectedTargetURL := fmt.Sprintf("memory://localhost/source/$currentMediaTime.ts?m3u8=output.m3u8&split=%d", segmentSize)
+			actualTargetURL := urls[0]
+			if expectedTargetURL != actualTargetURL {
+				return fmt.Errorf("incorrect Mist segmenting URL - expected %s but got %s", expectedTargetURL, actualTargetURL)
+			}
+			return nil
+		}
+		time.Sleep(time.Second)
+	}
+	return fmt.Errorf("did not receive a Mist segmenting request within %d seconds", timeoutSecs)
+}
+
 func (s *StepContext) CheckHTTPResponseCode(code int) error {
 	if s.latestResponse.StatusCode != code {
 		body, _ := io.ReadAll(s.latestResponse.Body)
@@ -121,6 +143,18 @@ func (s *StepContext) CheckHTTPResponseBody(expectedBody string) error {
 	}
 
 	return nil
+}
+
+func (s *StepContext) CheckHTTPResponseBodyFromFile(expectedBodyFilePath string) error {
+	file, err := os.Open(path.Join("fixtures", expectedBodyFilePath))
+	if err != nil {
+		return err
+	}
+	bytes, err := io.ReadAll(file)
+	if err != nil {
+		return err
+	}
+	return s.CheckHTTPResponseBody(string(bytes))
 }
 
 func (s *StepContext) SetRequestPayload(payload string) {

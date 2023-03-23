@@ -2,12 +2,10 @@ package pipeline
 
 import (
 	"fmt"
-	"math"
-	"mime"
-	"net/http"
 	"net/url"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,7 +16,6 @@ import (
 )
 
 const MIST_SEGMENTING_SUBDIR = "source"
-const TARGET_SEGMENT_LENGTH_SECS = "5"
 
 type mist struct {
 	MistClient      clients.MistAPIClient
@@ -57,36 +54,12 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	}
 	job.SegmentingTargetURL = segmentingTargetURL.String()
 
-	mistTargetURL, err := targetURLToMistTargetURL(*sourceOutputUrl)
+	mistTargetURL, err := targetURLToMistTargetURL(*sourceOutputUrl, job.TargetSegmentSizeSecs)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create mistTargetURL: %w", err)
 	}
 	log.AddContext(job.RequestID, "mist_target_url", mistTargetURL)
 	log.AddContext(job.RequestID, "segmented_url", job.SegmentingTargetURL)
-
-	// Arweave / IPFS URLs don't support HTTP Range requests and so Mist can't natively handle them for segmenting
-	// This workaround copies the file from Arweave to S3 and then tells Mist to use the S3 URL
-	if clients.IsDStorageResource(job.SourceFile) {
-		if !isVideo(job.RequestID, job.SourceFile) {
-			return nil, fmt.Errorf("source was not a video: %s", job.SourceFile)
-		}
-		sourceURL, err := url.Parse(job.SourceFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse source as URL: %w", err)
-		}
-
-		newSourceURL, err := inSameDirectory(*sourceOutputUrl, MIST_SEGMENTING_SUBDIR, path.Base(sourceURL.Path))
-		if err != nil {
-			return nil, fmt.Errorf("cannot create location for source copy: %w", err)
-		}
-		log.AddContext(job.RequestID, "new_source_url", newSourceURL.String())
-
-		if err := clients.CopyDStorageToS3(job.SourceFile, newSourceURL.String(), job.RequestID); err != nil {
-			return nil, fmt.Errorf("cannot copy content: %w", err)
-		}
-		job.SourceFile = newSourceURL.String()
-		job.ReportProgress(clients.TranscodeStatusPreparing, 0.1)
-	}
 
 	// Attempt an out-of-band call to generate the dtsh headers using MistIn*
 	var dtshStartTime = time.Now()
@@ -109,27 +82,6 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	job.ReportProgress(clients.TranscodeStatusPreparing, 0.3)
 	return ContinuePipeline, nil
-}
-
-var defaultHttpClient = &http.Client{Timeout: 5 * time.Second}
-
-func isVideo(requestID, source string) bool {
-	resp, err := defaultHttpClient.Head(source)
-	if err != nil {
-		log.Log(requestID, "failed to get headers", "err", err.Error())
-		return true // fail open on errors
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		log.Log(requestID, "bad status code", "status", resp.StatusCode)
-		return true // fail open
-	}
-	contentType := resp.Header.Get("Content-Type")
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	if err != nil {
-		log.Log(requestID, "media type parsing failed", "err", err.Error())
-		return true // fail open on errors
-	}
-	return strings.Contains(mediaType, "video")
 }
 
 func (m *mist) processUploadVOD(streamName, sourceURL, targetURL string) error {
@@ -175,15 +127,9 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 	}
 
 	// Compare duration of source stream to the segmented stream to ensure the input file was completely segmented before attempting to transcode
-	var inputVideoLengthMillis int64
-	for track, trackInfo := range streamInfo.Meta.Tracks {
-		if strings.Contains(track, "video") {
-			inputVideoLengthMillis = trackInfo.Lastms
-		}
-	}
-	if math.Abs(float64(inputVideoLengthMillis-p.StreamMediaDurationMillis)) > 500 {
-		log.Log(requestID, "Input video duration does not match segmented video duration", "input_duration_ms", inputVideoLengthMillis, "segmented_duration_ms", p.StreamMediaDurationMillis)
-		return nil, fmt.Errorf("input video duration (%dms) does not match segmented video duration (%dms)", inputVideoLengthMillis, p.StreamMediaDurationMillis)
+	if err := CheckSegmentedDurationWithinBounds(streamInfo, p.StreamMediaDurationMillis); err != nil {
+		log.Log(requestID, "Segmented Video duration is not within acceptable bounds vs. source duration: %s", err)
+		return nil, fmt.Errorf("segmented Video duration is not within acceptable bounds vs. source duration: %s", err)
 	}
 
 	transcodeRequest := transcode.TranscodeSegmentRequest{
@@ -197,6 +143,7 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 		TargetURL:         job.TargetURL.String(),
 		RequestID:         requestID,
 		ReportProgress:    job.ReportProgress,
+		GenerateMP4:       job.GenerateMP4,
 	}
 
 	var audioCodec = ""
@@ -241,9 +188,6 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 		}
 	}
 
-	job.sourceCodecVideo = videoCodec
-	job.sourceCodecAudio = audioCodec
-
 	job.state = "transcoding"
 	job.sourceBytes = int64(p.WrittenBytes)
 	job.sourceDurationMs = p.StreamMediaDurationMillis
@@ -263,17 +207,6 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 
 	job.transcodedSegments = transcodedSegments
 
-	// TODO: CreateDTSH is hardcoded to call MistInMP4 - the call below requires a call to MistInHLS instead.
-	//	 Update this logic later as it's required for Mist playback.
-	/*
-		// prepare .dtsh headers for all rendition playlists
-		for _, output := range outputs {
-			if err := d.MistClient.CreateDTSH(output.Manifest); err != nil {
-				// should not block the ingestion flow or make it fail on error.
-				log.LogError(requestID, "CreateDTSH() for rendition failed", err, "destination", output.Manifest)
-			}
-		}
-	*/
 	return &HandlerOutput{
 		Result: &UploadJobResult{
 			InputVideo: inputInfo,
@@ -305,7 +238,7 @@ func inSameDirectory(base url.URL, paths ...string) (*url.URL, error) {
 // and give it to Mist in the form:
 //
 //	s3+https://xyz:xyz@storage.googleapis.com/a/b/c/seg_$currentMediaTime.ts?m3u8=index.m3u8&split=5
-func targetURLToMistTargetURL(targetURL url.URL) (string, error) {
+func targetURLToMistTargetURL(targetURL url.URL, targetSegmentLengthSecs int64) (string, error) {
 	targetManifestFilename := path.Base(targetURL.Path)
 	segmentingTargetURL, err := inSameDirectory(targetURL, MIST_SEGMENTING_SUBDIR, "$currentMediaTime.ts")
 	if err != nil {
@@ -314,8 +247,26 @@ func targetURLToMistTargetURL(targetURL url.URL) (string, error) {
 
 	queryValues := segmentingTargetURL.Query()
 	queryValues.Add("m3u8", targetManifestFilename)
-	queryValues.Add("split", TARGET_SEGMENT_LENGTH_SECS)
+	queryValues.Add("split", strconv.FormatInt(targetSegmentLengthSecs, 10))
 	segmentingTargetURL.RawQuery = queryValues.Encode()
 
 	return segmentingTargetURL.String(), nil
+}
+
+func CheckSegmentedDurationWithinBounds(streamInfo clients.MistStreamInfo, segmentedDurationMillis int64) error {
+	var inputVideoLengthMillis int64
+	for track, trackInfo := range streamInfo.Meta.Tracks {
+		if strings.Contains(track, "video") {
+			inputVideoLengthMillis = trackInfo.Lastms
+		}
+	}
+
+	// We're more lenient (2x video length) if the segmented video is longer than the input
+	// If the output is shorter then it's more likely to be representative of an issue
+	if float64(inputVideoLengthMillis-segmentedDurationMillis) > 500 ||
+		float64(inputVideoLengthMillis-segmentedDurationMillis) < -float64(inputVideoLengthMillis) {
+		return fmt.Errorf("input video duration (%dms) does not match segmented video duration (%dms)", inputVideoLengthMillis, segmentedDurationMillis)
+	}
+
+	return nil
 }

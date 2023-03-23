@@ -49,7 +49,7 @@ func init() {
 }
 
 func startApp() error {
-	app = exec.Command("./app")
+	app = exec.Command("./app", "-private-bucket", "fixtures/playback-bucket")
 	outfile, err := os.Create("logs/app.log")
 	if err != nil {
 		return err
@@ -85,6 +85,8 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^I get an HTTP response with code "([^"]*)"$`, stepContext.CheckHTTPResponseCode)
 	ctx.Step(`^I get an HTTP response with code "([^"]*)" and the following body "([^"]*)"$`, stepContext.CheckHTTPResponseCodeAndBody)
 	ctx.Step(`^my "((failed)|(successful))" request metrics get recorded$`, stepContext.CheckRecordedMetrics)
+	ctx.Step(`^Mist receives a request for segmenting with "([^"]*)" second segments$`, stepContext.CheckMist)
+	ctx.Step(`^the body matches file "([^"]*)"$`, stepContext.CheckHTTPResponseBodyFromFile)
 
 	ctx.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
 		if app != nil && app.Process != nil {
@@ -100,7 +102,9 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 
 		_ = stepContext.Mist.Shutdown(ctx)
 		_ = stepContext.Studio.Shutdown(ctx)
-		_ = stepContext.MinioAdmin.ServiceStop(ctx)
+		if stepContext.MinioAdmin != nil {
+			_ = stepContext.MinioAdmin.ServiceStop(ctx)
+		}
 		return ctx, nil
 	})
 }

@@ -1,11 +1,12 @@
 package pipeline
 
 import (
-	"net/http"
-	"net/http/httptest"
+	"fmt"
 	"net/url"
 	"testing"
 
+	"github.com/livepeer/catalyst-api/clients"
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -47,67 +48,16 @@ func Test_inSameDirectory(t *testing.T) {
 	}
 }
 
-func Test_isVideo(t *testing.T) {
-	tests := []struct {
-		name        string
-		contentType string
-		want        bool
-	}{
-		{
-			name:        "mp4 video",
-			contentType: "video/mp4; foo=bar",
-			want:        true,
-		},
-		{
-			name:        "no params",
-			contentType: "video/mp4",
-			want:        true,
-		},
-		{
-			name:        "unknown video",
-			contentType: "video; foo=bar",
-			want:        true,
-		},
-		{
-			name:        "not a video",
-			contentType: "foo/bar; video=bar",
-			want:        false,
-		},
-		{
-			name:        "empty content type",
-			contentType: "",
-			want:        true,
-		},
-		{
-			name:        "empty content type with params",
-			contentType: "; foo=bar",
-			want:        true,
-		},
-	}
-	for _, tc := range tests {
-		tt := tc
-		t.Run(tt.name, func(t *testing.T) {
-			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, http.MethodHead, r.Method)
-				w.Header().Add("content-type", tt.contentType)
-				w.WriteHeader(http.StatusOK)
-			}))
-			defer ts.Close()
-			require.Equal(t, tc.want, isVideo("", ts.URL))
-		})
-	}
-}
-
 func TestItConvertsS3TargetURLToMistTargetURLCorrectly(t *testing.T) {
 	initialTargetURL, err := url.Parse("s3+https://abc:def@storage.googleapis.com/a/b/c/index.m3u8")
 	require.NoError(t, err)
 
-	mistTargetURL, err := targetURLToMistTargetURL(*initialTargetURL)
+	mistTargetURL, err := targetURLToMistTargetURL(*initialTargetURL, config.DefaultSegmentSizeSecs)
 	require.NoError(t, err)
 
 	require.Equal(
 		t,
-		"s3+https://abc:def@storage.googleapis.com/a/b/c/source/$currentMediaTime.ts?m3u8=index.m3u8&split=5",
+		"s3+https://abc:def@storage.googleapis.com/a/b/c/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10",
 		mistTargetURL,
 	)
 }
@@ -116,12 +66,78 @@ func TestItConvertsLocalPathToMistTargetCorrectly(t *testing.T) {
 	initialTargetURL, err := url.Parse("/a/b/c/index.m3u8")
 	require.NoError(t, err)
 
-	mistTargetURL, err := targetURLToMistTargetURL(*initialTargetURL)
+	mistTargetURL, err := targetURLToMistTargetURL(*initialTargetURL, config.DefaultSegmentSizeSecs)
 	require.NoError(t, err)
 
 	require.Equal(
 		t,
-		"/a/b/c/source/$currentMediaTime.ts?m3u8=index.m3u8&split=5",
+		"/a/b/c/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10",
 		mistTargetURL,
 	)
+}
+
+func TestSegmentedVersusSourceDurationComparison(t *testing.T) {
+	type TestCase struct {
+		Name           string
+		SourceDuration int64
+		OutputDuration int64
+		ShouldSucceed  bool
+	}
+
+	testCases := []TestCase{
+		{
+			Name:           "Segmented Output Is Shorter Than Source",
+			SourceDuration: 1000,
+			OutputDuration: 1,
+			ShouldSucceed:  false,
+		},
+		{
+			Name:           "Segmented Output Is Longer Than Source",
+			SourceDuration: 1000,
+			OutputDuration: 1900,
+			ShouldSucceed:  true,
+		},
+		{
+			Name:           "Segmented Output Is Much Longer Than Source",
+			SourceDuration: 1000,
+			OutputDuration: 2500,
+			ShouldSucceed:  false,
+		},
+		{
+			Name:           "Segmented Output Is Slightly Shorter Than Source",
+			SourceDuration: 1000,
+			OutputDuration: 990,
+			ShouldSucceed:  true,
+		},
+		{
+			Name:           "Segmented Output Is Equal To Source",
+			SourceDuration: 1000,
+			OutputDuration: 1000,
+			ShouldSucceed:  true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.Name, func(t *testing.T) {
+			err := CheckSegmentedDurationWithinBounds(
+				clients.MistStreamInfo{
+					Meta: clients.MistStreamInfoMetadata{
+						Tracks: map[string]clients.MistStreamInfoTrack{
+							"video": {
+								Lastms: testCase.SourceDuration,
+							},
+						},
+					},
+				},
+				testCase.OutputDuration,
+			)
+
+			if testCase.ShouldSucceed {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, fmt.Sprintf("input video duration (%dms) does not match segmented video duration (%dms)", testCase.SourceDuration, testCase.OutputDuration))
+			}
+
+		})
+	}
 }

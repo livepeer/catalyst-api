@@ -13,17 +13,20 @@ import (
 )
 
 type Prober interface {
-	ProbeFile(url string) (InputVideo, error)
+	ProbeFile(url string, ffProbeOptions ...string) (InputVideo, error)
 }
 
 type Probe struct{}
 
-func (p Probe) ProbeFile(url string) (iv InputVideo, err error) {
+func (p Probe) ProbeFile(url string, ffProbeOptions ...string) (iv InputVideo, err error) {
+	if len(ffProbeOptions) == 0 {
+		ffProbeOptions = []string{"-loglevel", "error"}
+	}
 	var data *ffprobe.ProbeData
 	operation := func() error {
 		probeCtx, probeCancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer probeCancel()
-		data, err = ffprobe.ProbeURL(probeCtx, url, "-loglevel", "error")
+		data, err = ffprobe.ProbeURL(probeCtx, url, ffProbeOptions...)
 		return err
 	}
 
@@ -56,12 +59,17 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 	if bitRateValue == "" {
 		bitRateValue = probeData.Format.BitRate
 	}
+	var (
+		bitrate int64
+		err     error
+	)
 	if bitRateValue == "" {
-		return InputVideo{}, fmt.Errorf("error probing: bitrate field not found")
-	}
-	bitrate, err := strconv.ParseInt(bitRateValue, 10, 64)
-	if err != nil {
-		return InputVideo{}, fmt.Errorf("error parsing bitrate from probed data: %w", err)
+		bitrate = DefaultProfile720p.Bitrate
+	} else {
+		bitrate, err = strconv.ParseInt(bitRateValue, 10, 64)
+		if err != nil {
+			return InputVideo{}, fmt.Errorf("error parsing bitrate from probed data: %w", err)
+		}
 	}
 	// parse filesize
 	size, err := strconv.ParseInt(probeData.Format.Size, 10, 64)
@@ -77,7 +85,7 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 	iv := InputVideo{
 		Tracks: []InputTrack{
 			{
-				Type:    "video",
+				Type:    TrackTypeVideo,
 				Codec:   videoStream.CodecName,
 				Bitrate: bitrate,
 				VideoTrack: VideoTrack{
@@ -90,8 +98,28 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 		Duration:  probeData.Format.Duration().Seconds(),
 		SizeBytes: size,
 	}
+	iv = addAudioTrack(probeData, iv)
 
 	return iv, nil
+}
+
+func addAudioTrack(probeData *ffprobe.ProbeData, iv InputVideo) InputVideo {
+	audioTrack := probeData.FirstAudioStream()
+	if audioTrack == nil {
+		return iv
+	}
+	bitrate, _ := strconv.ParseInt(audioTrack.BitRate, 10, 64)
+	iv.Tracks = append(iv.Tracks, InputTrack{
+		Type:    TrackTypeAudio,
+		Codec:   audioTrack.CodecName,
+		Bitrate: bitrate,
+		AudioTrack: AudioTrack{
+			Channels:   audioTrack.Channels,
+			SampleBits: audioTrack.BitsPerSample,
+		},
+	})
+
+	return iv
 }
 
 // function taken from task-runner task/probe.go

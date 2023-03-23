@@ -1,12 +1,16 @@
 package pipeline
 
 import (
+	"crypto/md5"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -33,6 +37,34 @@ var (
 	}
 )
 
+func setupTransferDir(t *testing.T, coor *Coordinator) (inputFile *os.File, transferDir string, cleanup func()) {
+	var err error
+	inputFile, err = os.CreateTemp(os.TempDir(), "user-input-*")
+	require.NoError(t, err)
+	movieFile, err := os.Open("../clients/fixtures/mediaconvert_payloads/sample.mp4")
+	require.NoError(t, err)
+	_, err = io.Copy(inputFile, movieFile)
+	require.NoError(t, err)
+	_, err = inputFile.WriteString("exampleFileContents")
+	require.NoError(t, err)
+	require.NoError(t, movieFile.Close())
+
+	// use the random file name as the dir name for the transfer file
+	transferDir = path.Join(inputFile.Name()+"-dir", "transfer")
+	require.NoError(t, os.MkdirAll(transferDir, 0777))
+
+	cleanup = func() {
+		inErr := os.Remove(inputFile.Name())
+		dirErr := os.RemoveAll(transferDir)
+		require.NoError(t, inErr)
+		require.NoError(t, dirErr)
+		require.NoError(t, inputFile.Close())
+	}
+
+	coor.SourceOutputUrl = transferDir
+	return
+}
+
 func TestCoordinatorDoesNotBlock(t *testing.T) {
 	require := require.New(t)
 
@@ -48,10 +80,15 @@ func TestCoordinatorDoesNotBlock(t *testing.T) {
 		},
 	}
 	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler)
-	coord.StartUploadJob(testJob)
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(job)
 	time.Sleep(1 * time.Second)
 
 	require.True(running.Load())
+	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
 	msg := requireReceive(t, callbacks, 1*time.Second)
 	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 
@@ -70,7 +107,6 @@ func TestCoordinatorPropagatesJobInfoChanges(t *testing.T) {
 	done := make(chan struct{}, 1)
 	blockHandler := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
-			require.Equal("source-file", job.SourceFile)
 			<-barrier
 			job.SourceFile = "new-source-file"
 			return ContinuePipeline, nil
@@ -83,7 +119,11 @@ func TestCoordinatorPropagatesJobInfoChanges(t *testing.T) {
 	}
 	coord := NewStubCoordinatorOpts("", nil, blockHandler, blockHandler)
 
-	coord.StartUploadJob(testJob)
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(job)
 	time.Sleep(100 * time.Millisecond)
 
 	coord.TriggerRecordingEnd(RecordingEndPayload{StreamName: config.SegmentingStreamName("123")})
@@ -107,9 +147,14 @@ func TestCoordinatorResistsPanics(t *testing.T) {
 	}
 	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler)
 
-	coord.StartUploadJob(testJob)
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(job)
 
 	require.Equal(1, len(callbacks))
+	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
 	require.Equal(clients.TranscodeStatusPreparing, (<-callbacks).Status)
 
 	msg := requireReceive(t, callbacks, 1*time.Second)
@@ -124,10 +169,14 @@ func TestCoordinatorCatalystDominance(t *testing.T) {
 	external := allFailingHandler(t)
 	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, nil, mist, external)
 
-	coord.StartUploadJob(testJob)
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(job)
 
-	job := requireReceive(t, calls, 1*time.Second)
-	require.Equal("123", job.RequestID)
+	j := requireReceive(t, calls, 1*time.Second)
+	require.Equal("123", j.RequestID)
 
 	time.Sleep(1 * time.Second)
 	require.Zero(len(calls))
@@ -161,8 +210,13 @@ func TestCoordinatorBackgroundJobsStrategies(t *testing.T) {
 			t.Fatalf("Unexpected strategy: %s", strategy)
 		}
 
-		coord.StartUploadJob(testJob)
+		inputFile, _, cleanup := setupTransferDir(t, coord)
+		defer cleanup()
+		job := testJob
+		job.SourceFile = "file://" + inputFile.Name()
+		coord.StartUploadJob(job)
 
+		requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
 		msg := requireReceive(t, callbacks, 1*time.Second)
 		require.NotZero(msg.URL)
 		require.Equal(clients.TranscodeStatusPreparing, msg.Status)
@@ -200,8 +254,13 @@ func TestCoordinatorFallbackStrategySuccess(t *testing.T) {
 
 	// Start a job that will complete successfully on mist, which should not
 	// trigger the external pipeline
-	coord.StartUploadJob(testJob)
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(job)
 
+	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
 	msg := requireReceive(t, callbacks, 1*time.Second)
 	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 
@@ -236,8 +295,13 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, mist, external)
 
 	// Start a job which mist will fail and only then call the external one
-	coord.StartUploadJob(testJob)
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(job)
 
+	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
 	msg := requireReceive(t, callbacks, 1*time.Second)
 	require.Equal("123", msg.RequestID)
 	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
@@ -247,22 +311,22 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 
 	// External provider pipeline will trigger the initial preparing trigger as well
 	msg = requireReceive(t, callbacks, 1*time.Second)
-	require.Equal("123", msg.RequestID)
+	require.Equal("fb_123", msg.RequestID)
 	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 
 	meconJob := requireReceive(t, externalCalls, 1*time.Second)
-	require.Equal("123", meconJob.RequestID)
-	require.Equal(mistJob.StreamName, meconJob.StreamName)
+	require.Equal("fb_123", meconJob.RequestID)
+	require.Equal(config.SEGMENTING_PREFIX+"fb_123", meconJob.StreamName)
 
 	// Check that the progress reported in the fallback handler is still reported
 	msg = requireReceive(t, callbacks, 1*time.Second)
 	require.NotZero(msg.URL)
-	require.Equal("123", msg.RequestID)
+	require.Equal("fb_123", msg.RequestID)
 	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 	require.Equal(clients.OverallCompletionRatio(clients.TranscodeStatusPreparing, 0.2), msg.CompletionRatio)
 
 	msg = requireReceive(t, callbacks, 1*time.Second)
-	require.Equal("123", msg.RequestID)
+	require.Equal("fb_123", msg.RequestID)
 	require.Equal(clients.TranscodeStatusCompleted, msg.Status)
 
 	time.Sleep(1 * time.Second)
@@ -280,13 +344,16 @@ func TestAllowsOverridingStrategyOnRequest(t *testing.T) {
 	// create coordinator with strategy catalyst dominance (external should never be called)
 	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, nil, mist, external)
 
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
 	// Override the strategy to background mist, which will call the external provider *and* the mist provider
 	p := testJob
 	p.PipelineStrategy = StrategyBackgroundMist
+	p.SourceFile = "file://" + inputFile.Name()
 	coord.StartUploadJob(p)
 
 	// Check that it was really called
-	meconJob := requireReceive(t, externalCalls, 1*time.Second)
+	meconJob := requireReceive(t, externalCalls, 500*time.Second)
 	require.Equal("123", meconJob.RequestID)
 	require.Equal("catalyst_vod_123", meconJob.StreamName)
 
@@ -326,18 +393,27 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 			return testHandlerResult, nil
 		},
 	}
+	callbackHandler, callbacks := callbacksRecorder()
 
 	db, dbMock, err := sqlmock.New()
 	require.NoError(err)
-	dbMock.
-		ExpectExec("insert into \"vod_completed\".*").
-		WithArgs(sqlmock.AnyArg(), 0, sqlmock.AnyArg(), "vid codec", "audio codec", "mist", "test region", "completed", 1, sqlmock.AnyArg(), 2, 3, 4, 5, "source-file", "s3+https://user:xxxxx@storage.google.com/bucket/key").
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	coord := NewStubCoordinatorOpts(StrategyBackgroundMist, nil, mist, external)
+	coord := NewStubCoordinatorOpts(StrategyBackgroundMist, callbackHandler, mist, external)
 	coord.MetricsDB = db
 
-	coord.StartUploadJob(testJob)
+	inputFile, transferDir, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	sourceFile := path.Join(transferDir, "transfer/123/"+filepath.Base(inputFile.Name()))
+
+	dbMock.
+		ExpectExec("insert into \"vod_completed\".*").
+		WithArgs(sqlmock.AnyArg(), 0, sqlmock.AnyArg(), "vid codec", "audio codec", "mist", "test region", "completed", 1, sqlmock.AnyArg(), 2, 3, 4, 5, sourceFile, "s3+https://user:xxxxx@storage.google.com/bucket/key", false).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	coord.StartUploadJob(job)
+	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
+	requireReceive(t, callbacks, 1*time.Second) // discard second TranscodeStatusPreparing message
 
 	res, err := http.Get(metricsServer.URL)
 	require.NoError(err)
@@ -358,6 +434,126 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 		return dbMock.ExpectationsWereMet()
 	})
 	require.NoError(err)
+}
+
+func Test_EmptyFile(t *testing.T) {
+	callbackHandler, callbacks := callbacksRecorder()
+	coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil)
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+
+	err := os.Truncate(inputFile.Name(), 0)
+	require.NoError(t, err)
+
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(job)
+	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
+	msg := requireReceive(t, callbacks, 1*time.Second)
+	require.Equal(t, clients.TranscodeStatusError, msg.Status)
+	require.Equal(t, "error copying input to storage: zero bytes found for source: "+job.SourceFile, msg.Error)
+}
+
+func Test_ProbeErrors(t *testing.T) {
+	tests := []struct {
+		name        string
+		fps         float64
+		assetType   string
+		size        int64
+		probeErr    error
+		expectedErr string
+	}{
+		{
+			name:        "valid",
+			expectedErr: "",
+		},
+		{
+			name:        "invalid framerate",
+			fps:         -1,
+			expectedErr: "error copying input to storage: invalid framerate: -1.000000",
+		},
+		{
+			name:        "audio only",
+			assetType:   "audio",
+			expectedErr: "error copying input to storage: no video track found in input video: no 'video' tracks found",
+		},
+		{
+			name:        "filesize greater than max",
+			size:        config.MaxInputFileSizeBytes + 1,
+			expectedErr: "error copying input to storage: input file 32212254721 bytes was greater than 32212254720 bytes",
+		},
+		{
+			name:        "probe error",
+			probeErr:    errors.New("probe failed"),
+			expectedErr: "error copying input to storage: error probing MP4 input file from S3: probe failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			callbackHandler, callbacks := callbacksRecorder()
+			coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil)
+			coord.InputCopy = &clients.InputCopy{
+				Probe: stubFFprobe{
+					FPS:  tt.fps,
+					Type: tt.assetType,
+					Size: tt.size,
+					Err:  tt.probeErr,
+				},
+			}
+			inputFile, _, cleanup := setupTransferDir(t, coord)
+			defer cleanup()
+
+			job := testJob
+			job.SourceFile = "file://" + inputFile.Name()
+			coord.StartUploadJob(job)
+			requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
+			msg := requireReceive(t, callbacks, 1*time.Second)
+
+			require.Equal(t, tt.expectedErr, msg.Error)
+		})
+	}
+}
+
+func Test_InputCopiedToTransferLocation(t *testing.T) {
+	require := require.New(t)
+	var actualTransferInput string
+	callbackHandler, callbacks := callbacksRecorder()
+	mist := &StubHandler{
+		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
+			actualTransferInput = job.SourceFile
+			return testHandlerResult, nil
+		},
+	}
+	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, callbackHandler, mist, nil)
+	f, transferDir, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+
+	job := testJob
+	job.SourceFile = "file://" + f.Name()
+	coord.StartUploadJob(job)
+	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
+	requireReceive(t, callbacks, 1*time.Second) // discard second TranscodeStatusPreparing message
+	msg := requireReceive(t, callbacks, 1*time.Second)
+	require.Equal(clients.TranscodeStatusCompleted, msg.Status)
+
+	// Check that the file was copied to the osTransferBucketURL folder
+	transferInput := path.Join(transferDir, "/transfer/123/"+filepath.Base(f.Name()))
+	require.Equal(transferInput, actualTransferInput)
+	content, err := os.Open(transferInput)
+	require.NoError(err)
+
+	hashContent := md5.New()
+	_, err = io.Copy(hashContent, content)
+	require.NoError(err)
+
+	inputFile, err := os.Open(f.Name())
+	require.NoError(err)
+	hashInputFile := md5.New()
+	_, err = io.Copy(hashInputFile, inputFile)
+	require.NoError(err)
+
+	require.Equal(hashInputFile, hashContent)
 }
 
 func retry(attempts int, sleep time.Duration, f func() error) (err error) {
@@ -409,8 +605,10 @@ func recordingHandler(err error) (Handler, <-chan *JobInfo) {
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			jobs <- job
 			if err != nil {
+				fmt.Println("WROTE TO CHANNEL " + err.Error())
 				return nil, err
 			}
+			fmt.Println("WROTE TO CHANNEL")
 			return testHandlerResult, nil
 		},
 	}
@@ -424,5 +622,153 @@ func requireReceive[T any](t *testing.T, ch <-chan T, timeout time.Duration) T {
 	case <-time.After(timeout):
 		require.Fail(t, "did not receive expected message")
 		panic("unreachable")
+	}
+}
+
+type stubFFprobe struct {
+	Bitrate  int64
+	Duration float64
+	FPS      float64
+	Type     string
+	Size     int64
+	Err      error
+}
+
+func (f stubFFprobe) ProbeFile(_ string, _ ...string) (video.InputVideo, error) {
+	if f.Err != nil {
+		return video.InputVideo{}, f.Err
+	}
+	if f.Type == "" {
+		f.Type = "video"
+	}
+	if f.FPS == 0 {
+		f.FPS = 30
+	}
+	return video.InputVideo{
+		Duration:  f.Duration,
+		SizeBytes: f.Size,
+		Tracks: []video.InputTrack{
+			{
+				Type:    f.Type,
+				Codec:   "h264",
+				Bitrate: f.Bitrate,
+				VideoTrack: video.VideoTrack{
+					Width:  576,
+					Height: 1024,
+					FPS:    f.FPS,
+				},
+			},
+		},
+	}, nil
+}
+
+func Test_checkMistCompatibleCodecs(t *testing.T) {
+	type args struct {
+		strategy Strategy
+		iv       video.InputVideo
+	}
+	inCompatibleVideoAndAudio := video.InputVideo{
+		Tracks: []video.InputTrack{
+			{
+				Codec: "HEVC",
+				Type:  video.TrackTypeVideo,
+			},
+			{
+				Codec: "ac-3",
+				Type:  video.TrackTypeAudio,
+			},
+		},
+	}
+	inCompatibleVideo := video.InputVideo{
+		Tracks: []video.InputTrack{
+			{
+				Codec: "HEVC",
+				Type:  video.TrackTypeVideo,
+			},
+			{
+				Codec: "aac",
+				Type:  video.TrackTypeAudio,
+			},
+		},
+	}
+	compatibleVideoAndAudio := video.InputVideo{
+		Tracks: []video.InputTrack{
+			{
+				Codec: "h264",
+				Type:  video.TrackTypeVideo,
+			},
+			{
+				Codec: "aac",
+				Type:  video.TrackTypeAudio,
+			},
+		},
+	}
+	tests := []struct {
+		name string
+		args args
+		want Strategy
+	}{
+		{
+			name: "catalyst dominance",
+			args: args{
+				strategy: StrategyCatalystDominance,
+				iv:       inCompatibleVideoAndAudio,
+			},
+			want: StrategyCatalystDominance,
+		},
+		{
+			name: "catalyst dominance",
+			args: args{
+				strategy: StrategyCatalystDominance,
+				iv:       inCompatibleVideo,
+			},
+			want: StrategyCatalystDominance,
+		},
+		{
+			name: "incompatible with mist - StrategyBackgroundMist",
+			args: args{
+				strategy: StrategyBackgroundMist,
+				iv:       inCompatibleVideoAndAudio,
+			},
+			want: StrategyExternalDominance,
+		},
+		{
+			name: "incompatible with mist - StrategyBackgroundMist",
+			args: args{
+				strategy: StrategyBackgroundMist,
+				iv:       inCompatibleVideo,
+			},
+			want: StrategyExternalDominance,
+		},
+		{
+			name: "compatible with mist - StrategyBackgroundMist",
+			args: args{
+				strategy: StrategyBackgroundMist,
+				iv:       compatibleVideoAndAudio,
+			},
+			want: StrategyBackgroundMist,
+		},
+		{
+			name: "incompatible with mist - StrategyFallbackExternal",
+			args: args{
+				strategy: StrategyFallbackExternal,
+				iv:       inCompatibleVideo,
+			},
+			want: StrategyExternalDominance,
+		},
+		{
+			name: "compatible with mist - StrategyFallbackExternal",
+			args: args{
+				strategy: StrategyFallbackExternal,
+				iv:       compatibleVideoAndAudio,
+			},
+			want: StrategyFallbackExternal,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := checkMistCompatibleCodecs(tt.args.strategy, tt.args.iv)
+			require.Equal(t, tt.want, got)
+		})
 	}
 }

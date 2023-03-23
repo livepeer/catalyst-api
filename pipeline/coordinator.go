@@ -7,6 +7,8 @@ import (
 	"os"
 	"path"
 	"runtime/debug"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,6 +41,11 @@ const (
 	StrategyFallbackExternal Strategy = "fallback_external"
 )
 
+const (
+	// Only mp4s of maxMP4OutDuration will have MP4s generated for each rendition
+	maxMP4OutDuration = 2 * time.Minute
+)
+
 func (s Strategy) IsValid() bool {
 	switch s {
 	case StrategyCatalystDominance, StrategyExternalDominance, StrategyBackgroundExternal, StrategyBackgroundMist, StrategyFallbackExternal:
@@ -60,7 +67,13 @@ type UploadJobPayload struct {
 	RequestID             string
 	Profiles              []video.EncodedProfile
 	PipelineStrategy      Strategy
+	TargetSegmentSizeSecs int64
 	AutoMP4               bool
+	ForceMP4              bool
+	GenerateMP4           bool
+	InputFileInfo         video.InputVideo
+	SignedSourceURL       string
+	InFallbackMode        bool
 }
 
 // UploadJobResult is the object returned by the successful execution of an
@@ -98,16 +111,17 @@ type JobInfo struct {
 	startTime    time.Time
 	result       chan bool
 
-	sourceBytes        int64
-	sourceSegments     int
-	sourceDurationMs   int64
-	sourceCodecVideo   string
-	sourceCodecAudio   string
-	transcodedSegments int
-	pipeline           string
-	catalystRegion     string
-	numProfiles        int
-	state              string
+	sourceBytes           int64
+	sourceSegments        int
+	sourceDurationMs      int64
+	sourceCodecVideo      string
+	sourceCodecAudio      string
+	transcodedSegments    int
+	targetSegmentSizeSecs int64
+	pipeline              string
+	catalystRegion        string
+	numProfiles           int
+	state                 string
 }
 
 func (j *JobInfo) ReportProgress(stage clients.TranscodeStatus, completionRatio float64) {
@@ -124,12 +138,14 @@ type Coordinator struct {
 
 	pipeMist, pipeExternal Handler
 
-	Jobs      *cache.Cache[*JobInfo]
-	MetricsDB *sql.DB
+	Jobs            *cache.Cache[*JobInfo]
+	MetricsDB       *sql.DB
+	InputCopy       clients.InputCopier
+	SourceOutputUrl string
 }
 
 func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
-	sourceOutputUrl, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB) (*Coordinator, error) {
+	sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB) (*Coordinator, error) {
 
 	if !strategy.IsValid() {
 		return nil, fmt.Errorf("invalid strategy: %s", strategy)
@@ -150,10 +166,14 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 	return &Coordinator{
 		strategy:     strategy,
 		statusClient: statusClient,
-		pipeMist:     &mist{MistClient: mistClient, SourceOutputUrl: sourceOutputUrl},
+		pipeMist:     &mist{MistClient: mistClient, SourceOutputUrl: sourceOutputURL},
 		pipeExternal: &external{extTranscoder},
 		Jobs:         cache.New[*JobInfo](),
 		MetricsDB:    metricsDB,
+		InputCopy: &clients.InputCopy{
+			Probe: video.Probe{},
+		},
+		SourceOutputUrl: sourceOutputURL,
 	}, nil
 }
 
@@ -180,6 +200,9 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 		pipeMist:     pipeMist,
 		pipeExternal: pipeExternal,
 		Jobs:         cache.New[*JobInfo](),
+		InputCopy: &clients.InputCopy{
+			Probe: video.Probe{},
+		},
 	}
 }
 
@@ -188,10 +211,60 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 // This has the main logic regarding the pipeline strategy. It starts jobs and
 // handles processing the response and triggering a fallback if appropriate.
 func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
+	// A bit hacky - this is effectively a dummy job object to allow us to reuse the runHandlerAsync and
+	// progress reporting logic. The real job objects still get created in startOneUploadJob().
+	si := &JobInfo{
+		UploadJobPayload: p,
+		statusClient:     c.statusClient,
+		startTime:        time.Now(),
+
+		numProfiles:    len(p.Profiles),
+		state:          "segmenting",
+		catalystRegion: os.Getenv("MY_REGION"),
+	}
+	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
+
+	c.runHandlerAsync(si, func() (*HandlerOutput, error) {
+		sourceURL, err := url.Parse(si.SourceFile)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing source as url: %w", err)
+		}
+
+		sourceOutputUrl, err := url.Parse(c.SourceOutputUrl)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
+		}
+		newSourceURL := sourceOutputUrl.JoinPath("transfer", si.RequestID, path.Base(sourceURL.Path))
+
+		inputVideoProbe, signedURL, err := c.InputCopy.CopyInputToS3(si.RequestID, sourceURL, newSourceURL)
+		if err != nil {
+			return nil, fmt.Errorf("error copying input to storage: %w", err)
+		}
+		p.SourceFile = newSourceURL.String()
+		p.SignedSourceURL = signedURL
+		p.InputFileInfo = inputVideoProbe
+		p.GenerateMP4 = func(forcemp4, automp4 bool, duration float64) bool {
+			if forcemp4 || (automp4 && duration <= maxMP4OutDuration.Seconds()) {
+				return true
+			}
+			return false
+		}(p.ForceMP4, p.AutoMP4, p.InputFileInfo.Duration)
+
+		log.AddContext(si.RequestID, "new_source_url", newSourceURL)
+		log.AddContext(si.RequestID, "signed_url", signedURL)
+
+		c.startUploadJob(p)
+		return nil, nil
+	})
+}
+func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 	strategy := c.strategy
 	if p.PipelineStrategy.IsValid() {
 		strategy = p.PipelineStrategy
 	}
+	strategy = checkMistCompatibleCodecs(strategy, p.InputFileInfo)
+	log.AddContext(p.RequestID, "strategy", strategy)
+
 	switch strategy {
 	case StrategyCatalystDominance:
 		c.startOneUploadJob(p, c.pipeMist, true, false)
@@ -208,11 +281,32 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		go recovered(func() (t bool, e error) {
 			success := <-c.startOneUploadJob(p, c.pipeMist, true, true)
 			if !success {
+				p.InFallbackMode = true
+				log.Log(p.RequestID, "Entering fallback pipeline")
 				c.startOneUploadJob(p, c.pipeExternal, true, false)
 			}
 			return
 		})
 	}
+}
+
+// checkMistCompatibleCodecs checks if the input codecs are compatible with mist and overrides the pipeline strategy
+// to external if they are incompatible
+func checkMistCompatibleCodecs(strategy Strategy, iv video.InputVideo) Strategy {
+	// allow StrategyCatalystDominance to pass through as this is used in tests and we might want to manually force it for debugging
+	// allow StrategyExternalDominance to pass through because we're already not trying to use mist so no need to loop through the tracks
+	if strategy == StrategyCatalystDominance || strategy == StrategyExternalDominance {
+		return strategy
+	}
+	for _, track := range iv.Tracks {
+		// if the codecs are not compatible then override to external pipeline to avoid sending to mist
+		if track.Type == video.TrackTypeVideo && strings.ToLower(track.Codec) != "h264" {
+			return StrategyExternalDominance
+		} else if track.Type == video.TrackTypeAudio && strings.ToLower(track.Codec) != "aac" {
+			return StrategyExternalDominance
+		}
+	}
+	return strategy
 }
 
 // Starts a single upload job with specified pipeline Handler. If the job is
@@ -231,6 +325,9 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		// this will prevent the callbacks for this job from actually being sent
 		p.CallbackURL = ""
 	}
+	if p.InFallbackMode {
+		p.RequestID = fmt.Sprintf("fb_%s", p.RequestID)
+	}
 	streamName := config.SegmentingStreamName(p.RequestID)
 	log.AddContext(p.RequestID, "stream_name", streamName)
 	log.AddContext(p.RequestID, "handler", handler.Name())
@@ -239,6 +336,9 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 	if handler.Name() == "external" {
 		pipeline = "aws-mediaconvert"
 	}
+
+	videoTrack, _ := p.InputFileInfo.GetTrack(video.TrackTypeVideo)
+	audioTrack, _ := p.InputFileInfo.GetTrack(video.TrackTypeAudio)
 
 	si := &JobInfo{
 		UploadJobPayload: p,
@@ -249,11 +349,14 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		startTime:        time.Now(),
 		result:           make(chan bool, 1),
 
-		pipeline:           pipeline,
-		numProfiles:        len(p.Profiles),
-		state:              "segmenting",
-		transcodedSegments: 0,
-		catalystRegion:     os.Getenv("MY_REGION"),
+		pipeline:              pipeline,
+		numProfiles:           len(p.Profiles),
+		state:                 "segmenting",
+		transcodedSegments:    0,
+		targetSegmentSizeSecs: p.TargetSegmentSizeSecs,
+		catalystRegion:        os.Getenv("MY_REGION"),
+		sourceCodecVideo:      videoTrack.Codec,
+		sourceCodecAudio:      audioTrack.Codec,
 	}
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 
@@ -312,7 +415,7 @@ func (c *Coordinator) runHandlerAsync(job *JobInfo, handler func() (*HandlerOutp
 		defer job.mu.Unlock()
 
 		out, err := recovered(handler)
-		if err != nil || !out.Continue {
+		if err != nil || (out != nil && !out.Continue) {
 			c.finishJob(job, out, err)
 		}
 		// dummy
@@ -343,7 +446,16 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 
 	log.Log(job.RequestID, "Finished job and deleted from job cache", "success", success)
 
-	var labels = []string{job.sourceCodecVideo, job.sourceCodecAudio, job.pipeline, job.catalystRegion, fmt.Sprint(job.numProfiles), job.state, config.Version}
+	var labels = []string{
+		job.sourceCodecVideo,
+		job.sourceCodecAudio,
+		job.pipeline,
+		job.catalystRegion,
+		fmt.Sprint(job.numProfiles),
+		job.state,
+		config.Version,
+		strconv.FormatBool(job.InFallbackMode),
+	}
 
 	metrics.Metrics.VODPipelineMetrics.Count.
 		WithLabelValues(labels...).
@@ -406,8 +518,9 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
                             "source_bytes_count",
                             "source_duration",
                             "source_url",
-                            "target_url"
-                            ) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`
+                            "target_url",
+                            "in_fallback_mode"
+                            ) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`
 	_, err := c.MetricsDB.Exec(
 		insertDynStmt,
 		time.Now().Unix(),
@@ -426,6 +539,7 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
 		job.sourceDurationMs,
 		log.RedactURL(job.SourceFile),
 		targetURL,
+		job.InFallbackMode,
 	)
 	if err != nil {
 		log.LogError(job.RequestID, "error writing postgres metrics", err)

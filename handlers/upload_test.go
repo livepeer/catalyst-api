@@ -1,9 +1,10 @@
 package handlers
 
 import (
-	"github.com/stretchr/testify/require"
 	"net/url"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetSourceOutputURL(t *testing.T) {
@@ -127,4 +128,21 @@ func TestGetTargetURL(t *testing.T) {
 func toUrl(URL string) *url.URL {
 	res, _ := url.Parse(URL)
 	return res
+}
+
+func TestItRejectsLocalDomain(t *testing.T) {
+	err := CheckSourceURLValid("http://ipfs.libraries.svc.cluster.local:8080/ipfs/asdasd")
+	require.EqualError(t, err, ".local domains are not valid")
+}
+
+func TestItRejectsEmptyURL(t *testing.T) {
+	err := CheckSourceURLValid("")
+	require.EqualError(t, err, "empty source URL")
+}
+
+func TestItAcceptsValidSourceURLs(t *testing.T) {
+	require.NoError(t, CheckSourceURLValid("http://www.google.com"))
+	require.NoError(t, CheckSourceURLValid("http://www.google.com:8080/123/asdsdf"))
+	require.NoError(t, CheckSourceURLValid("ipfs://sfsdf234fdsdfsd"))
+	require.NoError(t, CheckSourceURLValid("ar://123456"))
 }

@@ -18,3 +18,4 @@ test/minio
 
 # mock files always end up in a directory named /mocks/
 mocks/
+test/transfer

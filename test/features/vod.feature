@@ -20,9 +20,17 @@ Feature: VOD Streaming
     And receive a response within "3" seconds
     Then I get an HTTP response with code "200"
     And my "successful" request metrics get recorded
+    And Mist receives a request for segmenting with "10" second segments
 
   Scenario: Submit a bad request to `/api/vod`
     And I submit to the "/api/vod" endpoint with "an invalid upload vod request"
     And receive a response within "3" seconds
     Then I get an HTTP response with code "400"
     And my "failed" request metrics get recorded
+
+Scenario: Submit a video asset to stream as VOD with a custom segment size
+    When I submit to the "/api/vod" endpoint with "a valid upload vod request with a custom segment size"
+    And receive a response within "3" seconds
+    Then I get an HTTP response with code "200"
+    And my "successful" request metrics get recorded
+    And Mist receives a request for segmenting with "3" second segments

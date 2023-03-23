@@ -7,8 +7,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
+	"github.com/livepeer/catalyst-api/config"
 	xerrors "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/video"
@@ -16,6 +19,11 @@ import (
 )
 
 const MAX_COPY_FILE_DURATION = 30 * time.Minute
+const PresignDuration = 24 * time.Hour
+
+type InputCopier interface {
+	CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL) (video.InputVideo, string, error)
+}
 
 type InputCopy struct {
 	S3    S3
@@ -23,73 +31,80 @@ type InputCopy struct {
 }
 
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
-func (s *InputCopy) CopyInputToS3(args TranscodeJobArgs, s3HTTPTransferURL *url.URL) (TranscodeJobArgs, error) {
-	if s3HTTPTransferURL == nil {
-		return TranscodeJobArgs{}, errors.New("s3HTTPTransferURL was nil")
-	}
-	s3URL, err := url.Parse("s3://" + s3HTTPTransferURL.Path)
-	if err != nil {
-		return TranscodeJobArgs{}, fmt.Errorf("failed to parse s3 url: %w", err)
+func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL) (inputVideoProbe video.InputVideo, signedURL string, err error) {
+	if osTransferURL == nil {
+		err = errors.New("osTransferURL was nil")
+		return
 	}
 
-	log.Log(args.RequestID, "Copying input file to S3", "source", args.InputFile, "dest", s3URL)
-	size, err := CopyFile(context.Background(), args.InputFile.String(), s3HTTPTransferURL.String(), "", args.RequestID)
+	log.Log(requestID, "Copying input file to S3", "source", inputFile.String(), "dest", osTransferURL.String())
+	size, err := CopyFile(context.Background(), inputFile.String(), osTransferURL.String(), "", requestID)
 	if err != nil {
-		return TranscodeJobArgs{}, fmt.Errorf("error copying input file to S3: %w", err)
+		err = fmt.Errorf("error copying input file to S3: %w", err)
+		return
 	}
 	if size <= 0 {
-		return TranscodeJobArgs{}, fmt.Errorf("zero bytes found for source: %s", args.InputFile)
+		err = fmt.Errorf("zero bytes found for source: %s", inputFile)
+		return
 	}
-	log.Log(args.RequestID, "Copied", "bytes", size, "source", args.InputFile, "dest", s3URL)
-	args.CollectSourceSize(size)
+	log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", osTransferURL.String())
 
-	presignedInputFileURL, err := s.S3.PresignS3(s3URL.Host, s3URL.Path)
+	signedURL, err = SignURL(osTransferURL)
 	if err != nil {
-		return TranscodeJobArgs{}, fmt.Errorf("error creating s3 url: %w", err)
+		return
 	}
 
-	log.Log(args.RequestID, "starting probe", "s3url", s3URL)
-	inputVideoProbe, err := s.Probe.ProbeFile(presignedInputFileURL)
+	log.Log(requestID, "starting probe", "source", inputFile.String(), "dest", osTransferURL.String())
+	inputVideoProbe, err = s.Probe.ProbeFile(signedURL)
 	if err != nil {
-		log.Log(args.RequestID, "probe failed", "s3url", s3URL, "err", err)
-		return TranscodeJobArgs{}, fmt.Errorf("error probing MP4 input file from S3: %w", err)
+		log.Log(requestID, "probe failed", "err", err, "source", inputFile.String(), "dest", osTransferURL.String())
+		err = fmt.Errorf("error probing MP4 input file from S3: %w", err)
+		return
 	}
-	log.Log(args.RequestID, "probe succeeded", "s3url", s3URL)
-	videoTrack, err := inputVideoProbe.GetVideoTrack()
+	log.Log(requestID, "probe succeeded", "source", inputFile.String(), "dest", osTransferURL.String())
+	videoTrack, err := inputVideoProbe.GetTrack(video.TrackTypeVideo)
 	if err != nil {
-		return TranscodeJobArgs{}, fmt.Errorf("no video track found in input video: %w", err)
+		err = fmt.Errorf("no video track found in input video: %w", err)
+		return
 	}
+	audioTrack, _ := inputVideoProbe.GetTrack(video.TrackTypeAudio)
 	if videoTrack.FPS <= 0 {
 		// unsupported, includes things like motion jpegs
-		return TranscodeJobArgs{}, fmt.Errorf("invalid framerate: %f", videoTrack.FPS)
+		err = fmt.Errorf("invalid framerate: %f", videoTrack.FPS)
+		return
 	}
-
-	if inputVideoProbe.SizeBytes > maxInputFileSizeBytes {
-		return TranscodeJobArgs{}, fmt.Errorf("input file %d bytes was greater than %d bytes", inputVideoProbe.SizeBytes, maxInputFileSizeBytes)
+	if inputVideoProbe.SizeBytes > config.MaxInputFileSizeBytes {
+		err = fmt.Errorf("input file %d bytes was greater than %d bytes", inputVideoProbe.SizeBytes, config.MaxInputFileSizeBytes)
+		return
 	}
-	args.InputFileInfo = inputVideoProbe
-	args.InputFile = s3URL
-	return args, nil
+	log.Log(requestID, "probed video track:", "codec", videoTrack.Codec, "bitrate", videoTrack.Bitrate, "duration", videoTrack.DurationSec, "w", videoTrack.Width, "h", videoTrack.Height, "pix-format", videoTrack.PixelFormat, "FPS", videoTrack.FPS)
+	log.Log(requestID, "probed audio track", "codec", audioTrack.Codec, "bitrate", audioTrack.Bitrate, "duration", audioTrack.DurationSec, "channels", audioTrack.Channels)
+	return
 }
 
-func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (int64, error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-	defer cancel()
-	writtenBytes := ByteAccumulatorWriter{count: 0}
-	c, err := getFile(ctx, sourceURL, requestID)
-	if err != nil {
-		return writtenBytes.count, fmt.Errorf("download error: %w", err)
-	}
-	defer c.Close()
+func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
+	err = backoff.Retry(func() error {
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+		defer cancel()
 
-	content := io.TeeReader(c, &writtenBytes)
+		byteAccWriter := ByteAccumulatorWriter{count: 0}
+		defer func() { writtenBytes = byteAccWriter.count }()
 
-	err = UploadToOSURL(destOSBaseURL, filename, content, MAX_COPY_FILE_DURATION)
-	if err != nil {
-		return writtenBytes.count, fmt.Errorf("upload error: %w", err)
-	}
+		c, err := getFile(ctx, sourceURL, requestID)
+		if err != nil {
+			return fmt.Errorf("download error: %w", err)
+		}
+		defer c.Close()
 
-	return writtenBytes.count, nil
+		content := io.TeeReader(c, &byteAccWriter)
+
+		err = UploadToOSURL(destOSBaseURL, filename, content, MAX_COPY_FILE_DURATION)
+		if err != nil {
+			log.Log(requestID, "Copy attempt failed", "source", sourceURL, "dest", path.Join(destOSBaseURL, filename), "err", err)
+		}
+		return err
+	}, UploadRetryBackoff())
+	return
 }
 
 func getFile(ctx context.Context, url, requestID string) (io.ReadCloser, error) {
@@ -121,4 +136,10 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 		return nil, err
 	}
 	return resp.Body, nil
+}
+
+type StubInputCopy struct{}
+
+func (s *StubInputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL) (inputVideoProbe video.InputVideo, signedURL string, err error) {
+	return video.InputVideo{}, "", nil
 }

@@ -3,11 +3,15 @@ package video
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 const (
-	MIN_VIDEO_BITRATE          = 100_000
-	ABSOLUTE_MIN_VIDEO_BITRATE = 5_000
+	MinVideoBitrate         = 100_000
+	AbsoluteMinVideoBitrate = 5_000
+	MaxVideoBitrate         = 288_000_000
+	TrackTypeVideo          = "video"
+	TrackTypeAudio          = "audio"
 )
 
 type InputVideo struct {
@@ -20,13 +24,16 @@ type InputVideo struct {
 // Finds the video track from the list of input video tracks
 // If multiple video tracks present, returns the first one
 // If no video tracks present, returns an error
-func (i InputVideo) GetVideoTrack() (InputTrack, error) {
+func (i InputVideo) GetTrack(trackType string) (InputTrack, error) {
+	if trackType != TrackTypeVideo && trackType != TrackTypeAudio {
+		return InputTrack{}, fmt.Errorf("invalid track type - must be '%s' or '%s'", TrackTypeVideo, TrackTypeAudio)
+	}
 	for _, t := range i.Tracks {
-		if t.Type == "video" {
+		if t.Type == trackType {
 			return t, nil
 		}
 	}
-	return InputTrack{}, fmt.Errorf("no video tracks found")
+	return InputTrack{}, fmt.Errorf("no '%s' tracks found", trackType)
 }
 
 type VideoTrack struct {
@@ -57,26 +64,26 @@ type InputTrack struct {
 	AudioTrack
 }
 
-// DefaultTranscodeProfiles defines the default set of encoding profiles to use when none are specified
-var DefaultTranscodeProfiles = []EncodedProfile{
-	{
-		Name:    "360p0",
-		FPS:     0,
-		Bitrate: 1_000_000,
-		Width:   640,
-		Height:  360,
-	},
-	{
-		Name:    "720p0",
-		FPS:     0,
-		Bitrate: 4_000_000,
-		Width:   1280,
-		Height:  720,
-	},
+var DefaultProfile360p = EncodedProfile{
+	Name:    "360p0",
+	FPS:     0,
+	Bitrate: 1_000_000,
+	Width:   640,
+	Height:  360,
+}
+var DefaultProfile720p = EncodedProfile{
+	Name:    "720p0",
+	FPS:     0,
+	Bitrate: 4_000_000,
+	Width:   1280,
+	Height:  720,
 }
 
+// DefaultTranscodeProfiles defines the default set of encoding profiles to use when none are specified
+var DefaultTranscodeProfiles = []EncodedProfile{DefaultProfile360p, DefaultProfile720p}
+
 func GetPlaybackProfiles(iv InputVideo) ([]EncodedProfile, error) {
-	video, err := iv.GetVideoTrack()
+	video, err := iv.GetTrack(TrackTypeVideo)
 	if err != nil {
 		return nil, fmt.Errorf("no video track found in input video: %w", err)
 	}
@@ -92,9 +99,13 @@ func GetPlaybackProfiles(iv InputVideo) ([]EncodedProfile, error) {
 	if len(profiles) == 0 {
 		profiles = []EncodedProfile{lowBitrateProfile(video)}
 	}
+	videoBitrate := video.Bitrate
+	if videoBitrate > MaxVideoBitrate {
+		videoBitrate = MaxVideoBitrate
+	}
 	profiles = append(profiles, EncodedProfile{
 		Name:    strconv.FormatInt(nearestEven(video.Height), 10) + "p0",
-		Bitrate: video.Bitrate,
+		Bitrate: videoBitrate,
 		FPS:     0,
 		Width:   nearestEven(video.Width),
 		Height:  nearestEven(video.Height),
@@ -102,12 +113,16 @@ func GetPlaybackProfiles(iv InputVideo) ([]EncodedProfile, error) {
 	return profiles, nil
 }
 
+// When the input video's height and bitrate combo is too low to meet the default ABR ladder we output a low bitrate
+// profile as well as the profile matching the input video to achieve at least some ABR playback.
+// 50% of the input video's bitrate was found to give a decent experience. We also then check that this isn't below
+// some sensible minimum values.
 func lowBitrateProfile(video InputTrack) EncodedProfile {
 	bitrate := int64(float64(video.Bitrate) * (1.0 / 2.0))
-	if bitrate < MIN_VIDEO_BITRATE && video.Bitrate > MIN_VIDEO_BITRATE {
-		bitrate = MIN_VIDEO_BITRATE
-	} else if bitrate < ABSOLUTE_MIN_VIDEO_BITRATE {
-		bitrate = ABSOLUTE_MIN_VIDEO_BITRATE
+	if bitrate < MinVideoBitrate && video.Bitrate > MinVideoBitrate {
+		bitrate = MinVideoBitrate
+	} else if bitrate < AbsoluteMinVideoBitrate {
+		bitrate = AbsoluteMinVideoBitrate
 	}
 	return EncodedProfile{
 		Name:    "low-bitrate",
@@ -150,4 +165,33 @@ type OutputVideoFile struct {
 	Width     int64  `json:"width,omitempty"`
 	Height    int64  `json:"height,omitempty"`
 	Bitrate   int64  `json:"bitrate,omitempty"`
+}
+
+func PopulateOutput(probe Prober, outputURL string, videoFile OutputVideoFile) (OutputVideoFile, error) {
+	outputVideoProbe, err := runProbe(probe, outputURL)
+	if err != nil {
+		return OutputVideoFile{}, fmt.Errorf("error probing output file from S3: %w", err)
+	}
+	videoFile.SizeBytes = outputVideoProbe.SizeBytes
+	videoTrack, err := outputVideoProbe.GetTrack(TrackTypeVideo)
+	if err != nil {
+		return OutputVideoFile{}, fmt.Errorf("no video track found in output video: %w", err)
+	}
+	videoFile.Height = videoTrack.Height
+	videoFile.Width = videoTrack.Width
+	videoFile.Bitrate = videoTrack.Bitrate
+	return videoFile, nil
+}
+
+func runProbe(probe Prober, outputURL string) (InputVideo, error) {
+	outputVideoProbe, err := probe.ProbeFile(outputURL)
+	if err == nil {
+		return outputVideoProbe, nil
+	}
+
+	// ignore this probing error if found and re-run with fatal loglevel to obtain the probe data
+	if strings.Contains(strings.ToLower(err.Error()), "parametric stereo signaled to be not-present but was found in the bitstream") {
+		return probe.ProbeFile(outputURL, "-loglevel", "fatal")
+	}
+	return InputVideo{}, err
 }
