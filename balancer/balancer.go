@@ -170,11 +170,9 @@ func (b *BalancerImpl) getMistLoadBalancerServers() (map[string]interface{}, err
 }
 
 func (b *BalancerImpl) execBalancer(ctx context.Context, balancerArgs []string) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	args := append(balancerArgs, "-p", fmt.Sprintf("%d", b.config.MistUtilLoadPort))
 	glog.Infof("Running MistUtilLoad with %v", args)
-	b.cmd = exec.Command("MistUtilLoad", args...)
+	b.cmd = exec.CommandContext(ctx, "MistUtilLoad", args...)
 
 	b.cmd.Stdout = os.Stdout
 	b.cmd.Stderr = os.Stderr
@@ -184,19 +182,7 @@ func (b *BalancerImpl) execBalancer(ctx context.Context, balancerArgs []string) 
 		return err
 	}
 
-	go func() {
-		defer cancel()
-		err = b.cmd.Wait()
-	}()
-
-	<-ctx.Done()
-
-	if err != nil {
-		return err
-	}
-
-	glog.Infof("killing MistUtilLoad")
-	return b.cmd.Process.Kill()
+	return b.cmd.Wait()
 }
 
 func (b *BalancerImpl) queryMistForClosestNode(playbackID, lat, lon, prefix string) (string, error) {
