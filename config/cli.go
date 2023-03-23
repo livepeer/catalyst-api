@@ -124,7 +124,7 @@ func parseURLs(s string, dest *[]*url.URL) error {
 	return nil
 }
 
-// handles -foo=value1,value2,value3
+// handles -foo "value1 value2 value3"
 func SpaceSliceFlag(fs *flag.FlagSet, dest *[]string, name string, value []string, usage string) {
 	*dest = value
 	fs.Func(name, usage, func(s string) error {
