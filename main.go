@@ -19,6 +19,7 @@ import (
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
+	"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/catalyst-api/pipeline"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
 	"github.com/peterbourgon/ff/v3"
@@ -150,6 +151,16 @@ func main() {
 	if err != nil {
 		glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 	}
+
+	// Start cron style apps to run periodically
+	app := "mist-cleanup.sh"
+	// schedule mist-cleanup every 2hrs with a timeout of 5min
+	mistCleanup, err := middleware.NewShell(2*60*60*time.Second, 5*60*time.Second, app)
+	if err != nil {
+		glog.Info("Failed to shell out:", app, err)
+	}
+	mistCleanupTick := mistCleanup.RunBg()
+	defer mistCleanupTick.Stop()
 
 	var mapic mistapiconnector.IMac
 	if cli.ShouldMapic() {
