@@ -1,4 +1,13 @@
-#!/bin/bash
+#!/bin/bash -e
+
+script=$(basename "$0")
+pidfile="/var/run/${script}"
+
+# lock so that multiple instances of this script cannot run in parallel
+exec 200>"$pidfile"
+flock -n 200 || exit 1
+pid=$$
+echo $pid 1>&200
 
 containsElement () {
   local e match="$1"
