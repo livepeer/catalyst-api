@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"path/filepath"
 	"time"
 
 	"github.com/livepeer/catalyst-api/log"
@@ -65,7 +66,7 @@ func UploadToOSURL(osURL, filename string, data io.Reader, timeout time.Duration
 
 	if err != nil {
 		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(url, "write").Inc()
-		return fmt.Errorf("failed to write file %q to OS URL %q: %s", filename, log.RedactURL(osURL), err)
+		return fmt.Errorf("failed to write to OS URL %q: %s", log.RedactURL(filepath.Join(osURL, filename)), err)
 	}
 
 	duration := time.Since(start)
