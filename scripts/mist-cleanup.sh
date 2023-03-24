@@ -1,5 +1,6 @@
-#!/bin/bash -e
+#!/bin/bash
 
+loglevel=1 # 0=debug, 1=info
 script=$(basename "$0")
 pidfile="/var/run/${script}"
 
@@ -8,6 +9,14 @@ exec 200>"$pidfile"
 flock -n 200 || exit 1
 pid=$$
 echo $pid 1>&200
+
+log () {
+  local msg="$1"
+  local level="$2"
+  if [ "$level" -ge "$loglevel" ]; then
+    echo $$ - "$(date)" - "mist-cleanup" - "$msg" 2>&1
+  fi
+}
 
 containsElement () {
   local e match="$1"
@@ -24,15 +33,20 @@ STAT=$(ls -tr /dev/shm/MstSTATEgolive* 2> /dev/null)
 ACTS=$(ps -C MistInBuffer -o command= | awk ' { print $3 } ' | sort | uniq)
 DTPL=$(ps -C MistInDTSC -o command= | awk ' { print $3 } ' | sort | uniq)
 DATA_DEL=0
+STATS_DEL=0
+SEMS_DEL=0
+
+log "Starting..." 0
 
 #Check for input semaphores without data
 for S in $SEMS ; do
   STRM=${S:20}
   if containsElement "$STRM" "$ACTS" ; then
-    echo "Yes: ${STRM} (${S})" > /dev/null
+    log "Yes: ${STRM} (${S})" 0
   else
-    echo "SEM_INPUT: ${S}"
+    log "SEM_INPUT: ${S}" 1
     rm "${S}"
+    SEMS_DEL=$(( SEMS_DEL + 1 ))
   fi
 done
 
@@ -40,11 +54,11 @@ done
 for S in $PULS ; do
   STRM=${S:21}
   if containsElement "$STRM" "$DTPL" ; then
-    echo "Yes: ${STRM} (${S})" > /dev/null
+    log "Yes: ${STRM} (${S})" 0
   else
-    #Silenced, since this one is mostly harmless.
-    #echo "SEM_PULL: ${S}"
+    log "SEM_PULL: ${S}" 1
     rm "${S}"
+    SEMS_DEL=$(( SEMS_DEL + 1 ))
   fi
 done
 
@@ -53,10 +67,10 @@ for P in $PAGS; do
   FILE=${P%@*} #Remove everything after the '@'
   STRM=${FILE:16} #Strip the beginning
   if containsElement "$STRM" "$ACTS" ; then
-    echo "Yes: ${STRM} (${P})" > /dev/null
+    log "Yes: ${STRM} (${P})" 0
   else
     if (( $# != 0 )); then
-      echo "DATA: ${P}"
+      log "DATA: ${P}" 1
     fi
     rm "${P}"
     DATA_DEL=$(( DATA_DEL + 1 ))
@@ -67,11 +81,12 @@ done
 for P in $STAT ; do
   STRM=${P:17} #Strip the beginning
   if containsElement "$STRM" "$ACTS" ; then
-    echo "Yes: ${STRM} (${P})" > /dev/null
+    log "Yes: ${STRM} (${P})" 0
   else
-    echo "STATE: ${P}"
+    log "STATE: ${P}" 1
     rm "${P}"
+    STATS_DEL=$(( STATS_DEL + 1 ))
   fi
 done
 
-echo "Deleted ${DATA_DEL} data pages"
+log "Done. Deleted ${DATA_DEL} data pages, ${SEMS_DEL} semaphores, ${STATS_DEL} state pages" 1
