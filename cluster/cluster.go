@@ -5,7 +5,11 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"math/rand"
+	"net"
 	"net/url"
+	"strconv"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/hashicorp/memberlist"
@@ -29,8 +33,8 @@ type ClusterImpl struct {
 }
 
 type Member struct {
-	Name string
-	Tags map[string]string
+	Name string            `json:"name"`
+	Tags map[string]string `json:"tags"`
 }
 
 var mediaFilter = map[string]string{"node": "media"}
@@ -54,8 +58,17 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("error decoding encryption key: %w", err)
 	}
+	host, portstr, err := net.SplitHostPort(c.config.ClusterAddress)
+	if err != nil {
+		return fmt.Errorf("error splitting bind address %s: %v", c.config.ClusterAddress, err)
+	}
+	port, err := strconv.Atoi(portstr)
+	if err != nil {
+		return fmt.Errorf("error parsing port %s: %v", portstr, err)
+	}
 	memberlistConfig := memberlist.DefaultWANConfig()
-	memberlistConfig.BindAddr = c.config.ClusterAddress
+	memberlistConfig.BindAddr = host
+	memberlistConfig.BindPort = port
 	memberlistConfig.AdvertiseAddr = c.config.ClusterAdvertiseAddress
 	memberlistConfig.EnableCompression = true
 	memberlistConfig.SecretKey = encryptBytes
@@ -66,9 +79,12 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	serfConfig.EventCh = c.eventCh
 	serfConfig.ProtocolVersion = 5
 
+	c.serf, err = serf.Create(serfConfig)
 	if err != nil {
 		return err
 	}
+
+	go c.retryJoin(ctx)
 
 	go func() {
 		err = c.handleEvents(ctx)
@@ -90,15 +106,53 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	return err
 }
 
+func (c *ClusterImpl) retryJoin(ctx context.Context) {
+	if len(c.config.RetryJoin) == 0 {
+		glog.Infof("No --retry-join provided, starting a single-node cluster")
+		return
+	}
+	backoff := time.Second
+
+	for {
+		n, err := c.serf.Join(c.config.RetryJoin, false)
+		if n > 1 {
+			glog.Infof("Serf successfully joined %d-node cluster", n)
+			return
+		}
+		if err != nil {
+			glog.Errorf("Error attempting to join Serf cluster: %v", err)
+		}
+
+		jitter := time.Duration(rand.Int63n(int64(backoff)))
+		sleepTime := backoff + jitter
+
+		fmt.Printf("Retrying in %v...\n", sleepTime)
+
+		sleepCtx, cancel := context.WithTimeout(ctx, sleepTime)
+		defer cancel()
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-sleepCtx.Done():
+			continue
+		}
+	}
+}
+
 func (c *ClusterImpl) MembersFiltered(filter map[string]string, status, name string) ([]Member, error) {
 	all := c.serf.Members()
 	nodes := []Member{}
 	for _, member := range all {
+		matches := true
 		for k, v := range filter {
 			val, ok := member.Tags[k]
 			if !ok || val != v {
-				continue
+				matches = false
+				break
 			}
+		}
+		if matches {
 			nodes = append(nodes, Member{
 				Name: member.Name,
 				Tags: member.Tags,

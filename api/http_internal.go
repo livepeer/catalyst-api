@@ -11,6 +11,7 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/handlers/accesscontrol"
+	"github.com/livepeer/catalyst-api/handlers/admin"
 	"github.com/livepeer/catalyst-api/handlers/geolocation"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/log"
@@ -60,6 +61,7 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
 	mistCallbackHandlers := &misttriggers.MistCallbackHandlersCollection{VODEngine: vodEngine}
 	accessControlHandlers := accesscontrol.NewAccessControlHandlersCollection(cli)
+	adminHandlers := &admin.AdminHandlersCollection{Cluster: c}
 
 	// Simple endpoint for healthchecks
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
@@ -88,6 +90,9 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 
 	// Endpoint to receive "Triggers" (callbacks) from Mist
 	router.POST("/api/mist/trigger", withLogging(mistCallbackHandlers.Trigger()))
+
+	// Temporary endpoint for admin queries
+	router.GET("/admin/members", withLogging(adminHandlers.MembersHandler()))
 
 	return router
 }
