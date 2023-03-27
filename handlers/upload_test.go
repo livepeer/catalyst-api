@@ -114,7 +114,7 @@ func TestGetTargetURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.req.getTargetOutput()
+			got, err := tt.req.getTargetHlsOutput()
 			require.Equal(t, tt.expectedURL, got.URL)
 			if tt.isErr {
 				require.Error(t, err)

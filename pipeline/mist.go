@@ -27,7 +27,7 @@ func (m *mist) Name() string {
 }
 
 func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
-	targetManifestFilename := path.Base(job.TargetURL.Path)
+	targetManifestFilename := path.Base(job.HlsTargetURL.Path)
 	targetExtension := path.Ext(targetManifestFilename)
 	if targetExtension != ".m3u8" {
 		return nil, fmt.Errorf("target output file should have .m3u8 extension, found %q", targetExtension)
@@ -140,7 +140,8 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 		SourceStreamInfo:  streamInfo,
 		Profiles:          job.Profiles,
 		SourceManifestURL: job.SegmentingTargetURL,
-		TargetURL:         job.TargetURL.String(),
+		HlsTargetURL:      job.HlsTargetURL.String(),
+		Mp4TargetUrl:      job.Mp4TargetURL.String(),
 		RequestID:         requestID,
 		ReportProgress:    job.ReportProgress,
 		GenerateMP4:       job.GenerateMP4,

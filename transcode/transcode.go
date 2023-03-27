@@ -27,7 +27,8 @@ type TranscodeSegmentRequest struct {
 	SourceFile        string                 `json:"source_location"`
 	CallbackURL       string                 `json:"callback_url"`
 	SourceManifestURL string                 `json:"source_manifest_url"`
-	TargetURL         string                 `json:"target_url"`
+	HlsTargetURL      string                 `json:"target_url"`
+	Mp4TargetUrl      string                 `json:mp4_target_url`
 	StreamKey         string                 `json:"streamKey"`
 	AccessToken       string                 `json:"accessToken"`
 	TranscodeAPIUrl   string                 `json:"transcodeAPIUrl"`
@@ -64,24 +65,24 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	outputs := []video.OutputVideo{}
 
-	var targetURL *url.URL
+	var hlsTargetURL *url.URL
 	var err error
-	if transcodeRequest.TargetURL != "" {
-		targetURL, err = url.Parse(transcodeRequest.TargetURL)
+	if transcodeRequest.HlsTargetURL != "" {
+		hlsTargetURL, err = url.Parse(transcodeRequest.HlsTargetURL)
 	} else {
 		// TargetURL not defined in the /api/transcode/file request; for the backwards-compatibility, use SourceManifestURL.
 		// For the /api/vod endpoint, TargetURL is always defined.
-		targetURL, err = url.Parse(path.Dir(transcodeRequest.SourceManifestURL))
+		hlsTargetURL, err = url.Parse(path.Dir(transcodeRequest.SourceManifestURL))
 	}
 
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("failed to parse transcodeRequest.TargetURL: %s", err)
 	}
-	tout, err := url.Parse(path.Dir(targetURL.Path))
+	tout, err := url.Parse(path.Dir(hlsTargetURL.Path))
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("failed to parse targetTranscodedPath: %s", err)
 	}
-	targetTranscodedRenditionOutputURL := targetURL.ResolveReference(tout)
+	targetTranscodedRenditionOutputURL := hlsTargetURL.ResolveReference(tout)
 
 	// Grab some useful parameters to be used later from the TranscodeSegmentRequest
 	sourceManifestOSURL := transcodeRequest.SourceManifestURL
@@ -158,6 +159,10 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	var mp4Outputs []video.OutputVideoFile
 	// Transmux received segments from T into a single mp4
 	if transcodeRequest.GenerateMP4 {
+		mp4TargetUrlBase, err := url.Parse(transcodeRequest.Mp4TargetUrl)
+		if err != nil {
+			return outputs, segmentsCount, err
+		}
 		for rendition, segments := range renditionList.RenditionSegmentTable {
 			// a. create folder to hold transmux-ed files in local storage temporarily
 			err := os.MkdirAll(TRANSMUX_STORAGE_DIR, 0700)
@@ -208,23 +213,23 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				break
 			}
 
-			targetMP4URL := targetTranscodedRenditionOutputURL.JoinPath(rendition, filepath.Base(mp4OutputFile.Name()))
+			mp4TargetUrl := mp4TargetUrlBase.JoinPath(rendition, filepath.Base(mp4OutputFile.Name()))
 			err = backoff.Retry(func() error {
-				return clients.UploadToOSURL(targetMP4URL.String(), "", bufio.NewReader(mp4OutputFile), UPLOAD_TIMEOUT)
+				return clients.UploadToOSURL(mp4TargetUrl.String(), "", bufio.NewReader(mp4OutputFile), UPLOAD_TIMEOUT)
 			}, clients.UploadRetryBackoff())
 			if err != nil {
 				log.Log(transcodeRequest.RequestID, "failed to upload mp4", "file", mp4OutputFile.Name())
 				break
 			}
 
-			mp4PlaybackURL := strings.ReplaceAll(targetMP4URL.String(), targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
+			mp4PlaybackURL := strings.ReplaceAll(mp4TargetUrl.String(), targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
 			mp4Out := video.OutputVideoFile{
 				Type:     "mp4",
 				Location: mp4PlaybackURL,
 			}
-			signedURL, err := clients.SignURL(targetMP4URL)
+			signedURL, err := clients.SignURL(mp4TargetUrl)
 			if err != nil {
-				return outputs, segmentsCount, fmt.Errorf("failed to create signed url for %s: %w", targetMP4URL, err)
+				return outputs, segmentsCount, fmt.Errorf("failed to create signed url for %s: %w", mp4TargetUrl, err)
 			}
 			mp4Out, err = video.PopulateOutput(video.Probe{}, signedURL, mp4Out)
 			if err != nil {

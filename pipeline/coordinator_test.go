@@ -30,10 +30,10 @@ var (
 		}},
 	}
 	testJob = UploadJobPayload{
-		RequestID:   "123",
-		SourceFile:  "source-file",
-		TargetURL:   &url.URL{Scheme: "s3+https", Host: "storage.google.com", Path: "/bucket/key", User: url.UserPassword("user", "pass")},
-		CallbackURL: "http://localhost:3000/dummy",
+		RequestID:    "123",
+		SourceFile:   "source-file",
+		HlsTargetURL: &url.URL{Scheme: "s3+https", Host: "storage.google.com", Path: "/bucket/key", User: url.UserPassword("user", "pass")},
+		CallbackURL:  "http://localhost:3000/dummy",
 	}
 )
 

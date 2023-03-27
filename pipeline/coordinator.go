@@ -60,7 +60,9 @@ type UploadJobPayload struct {
 	SourceFile            string
 	CallbackURL           string
 	SourceOutputURL       *url.URL
-	TargetURL             *url.URL
+	HlsTargetURL          *url.URL
+	Mp4TargetURL          *url.URL
+	Mp4OnlyShort          bool
 	AccessToken           string
 	TranscodeAPIUrl       string
 	HardcodedBroadcasters string
@@ -68,8 +70,6 @@ type UploadJobPayload struct {
 	Profiles              []video.EncodedProfile
 	PipelineStrategy      Strategy
 	TargetSegmentSizeSecs int64
-	AutoMP4               bool
-	ForceMP4              bool
 	GenerateMP4           bool
 	InputFileInfo         video.InputVideo
 	SignedSourceURL       string
@@ -243,12 +243,12 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		p.SourceFile = newSourceURL.String()
 		p.SignedSourceURL = signedURL
 		p.InputFileInfo = inputVideoProbe
-		p.GenerateMP4 = func(forcemp4, automp4 bool, duration float64) bool {
-			if forcemp4 || (automp4 && duration <= maxMP4OutDuration.Seconds()) {
+		p.GenerateMP4 = func(mp4TargetUrl *url.URL, mp4OnlyShort bool, duration float64) bool {
+			if mp4TargetUrl != nil && (!mp4OnlyShort || duration <= maxMP4OutDuration.Seconds()) {
 				return true
 			}
 			return false
-		}(p.ForceMP4, p.AutoMP4, p.InputFileInfo.Duration)
+		}(p.Mp4TargetURL, p.Mp4OnlyShort, p.InputFileInfo.Duration)
 
 		log.AddContext(si.RequestID, "new_source_url", newSourceURL)
 		log.AddContext(si.RequestID, "signed_url", signedURL)
@@ -321,7 +321,7 @@ func checkMistCompatibleCodecs(strategy Strategy, iv video.InputVideo) Strategy 
 func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, foreground, hasFallback bool) <-chan bool {
 	if !foreground {
 		p.RequestID = fmt.Sprintf("bg_%s", p.RequestID)
-		p.TargetURL = p.TargetURL.JoinPath("..", handler.Name(), path.Base(p.TargetURL.Path))
+		p.HlsTargetURL = p.HlsTargetURL.JoinPath("..", handler.Name(), path.Base(p.HlsTargetURL.Path))
 		// this will prevent the callbacks for this job from actually being sent
 		p.CallbackURL = ""
 	}
@@ -499,8 +499,8 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
 	}
 
 	targetURL := ""
-	if job.TargetURL != nil {
-		targetURL = job.TargetURL.Redacted()
+	if job.HlsTargetURL != nil {
+		targetURL = job.HlsTargetURL.Redacted()
 	}
 	insertDynStmt := `insert into "vod_completed"(
                             "finished_at",

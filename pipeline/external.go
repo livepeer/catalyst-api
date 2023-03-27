@@ -34,7 +34,7 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		RequestID:       job.RequestID,
 		SegmentSizeSecs: job.targetSegmentSizeSecs,
 		InputFile:       sourceFileUrl,
-		HLSOutputFile:   job.TargetURL,
+		HLSOutputFile:   job.HlsTargetURL,
 		Profiles:        job.Profiles,
 		GenerateMP4:     job.GenerateMP4,
 		ReportProgress: func(progress float64) {

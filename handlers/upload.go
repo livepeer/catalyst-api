@@ -22,11 +22,13 @@ import (
 )
 
 type UploadVODRequestOutputLocationOutputs struct {
-	SourceMp4          bool `json:"source_mp4"`
-	SourceSegments     bool `json:"source_segments"`
-	TranscodedSegments bool `json:"transcoded_segments"`
-	ForceMP4           bool `json:"force_mp4"`
-	AutoMP4            bool `json:"auto_mp4"`
+	SourceMp4          bool   `json:"source_mp4"`
+	SourceSegments     bool   `json:"source_segments"`
+	TranscodedSegments bool   `json:"transcoded_segments"`
+	ForceMP4           bool   `json:"force_mp4"`
+	AutoMP4            bool   `json:"auto_mp4"`
+	HLS                string `json:"hls"`
+	MP4                string `json:"mp4"`
 }
 
 type UploadVODRequestOutputLocation struct {
@@ -81,13 +83,24 @@ func (r UploadVODRequest) getSourceOutputURL() (*url.URL, error) {
 	return nil, nil
 }
 
-func (r UploadVODRequest) getTargetOutput() (UploadVODRequestOutputLocation, error) {
+func (r UploadVODRequest) getTargetHlsOutput() (UploadVODRequestOutputLocation, error) {
 	for _, o := range r.OutputLocations {
-		if o.Outputs.TranscodedSegments {
+		if o.Outputs.HLS == "enabled" {
 			return o, nil
 		}
 	}
-	return UploadVODRequestOutputLocation{}, fmt.Errorf("no output_location with transcoded_segments")
+	return UploadVODRequestOutputLocation{}, fmt.Errorf("no output_location with HLS output")
+}
+
+func (r UploadVODRequest) getTargetMp4Output() (UploadVODRequestOutputLocation, bool, error) {
+	for _, o := range r.OutputLocations {
+		if o.Outputs.MP4 == "enabled" {
+			return o, false, nil
+		} else if o.Outputs.MP4 == "only_short" {
+			return o, true, nil
+		}
+	}
+	return UploadVODRequestOutputLocation{}, false, fmt.Errorf("no output_location with HLS output")
 }
 
 func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
@@ -145,19 +158,27 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 
 	// Create a separate subdirectory for the source segments
 	// Use the output directory specified in request as the output directory of transcoded renditions
-	targetOutput, err := uploadVODRequest.getTargetOutput()
+	hlsTargetOutput, err := uploadVODRequest.getTargetHlsOutput()
 	if err != nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 	}
-	targetURL, err := url.Parse(targetOutput.URL)
+	hlsTargetURL, err := url.Parse(hlsTargetOutput.URL)
+	if err != nil {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+	}
+	mp4TargetOutput, mp4OnlyShort, err := uploadVODRequest.getTargetMp4Output()
+	if err != nil {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+	}
+	mp4TargetURL, err := url.Parse(mp4TargetOutput.URL)
 	if err != nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 	}
 	// Hack for web3.storage to distinguish different jobs, before calling Publish()
 	// Can be removed after we address this issue: https://github.com/livepeer/go-tools/issues/16
-	if targetURL.Scheme == "w3s" {
-		targetURL.Host = requestID
-		log.AddContext(requestID, "w3s-url", targetURL.String())
+	if hlsTargetURL.Scheme == "w3s" {
+		hlsTargetURL.Host = requestID
+		log.AddContext(requestID, "w3s-url", hlsTargetURL.String())
 	}
 
 	sourceOutputURL, err := uploadVODRequest.getSourceOutputURL()
@@ -173,18 +194,19 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 
 	// Once we're happy with the request, do the rest of the Segmenting stage asynchronously to allow us to
 	// from the API call and free up the HTTP connection
+
 	d.VODEngine.StartUploadJob(pipeline.UploadJobPayload{
 		SourceFile:            uploadVODRequest.Url,
 		CallbackURL:           uploadVODRequest.CallbackUrl,
 		SourceOutputURL:       sourceOutputURL,
-		TargetURL:             targetURL,
+		HlsTargetURL:          hlsTargetURL,
+		Mp4TargetURL:          mp4TargetURL,
+		Mp4OnlyShort:          mp4OnlyShort,
 		AccessToken:           uploadVODRequest.AccessToken,
 		TranscodeAPIUrl:       uploadVODRequest.TranscodeAPIUrl,
 		RequestID:             requestID,
 		Profiles:              uploadVODRequest.Profiles,
 		PipelineStrategy:      uploadVODRequest.PipelineStrategy,
-		ForceMP4:              targetOutput.Outputs.ForceMP4,
-		AutoMP4:               targetOutput.Outputs.AutoMP4,
 		TargetSegmentSizeSecs: uploadVODRequest.TargetSegmentSizeSecs,
 	})
 
