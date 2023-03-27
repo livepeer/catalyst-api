@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang/glog"
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/config"
-	glog "github.com/magicsong/color-glog"
 	"github.com/pquerna/cachecontrol/cacheobject"
 )
 

@@ -35,9 +35,9 @@ func main() {
 
 	// listen addresses
 	config.AddrFlag(fs, &cli.HTTPAddress, "http-addr", "0.0.0.0:4949", "Address to bind for external-facing Catalyst HTTP handling")
-	config.AddrFlag(fs, &cli.HTTPInternalAddress, "http-internal-addr", "127.0.0.1:4948", "Address to bind for internal privileged HTTP commands")
+	config.AddrFlag(fs, &cli.HTTPInternalAddress, "http-internal-addr", "127.0.0.1:4848", "Address to bind for internal privileged HTTP commands")
 	config.AddrFlag(fs, &cli.ClusterAddress, "cluster-addr", "0.0.0.0:9935", "Address to bind Serf network listeners to. To use an IPv6 address, specify [::1] or [::1]:7946.")
-	fs.StringVar(&cli.ClusterAdvertiseAddress, "cluster-advertise-addr", "0.0.0.0", "Address to advertise to the other cluster members")
+	fs.StringVar(&cli.ClusterAdvertiseAddress, "cluster-advertise-addr", "", "Address to advertise to the other cluster members")
 	config.AddrFlag(fs, &cli.RPCAddr, "rpc-addr", "127.0.0.1:7373", "Address to bind the Serf RPC listener.")
 
 	// catalyst-api parameters
@@ -69,7 +69,8 @@ func main() {
 	fs.StringVar(&cli.OwnRegion, "own-region", "", "Identifier of the region where the service is running, used for mapping external data back to current region")
 
 	// catalyst-node parameters
-	fs.StringVar(&cli.NodeName, "node", "", "Name of this node within the cluster")
+	hostname, _ := os.Hostname()
+	fs.StringVar(&cli.NodeName, "node", hostname, "Name of this node within the cluster")
 	config.SpaceSliceFlag(fs, &cli.BalancerArgs, "balancer-args", []string{}, "arguments passed to MistUtilLoad")
 	fs.StringVar(&cli.NodeHost, "node-host", "", "Hostname this node should handle requests for. Requests on any other domain will trigger a redirect. Useful as a 404 handler to send users to another node.")
 	fs.Float64Var(&cli.NodeLatitude, "node-latitude", 0, "Latitude of this Catalyst node. Used for load balancing.")
