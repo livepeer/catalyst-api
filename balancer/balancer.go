@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/cluster"
@@ -35,6 +36,8 @@ type BalancerImpl struct {
 	config   *Config
 	cmd      *exec.Cmd
 	endpoint string
+	// Blocks until initial startup
+	startupOnce sync.Once
 }
 
 // create a new load balancer instance
@@ -48,10 +51,25 @@ func NewBalancer(config *Config) Balancer {
 
 // start this load balancer instance, execing MistUtilLoad if necessary
 func (b *BalancerImpl) Start(ctx context.Context) error {
+	go b.waitForStartup()
 	return b.execBalancer(ctx, b.config.Args)
 }
 
+// wait for the mist LB to be available. can be called multiple times.
+func (b *BalancerImpl) waitForStartup() {
+	b.startupOnce.Do(func() {
+		for {
+			_, err := b.getMistLoadBalancerServers()
+			if err == nil {
+				return
+			}
+			time.Sleep(250 * time.Millisecond)
+		}
+	})
+}
+
 func (b *BalancerImpl) UpdateMembers(members []cluster.Member) error {
+	b.waitForStartup()
 	balancedServers, err := b.getMistLoadBalancerServers()
 
 	if err != nil {
