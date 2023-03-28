@@ -142,36 +142,15 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	}
 	log.AddContext(requestID, "target_segment_size_secs", uploadVODRequest.TargetSegmentSizeSecs)
 
-	var hlsTargetURL *url.URL
 	hlsTargetOutput := uploadVODRequest.getTargetHlsOutput()
-	if hlsTargetOutput.URL != "" {
-		var err error
-		hlsTargetURL, err = url.Parse(hlsTargetOutput.URL)
-		if err != nil {
-			return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
-		}
-		// Hack for web3.storage to distinguish different jobs, before calling Publish()
-		// Can be removed after we address this issue: https://github.com/livepeer/go-tools/issues/16
-		if hlsTargetURL.Scheme == "w3s" {
-			hlsTargetURL.Host = requestID
-			log.AddContext(requestID, "w3s-url", hlsTargetURL.String())
-		}
+	hlsTargetURL, err := toTargetURL(hlsTargetOutput, requestID)
+	if err != nil {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 	}
-
-	var mp4TargetURL *url.URL
 	mp4TargetOutput, mp4OnlyShort := uploadVODRequest.getTargetMp4Output()
-	if mp4TargetOutput.URL != "" {
-		var err error
-		mp4TargetURL, err = url.Parse(mp4TargetOutput.URL)
-		if err != nil {
-			return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
-		}
-		// Hack for web3.storage to distinguish different jobs, before calling Publish()
-		// Can be removed after we address this issue: https://github.com/livepeer/go-tools/issues/16
-		if mp4TargetURL.Scheme == "w3s" {
-			mp4TargetURL.Host = requestID
-			log.AddContext(requestID, "w3s-url", mp4TargetURL.String())
-		}
+	mp4TargetURL, err := toTargetURL(mp4TargetOutput, requestID)
+	if err != nil {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 	}
 
 	if strat := uploadVODRequest.PipelineStrategy; strat != "" && !strat.IsValid() {
@@ -209,6 +188,24 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	}
 
 	return true, errors.APIError{}
+}
+
+func toTargetURL(ol UploadVODRequestOutputLocation, reqID string) (*url.URL, error) {
+	if ol.URL != "" {
+		tURL, err := url.Parse(ol.URL)
+		if err != nil {
+			return nil, err
+		}
+
+		// Hack for web3.storage to distinguish different jobs, before calling Publish()
+		// Can be removed after we address this issue: https://github.com/livepeer/go-tools/issues/16
+		if tURL.Scheme == "w3s" {
+			tURL.Host = reqID
+			log.AddContext(reqID, "w3s-url", tURL.String())
+		}
+		return tURL, nil
+	}
+	return nil, nil
 }
 
 func CheckSourceURLValid(sourceURL string) error {

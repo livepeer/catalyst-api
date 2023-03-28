@@ -28,27 +28,18 @@ func (m *mist) Name() string {
 }
 
 func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
-	var sourceOutputUrl *url.URL
-	perRequestPath, err := url.JoinPath(m.SourceOutputUrl, job.RequestID)
+	sourceOutputBaseURL, err := url.Parse(m.SourceOutputUrl)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
 	}
-	perRequestMistPath, err := url.JoinPath(perRequestPath, "index.m3u8")
-	if err != nil {
-		return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
-	}
-	if sourceOutputUrl, err = url.Parse(perRequestMistPath); err != nil {
-		return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
-	}
+	sourceOutputURL := sourceOutputBaseURL.JoinPath(job.RequestID)
+	mistSourceOutputURL := sourceOutputURL.JoinPath(MIST_SEGMENTING_TARGET_MANIFEST)
+	segmentingTargetURL := sourceOutputURL.JoinPath(MIST_SEGMENTING_SUBDIR, MIST_SEGMENTING_TARGET_MANIFEST)
 
-	segmentingTargetURL, err := inSameDirectory(*sourceOutputUrl, MIST_SEGMENTING_SUBDIR, MIST_SEGMENTING_TARGET_MANIFEST)
-	if err != nil {
-		return nil, fmt.Errorf("cannot create targetSegmentedOutputURL: %w", err)
-	}
+	job.SourceOutputURL = sourceOutputURL.String()
 	job.SegmentingTargetURL = segmentingTargetURL.String()
-	job.SourceOutputURL = perRequestPath
 
-	mistTargetURL, err := targetURLToMistTargetURL(*sourceOutputUrl, job.TargetSegmentSizeSecs)
+	mistTargetURL, err := targetURLToMistTargetURL(*mistSourceOutputURL, job.TargetSegmentSizeSecs)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create mistTargetURL: %w", err)
 	}

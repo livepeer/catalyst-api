@@ -63,22 +63,13 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	var segmentsCount = 0
 
-	outputs := []video.OutputVideo{}
+	var outputs []video.OutputVideo
 
-	var hlsTargetURL *url.URL
-	if transcodeRequest.HlsTargetURL != "" {
-		var err error
-		hlsTargetURL, err = url.Parse(transcodeRequest.HlsTargetURL)
-		if err != nil {
-			return outputs, segmentsCount, fmt.Errorf("failed to parse transcodeRequest.TargetURL: %s", err)
-		}
-	} else {
-		sourceOutputURL, err := url.Parse(transcodeRequest.SourceOutputURL)
-		if err != nil {
-			return outputs, segmentsCount, fmt.Errorf("failed to parse transcodeRequest.SourceOutputURL: %s", err)
-		}
-		hlsTargetURL = sourceOutputURL.JoinPath("rendition")
+	hlsTargetURL, err := getHlsTargetURL(transcodeRequest)
+	if err != nil {
+		return outputs, segmentsCount, err
 	}
+
 	tout, err := url.Parse(hlsTargetURL.Path)
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("failed to parse targetTranscodedPath: %s", err)
@@ -286,6 +277,25 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	outputs = []video.OutputVideo{output}
 	// Return outputs for .dtsh file creation
 	return outputs, segmentsCount, nil
+}
+
+// getHlsTargetURL extracts URL for storing rendition HLS segments.
+// If HLS output is requested, then the URL from the VOD request is used
+// If HLS output is not requested, then the URL from source_output flag is used
+func getHlsTargetURL(tsr TranscodeSegmentRequest) (*url.URL, error) {
+	if tsr.HlsTargetURL != "" {
+		hlsTargetURL, err := url.Parse(tsr.HlsTargetURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse transcodeRequest.TargetURL: %s", err)
+		}
+		return hlsTargetURL, nil
+	} else {
+		sourceOutputURL, err := url.Parse(tsr.SourceOutputURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse transcodeRequest.SourceOutputURL: %s", err)
+		}
+		return sourceOutputURL.JoinPath("rendition"), nil
+	}
 }
 
 func transcodeSegment(
