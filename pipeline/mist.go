@@ -34,18 +34,12 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	}
 
 	var sourceOutputUrl *url.URL
-	if job.SourceOutputURL != nil {
-		// use SourceOutputURL defined in the vod request
-		sourceOutputUrl = job.SourceOutputURL
-	} else {
-		// no SourceOutputURL defined in the vod request, use SourceOutputUrl defined with the catalyst-api
-		perRequestPath, err := url.JoinPath(m.SourceOutputUrl, job.RequestID, "index.m3u8")
-		if err != nil {
-			return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
-		}
-		if sourceOutputUrl, err = url.Parse(perRequestPath); err != nil {
-			return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
-		}
+	perRequestPath, err := url.JoinPath(m.SourceOutputUrl, job.RequestID, "index.m3u8")
+	if err != nil {
+		return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
+	}
+	if sourceOutputUrl, err = url.Parse(perRequestPath); err != nil {
+		return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
 	}
 
 	segmentingTargetURL, err := inSameDirectory(*sourceOutputUrl, MIST_SEGMENTING_SUBDIR, targetManifestFilename)

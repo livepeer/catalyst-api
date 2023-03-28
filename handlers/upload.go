@@ -22,13 +22,8 @@ import (
 )
 
 type UploadVODRequestOutputLocationOutputs struct {
-	SourceMp4          bool   `json:"source_mp4"`
-	SourceSegments     bool   `json:"source_segments"`
-	TranscodedSegments bool   `json:"transcoded_segments"`
-	ForceMP4           bool   `json:"force_mp4"`
-	AutoMP4            bool   `json:"auto_mp4"`
-	HLS                string `json:"hls"`
-	MP4                string `json:"mp4"`
+	HLS string `json:"hls"`
+	MP4 string `json:"mp4"`
 }
 
 type UploadVODRequestOutputLocation struct {
@@ -72,15 +67,6 @@ func HasContentType(r *http.Request, mimetype string) bool {
 	}
 
 	return false
-}
-
-func (r UploadVODRequest) getSourceOutputURL() (*url.URL, error) {
-	for _, o := range r.OutputLocations {
-		if o.Outputs.SourceSegments {
-			return url.Parse(o.URL)
-		}
-	}
-	return nil, nil
 }
 
 func (r UploadVODRequest) getTargetHlsOutput() (UploadVODRequestOutputLocation, error) {
@@ -181,11 +167,6 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		log.AddContext(requestID, "w3s-url", hlsTargetURL.String())
 	}
 
-	sourceOutputURL, err := uploadVODRequest.getSourceOutputURL()
-	if err != nil {
-		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
-	}
-
 	if strat := uploadVODRequest.PipelineStrategy; strat != "" && !strat.IsValid() {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("invalid value provided for pipeline strategy: %q", uploadVODRequest.PipelineStrategy))
 	}
@@ -198,7 +179,6 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	d.VODEngine.StartUploadJob(pipeline.UploadJobPayload{
 		SourceFile:            uploadVODRequest.Url,
 		CallbackURL:           uploadVODRequest.CallbackUrl,
-		SourceOutputURL:       sourceOutputURL,
 		HlsTargetURL:          hlsTargetURL,
 		Mp4TargetURL:          mp4TargetURL,
 		Mp4OnlyShort:          mp4OnlyShort,

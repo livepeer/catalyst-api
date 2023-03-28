@@ -59,7 +59,6 @@ func (s Strategy) IsValid() bool {
 type UploadJobPayload struct {
 	SourceFile            string
 	CallbackURL           string
-	SourceOutputURL       *url.URL
 	HlsTargetURL          *url.URL
 	Mp4TargetURL          *url.URL
 	Mp4OnlyShort          bool
