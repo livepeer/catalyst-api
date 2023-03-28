@@ -58,18 +58,31 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("error decoding encryption key: %w", err)
 	}
-	host, portstr, err := net.SplitHostPort(c.config.ClusterAddress)
+	bhost, portstr, err := net.SplitHostPort(c.config.ClusterAddress)
 	if err != nil {
 		return fmt.Errorf("error splitting bind address %s: %v", c.config.ClusterAddress, err)
 	}
-	port, err := strconv.Atoi(portstr)
+	bport, err := strconv.Atoi(portstr)
 	if err != nil {
 		return fmt.Errorf("error parsing port %s: %v", portstr, err)
 	}
+	ahost := ""
+	aport := 0
+	if c.config.ClusterAdvertiseAddress != "" {
+		ahost, portstr, err = net.SplitHostPort(c.config.ClusterAdvertiseAddress)
+		if err != nil {
+			return fmt.Errorf("error splitting bind address %s: %v", c.config.ClusterAddress, err)
+		}
+		aport, err = strconv.Atoi(portstr)
+		if err != nil {
+			return fmt.Errorf("error parsing port %s: %v", portstr, err)
+		}
+	}
 	memberlistConfig := memberlist.DefaultWANConfig()
-	memberlistConfig.BindAddr = host
-	memberlistConfig.BindPort = port
-	memberlistConfig.AdvertiseAddr = c.config.ClusterAdvertiseAddress
+	memberlistConfig.BindAddr = bhost
+	memberlistConfig.BindPort = bport
+	memberlistConfig.AdvertiseAddr = ahost
+	memberlistConfig.AdvertisePort = aport
 	memberlistConfig.EnableCompression = true
 	memberlistConfig.SecretKey = encryptBytes
 	serfConfig := serf.DefaultConfig()
