@@ -796,7 +796,7 @@ func Test_checkMistCompatibleCodecs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			supported, got := checkMistCompatibleCodecs(tt.args.strategy, tt.args.iv)
+			supported, got := checkMistCompatibleCodecs("requestID", tt.args.strategy, tt.args.iv)
 			require.Equal(t, tt.want, got)
 			require.Equal(t, tt.wantSupported, supported)
 		})
