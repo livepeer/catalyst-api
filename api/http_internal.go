@@ -66,8 +66,10 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	// Simple endpoint for healthchecks
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 
-	// Endpoint to receive "Triggers" (callbacks) from Mist
-	router.POST("/mapic", withLogging(mapic.HandleDefaultStreamTrigger()))
+	if cli.ShouldMapic() {
+		// Endpoint to receive "Triggers" (callbacks) from Mist
+		router.POST("/mapic", withLogging(mapic.HandleDefaultStreamTrigger()))
+	}
 
 	// Endpoint for handling STREAM_SOURCE requests
 	router.POST("/STREAM_SOURCE", withLogging(geoHandlers.StreamSourceHandler()))

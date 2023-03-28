@@ -71,6 +71,11 @@ func (cli *Cli) EncryptBytes() ([]byte, error) {
 	return base64.StdEncoding.DecodeString(cli.EncryptKey)
 }
 
+// Should we enable mapic?
+func (cli *Cli) ShouldMapic() bool {
+	return cli.APIServer != ""
+}
+
 // still a string, but validates the provided value is some kind of coherent host:port
 func AddrFlag(fs *flag.FlagSet, dest *string, name, value, usage string) {
 	*dest = value
