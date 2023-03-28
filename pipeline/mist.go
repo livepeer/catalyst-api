@@ -29,11 +29,15 @@ func (m *mist) Name() string {
 
 func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	var sourceOutputUrl *url.URL
-	perRequestPath, err := url.JoinPath(m.SourceOutputUrl, job.RequestID, "index.m3u8")
+	perRequestPath, err := url.JoinPath(m.SourceOutputUrl, job.RequestID)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
 	}
-	if sourceOutputUrl, err = url.Parse(perRequestPath); err != nil {
+	perRequestMistPath, err := url.JoinPath(perRequestPath, "index.m3u8")
+	if err != nil {
+		return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
+	}
+	if sourceOutputUrl, err = url.Parse(perRequestMistPath); err != nil {
 		return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
 	}
 
@@ -42,6 +46,7 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		return nil, fmt.Errorf("cannot create targetSegmentedOutputURL: %w", err)
 	}
 	job.SegmentingTargetURL = segmentingTargetURL.String()
+	job.SourceOutputURL = perRequestPath
 
 	mistTargetURL, err := targetURLToMistTargetURL(*sourceOutputUrl, job.TargetSegmentSizeSecs)
 	if err != nil {
@@ -129,8 +134,9 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 		SourceStreamInfo:  streamInfo,
 		Profiles:          job.Profiles,
 		SourceManifestURL: job.SegmentingTargetURL,
-		HlsTargetURL:      job.HlsTargetURL.String(),
-		Mp4TargetUrl:      job.Mp4TargetURL.String(),
+		SourceOutputURL:   job.SourceOutputURL,
+		HlsTargetURL:      toStr(job.HlsTargetURL),
+		Mp4TargetUrl:      toStr(job.Mp4TargetURL),
 		RequestID:         requestID,
 		ReportProgress:    job.ReportProgress,
 		GenerateMP4:       job.GenerateMP4,
@@ -202,6 +208,13 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 			InputVideo: inputInfo,
 			Outputs:    outputs,
 		}}, nil
+}
+
+func toStr(URL *url.URL) string {
+	if URL != nil {
+		return URL.String()
+	}
+	return ""
 }
 
 func (m *mist) HandlePushEndTrigger(job *JobInfo, p PushEndPayload) (*HandlerOutput, error) {

@@ -26,8 +26,9 @@ type TranscodeSegmentRequest struct {
 	SourceFile        string                 `json:"source_location"`
 	CallbackURL       string                 `json:"callback_url"`
 	SourceManifestURL string                 `json:"source_manifest_url"`
+	SourceOutputURL   string                 `json:"source_output_url"`
 	HlsTargetURL      string                 `json:"target_url"`
-	Mp4TargetUrl      string                 `json:mp4_target_url`
+	Mp4TargetUrl      string                 `json:"mp4_target_url"`
 	StreamKey         string                 `json:"streamKey"`
 	AccessToken       string                 `json:"accessToken"`
 	TranscodeAPIUrl   string                 `json:"transcodeAPIUrl"`
@@ -64,9 +65,19 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	outputs := []video.OutputVideo{}
 
-	hlsTargetURL, err := url.Parse(transcodeRequest.HlsTargetURL)
-	if err != nil {
-		return outputs, segmentsCount, fmt.Errorf("failed to parse transcodeRequest.TargetURL: %s", err)
+	var hlsTargetURL *url.URL
+	if transcodeRequest.HlsTargetURL != "" {
+		var err error
+		hlsTargetURL, err = url.Parse(transcodeRequest.HlsTargetURL)
+		if err != nil {
+			return outputs, segmentsCount, fmt.Errorf("failed to parse transcodeRequest.TargetURL: %s", err)
+		}
+	} else {
+		sourceOutputURL, err := url.Parse(transcodeRequest.SourceOutputURL)
+		if err != nil {
+			return outputs, segmentsCount, fmt.Errorf("failed to parse transcodeRequest.SourceOutputURL: %s", err)
+		}
+		hlsTargetURL = sourceOutputURL.JoinPath("rendition")
 	}
 	tout, err := url.Parse(hlsTargetURL.Path)
 	if err != nil {

@@ -69,24 +69,24 @@ func HasContentType(r *http.Request, mimetype string) bool {
 	return false
 }
 
-func (r UploadVODRequest) getTargetHlsOutput() (UploadVODRequestOutputLocation, error) {
+func (r UploadVODRequest) getTargetHlsOutput() UploadVODRequestOutputLocation {
 	for _, o := range r.OutputLocations {
 		if o.Outputs.HLS == "enabled" {
-			return o, nil
+			return o
 		}
 	}
-	return UploadVODRequestOutputLocation{}, fmt.Errorf("no output_location with HLS output")
+	return UploadVODRequestOutputLocation{}
 }
 
-func (r UploadVODRequest) getTargetMp4Output() (UploadVODRequestOutputLocation, bool, error) {
+func (r UploadVODRequest) getTargetMp4Output() (UploadVODRequestOutputLocation, bool) {
 	for _, o := range r.OutputLocations {
 		if o.Outputs.MP4 == "enabled" {
-			return o, false, nil
+			return o, false
 		} else if o.Outputs.MP4 == "only_short" {
-			return o, true, nil
+			return o, true
 		}
 	}
-	return UploadVODRequestOutputLocation{}, false, fmt.Errorf("no output_location with HLS output")
+	return UploadVODRequestOutputLocation{}, false
 }
 
 func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
@@ -142,29 +142,30 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	}
 	log.AddContext(requestID, "target_segment_size_secs", uploadVODRequest.TargetSegmentSizeSecs)
 
-	// Create a separate subdirectory for the source segments
-	// Use the output directory specified in request as the output directory of transcoded renditions
-	hlsTargetOutput, err := uploadVODRequest.getTargetHlsOutput()
-	if err != nil {
-		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+	var hlsTargetURL *url.URL
+	hlsTargetOutput := uploadVODRequest.getTargetHlsOutput()
+	if hlsTargetOutput.URL != "" {
+		var err error
+		hlsTargetURL, err = url.Parse(hlsTargetOutput.URL)
+		if err != nil {
+			return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+		}
+		// Hack for web3.storage to distinguish different jobs, before calling Publish()
+		// Can be removed after we address this issue: https://github.com/livepeer/go-tools/issues/16
+		if hlsTargetURL.Scheme == "w3s" {
+			hlsTargetURL.Host = requestID
+			log.AddContext(requestID, "w3s-url", hlsTargetURL.String())
+		}
 	}
-	hlsTargetURL, err := url.Parse(hlsTargetOutput.URL)
-	if err != nil {
-		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
-	}
-	mp4TargetOutput, mp4OnlyShort, err := uploadVODRequest.getTargetMp4Output()
-	if err != nil {
-		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
-	}
-	mp4TargetURL, err := url.Parse(mp4TargetOutput.URL)
-	if err != nil {
-		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
-	}
-	// Hack for web3.storage to distinguish different jobs, before calling Publish()
-	// Can be removed after we address this issue: https://github.com/livepeer/go-tools/issues/16
-	if hlsTargetURL.Scheme == "w3s" {
-		hlsTargetURL.Host = requestID
-		log.AddContext(requestID, "w3s-url", hlsTargetURL.String())
+
+	var mp4TargetURL *url.URL
+	mp4TargetOutput, mp4OnlyShort := uploadVODRequest.getTargetMp4Output()
+	if mp4TargetOutput.URL != "" {
+		var err error
+		mp4TargetURL, err = url.Parse(mp4TargetOutput.URL)
+		if err != nil {
+			return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+		}
 	}
 
 	if strat := uploadVODRequest.PipelineStrategy; strat != "" && !strat.IsValid() {

@@ -103,6 +103,7 @@ type JobInfo struct {
 	StreamName string
 	// this is only set&used internally in the mist pipeline
 	SegmentingTargetURL string
+	SourceOutputURL     string
 
 	handler      Handler
 	hasFallback  bool
@@ -320,7 +321,9 @@ func checkMistCompatibleCodecs(strategy Strategy, iv video.InputVideo) Strategy 
 func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, foreground, hasFallback bool) <-chan bool {
 	if !foreground {
 		p.RequestID = fmt.Sprintf("bg_%s", p.RequestID)
-		p.HlsTargetURL = p.HlsTargetURL.JoinPath("..", handler.Name(), path.Base(p.HlsTargetURL.Path))
+		if p.HlsTargetURL != nil {
+			p.HlsTargetURL = p.HlsTargetURL.JoinPath("..", handler.Name(), path.Base(p.HlsTargetURL.Path))
+		}
 		// this will prevent the callbacks for this job from actually being sent
 		p.CallbackURL = ""
 	}
