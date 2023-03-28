@@ -185,7 +185,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 func (mc *MediaConvert) outputVideoFiles(mcArgs TranscodeJobArgs, ourOutputBaseDir *url.URL, filePrefix, fileSuffix string) (files []video.OutputVideoFile, err error) {
 	for _, profile := range mcArgs.Profiles {
 		suffix := profile.Name + "." + fileSuffix
-		key := mcArgs.HLSOutputFile.JoinPath(filePrefix + suffix).Path
+		key := mcArgs.HLSOutputFile.JoinPath("..", filePrefix+suffix).Path
 		// get object from s3 to check that it exists and to find out the file size
 		videoFile := video.OutputVideoFile{
 			Type:     fileSuffix,
