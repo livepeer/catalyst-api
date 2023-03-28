@@ -157,6 +157,12 @@ func (c *ClusterImpl) MembersFiltered(filter map[string]string, status, name str
 	all := c.serf.Members()
 	nodes := []Member{}
 	for _, member := range all {
+		if status != "" && status != member.Status.String() {
+			continue
+		}
+		if name != "" && name != member.Name {
+			continue
+		}
 		matches := true
 		for k, v := range filter {
 			val, ok := member.Tags[k]
