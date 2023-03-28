@@ -13,10 +13,11 @@ import (
 	"github.com/livepeer/catalyst-api/handlers/geolocation"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/middleware"
+	"github.com/livepeer/catalyst-api/pipeline"
 )
 
-func ListenAndServe(ctx context.Context, cli config.Cli, bal balancer.Balancer, c cluster.Cluster) error {
-	router := NewCatalystAPIRouter(cli, bal, c)
+func ListenAndServe(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster) error {
+	router := NewCatalystAPIRouter(cli, vodEngine, bal, c)
 	server := http.Server{Addr: cli.HTTPAddress, Handler: router}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -42,15 +43,18 @@ func ListenAndServe(ctx context.Context, cli config.Cli, bal balancer.Balancer, 
 	return server.Shutdown(ctx)
 }
 
-func NewCatalystAPIRouter(cli config.Cli, bal balancer.Balancer, c cluster.Cluster) *httprouter.Router {
+func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster) *httprouter.Router {
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
 
+	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
 	geoHandlers := &geolocation.GeolocationHandlersCollection{
 		Balancer: bal,
 		Cluster:  c,
 		Config:   cli,
 	}
+
+	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 
 	// Manifest endpoint
 	router.GET("/asset/hls/:playbackID/*file",
