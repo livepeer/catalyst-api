@@ -205,7 +205,10 @@ func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Clu
 		case <-ctx.Done():
 			return nil
 		case list := <-memberCh:
-			bal.UpdateMembers(list)
+			err := bal.UpdateMembers(list)
+			if err != nil {
+				return fmt.Errorf("failed to update load balancer from member list: %w", err)
+			}
 		}
 	}
 }
