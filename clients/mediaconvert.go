@@ -118,9 +118,6 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 // It calls the input.ReportProgress function to report the progress of the job
 // during the polling loop.
 func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (outs []video.OutputVideo, err error) {
-	if path.Base(args.HLSOutputFile.Path) != "index.m3u8" {
-		return nil, fmt.Errorf("target URL must be an `index.m3u8` file, found %s", args.HLSOutputFile)
-	}
 	targetDir := getTargetDir(args)
 
 	// AWS MediaConvert adds the .m3u8 to the end of the output file name
@@ -151,7 +148,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 	}
 
 	mcOutputBaseDir := mc.osTransferBucketURL.JoinPath(mcOutputRelPath, "..")
-	ourOutputBaseDir := args.HLSOutputFile.JoinPath("..")
+	ourOutputBaseDir := args.HLSOutputFile
 	log.Log(args.RequestID, "Copying output files from S3", "source", mcOutputBaseDir, "dest", ourOutputBaseDir)
 	if err := copyDir(mcOutputBaseDir, ourOutputBaseDir, args); err != nil {
 		return nil, fmt.Errorf("error copying output files: %w", err)
@@ -188,7 +185,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 func (mc *MediaConvert) outputVideoFiles(mcArgs TranscodeJobArgs, ourOutputBaseDir *url.URL, filePrefix, fileSuffix string) (files []video.OutputVideoFile, err error) {
 	for _, profile := range mcArgs.Profiles {
 		suffix := profile.Name + "." + fileSuffix
-		key := mcArgs.HLSOutputFile.JoinPath("..", filePrefix+suffix).Path
+		key := mcArgs.HLSOutputFile.JoinPath(filePrefix + suffix).Path
 		// get object from s3 to check that it exists and to find out the file size
 		videoFile := video.OutputVideoFile{
 			Type:     fileSuffix,
