@@ -115,7 +115,7 @@ func (c *ClusterImpl) retryJoin(ctx context.Context) {
 
 	for {
 		n, err := c.serf.Join(c.config.RetryJoin, false)
-		if n > 1 {
+		if n > 0 {
 			glog.Infof("Serf successfully joined %d-node cluster", n)
 			return
 		}
@@ -236,19 +236,20 @@ func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 	}()
 
 	for {
-		event := <-inbox
-		glog.V(5).Infof("got event: %v", event)
+		select {
+		case event := <-inbox:
+			glog.V(3).Infof("got event: %v", event)
+		case <-ctx.Done():
+			return nil
+		}
 
 		members, err := c.MembersFiltered(mediaFilter, ".*", ".*")
 
 		if err != nil {
 			glog.Errorf("Error getting serf, crashing: %v\n", err)
-			break
+			return err
 		}
 
 		c.memberCh <- members
-		continue
 	}
-
-	return nil
 }
