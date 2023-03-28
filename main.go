@@ -92,6 +92,7 @@ func main() {
 		ff.WithConfigFileParser(ff.PlainParser),
 		ff.WithEnvVarPrefix("CATALYST_API"),
 	)
+	cli.ParseLegacyEnv()
 	if err != nil {
 		glog.Fatalf("error parsing cli: %s", err)
 	}
