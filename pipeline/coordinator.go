@@ -233,7 +233,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		if err != nil {
 			return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
 		}
-		newSourceURL := sourceOutputUrl.JoinPath("transfer", si.RequestID, path.Base(sourceURL.Path))
+		newSourceURL := sourceOutputUrl.JoinPath(si.RequestID, "transfer", path.Base(sourceURL.Path))
 
 		inputVideoProbe, signedURL, err := c.InputCopy.CopyInputToS3(si.RequestID, sourceURL, newSourceURL)
 		if err != nil {
