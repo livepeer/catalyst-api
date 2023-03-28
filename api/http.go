@@ -64,7 +64,10 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 	)
 
 	// Handling incoming playback redirection requests
-	router.GET("/", withLogging(geoHandlers.RedirectHandler()))
+	redirectHandler := withLogging(geoHandlers.RedirectHandler())
+	router.NotFound = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		redirectHandler(w, r, httprouter.Params{})
+	})
 
 	return router
 }
