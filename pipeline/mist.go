@@ -16,6 +16,7 @@ import (
 )
 
 const MIST_SEGMENTING_SUBDIR = "source"
+const MIST_SEGMENTING_TARGET_MANIFEST = "index.m3u8"
 
 type mist struct {
 	MistClient      clients.MistAPIClient
@@ -27,12 +28,6 @@ func (m *mist) Name() string {
 }
 
 func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
-	targetManifestFilename := path.Base(job.HlsTargetURL.Path)
-	targetExtension := path.Ext(targetManifestFilename)
-	if targetExtension != ".m3u8" {
-		return nil, fmt.Errorf("target output file should have .m3u8 extension, found %q", targetExtension)
-	}
-
 	var sourceOutputUrl *url.URL
 	perRequestPath, err := url.JoinPath(m.SourceOutputUrl, job.RequestID, "index.m3u8")
 	if err != nil {
@@ -42,7 +37,7 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
 	}
 
-	segmentingTargetURL, err := inSameDirectory(*sourceOutputUrl, MIST_SEGMENTING_SUBDIR, targetManifestFilename)
+	segmentingTargetURL, err := inSameDirectory(*sourceOutputUrl, MIST_SEGMENTING_SUBDIR, MIST_SEGMENTING_TARGET_MANIFEST)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create targetSegmentedOutputURL: %w", err)
 	}

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -65,20 +64,11 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	outputs := []video.OutputVideo{}
 
-	var hlsTargetURL *url.URL
-	var err error
-	if transcodeRequest.HlsTargetURL != "" {
-		hlsTargetURL, err = url.Parse(transcodeRequest.HlsTargetURL)
-	} else {
-		// TargetURL not defined in the /api/transcode/file request; for the backwards-compatibility, use SourceManifestURL.
-		// For the /api/vod endpoint, TargetURL is always defined.
-		hlsTargetURL, err = url.Parse(path.Dir(transcodeRequest.SourceManifestURL))
-	}
-
+	hlsTargetURL, err := url.Parse(transcodeRequest.HlsTargetURL)
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("failed to parse transcodeRequest.TargetURL: %s", err)
 	}
-	tout, err := url.Parse(path.Dir(hlsTargetURL.Path))
+	tout, err := url.Parse(hlsTargetURL.Path)
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("failed to parse targetTranscodedPath: %s", err)
 	}
