@@ -70,12 +70,6 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, err
 	}
 
-	tout, err := url.Parse(hlsTargetURL.Path)
-	if err != nil {
-		return outputs, segmentsCount, fmt.Errorf("failed to parse targetTranscodedPath: %s", err)
-	}
-	targetTranscodedRenditionOutputURL := hlsTargetURL.ResolveReference(tout)
-
 	// Grab some useful parameters to be used later from the TranscodeSegmentRequest
 	sourceManifestOSURL := transcodeRequest.SourceManifestURL
 	// transcodeProfiles are desired constraints for transcoding process
@@ -119,7 +113,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	var jobs *ParallelTranscoding
 	jobs = NewParallelTranscoding(sourceSegmentURLs, func(segment segmentInfo) error {
-		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, targetTranscodedRenditionOutputURL, transcodedStats, &renditionList)
+		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, hlsTargetURL, transcodedStats, &renditionList)
 		segmentsCount++
 		if err != nil {
 			return err
@@ -138,7 +132,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Build the manifests and push them to storage
-	manifestURL, err := GenerateAndUploadManifests(sourceManifest, targetTranscodedRenditionOutputURL.String(), transcodedStats)
+	manifestURL, err := GenerateAndUploadManifests(sourceManifest, hlsTargetURL.String(), transcodedStats)
 	if err != nil {
 		return outputs, segmentsCount, err
 	}
@@ -218,7 +212,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	pubUrl := transcodeRequest.HlsTargetURL
-	rel := tout.Path
+	rel := hlsTargetURL.Path
 	if pubUrl == "" {
 		pubURL, err := url.Parse(transcodeRequest.Mp4TargetUrl)
 		if err != nil {
@@ -264,12 +258,12 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		}
 	}
 
-	manifestURL = strings.ReplaceAll(manifestURL, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
+	manifestURL = strings.ReplaceAll(manifestURL, hlsTargetURL.String(), playbackBaseURL)
 	output := video.OutputVideo{Type: "object_store"}
 	if transcodeRequest.HlsTargetURL != "" {
 		output.Manifest = manifestURL
 		for _, rendition := range transcodedStats {
-			videoManifestURL := strings.ReplaceAll(rendition.ManifestLocation, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
+			videoManifestURL := strings.ReplaceAll(rendition.ManifestLocation, hlsTargetURL.String(), playbackBaseURL)
 			output.Videos = append(output.Videos, video.OutputVideoFile{Location: videoManifestURL, SizeBytes: rendition.Bytes})
 		}
 	}
