@@ -21,7 +21,6 @@ import (
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/pipeline"
-	lpapi "github.com/livepeer/go-api-client"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
 	"github.com/peterbourgon/ff"
 	"golang.org/x/sync/errgroup"
@@ -64,7 +63,7 @@ func main() {
 	config.InvertedBoolFlag(fs, &cli.MistScrapeMetrics, "mist-scrape-metrics", true, "Scrape statistics from MistServer and publish to RabbitMQ")
 	fs.StringVar(&cli.MistSendAudio, "send-audio", "record", "when should we send audio?  {always|never|record}")
 	fs.StringVar(&cli.MistBaseStreamName, "mist-base-stream-name", "", "Base stream name to be used in wildcard-based routing scheme")
-	fs.StringVar(&cli.APIServer, "api-server", lpapi.ProdServer, "Livepeer API server to use")
+	fs.StringVar(&cli.APIServer, "api-server", "", "Livepeer API server to use")
 	fs.StringVar(&cli.AMQPURL, "amqp-url", "", "RabbitMQ url")
 	fs.StringVar(&cli.OwnRegion, "own-region", "", "Identifier of the region where the service is running, used for mapping external data back to current region")
 
@@ -147,7 +146,10 @@ func main() {
 		glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 	}
 
-	mapic := mistapiconnector.NewMapic(&cli)
+	var mapic mistapiconnector.IMac
+	if cli.ShouldMapic() {
+		mapic = mistapiconnector.NewMapic(&cli)
+	}
 
 	// Start balancer
 	bal := balancer.NewBalancer(&balancer.Config{
@@ -173,9 +175,11 @@ func main() {
 		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c)
 	})
 
-	group.Go(func() error {
-		return mapic.Start(ctx)
-	})
+	if cli.ShouldMapic() {
+		group.Go(func() error {
+			return mapic.Start(ctx)
+		})
+	}
 
 	group.Go(func() error {
 		return bal.Start(ctx)
