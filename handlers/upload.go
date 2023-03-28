@@ -166,6 +166,12 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		if err != nil {
 			return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 		}
+		// Hack for web3.storage to distinguish different jobs, before calling Publish()
+		// Can be removed after we address this issue: https://github.com/livepeer/go-tools/issues/16
+		if mp4TargetURL.Scheme == "w3s" {
+			mp4TargetURL.Host = requestID
+			log.AddContext(requestID, "w3s-url", mp4TargetURL.String())
+		}
 	}
 
 	if strat := uploadVODRequest.PipelineStrategy; strat != "" && !strat.IsValid() {

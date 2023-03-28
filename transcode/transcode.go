@@ -152,12 +152,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, err
 	}
 
-	playbackBaseURL, err := clients.PublishDriverSession(targetTranscodedRenditionOutputURL.String(), tout.Path)
-	if err != nil {
-		return outputs, segmentsCount, err
-	}
-
-	var mp4Outputs []video.OutputVideoFile
+	var mp4OutputsPre []video.OutputVideoFile
 	// Transmux received segments from T into a single mp4
 	if transcodeRequest.GenerateMP4 {
 		mp4TargetUrlBase, err := url.Parse(transcodeRequest.Mp4TargetUrl)
@@ -214,25 +209,62 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				break
 			}
 
-			mp4TargetUrl := mp4TargetUrlBase.JoinPath(rendition, filepath.Base(mp4OutputFile.Name()))
+			filename := fmt.Sprintf("%s.mp4", rendition)
 			err = backoff.Retry(func() error {
-				return clients.UploadToOSURL(mp4TargetUrl.String(), "", bufio.NewReader(mp4OutputFile), UPLOAD_TIMEOUT)
+				return clients.UploadToOSURL(mp4TargetUrlBase.String(), filename, bufio.NewReader(mp4OutputFile), UPLOAD_TIMEOUT)
 			}, clients.UploadRetryBackoff())
 			if err != nil {
 				log.Log(transcodeRequest.RequestID, "failed to upload mp4", "file", mp4OutputFile.Name())
 				break
 			}
 
-			mp4PlaybackURL := strings.ReplaceAll(mp4TargetUrl.String(), targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
 			mp4Out := video.OutputVideoFile{
 				Type:     "mp4",
-				Location: mp4PlaybackURL,
+				Location: mp4TargetUrlBase.JoinPath(filename).String(),
 			}
-			signedURL, err := clients.SignURL(mp4TargetUrl)
+			mp4OutputsPre = append(mp4OutputsPre, mp4Out)
+		}
+	}
+
+	pubUrl := transcodeRequest.HlsTargetURL
+	rel := tout.Path
+	if pubUrl == "" {
+		pubURL, err := url.Parse(transcodeRequest.Mp4TargetUrl)
+		if err != nil {
+			return outputs, segmentsCount, err
+		}
+		pubUrl = pubURL.String()
+		// Fix different rel paths for hls and mp4
+		rel = pubURL.Path
+	}
+	playbackBaseURL, err := clients.PublishDriverSession(pubUrl, rel)
+	if err != nil {
+		return outputs, segmentsCount, err
+	}
+
+	var mp4Outputs []video.OutputVideoFile
+	if transcodeRequest.GenerateMP4 {
+		for _, mp4Out := range mp4OutputsPre {
+			mp4Out.Location = strings.ReplaceAll(mp4Out.Location, transcodeRequest.Mp4TargetUrl, playbackBaseURL)
+
+			mp4TargetUrl, err := url.Parse(mp4Out.Location)
 			if err != nil {
-				return outputs, segmentsCount, fmt.Errorf("failed to create signed url for %s: %w", mp4TargetUrl, err)
+				return outputs, segmentsCount, fmt.Errorf("failed to parse mp4Out.Location %s: %w", mp4Out.Location, err)
 			}
-			mp4Out, err = video.PopulateOutput(video.Probe{}, signedURL, mp4Out)
+
+			var probeURL string
+			if mp4TargetUrl.Scheme == "ipfs" {
+				// probe IPFS with web3.storage URL, since ffprobe does not support "ipfs://"
+				probeURL = fmt.Sprintf("https://%s.ipfs.w3s.link/%s", mp4TargetUrl.Host, mp4TargetUrl.Path)
+			} else {
+				var err error
+				probeURL, err = clients.SignURL(mp4TargetUrl)
+				if err != nil {
+					return outputs, segmentsCount, fmt.Errorf("failed to create signed url for %s: %w", mp4TargetUrl, err)
+				}
+			}
+
+			mp4Out, err = video.PopulateOutput(video.Probe{}, probeURL, mp4Out)
 			if err != nil {
 				return outputs, segmentsCount, err
 			}
@@ -242,10 +274,13 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	manifestURL = strings.ReplaceAll(manifestURL, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
-	output := video.OutputVideo{Type: "object_store", Manifest: manifestURL}
-	for _, rendition := range transcodedStats {
-		videoManifestURL := strings.ReplaceAll(rendition.ManifestLocation, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
-		output.Videos = append(output.Videos, video.OutputVideoFile{Location: videoManifestURL, SizeBytes: rendition.Bytes})
+	output := video.OutputVideo{Type: "object_store"}
+	if transcodeRequest.HlsTargetURL != "" {
+		output.Manifest = manifestURL
+		for _, rendition := range transcodedStats {
+			videoManifestURL := strings.ReplaceAll(rendition.ManifestLocation, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
+			output.Videos = append(output.Videos, video.OutputVideoFile{Location: videoManifestURL, SizeBytes: rendition.Bytes})
+		}
 	}
 	output.MP4Outputs = mp4Outputs
 	outputs = []video.OutputVideo{output}
