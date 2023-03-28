@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"strings"
 	"time"
+
+	"github.com/golang/glog"
 )
 
 type Cli struct {
@@ -74,6 +77,37 @@ func (cli *Cli) EncryptBytes() ([]byte, error) {
 // Should we enable mapic?
 func (cli *Cli) ShouldMapic() bool {
 	return cli.APIServer != ""
+}
+
+// Handle some legacy environment variables for zero-downtime catalyst-node migration
+func (cli *Cli) ParseLegacyEnv() {
+	node := os.Getenv("CATALYST_NODE_NODE")
+	if node != "" {
+		cli.NodeName = node
+		glog.Warning("Detected legacy env CATALYST_NODE_NODE, please migrate to CATALYST_API_NODE")
+	}
+
+	bind := os.Getenv("CATALYST_NODE_BIND")
+	if bind != "" {
+		cli.ClusterAddress = bind
+		glog.Warning("Detected legacy env CATALYST_NODE_BIND, please migrate to CATALYST_API_CLUSTER_ADDR")
+	}
+
+	advertise := os.Getenv("CATALYST_NODE_ADVERTISE")
+	if advertise != "" {
+		cli.ClusterAdvertiseAddress = advertise
+		glog.Warning("Detected legacy env CATALYST_NODE_ADVERTISE, please migrate to CATALYST_API_CLUSTER_ADVERTISE_ADDR")
+	}
+
+	tags := os.Getenv("CATALYST_NODE_SERF_TAGS")
+	if tags != "" {
+		parsed, err := parseCommaMap(tags)
+		if err != nil {
+			panic(fmt.Errorf("error parsing CATALYST_NODE_SERF_TAGS: %w", err))
+		}
+		cli.Tags = parsed
+		glog.Warning("Detected legacy env CATALYST_NODE_SERF_TAGS, please migrate to CATALYST_API_TAGS")
+	}
 }
 
 // still a string, but validates the provided value is some kind of coherent host:port
@@ -157,25 +191,29 @@ func CommaSliceFlag(fs *flag.FlagSet, dest *[]string, name string, value []strin
 	})
 }
 
+func parseCommaMap(s string) (map[string]string, error) {
+	output := map[string]string{}
+	if s == "" {
+		return output, nil
+	}
+	for _, pair := range strings.Split(s, ",") {
+		kv := strings.Split(pair, "=")
+		if len(kv) != 2 {
+			return map[string]string{}, fmt.Errorf("failed to parse keypairs, -option=k1=v1,k2=v2 format required, got %s", s)
+		}
+		k, v := kv[0], kv[1]
+		output[k] = v
+	}
+	return output, nil
+}
+
 // handles -foo=key1=value1,key2=value2
 func CommaMapFlag(fs *flag.FlagSet, dest *map[string]string, name string, value map[string]string, usage string) {
 	*dest = value
 	fs.Func(name, usage, func(s string) error {
-		output := map[string]string{}
-		if s == "" {
-			*dest = output
-			return nil
-		}
-		for _, pair := range strings.Split(s, ",") {
-			kv := strings.Split(pair, "=")
-			if len(kv) != 2 {
-				return fmt.Errorf("failed to parse keypairs, -%s=k1=v1,k2=v2 format required, got %s", name, SEGMENTING_PREFIX)
-			}
-			k, v := kv[0], kv[1]
-			output[k] = v
-		}
-		*dest = output
-		return nil
+		var err error
+		*dest, err = parseCommaMap(s)
+		return err
 	})
 }
 
