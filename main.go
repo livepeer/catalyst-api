@@ -33,8 +33,8 @@ func main() {
 	cli := config.Cli{}
 
 	// listen addresses
-	config.AddrFlag(fs, &cli.HTTPAddress, "http-addr", "0.0.0.0:4949", "Address to bind for external-facing Catalyst HTTP handling")
-	config.AddrFlag(fs, &cli.HTTPInternalAddress, "http-internal-addr", "127.0.0.1:4848", "Address to bind for internal privileged HTTP commands")
+	config.AddrFlag(fs, &cli.HTTPAddress, "http-addr", "0.0.0.0:8989", "Address to bind for external-facing Catalyst HTTP handling")
+	config.AddrFlag(fs, &cli.HTTPInternalAddress, "http-internal-addr", "127.0.0.1:7979", "Address to bind for internal privileged HTTP commands")
 	config.AddrFlag(fs, &cli.ClusterAddress, "cluster-addr", "0.0.0.0:9935", "Address to bind Serf network listeners to. To use an IPv6 address, specify [::1] or [::1]:7946.")
 	fs.StringVar(&cli.ClusterAdvertiseAddress, "cluster-advertise-addr", "", "Address to advertise to the other cluster members")
 	config.AddrFlag(fs, &cli.RPCAddr, "rpc-addr", "127.0.0.1:7373", "Address to bind the Serf RPC listener.")
