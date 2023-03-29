@@ -34,7 +34,6 @@ type Cli struct {
 	MistLoadBalancerTemplate  string
 	AMQPURL                   string
 	OwnRegion                 string
-	PromPort                  int
 	APIToken                  string
 	APIServer                 string
 	SourceOutput              string
