@@ -538,7 +538,7 @@ func Test_InputCopiedToTransferLocation(t *testing.T) {
 	require.Equal(clients.TranscodeStatusCompleted, msg.Status)
 
 	// Check that the file was copied to the osTransferBucketURL folder
-	transferInput := path.Join(transferDir, "/transfer/123/"+filepath.Base(f.Name()))
+	transferInput := path.Join(transferDir, "/123/transfer/"+filepath.Base(f.Name()))
 	require.Equal(transferInput, actualTransferInput)
 	content, err := os.Open(transferInput)
 	require.NoError(err)
