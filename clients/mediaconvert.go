@@ -506,3 +506,10 @@ func contains[T comparable](v T, list []T) bool {
 	}
 	return false
 }
+
+func toStr(URL *url.URL) string {
+	if URL != nil {
+		return URL.String()
+	}
+	return ""
+}
