@@ -211,26 +211,43 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		}
 	}
 
-	pubUrl := transcodeRequest.HlsTargetURL
-	rel := hlsTargetURL.Path
-	if pubUrl == "" {
-		pubURL, err := url.Parse(transcodeRequest.Mp4TargetUrl)
+	hlsPubUrl := hlsTargetURL.String()
+	hlsRel := hlsTargetURL.Path
+	var hlsPlaybackBaseURL string
+	if hlsPubUrl != "" {
+		hlsPlaybackBaseURL, err = clients.PublishDriverSession(hlsPubUrl, hlsRel)
 		if err != nil {
 			return outputs, segmentsCount, err
 		}
-		pubUrl = pubURL.String()
-		// Fix different rel paths for hls and mp4
-		rel = pubURL.Path
 	}
-	playbackBaseURL, err := clients.PublishDriverSession(pubUrl, rel)
-	if err != nil {
-		return outputs, segmentsCount, err
+
+	mp4PubUrl := transcodeRequest.Mp4TargetUrl
+	var mp4PlaybackBaseURL string
+	if mp4PubUrl != "" {
+		mp4TargetURL, err := url.Parse(mp4PubUrl)
+		if err != nil {
+			return outputs, segmentsCount, err
+		}
+		mp4Rel := mp4TargetURL.Path
+		hlsPubUrlNoPath, _ := url.Parse(hlsTargetURL.String())
+		hlsPubUrlNoPath.Path = ""
+		mp4PubUrlNoPath, _ := url.Parse(mp4TargetURL.String())
+		mp4PubUrlNoPath.Path = ""
+		if hlsPubUrlNoPath.String() == mp4PubUrlNoPath.String() {
+			// Do not publish the second time, just reuse playbackBaseURL from HLS
+			mp4PlaybackBaseURL = strings.ReplaceAll(hlsPlaybackBaseURL, hlsRel, mp4Rel)
+		} else {
+			mp4PlaybackBaseURL, err = clients.PublishDriverSession(mp4PubUrl, mp4Rel)
+			if err != nil {
+				return outputs, segmentsCount, err
+			}
+		}
 	}
 
 	var mp4Outputs []video.OutputVideoFile
 	if transcodeRequest.GenerateMP4 {
 		for _, mp4Out := range mp4OutputsPre {
-			mp4Out.Location = strings.ReplaceAll(mp4Out.Location, transcodeRequest.Mp4TargetUrl, playbackBaseURL)
+			mp4Out.Location = strings.ReplaceAll(mp4Out.Location, transcodeRequest.Mp4TargetUrl, mp4PlaybackBaseURL)
 
 			mp4TargetUrl, err := url.Parse(mp4Out.Location)
 			if err != nil {
@@ -258,12 +275,12 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		}
 	}
 
-	manifestURL = strings.ReplaceAll(manifestURL, hlsTargetURL.String(), playbackBaseURL)
+	manifestURL = strings.ReplaceAll(manifestURL, hlsTargetURL.String(), hlsPlaybackBaseURL)
 	output := video.OutputVideo{Type: "object_store"}
 	if transcodeRequest.HlsTargetURL != "" {
 		output.Manifest = manifestURL
 		for _, rendition := range transcodedStats {
-			videoManifestURL := strings.ReplaceAll(rendition.ManifestLocation, hlsTargetURL.String(), playbackBaseURL)
+			videoManifestURL := strings.ReplaceAll(rendition.ManifestLocation, hlsTargetURL.String(), hlsPlaybackBaseURL)
 			output.Videos = append(output.Videos, video.OutputVideoFile{Location: videoManifestURL, SizeBytes: rendition.Bytes})
 		}
 	}
