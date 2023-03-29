@@ -29,15 +29,13 @@ func init() {
 		panic(buildErr)
 	}
 
-	// Get minio
-	getMinio := exec.Command("go", "get", "github.com/minio/minio@v0.0.0-20221229230822-b8943fdf19ac")
-	getMinio.Dir = ".."
-	if buildErr := getMinio.Run(); buildErr != nil {
-		panic(buildErr)
-	}
-
 	// Build minio
-	buildMinio := exec.Command("go", "build", "-o", "test/minio", "github.com/minio/minio")
+	buildMinio := exec.Command("go", "install", "github.com/minio/minio@v0.0.0-20221229230822-b8943fdf19ac")
+	wd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	buildMinio.Env = append(os.Environ(), fmt.Sprintf("GOBIN=%s", wd))
 	buildMinio.Dir = ".."
 	if buildErr := buildMinio.Run(); buildErr != nil {
 		panic(buildErr)
