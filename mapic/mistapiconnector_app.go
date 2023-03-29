@@ -46,6 +46,7 @@ type (
 		SetupTriggers(ownURI string) error
 		HandleDefaultStreamTrigger() httprouter.Handle
 		Start(ctx context.Context) error
+		MetricsHandler() http.Handler
 	}
 
 	pushStatus struct {
@@ -148,7 +149,6 @@ func (mc *mac) Start(ctx context.Context) error {
 	mapi := mistapi.NewMist(mc.config.MistHost, mc.config.MistUser, mc.config.MistPassword, mc.config.APIToken, uint(mc.config.MistPort))
 	ensureLoggedIn(mapi, mc.config.MistConnectTimeout)
 	mc.mapi = mapi
-	metrics.InitCensus(mc.config.NodeName, model.Version, "mistconnector")
 
 	if err := mc.SetupTriggers(mc.config.OwnInternalURL() + "/mapic"); err != nil {
 		return err
@@ -183,6 +183,10 @@ func (mc *mac) Start(ctx context.Context) error {
 	}
 	<-ctx.Done()
 	return nil
+}
+
+func (mc *mac) MetricsHandler() http.Handler {
+	return metrics.Exporter
 }
 
 func ensureLoggedIn(mapi *mistapi.API, timeout time.Duration) {

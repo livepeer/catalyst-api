@@ -1,8 +1,11 @@
 package api
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
@@ -18,6 +21,7 @@ import (
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/catalyst-api/pipeline"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster) error {
@@ -69,6 +73,11 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	if cli.ShouldMapic() {
 		// Endpoint to receive "Triggers" (callbacks) from Mist
 		router.POST("/mapic", withLogging(mapic.HandleDefaultStreamTrigger()))
+
+		// Hacky combined metrics handler. To be refactored away with mapic.
+		router.GET("/metrics", concatHandlers(promhttp.Handler(), mapic.MetricsHandler()))
+	} else {
+		router.Handler("GET", "/metrics", promhttp.Handler())
 	}
 
 	// Endpoint for handling STREAM_SOURCE requests
@@ -97,4 +106,23 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	router.GET("/admin/members", withLogging(adminHandlers.MembersHandler()))
 
 	return router
+}
+
+// Hack to combine main metrics and mapic metrics. To be refactored away with mapic.
+func concatHandlers(handlers ...http.Handler) httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		var outbuf bytes.Buffer
+		writer := bufio.NewWriter(&outbuf)
+		for _, handler := range handlers {
+			rec := httptest.NewRecorder()
+			rec.Body = &bytes.Buffer{}
+			handler.ServeHTTP(rec, r)
+			for key, val := range rec.Header() {
+				w.Header().Set(key, val[0])
+			}
+			rec.Body.WriteTo(writer)
+			writer.WriteString("\n")
+		}
+		outbuf.WriteTo(w)
+	}
 }

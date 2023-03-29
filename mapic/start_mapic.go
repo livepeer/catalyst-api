@@ -2,6 +2,8 @@ package mistapiconnector
 
 import (
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/mapic/metrics"
+	"github.com/livepeer/catalyst-api/mapic/model"
 )
 
 func NewMapic(cli *config.Cli) IMac {
@@ -16,5 +18,6 @@ func NewMapic(cli *config.Cli) IMac {
 		mistStreamSource:          cli.MistStreamSource,
 		mistHardcodedBroadcasters: cli.MistHardcodedBroadcasters,
 	}
+	metrics.InitCensus(mc.config.NodeName, model.Version, "mistconnector")
 	return mc
 }
