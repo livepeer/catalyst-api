@@ -262,7 +262,7 @@ func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 			return nil
 		}
 
-		members, err := c.MembersFiltered(mediaFilter, ".*", ".*")
+		members, err := c.MembersFiltered(mediaFilter, "", "")
 
 		if err != nil {
 			glog.Errorf("Error getting serf, crashing: %v\n", err)
