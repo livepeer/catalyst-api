@@ -31,9 +31,12 @@ lint:
 run:
 	CATALYST_API_HTTP_ADDR=127.0.0.1:4949 CATALYST_API_HTTP_INTERNAL_ADDR=127.0.0.1:3939 go run main.go
 
-.PHONY: test
-test:
+.PHONY: generate
+generate:
 	go generate ./...
+
+.PHONY: test
+test: generate
 	go test -race ./...
 
 .PHONY: tidy
