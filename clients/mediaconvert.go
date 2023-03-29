@@ -118,11 +118,11 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 // It calls the input.ReportProgress function to report the progress of the job
 // during the polling loop.
 func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (outs []video.OutputVideo, err error) {
-	// AWS MediaConvert adds the .m3u8 to the end of the output file name
-	mcHlsOutputRelPath := path.Join("output", getTargetDir(args.HLSOutputLocation, args.RequestID, "hls"), "index")
-
-	mcArgs := args
-	mcArgs.HLSOutputLocation = mc.s3TransferBucket.JoinPath(mcHlsOutputRelPath)
+	var (
+		mcArgs    = args
+		hlsTarget = args.HLSOutputLocation
+		mp4Target = args.MP4OutputLocation
+	)
 
 	if len(mcArgs.Profiles) == 0 {
 		mcArgs.Profiles, err = video.GetPlaybackProfiles(mcArgs.InputFileInfo)
@@ -131,10 +131,18 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 		}
 	}
 
+	var mcHlsOutputRelPath string
+	if hlsTarget != nil {
+		// AWS MediaConvert adds the .m3u8 to the end of the output file name
+		mcHlsOutputRelPath = path.Join("output", getTargetDir(hlsTarget, args.RequestID, "hls"), "index")
+		mcArgs.HLSOutputLocation = mc.s3TransferBucket.JoinPath(mcHlsOutputRelPath)
+	}
+
+	var mcMp4OutputRelPath string
 	if args.GenerateMP4 {
 		// sets the mp4 path to be the same as HLS except for the suffix being "static"
 		// resulting files look something like https://storage.googleapis.com/bucket/25afy0urw3zu2476/static360p0.mp4
-		mcMp4OutputRelPath := path.Join("output", getTargetDir(args.HLSOutputLocation, args.RequestID, "mp4"), mp4OutFilePrefix)
+		mcMp4OutputRelPath = path.Join("output", getTargetDir(mp4Target, args.RequestID, "mp4"), mp4OutFilePrefix)
 		mcArgs.MP4OutputLocation = mc.s3TransferBucket.JoinPath(mcMp4OutputRelPath)
 	}
 
@@ -146,16 +154,16 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 		return nil, err
 	}
 
-	mcHlsOutputBaseDir := mc.osTransferBucketURL.JoinPath(mcHlsOutputRelPath, "..")
-	hlsTarget := args.HLSOutputLocation
-	log.Log(args.RequestID, "Copying HLS output files from S3", "source", mcHlsOutputBaseDir, "dest", hlsTarget)
-	if err := copyDir(mcHlsOutputBaseDir, hlsTarget, args); err != nil {
-		return nil, fmt.Errorf("error copying output files: %w", err)
+	if hlsTarget != nil {
+		mcHlsOutputBaseDir := mc.osTransferBucketURL.JoinPath(mcHlsOutputRelPath, "..")
+		log.Log(args.RequestID, "Copying HLS output files from S3", "source", mcHlsOutputBaseDir, "dest", hlsTarget)
+		if err := copyDir(mcHlsOutputBaseDir, hlsTarget, args); err != nil {
+			return nil, fmt.Errorf("error copying output files: %w", err)
+		}
 	}
 
-	mp4Target := args.MP4OutputLocation
 	if args.GenerateMP4 {
-		mcMp4OutputBaseDir := mc.osTransferBucketURL.JoinPath(mcHlsOutputRelPath, "..")
+		mcMp4OutputBaseDir := mc.osTransferBucketURL.JoinPath(mcMp4OutputRelPath, "..")
 		log.Log(args.RequestID, "Copying MP4 output files from S3", "source", mcMp4OutputBaseDir, "dest", mp4Target)
 		if err := copyDir(mcMp4OutputBaseDir, mp4Target, args); err != nil {
 			return nil, fmt.Errorf("error copying output files: %w", err)
@@ -163,26 +171,31 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 	}
 
 	hlsPlaybackBaseURL, mp4PlaybackBaseURL, err := Publish(toStr(hlsTarget), toStr(mp4Target))
-	fmt.Println(mp4PlaybackBaseURL)
-	if err != nil {
-		return nil, err
-	}
-	playbackDirURL, err := url.Parse(hlsPlaybackBaseURL)
 	if err != nil {
 		return nil, err
 	}
 
-	outputHLSFiles, err := mc.outputVideoFiles(mcArgs, playbackDirURL, "index", "m3u8")
-	if err != nil {
-		return nil, err
-	}
 	outputVideo := video.OutputVideo{
-		Type:     "object_store",
-		Manifest: playbackDirURL.JoinPath("index.m3u8").String(),
-		Videos:   outputHLSFiles,
+		Type: "object_store",
 	}
-	if mcArgs.MP4OutputLocation != nil {
-		outputMP4Files, err := mc.outputVideoFiles(mcArgs, playbackDirURL, mp4OutFilePrefix, "mp4")
+	if hlsTarget != nil {
+		hlsPlaybackDirURL, err := url.Parse(hlsPlaybackBaseURL)
+		if err != nil {
+			return nil, err
+		}
+		outputHLSFiles, err := mc.outputVideoFiles(mcArgs, hlsPlaybackDirURL, "index", "m3u8")
+		if err != nil {
+			return nil, err
+		}
+		outputVideo.Manifest = hlsPlaybackDirURL.JoinPath("index.m3u8").String()
+		outputVideo.Videos = outputHLSFiles
+	}
+	if args.GenerateMP4 {
+		mp4PlaybackDirURL, err := url.Parse(mp4PlaybackBaseURL)
+		if err != nil {
+			return nil, err
+		}
+		outputMP4Files, err := mc.outputVideoFiles(mcArgs, mp4PlaybackDirURL, mp4OutFilePrefix, "mp4")
 		if err != nil {
 			return nil, err
 		}
@@ -221,11 +234,7 @@ func (mc *MediaConvert) outputVideoFiles(mcArgs TranscodeJobArgs, ourOutputBaseD
 func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobArgs, accelerated bool) (err error) {
 	log.Log(args.RequestID, "Creating AWS MediaConvert job", "input", args.InputFile, "output", args.HLSOutputLocation, "accelerated", accelerated)
 
-	mp4Out := ""
-	if args.MP4OutputLocation != nil {
-		mp4Out = args.MP4OutputLocation.String()
-	}
-	payload := createJobPayload(args.InputFile.String(), args.HLSOutputLocation.String(), mp4Out, mc.role, accelerated, args.Profiles, args.SegmentSizeSecs)
+	payload := createJobPayload(args.InputFile.String(), toStr(args.HLSOutputLocation), toStr(args.MP4OutputLocation), mc.role, accelerated, args.Profiles, args.SegmentSizeSecs)
 	job, err := mc.client.CreateJob(payload)
 	if err != nil {
 		return fmt.Errorf("error creting mediaconvert job: %w", err)
@@ -320,8 +329,9 @@ func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, acce
 }
 
 func outputGroups(hlsOutputFile, mp4OutputFile string, profiles []video.EncodedProfile, segmentSizeSecs int64) []*mediaconvert.OutputGroup {
-	groups := []*mediaconvert.OutputGroup{
-		{
+	var groups []*mediaconvert.OutputGroup
+	if hlsOutputFile != "" {
+		groups = append(groups, &mediaconvert.OutputGroup{
 			Name: aws.String("Apple HLS"),
 			OutputGroupSettings: &mediaconvert.OutputGroupSettings{
 				HlsGroupSettings: &mediaconvert.HlsGroupSettings{
@@ -333,7 +343,7 @@ func outputGroups(hlsOutputFile, mp4OutputFile string, profiles []video.EncodedP
 			},
 			Outputs:    outputs("M3U8", profiles),
 			CustomName: aws.String("hls"),
-		},
+		})
 	}
 	if mp4OutputFile != "" {
 		groups = append(groups, &mediaconvert.OutputGroup{
