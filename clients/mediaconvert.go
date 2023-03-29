@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"path"
 	"strings"
@@ -15,7 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/mediaconvert"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/video"
 	"golang.org/x/sync/errgroup"
@@ -24,7 +22,6 @@ import (
 const MAX_COPY_DIR_DURATION = 2 * time.Hour
 
 var pollDelay = 10 * time.Second
-var retryableHttpClient = newRetryableHttpClient()
 
 const (
 	rateLimitedPollDelay = 15 * time.Second
@@ -492,18 +489,4 @@ func contains[T comparable](v T, list []T) bool {
 		}
 	}
 	return false
-}
-
-func newRetryableHttpClient() *http.Client {
-	client := retryablehttp.NewClient()
-	client.RetryMax = 5                          // Retry a maximum of this+1 times
-	client.RetryWaitMin = 200 * time.Millisecond // Wait at least this long between retries
-	client.RetryWaitMax = 5 * time.Second        // Wait at most this long between retries (exponential backoff)
-	client.HTTPClient = &http.Client{
-		// Give up on requests that take more than this long - the file is probably too big for us to process locally if it takes this long
-		// or something else has gone wrong and the request is hanging
-		Timeout: MAX_COPY_FILE_DURATION,
-	}
-
-	return client.StandardClient()
 }
