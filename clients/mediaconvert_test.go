@@ -164,14 +164,14 @@ func TestCopiesMediaConvertOutputToFinalLocation(t *testing.T) {
 	mc, inputFile, transferDir, cleanup := setupTestMediaConvert(t, awsStub)
 	defer cleanup()
 
-	outFile := path.Join(transferDir, "../out/index.m3u8")
-	defer os.RemoveAll(path.Dir(outFile))
-	transfOutputFile = path.Join(transferDir, "output", outFile)
+	outLocation := path.Join(transferDir, "../hls")
+	defer os.RemoveAll(path.Dir(outLocation))
+	transfOutputFile = path.Join(transferDir, "output", outLocation, "index.m3u8")
 	require.NoError(os.MkdirAll(path.Dir(transfOutputFile), 0777))
 
 	_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
 		InputFile:                mustParseURL(t, "file://"+inputFile.Name()),
-		HLSOutputLocation:        mustParseURL(t, "file:/"+outFile),
+		HLSOutputLocation:        mustParseURL(t, "file:/"+outLocation),
 		ReportProgress:           func(progress float64) {},
 		CollectTranscodedSegment: func() {},
 		InputFileInfo:            inputVideo,
@@ -181,11 +181,11 @@ func TestCopiesMediaConvertOutputToFinalLocation(t *testing.T) {
 	require.Equal(2, getJobCalls)
 
 	// Check that the output files were copied to the osTransferBucketURL folder
-	content, err := os.ReadFile(outFile)
+	content, err := os.ReadFile(path.Join(outLocation, "index.m3u8"))
 	require.NoError(err)
 	require.Equal(dummyHlsPlaylist, string(content))
 
-	content, err = os.ReadFile(path.Join(outFile, "../1.ts"))
+	content, err = os.ReadFile(path.Join(outLocation, "1.ts"))
 	require.NoError(err)
 	require.Equal(exampleFileContents, string(content))
 }
@@ -282,7 +282,8 @@ func Test_MP4OutDurationCheck(t *testing.T) {
 			iv.Duration = tt.duration
 			_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
 				InputFile:         mustParseURL(t, "file://"+f.Name()),
-				HLSOutputLocation: mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
+				HLSOutputLocation: mustParseURL(t, "s3+https://endpoint.com/bucket/1234"),
+				MP4OutputLocation: mustParseURL(t, "s3+https://endpoint.com/bucket/1234"),
 				GenerateMP4:       tt.generatemp4,
 				InputFileInfo:     iv,
 			})

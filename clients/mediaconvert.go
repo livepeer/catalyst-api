@@ -234,7 +234,11 @@ func (mc *MediaConvert) outputVideoFiles(mcArgs TranscodeJobArgs, ourOutputBaseD
 func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobArgs, accelerated bool) (err error) {
 	log.Log(args.RequestID, "Creating AWS MediaConvert job", "input", args.InputFile, "output", args.HLSOutputLocation, "accelerated", accelerated)
 
-	payload := createJobPayload(args.InputFile.String(), toStr(args.HLSOutputLocation), toStr(args.MP4OutputLocation), mc.role, accelerated, args.Profiles, args.SegmentSizeSecs)
+	var mp4OutputLocation string
+	if args.GenerateMP4 {
+		mp4OutputLocation = toStr(args.MP4OutputLocation)
+	}
+	payload := createJobPayload(args.InputFile.String(), toStr(args.HLSOutputLocation), mp4OutputLocation, mc.role, accelerated, args.Profiles, args.SegmentSizeSecs)
 	job, err := mc.client.CreateJob(payload)
 	if err != nil {
 		return fmt.Errorf("error creting mediaconvert job: %w", err)
