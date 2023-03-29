@@ -1,3 +1,4 @@
+//nolint:all
 package mistapiconnector
 
 import (
@@ -118,9 +119,6 @@ type (
 		createStreamLock          sync.Mutex
 		mistHot                   string
 		checkBandwidth            bool
-		routePrefix               string
-		mistURL                   string
-		playbackDomain            string
 		sendAudio                 string
 		baseStreamName            string
 		streamInfo                map[string]*streamInfo // public key to info
@@ -755,15 +753,6 @@ func (mc *mac) createMistStream(streamName string, stream *api.Stream, skipTrans
 		LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID, source, mc.mistHardcodedBroadcasters, skipTranscoding, audio, true)
 	// err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", "http://host.docker.internal:3004/api/stream/"+stream.ID)
 	return err
-}
-
-func (mc *mac) handleHealthcheck(w http.ResponseWriter, r *http.Request) {
-	if config, err := mc.mapi.GetConfig(); err != nil || config == nil {
-		glog.Errorf("Error getting mist config on healthcheck. err=%q", err)
-		w.WriteHeader(http.StatusServiceUnavailable)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
 }
 
 func (mc *mac) addTrigger(triggers mist.TriggersMap, name, ownURI, def, params string, sync bool) bool {

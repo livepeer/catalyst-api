@@ -1,3 +1,4 @@
+//nolint:all
 package metrics
 
 import (
@@ -332,32 +333,4 @@ func TriggerDuration(trigger string, duration time.Duration) {
 		return
 	}
 	stats.Record(ctx, Census.mTriggerDuration.M(duration.Seconds()))
-}
-
-// ConsulRequest ...
-func ConsulRequest(rType string, duration time.Duration, err error) {
-	ctx, err := tag.New(Census.ctx, tag.Insert(Census.kType, rType))
-	if err != nil {
-		glog.Error("Error creating context", err)
-		return
-	}
-	if err != nil {
-		stats.Record(ctx, Census.mConsulErrors.M(1))
-	} else {
-		stats.Record(ctx, Census.mConsulLatency.M(duration.Seconds()))
-	}
-}
-
-// APIRequest ...
-func APIRequest(rType string, duration time.Duration, err error) {
-	ctx, err := tag.New(Census.ctx, tag.Insert(Census.kType, rType))
-	if err != nil {
-		glog.Error("Error creating context", err)
-		return
-	}
-	if err != nil {
-		stats.Record(ctx, Census.mAPIErrors.M(1))
-	} else {
-		stats.Record(ctx, Census.mAPILatency.M(duration.Seconds()))
-	}
 }

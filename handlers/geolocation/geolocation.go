@@ -87,7 +87,7 @@ func (c *GeolocationHandlersCollection) StreamSourceHandler() httprouter.Handle 
 		b, err := io.ReadAll(r.Body)
 		if err != nil {
 			glog.Errorf("error handling STREAM_SOURCE body=%s", err)
-			w.Write([]byte("push://"))
+			w.Write([]byte("push://")) // nolint:errcheck
 			return
 		}
 		streamName := string(b)
@@ -95,7 +95,7 @@ func (c *GeolocationHandlersCollection) StreamSourceHandler() httprouter.Handle 
 
 		// if VOD source is detected, return empty response to use input URL as configured
 		if strings.HasPrefix(streamName, "catalyst_vod_") || strings.HasPrefix(streamName, "tr_src_") {
-			w.Write([]byte(""))
+			w.Write([]byte("")) // nolint:errcheck
 			return
 		}
 
@@ -104,17 +104,17 @@ func (c *GeolocationHandlersCollection) StreamSourceHandler() httprouter.Handle 
 		dtscURL, err := c.Balancer.QueryMistForClosestNodeSource(streamName, latStr, lonStr, "", true)
 		if err != nil {
 			glog.Errorf("error querying mist for STREAM_SOURCE: %s", err)
-			w.Write([]byte("push://"))
+			w.Write([]byte("push://")) // nolint:errcheck
 			return
 		}
 		outURL, err := c.Cluster.ResolveNodeURL(dtscURL)
 		if err != nil {
 			glog.Errorf("error finding STREAM_SOURCE: %s", err)
-			w.Write([]byte("push://"))
+			w.Write([]byte("push://")) // nolint:errcheck
 			return
 		}
 		glog.V(7).Infof("replying to Mist STREAM_SOURCE request=%s response=%s", streamName, outURL)
-		w.Write([]byte(outURL))
+		w.Write([]byte(outURL)) // nolint:errcheck
 	}
 }
 
