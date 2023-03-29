@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/livepeer/catalyst-api/log"
@@ -89,6 +90,44 @@ func ListOSURL(ctx context.Context, osURL string) (drivers.PageInfo, error) {
 	}
 
 	return page, nil
+}
+
+func Publish(hlsTarget string, mp4Target string) (string, string, error) {
+	var hlsPlaybackBaseURL, hlsRel string
+	if hlsTarget != "" {
+		hlsPubUrl, err := url.Parse(hlsTarget)
+		if err != nil {
+			return "", "", err
+		}
+		hlsRel = hlsPubUrl.Path
+		hlsPlaybackBaseURL, err = PublishDriverSession(hlsTarget, hlsRel)
+		if err != nil {
+			return "", "", err
+		}
+	}
+
+	var mp4PlaybackBaseURL string
+	if mp4Target != "" {
+		mp4TargetURL, err := url.Parse(mp4Target)
+		if err != nil {
+			return "", "", err
+		}
+		mp4Rel := mp4TargetURL.Path
+		hlsPubUrlNoPath, _ := url.Parse(hlsTarget)
+		hlsPubUrlNoPath.Path = ""
+		mp4PubUrlNoPath, _ := url.Parse(mp4TargetURL.String())
+		mp4PubUrlNoPath.Path = ""
+		if hlsPubUrlNoPath.String() == mp4PubUrlNoPath.String() {
+			// Do not publish the second time, just reuse playbackBaseURL from HLS
+			mp4PlaybackBaseURL = strings.ReplaceAll(hlsPlaybackBaseURL, hlsRel, mp4Rel)
+		} else {
+			mp4PlaybackBaseURL, err = PublishDriverSession(mp4Target, mp4Rel)
+			if err != nil {
+				return "", "", err
+			}
+		}
+	}
+	return hlsPlaybackBaseURL, mp4PlaybackBaseURL, nil
 }
 
 // PublishDriverSession tries to publish the given osUrl and returns a publicly accessible video URL.

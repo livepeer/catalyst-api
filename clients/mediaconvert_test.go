@@ -70,8 +70,8 @@ func TestReportsMediaConvertProgress(t *testing.T) {
 
 	reportProgressCalls := 0
 	_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
-		InputFile:     mustParseURL(t, "file://"+f.Name()),
-		HLSOutputFile: mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
+		InputFile:         mustParseURL(t, "file://"+f.Name()),
+		HLSOutputLocation: mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
 		ReportProgress: func(progress float64) {
 			reportProgressCalls++
 			require.InEpsilon(0.5, progress, 1e-9)
@@ -122,9 +122,9 @@ func TestRetriesOnAccelerationError(t *testing.T) {
 
 	_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
 		// use a non existing HTTP endpoint for the file
-		InputFile:     mustParseURL(t, "file://"+inputFile.Name()),
-		HLSOutputFile: mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
-		InputFileInfo: inputVideo,
+		InputFile:         mustParseURL(t, "file://"+inputFile.Name()),
+		HLSOutputLocation: mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
+		InputFileInfo:     inputVideo,
 	})
 	require.ErrorContains(err, "done with this test")
 	require.Equal(2, createdJobs)
@@ -171,7 +171,7 @@ func TestCopiesMediaConvertOutputToFinalLocation(t *testing.T) {
 
 	_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
 		InputFile:                mustParseURL(t, "file://"+inputFile.Name()),
-		HLSOutputFile:            mustParseURL(t, "file:/"+outFile),
+		HLSOutputLocation:        mustParseURL(t, "file:/"+outFile),
 		ReportProgress:           func(progress float64) {},
 		CollectTranscodedSegment: func() {},
 		InputFileInfo:            inputVideo,
@@ -281,10 +281,10 @@ func Test_MP4OutDurationCheck(t *testing.T) {
 			iv := inputVideo
 			iv.Duration = tt.duration
 			_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
-				InputFile:     mustParseURL(t, "file://"+f.Name()),
-				HLSOutputFile: mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
-				GenerateMP4:   tt.generatemp4,
-				InputFileInfo: iv,
+				InputFile:         mustParseURL(t, "file://"+f.Name()),
+				HLSOutputLocation: mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
+				GenerateMP4:       tt.generatemp4,
+				InputFileInfo:     iv,
 			})
 			require.Error(err)
 		})

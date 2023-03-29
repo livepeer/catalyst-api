@@ -211,38 +211,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		}
 	}
 
-	hlsPubUrl := hlsTargetURL.String()
-	hlsRel := hlsTargetURL.Path
-	var hlsPlaybackBaseURL string
-	if hlsPubUrl != "" {
-		hlsPlaybackBaseURL, err = clients.PublishDriverSession(hlsPubUrl, hlsRel)
-		if err != nil {
-			return outputs, segmentsCount, err
-		}
-	}
-
-	mp4PubUrl := transcodeRequest.Mp4TargetUrl
-	var mp4PlaybackBaseURL string
-	if mp4PubUrl != "" {
-		mp4TargetURL, err := url.Parse(mp4PubUrl)
-		if err != nil {
-			return outputs, segmentsCount, err
-		}
-		mp4Rel := mp4TargetURL.Path
-		hlsPubUrlNoPath, _ := url.Parse(hlsTargetURL.String())
-		hlsPubUrlNoPath.Path = ""
-		mp4PubUrlNoPath, _ := url.Parse(mp4TargetURL.String())
-		mp4PubUrlNoPath.Path = ""
-		if hlsPubUrlNoPath.String() == mp4PubUrlNoPath.String() {
-			// Do not publish the second time, just reuse playbackBaseURL from HLS
-			mp4PlaybackBaseURL = strings.ReplaceAll(hlsPlaybackBaseURL, hlsRel, mp4Rel)
-		} else {
-			mp4PlaybackBaseURL, err = clients.PublishDriverSession(mp4PubUrl, mp4Rel)
-			if err != nil {
-				return outputs, segmentsCount, err
-			}
-		}
-	}
+	hlsPlaybackBaseURL, mp4PlaybackBaseURL, err := clients.Publish(hlsTargetURL.String(), transcodeRequest.Mp4TargetUrl)
 
 	var mp4Outputs []video.OutputVideoFile
 	if transcodeRequest.GenerateMP4 {

@@ -11,7 +11,7 @@ import (
 type TranscodeJobArgs struct {
 	// Input and output URLs for the job. Input can be any HTTP or OS URL, while
 	// output must be a OS URL.
-	InputFile, HLSOutputFile, MP4OutputLocation *url.URL
+	InputFile, HLSOutputLocation, MP4OutputLocation *url.URL
 	// Target segment size
 	SegmentSizeSecs int64
 	// Just for logging purposes.
