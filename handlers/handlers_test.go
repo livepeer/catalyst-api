@@ -125,7 +125,7 @@ func TestVODHandlerProfiles(t *testing.T) {
 		"output_locations": [{
 			"type": "object_store",
 			"url": "%s",
-			"outputs": {"source_segments": true,"transcoded_segments": true}
+			"outputs": {"hls": "enabled"}
 		}]
 	}`, inputUrl, callbackServer.URL, outputUrl)
 	router := httprouter.New()
