@@ -1,4 +1,6 @@
 // Package mist API
+
+//nolint:all
 package mist
 
 import (

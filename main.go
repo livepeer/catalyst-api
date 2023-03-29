@@ -26,7 +26,10 @@ import (
 )
 
 func main() {
-	flag.Set("logtostderr", "true")
+	err := flag.Set("logtostderr", "true")
+	if err != nil {
+		glog.Fatal(err)
+	}
 	vFlag := flag.Lookup("v")
 	fs := flag.NewFlagSet("catalyst-api", flag.ExitOnError)
 	cli := config.Cli{}
@@ -84,20 +87,26 @@ func main() {
 	verbosity := fs.String("v", "", "Log verbosity.  {4|5|6}")
 	_ = fs.String("config", "", "config file (optional)")
 
-	err := ff.Parse(fs, os.Args[1:],
+	err = ff.Parse(fs, os.Args[1:],
 		ff.WithConfigFileFlag("config"),
 		ff.WithConfigFileParser(ff.PlainParser),
 		ff.WithEnvVarPrefix("CATALYST_API"),
 	)
-	cli.ParseLegacyEnv()
 	if err != nil {
 		glog.Fatalf("error parsing cli: %s", err)
 	}
+	cli.ParseLegacyEnv()
 	if len(fs.Args()) > 0 {
 		glog.Fatalf("unexpected extra arguments on command line: %v", fs.Args())
 	}
-	flag.CommandLine.Parse(nil)
-	vFlag.Value.Set(*verbosity)
+	err = flag.CommandLine.Parse(nil)
+	if err != nil {
+		glog.Fatal(err)
+	}
+	err = vFlag.Value.Set(*verbosity)
+	if err != nil {
+		glog.Fatal(err)
+	}
 
 	if *mistJson {
 		mistconnector.PrintMistConfigJson("catalyst-api", "HTTP API server for translating Catalyst API requests into Mist calls", "Catalyst API", config.Version, fs)

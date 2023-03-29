@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -141,7 +141,7 @@ func (b *BalancerImpl) changeLoadBalancerServers(server, action string) ([]byte,
 		return nil, err
 	}
 
-	bytes, err := ioutil.ReadAll(resp.Body)
+	bytes, err := io.ReadAll(resp.Body)
 
 	if err != nil {
 		glog.Errorf("Error reading response: %v", err)
@@ -174,11 +174,11 @@ func (b *BalancerImpl) getMistLoadBalancerServers() (map[string]interface{}, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		b, _ := ioutil.ReadAll(resp.Body)
+		b, _ := io.ReadAll(resp.Body)
 		glog.Errorf("Error response from load balancer listing servers: %s\n", string(b))
 		return nil, errors.New(string(b))
 	}
-	bytes, err := ioutil.ReadAll(resp.Body)
+	bytes, err := io.ReadAll(resp.Body)
 
 	if err != nil {
 		glog.Errorf("Error reading response: %v", err)
@@ -187,7 +187,10 @@ func (b *BalancerImpl) getMistLoadBalancerServers() (map[string]interface{}, err
 
 	var mistResponse map[string]interface{}
 
-	json.Unmarshal([]byte(string(bytes)), &mistResponse)
+	err = json.Unmarshal([]byte(string(bytes)), &mistResponse)
+	if err != nil {
+		return nil, err
+	}
 
 	return mistResponse, nil
 }
@@ -303,7 +306,7 @@ func (b *BalancerImpl) QueryMistForClosestNodeSource(playbackID, lat, lon, prefi
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("GET request '%s' failed with http status code %d", murl, resp.StatusCode)
 	}
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("GET request '%s' failed while reading response body", murl)
 	}

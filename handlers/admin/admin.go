@@ -27,6 +27,6 @@ func (c *AdminHandlersCollection) MembersHandler() httprouter.Handle {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(b)
+		w.Write(b) // nolint:errcheck
 	}
 }

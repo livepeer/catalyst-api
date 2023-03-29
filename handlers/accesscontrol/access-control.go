@@ -64,7 +64,7 @@ func (ac *AccessControlHandlersCollection) TriggerHandler() httprouter.Handle {
 		payload, err := io.ReadAll(r.Body)
 
 		if err != nil {
-			w.Write([]byte("false"))
+			w.Write([]byte("false")) // nolint:errcheck
 			glog.Errorf("Unable to parse trigger body %v", err)
 			return
 		}
@@ -73,10 +73,10 @@ func (ac *AccessControlHandlersCollection) TriggerHandler() httprouter.Handle {
 
 		switch triggerName {
 		case UserNewTrigger:
-			w.Write(ac.handleUserNew(payload))
+			w.Write(ac.handleUserNew(payload)) // nolint:errcheck
 			return
 		default:
-			w.Write([]byte("false"))
+			w.Write([]byte("false")) // nolint:errcheck
 			glog.Errorf("Trigger not handled %v", triggerName)
 			return
 		}
@@ -189,7 +189,10 @@ func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(playback
 			stillStale := isStale(ac.cache[playbackID][cacheKey])
 			ac.mutex.RUnlock()
 			if stillStale {
-				ac.cachePlaybackAccessControlInfo(playbackID, cacheKey, requestBody)
+				err := ac.cachePlaybackAccessControlInfo(playbackID, cacheKey, requestBody)
+				if err != nil {
+					glog.Errorf("Error caching playback access control info: %s", err)
+				}
 			}
 		}()
 	} else {

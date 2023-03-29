@@ -120,9 +120,9 @@ func concatHandlers(handlers ...http.Handler) httprouter.Handle {
 			for key, val := range rec.Header() {
 				w.Header().Set(key, val[0])
 			}
-			rec.Body.WriteTo(writer)
-			writer.WriteString("\n")
+			rec.Body.WriteTo(writer) // nolint:errcheck
+			writer.WriteString("\n") // nolint:errcheck
 		}
-		outbuf.WriteTo(w)
+		outbuf.WriteTo(w) // nolint:errcheck
 	}
 }
