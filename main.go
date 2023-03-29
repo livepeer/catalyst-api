@@ -22,7 +22,7 @@ import (
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/pipeline"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
-	"github.com/peterbourgon/ff"
+	"github.com/peterbourgon/ff/v3"
 	"golang.org/x/sync/errgroup"
 )
 
