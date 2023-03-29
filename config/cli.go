@@ -18,7 +18,6 @@ type Cli struct {
 	HTTPInternalAddress       string
 	ClusterAddress            string
 	ClusterAdvertiseAddress   string
-	RPCAddr                   string
 	MistHost                  string
 	MistUser                  string
 	MistPassword              string
