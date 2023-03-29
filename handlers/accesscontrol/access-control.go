@@ -1,0 +1,307 @@
+package accesscontrol
+
+import (
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang/glog"
+	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/config"
+	"github.com/pquerna/cachecontrol/cacheobject"
+)
+
+type AccessControlHandlersCollection struct {
+	cache      map[string]map[string]*PlaybackAccessControlEntry
+	mutex      sync.RWMutex
+	gateClient GateAPICaller
+}
+
+type PlaybackAccessControlEntry struct {
+	Stale  time.Time
+	MaxAge time.Time
+	Allow  bool
+}
+
+type PlaybackAccessControlRequest struct {
+	Type      string `json:"type"`
+	Pub       string `json:"pub"`
+	AccessKey string `json:"accessKey"`
+	Stream    string `json:"stream"`
+}
+
+type GateAPICaller interface {
+	QueryGate(body []byte) (bool, int32, int32, error)
+}
+
+type GateClient struct {
+	Client  *http.Client
+	gateURL string
+}
+
+const UserNewTrigger = "USER_NEW"
+
+func NewAccessControlHandlersCollection(cli config.Cli) *AccessControlHandlersCollection {
+	return &AccessControlHandlersCollection{
+		cache: make(map[string]map[string]*PlaybackAccessControlEntry),
+		gateClient: &GateClient{
+			gateURL: cli.GateURL,
+			Client:  &http.Client{},
+		},
+	}
+}
+
+func (ac *AccessControlHandlersCollection) TriggerHandler() httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		payload, err := io.ReadAll(r.Body)
+
+		if err != nil {
+			w.Write([]byte("false")) // nolint:errcheck
+			glog.Errorf("Unable to parse trigger body %v", err)
+			return
+		}
+
+		triggerName := r.Header.Get("X-Trigger")
+
+		switch triggerName {
+		case UserNewTrigger:
+			w.Write(ac.handleUserNew(payload)) // nolint:errcheck
+			return
+		default:
+			w.Write([]byte("false")) // nolint:errcheck
+			glog.Errorf("Trigger not handled %v", triggerName)
+			return
+		}
+
+	}
+}
+
+func (ac *AccessControlHandlersCollection) handleUserNew(payload []byte) []byte {
+	lines := strings.Split(string(payload), "\n")
+
+	if len(lines) != 6 {
+		glog.Errorf("Malformed trigger payload")
+		return []byte("false")
+	}
+
+	requestURL, err := url.Parse(lines[4])
+	if err != nil {
+		glog.Errorf("Unable to parse URL %v", err)
+		return []byte("false")
+	}
+
+	playbackID := lines[0]
+	playbackID = playbackID[strings.Index(playbackID, "+")+1:]
+
+	jwtToken := requestURL.Query().Get("jwt")
+
+	var pubKey string
+	if jwtToken != "" {
+		claims, err := decodeJwt(jwtToken)
+		if err != nil {
+			glog.Errorf("Unable to decode on incoming playbackId=%v jwt=%v", playbackID, jwtToken)
+			return []byte("false")
+		}
+
+		if playbackID != claims.Subject {
+			glog.Errorf("PlaybackId mismatch playbackId=%v != claimed=%v", playbackID, claims.Subject)
+			return []byte("false")
+		}
+
+		glog.Infof("Access control request for playbackId=%v pubkey=%v", playbackID, claims.PublicKey)
+
+		pubKey = claims.PublicKey
+	}
+
+	body, err := json.Marshal(PlaybackAccessControlRequest{Type: "jwt", Pub: pubKey, Stream: playbackID})
+	if err != nil {
+		glog.Errorf("Unable to get playback access control info, JSON marshalling failed. playbackId=%v pubkey=%v", playbackID, pubKey)
+		return []byte("false")
+	}
+
+	playbackAccessControlAllowed, err := ac.GetPlaybackAccessControlInfo(playbackID, pubKey, body)
+	if err != nil {
+		glog.Errorf("Unable to get playback access control info for playbackId=%v pubkey=%v", playbackID, pubKey)
+		return []byte("false")
+	}
+
+	if playbackAccessControlAllowed {
+		glog.Infof("Playback access control allowed for playbackId=%v pubkey=%v", playbackID, pubKey)
+		return []byte("true")
+	}
+
+	glog.Infof("Playback access control denied for playbackId=%v", playbackID)
+	return []byte("false")
+}
+
+func (ac *AccessControlHandlersCollection) IsAuthorized(reqURL *url.URL) (bool, error) {
+	acReq := PlaybackAccessControlRequest{}
+	cacheKey := ""
+	tkn := reqURL.Query().Get("tkn")
+	jwt := reqURL.Query().Get("jwt")
+	if tkn != "" {
+		acReq.Type = "accessKey"
+		acReq.AccessKey = tkn
+		cacheKey = tkn
+	} else if jwt != "" {
+		acReq.Type = "jwt"
+		// TODO reuse the jwt logic above
+		acReq.Pub = ""
+		cacheKey = acReq.Pub
+	} else {
+		// no auth method found
+		return false, nil
+	}
+	acReq.Stream = "" // TODO parse out playbackID from url path
+
+	body, err := json.Marshal(acReq)
+	if err != nil {
+		//glog.Errorf("Unable to get playback access control info, JSON marshalling failed. playbackId=%v pubkey=%v", playbackID, pubKey)
+		return false, nil
+	}
+
+	return ac.GetPlaybackAccessControlInfo(acReq.Stream, cacheKey, body)
+}
+
+func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(playbackID, cacheKey string, requestBody []byte) (bool, error) {
+	ac.mutex.RLock()
+	entry := ac.cache[playbackID][cacheKey]
+	ac.mutex.RUnlock()
+
+	if isExpired(entry) {
+		glog.Infof("Cache expired for playbackId=%v cacheKey=%v", playbackID, cacheKey)
+		err := ac.cachePlaybackAccessControlInfo(playbackID, cacheKey, requestBody)
+		if err != nil {
+			return false, err
+		}
+	} else if isStale(entry) {
+		glog.Infof("Cache stale for playbackId=%v cacheKey=%v\n", playbackID, cacheKey)
+		go func() {
+			ac.mutex.RLock()
+			stillStale := isStale(ac.cache[playbackID][cacheKey])
+			ac.mutex.RUnlock()
+			if stillStale {
+				err := ac.cachePlaybackAccessControlInfo(playbackID, cacheKey, requestBody)
+				if err != nil {
+					glog.Errorf("Error caching playback access control info: %s", err)
+				}
+			}
+		}()
+	} else {
+		glog.Infof("Cache hit for playbackId=%v cacheKey=%v", playbackID, cacheKey)
+	}
+
+	ac.mutex.RLock()
+	entry = ac.cache[playbackID][cacheKey]
+	ac.mutex.RUnlock()
+
+	glog.Infof("playbackId=%v cacheKey=%v playback allowed=%v", playbackID, cacheKey, entry.Allow)
+
+	return entry.Allow, nil
+}
+
+func isExpired(entry *PlaybackAccessControlEntry) bool {
+	return entry == nil || time.Now().After(entry.Stale)
+}
+
+func isStale(entry *PlaybackAccessControlEntry) bool {
+	return entry != nil && time.Now().After(entry.MaxAge) && !isExpired(entry)
+}
+
+func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playbackID, cacheKey string, requestBody []byte) error {
+	allow, maxAge, stale, err := ac.gateClient.QueryGate(requestBody)
+	if err != nil {
+		return err
+	}
+
+	var maxAgeTime = time.Now().Add(time.Duration(maxAge) * time.Second)
+	var staleTime = time.Now().Add(time.Duration(stale) * time.Second)
+	ac.mutex.Lock()
+	defer ac.mutex.Unlock()
+	if ac.cache[playbackID] == nil {
+		ac.cache[playbackID] = make(map[string]*PlaybackAccessControlEntry)
+	}
+	ac.cache[playbackID][cacheKey] = &PlaybackAccessControlEntry{staleTime, maxAgeTime, allow}
+	return nil
+}
+
+func (g *GateClient) QueryGate(body []byte) (bool, int32, int32, error) {
+	req, err := http.NewRequest("POST", g.gateURL, bytes.NewReader(body))
+	if err != nil {
+		return false, 0, 0, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := g.Client.Do(req)
+	if err != nil {
+		return false, 0, 0, err
+	}
+
+	defer res.Body.Close()
+	cc, err := cacheobject.ParseResponseCacheControl(res.Header.Get("Cache-Control"))
+	if err != nil {
+		return false, 0, 0, err
+	}
+
+	return res.StatusCode/100 == 2, int32(cc.MaxAge), int32(cc.StaleWhileRevalidate), nil
+}
+
+type PlaybackGateClaims struct {
+	PublicKey string `json:"pub"`
+	jwt.RegisteredClaims
+}
+
+func (c *PlaybackGateClaims) Valid() error {
+	if err := c.RegisteredClaims.Valid(); err != nil {
+		glog.Errorf("Invalid registered claims %v", err)
+		return err
+	}
+	if c.Subject == "" {
+		glog.Errorf("Missing subject claim for playbackId=%v", c.Subject)
+		return errors.New("missing sub claim")
+	}
+	if c.PublicKey == "" {
+		glog.Infof("Missing pub claim for playbackId=%v", c.Subject)
+		return errors.New("missing pub claim")
+	}
+	if c.ExpiresAt == nil {
+		return errors.New("missing exp claim")
+	} else if time.Until(c.ExpiresAt.Time) > 7*24*time.Hour {
+		glog.Errorf("exp claim is too far in the future for playbackId=%v", c.Subject)
+		return errors.New("exp claim too far in the future")
+	}
+	return nil
+}
+
+func decodeJwt(tokenString string) (*PlaybackGateClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &PlaybackGateClaims{}, func(token *jwt.Token) (interface{}, error) {
+		pub := token.Claims.(*PlaybackGateClaims).PublicKey
+		decodedPubkey, err := base64.StdEncoding.DecodeString(pub)
+		if err != nil {
+			return nil, err
+		}
+
+		return jwt.ParseECPublicKeyFromPEM(decodedPubkey)
+	})
+
+	if err != nil {
+		glog.Errorf("Unable to parse jwt token %v", err)
+		return nil, err
+	} else if err = token.Claims.Valid(); err != nil {
+		glog.Errorf("Invalid claims: %v", err)
+		return nil, err
+	} else if !token.Valid {
+		glog.Errorf("Invalid token=%v for playbackId=%v", tokenString, token.Claims.(*PlaybackGateClaims).Subject)
+		return nil, errors.New("invalid token")
+	}
+	return token.Claims.(*PlaybackGateClaims), nil
+}
