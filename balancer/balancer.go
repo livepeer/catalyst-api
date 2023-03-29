@@ -42,6 +42,11 @@ type BalancerImpl struct {
 
 // create a new load balancer instance
 func NewBalancer(config *Config) Balancer {
+	_, err := exec.LookPath("MistUtilLoad")
+	if err != nil {
+		glog.Warning("MistUtilLoad not found, not doing meaningful balancing")
+		return &BalancerStub{}
+	}
 	return &BalancerImpl{
 		config:   config,
 		cmd:      nil,
