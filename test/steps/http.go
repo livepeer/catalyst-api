@@ -12,7 +12,15 @@ import (
 )
 
 func (s *StepContext) CreateGetRequest(endpoint string) error {
-	r, err := http.NewRequest(http.MethodGet, s.BaseURL+endpoint, nil)
+	return s.getRequest(s.BaseURL, endpoint)
+}
+
+func (s *StepContext) CreateGetRequestInternal(endpoint string) error {
+	return s.getRequest(s.BaseInternalURL, endpoint)
+}
+
+func (s *StepContext) getRequest(baseURL, endpoint string) error {
+	r, err := http.NewRequest(http.MethodGet, baseURL+endpoint, nil)
 	if err != nil {
 		return err
 	}
@@ -23,6 +31,14 @@ func (s *StepContext) CreateGetRequest(endpoint string) error {
 }
 
 func (s *StepContext) CreatePostRequest(endpoint, payload string) error {
+	return s.postRequest(s.BaseURL, endpoint, payload)
+}
+
+func (s *StepContext) CreatePostRequestInternal(endpoint, payload string) error {
+	return s.postRequest(s.BaseInternalURL, endpoint, payload)
+}
+
+func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
 	sourceFile, err := os.CreateTemp(os.TempDir(), "source*.mp4")
 	if err != nil {
 		return fmt.Errorf("failed to create a source file: %s", err)
@@ -54,7 +70,7 @@ func (s *StepContext) CreatePostRequest(endpoint, payload string) error {
 		payload = "{}"
 	}
 
-	r, err := http.NewRequest(http.MethodPost, s.BaseURL+endpoint, strings.NewReader(payload))
+	r, err := http.NewRequest(http.MethodPost, baseURL+endpoint, strings.NewReader(payload))
 	r.Header.Set("Authorization", s.authHeaders)
 	r.Header.Set("Content-Type", "application/json")
 	if err != nil {
@@ -162,7 +178,7 @@ func (s *StepContext) SetRequestPayload(payload string) {
 }
 
 func (s *StepContext) CheckRecordedMetrics(metricsType string) error {
-	var url = "http://localhost:2112/metrics"
+	var url = s.BaseInternalURL + "/metrics"
 
 	res, err := http.Get(url)
 	if err != nil {

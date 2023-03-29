@@ -13,7 +13,8 @@ import (
 	"github.com/livepeer/catalyst-api/test/steps"
 )
 
-var baseURL = "http://localhost:4949"
+var baseURL = "http://127.0.0.1:8989"
+var baseInternalURL = "http://127.0.0.1:7979"
 var app *exec.Cmd
 
 func init() {
@@ -70,7 +71,8 @@ func startApp() error {
 func InitializeScenario(ctx *godog.ScenarioContext) {
 	// Allows our steps to share data between themselves, e.g the response of the last HTTP call (which future steps can check is correct)
 	var stepContext = steps.StepContext{
-		BaseURL: baseURL,
+		BaseURL:         baseURL,
+		BaseInternalURL: baseInternalURL,
 	}
 
 	ctx.Step(`^the VOD API is running$`, startApp)
@@ -80,7 +82,9 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^Mist is running at "([^"]*)"$`, stepContext.StartMist)
 
 	ctx.Step(`^I query the "([^"]*)" endpoint$`, stepContext.CreateGetRequest)
+	ctx.Step(`^I query the internal "([^"]*)" endpoint$`, stepContext.CreateGetRequestInternal)
 	ctx.Step(`^I submit to the "([^"]*)" endpoint with "([^"]*)"$`, stepContext.CreatePostRequest)
+	ctx.Step(`^I submit to the internal "([^"]*)" endpoint with "([^"]*)"$`, stepContext.CreatePostRequestInternal)
 	ctx.Step(`^receive a response within "(\d+)" seconds$`, stepContext.CallAPI)
 	ctx.Step(`^I get an HTTP response with code "([^"]*)"$`, stepContext.CheckHTTPResponseCode)
 	ctx.Step(`^I get an HTTP response with code "([^"]*)" and the following body "([^"]*)"$`, stepContext.CheckHTTPResponseCodeAndBody)
