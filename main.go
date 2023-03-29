@@ -19,7 +19,6 @@ import (
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
-	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/pipeline"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
 	"github.com/peterbourgon/ff/v3"
@@ -116,10 +115,6 @@ func main() {
 	var (
 		metricsDB *sql.DB
 	)
-
-	go func() {
-		glog.Fatal(metrics.ListenAndServe(cli.PromPort))
-	}()
 
 	mist := &clients.MistClient{
 		ApiUrl:          fmt.Sprintf("http://%s:%d/api2", cli.MistHost, cli.MistPort),
