@@ -103,9 +103,11 @@ func main() {
 	if err != nil {
 		glog.Fatal(err)
 	}
-	err = vFlag.Value.Set(*verbosity)
-	if err != nil {
-		glog.Fatal(err)
+	if *verbosity != "" {
+		err = vFlag.Value.Set(*verbosity)
+		if err != nil {
+			glog.Fatal(err)
+		}
 	}
 
 	if *mistJson {
