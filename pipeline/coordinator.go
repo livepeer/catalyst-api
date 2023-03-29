@@ -74,6 +74,7 @@ type UploadJobPayload struct {
 	InputFileInfo         video.InputVideo
 	SignedSourceURL       string
 	InFallbackMode        bool
+	MistSupported         bool
 }
 
 // UploadJobResult is the object returned by the successful execution of an
@@ -262,7 +263,7 @@ func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 	if p.PipelineStrategy.IsValid() {
 		strategy = p.PipelineStrategy
 	}
-	strategy = checkMistCompatibleCodecs(strategy, p.InputFileInfo)
+	p.MistSupported, strategy = checkMistCompatibleCodecs(p.RequestID, strategy, p.InputFileInfo)
 	log.AddContext(p.RequestID, "strategy", strategy)
 
 	switch strategy {
@@ -292,21 +293,20 @@ func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 
 // checkMistCompatibleCodecs checks if the input codecs are compatible with mist and overrides the pipeline strategy
 // to external if they are incompatible
-func checkMistCompatibleCodecs(strategy Strategy, iv video.InputVideo) Strategy {
-	// allow StrategyCatalystDominance to pass through as this is used in tests and we might want to manually force it for debugging
-	// allow StrategyExternalDominance to pass through because we're already not trying to use mist so no need to loop through the tracks
-	if strategy == StrategyCatalystDominance || strategy == StrategyExternalDominance {
-		return strategy
-	}
+func checkMistCompatibleCodecs(requestID string, strategy Strategy, iv video.InputVideo) (bool, Strategy) {
 	for _, track := range iv.Tracks {
 		// if the codecs are not compatible then override to external pipeline to avoid sending to mist
-		if track.Type == video.TrackTypeVideo && strings.ToLower(track.Codec) != "h264" {
-			return StrategyExternalDominance
-		} else if track.Type == video.TrackTypeAudio && strings.ToLower(track.Codec) != "aac" {
-			return StrategyExternalDominance
+		if (track.Type == video.TrackTypeVideo && strings.ToLower(track.Codec) != "h264") ||
+			(track.Type == video.TrackTypeAudio && strings.ToLower(track.Codec) != "aac") {
+			log.Log(requestID, "codec not supported by mist", "trackType", track.Type, "codec", track.Codec)
+			// allow StrategyCatalystDominance to pass through as this is used in tests and we might want to manually force it for debugging
+			if strategy == StrategyCatalystDominance {
+				return false, strategy
+			}
+			return false, StrategyExternalDominance
 		}
 	}
-	return strategy
+	return true, strategy
 }
 
 // Starts a single upload job with specified pipeline Handler. If the job is
@@ -455,6 +455,7 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 		job.state,
 		config.Version,
 		strconv.FormatBool(job.InFallbackMode),
+		strconv.FormatBool(job.MistSupported),
 	}
 
 	metrics.Metrics.VODPipelineMetrics.Count.

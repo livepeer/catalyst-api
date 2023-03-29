@@ -88,7 +88,7 @@ jobs:
         if: matrix.platform.name != 'windows'
         run: |
           cd build/
-          tar -czvf "../releases/livepeer-catalyst-api-${GOOS}-${GOARCH}.tar.gz" ./livepeer-catalyst-api
+          tar -czvf "../releases/livepeer-catalyst-api-${GOOS}-${GOARCH}.tar.gz" .
 
       - name: Upload artifacts for cutting release
         uses: actions/upload-artifact@master

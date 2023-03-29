@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/livepeer/catalyst-api/config"
 	xerrors "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
@@ -18,7 +19,7 @@ import (
 	"github.com/livepeer/go-tools/drivers"
 )
 
-const MAX_COPY_FILE_DURATION = 30 * time.Minute
+const MaxCopyFileDuration = 2 * time.Hour
 const PresignDuration = 24 * time.Hour
 
 type InputCopier interface {
@@ -98,7 +99,7 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 
 		content := io.TeeReader(c, &byteAccWriter)
 
-		err = UploadToOSURL(destOSBaseURL, filename, content, MAX_COPY_FILE_DURATION)
+		err = UploadToOSURL(destOSBaseURL, filename, content, MaxCopyFileDuration)
 		if err != nil {
 			log.Log(requestID, "Copy attempt failed", "source", sourceURL, "dest", path.Join(destOSBaseURL, filename), "err", err)
 		}
@@ -116,6 +117,22 @@ func getFile(ctx context.Context, url, requestID string) (io.ReadCloser, error) 
 	} else {
 		return getFileHTTP(ctx, url)
 	}
+}
+
+var retryableHttpClient = newRetryableHttpClient()
+
+func newRetryableHttpClient() *http.Client {
+	client := retryablehttp.NewClient()
+	client.RetryMax = 5                          // Retry a maximum of this+1 times
+	client.RetryWaitMin = 200 * time.Millisecond // Wait at least this long between retries
+	client.RetryWaitMax = 5 * time.Second        // Wait at most this long between retries (exponential backoff)
+	client.HTTPClient = &http.Client{
+		// Give up on requests that take more than this long - the file is probably too big for us to process locally if it takes this long
+		// or something else has gone wrong and the request is hanging
+		Timeout: MaxCopyFileDuration,
+	}
+
+	return client.StandardClient()
 }
 
 func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
