@@ -10,7 +10,7 @@ require (
 	github.com/cucumber/godog v0.12.5
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/golang/glog v1.0.0
-	github.com/golang/mock v1.4.4
+	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/memberlist v0.1.3
 	github.com/hashicorp/serf v0.8.2
