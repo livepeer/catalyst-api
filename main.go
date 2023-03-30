@@ -155,8 +155,8 @@ func main() {
 
 	// Start cron style apps to run periodically
 	app := "mist-cleanup.sh"
-	// schedule mist-cleanup every 2hrs with a timeout of 5min
-	mistCleanup, err := middleware.NewShell(2*60*60*time.Second, 5*60*time.Second, app)
+	// schedule mist-cleanup every 2hrs with a timeout of 15min
+	mistCleanup, err := middleware.NewShell(2*60*60*time.Second, 15*60*time.Second, app)
 	if err != nil {
 		glog.Info("Failed to shell out:", app, err)
 	}
