@@ -20,7 +20,7 @@ const MAX_TIME_WITHOUT_UPDATE = 30 * time.Minute
 // The default client is only used for the recording event. This is to avoid
 // misusing the singleton client to send transcode status updates, which should
 // be sent through the JobInfo.ReportStatus function instead.
-var recordingCallbackClient = NewPeriodicCallbackClient(15 * time.Second)
+var recordingCallbackClient = NewPeriodicCallbackClient(15*time.Second, map[string]string{})
 
 func SendRecordingEventCallback(event *RecordingEvent) {
 	recordingCallbackClient.SendRecordingEvent(event)
@@ -41,9 +41,10 @@ type PeriodicCallbackClient struct {
 	mapLock                  sync.RWMutex
 	httpClient               *http.Client
 	callbackInterval         time.Duration
+	headers                  map[string]string
 }
 
-func NewPeriodicCallbackClient(callbackInterval time.Duration) *PeriodicCallbackClient {
+func NewPeriodicCallbackClient(callbackInterval time.Duration, headers map[string]string) *PeriodicCallbackClient {
 	client := retryablehttp.NewClient()
 	client.RetryMax = 2                          // Retry a maximum of this+1 times
 	client.RetryWaitMin = 200 * time.Millisecond // Wait at least this long between retries
@@ -58,6 +59,7 @@ func NewPeriodicCallbackClient(callbackInterval time.Duration) *PeriodicCallback
 		callbackInterval:         callbackInterval,
 		requestIDToLatestMessage: map[string]TranscodeStatusMessage{},
 		mapLock:                  sync.RWMutex{},
+		headers:                  headers,
 	}
 }
 
@@ -178,8 +180,9 @@ func (pcc *PeriodicCallbackClient) SendCallbacks() {
 }
 
 func (pcc *PeriodicCallbackClient) doWithRetries(r *http.Request) error {
-	// TODO: Replace with a proper shared Secret, probably coming from the initial request
-	r.Header.Set("Authorization", "Bearer IAmAuthorized")
+	for k, v := range pcc.headers {
+		r.Header.Set(k, v)
+	}
 
 	resp, err := metrics.MonitorRequest(metrics.Metrics.TranscodingStatusUpdate, pcc.httpClient, r)
 	if err != nil {

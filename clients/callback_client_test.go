@@ -24,6 +24,9 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 
+		// Check that the expected headers were passed through
+		require.Equal(t, "bar", r.Header["Foo"][0])
+
 		// Check we got a valid callback message of the type we'd expect
 		var actualMsg TranscodeStatusMessage
 		require.NoError(t, json.Unmarshal(body, &actualMsg))
@@ -42,7 +45,7 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 	defer svr.Close()
 
 	// Create a client that sends heartbeats very irregularly, to let us assert things about a single iteration of the callback
-	client := NewPeriodicCallbackClient(100 * time.Hour)
+	client := NewPeriodicCallbackClient(100*time.Hour, map[string]string{"Foo": "bar"})
 
 	// Send the status in, but it shouldn't get sent yet because we haven't started the client
 	client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusCompleted, 1))
@@ -77,7 +80,7 @@ func TestItSendsPeriodicHeartbeats(t *testing.T) {
 	defer svr.Close()
 
 	// Send the callback and confirm the number of times we retried
-	client := NewPeriodicCallbackClient(100 * time.Millisecond).Start()
+	client := NewPeriodicCallbackClient(100*time.Millisecond, map[string]string{}).Start()
 	client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusCompleted, 1))
 
 	time.Sleep(400 * time.Millisecond)
@@ -105,7 +108,7 @@ func TestTranscodeStatusErrorNotifcation(t *testing.T) {
 	defer svr.Close()
 
 	// Send the callback and confirm the number of times we retried
-	client := NewPeriodicCallbackClient(100 * time.Millisecond).Start()
+	client := NewPeriodicCallbackClient(100*time.Millisecond, map[string]string{}).Start()
 	client.SendTranscodeStatus(NewTranscodeStatusError(svr.URL, "example-request-id", "something went wrong", false))
 
 	time.Sleep(200 * time.Millisecond)
@@ -144,7 +147,7 @@ func TestItDoesntSendOutOfOrderUpdates(t *testing.T) {
 	defer svr.Close()
 
 	// Send the callback and confirm the number of times we retried
-	client := NewPeriodicCallbackClient(100 * time.Millisecond).Start()
+	client := NewPeriodicCallbackClient(100*time.Millisecond, map[string]string{}).Start()
 	client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusTranscoding, 1))
 	client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusPreparing, 1))
 	time.Sleep(400 * time.Millisecond)

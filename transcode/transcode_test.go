@@ -108,7 +108,7 @@ func TestItCanTranscode(t *testing.T) {
 		},
 	}
 
-	statusClient := clients.NewPeriodicCallbackClient(100 * time.Minute)
+	statusClient := clients.NewPeriodicCallbackClient(100*time.Minute, map[string]string{})
 	// Check we don't get an error downloading or parsing it
 	outputs, segmentsCount, err := RunTranscodeProcess(
 		TranscodeSegmentRequest{

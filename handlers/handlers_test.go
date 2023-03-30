@@ -106,7 +106,7 @@ func TestVODHandlerProfiles(t *testing.T) {
 	defer callbackServer.Close()
 
 	// Set up out own callback client so that we can ensure it just fires once
-	statusClient := clients.NewPeriodicCallbackClient(100 * time.Minute)
+	statusClient := clients.NewPeriodicCallbackClient(100*time.Minute, map[string]string{})
 	// Workflow engine
 	vodEngine := pipeline.NewStubCoordinatorOpts("", statusClient, nil, nil)
 	vodEngine.InputCopy = &clients.StubInputCopy{}
