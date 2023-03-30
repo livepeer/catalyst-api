@@ -85,7 +85,8 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 
 func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
 	err = backoff.Retry(func() error {
-		ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+		// currently this timeout is only used for http downloads in the getFileHTTP function when it calls http.NewRequestWithContext
+		ctx, cancel := context.WithTimeout(ctx, MaxCopyFileDuration)
 		defer cancel()
 
 		byteAccWriter := ByteAccumulatorWriter{count: 0}
