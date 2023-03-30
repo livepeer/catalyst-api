@@ -15,6 +15,7 @@ type StepContext struct {
 	authHeaders           string
 	timeoutSecs           int64
 	BaseURL               string
+	BaseInternalURL       string
 	Mist                  http.Server
 	Studio                http.Server
 	MinioAdmin            *madmin.AdminClient

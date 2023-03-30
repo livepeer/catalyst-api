@@ -13,7 +13,8 @@ import (
 	"github.com/livepeer/catalyst-api/test/steps"
 )
 
-var baseURL = "http://localhost:4949"
+var baseURL = "http://127.0.0.1:8989"
+var baseInternalURL = "http://127.0.0.1:7979"
 var app *exec.Cmd
 
 func init() {
@@ -28,15 +29,13 @@ func init() {
 		panic(buildErr)
 	}
 
-	// Get minio
-	getMinio := exec.Command("go", "get", "github.com/minio/minio@v0.0.0-20221229230822-b8943fdf19ac")
-	getMinio.Dir = ".."
-	if buildErr := getMinio.Run(); buildErr != nil {
-		panic(buildErr)
-	}
-
 	// Build minio
-	buildMinio := exec.Command("go", "build", "-o", "test/minio", "github.com/minio/minio")
+	buildMinio := exec.Command("go", "install", "github.com/minio/minio@v0.0.0-20221229230822-b8943fdf19ac")
+	wd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	buildMinio.Env = append(os.Environ(), fmt.Sprintf("GOBIN=%s", wd))
 	buildMinio.Dir = ".."
 	if buildErr := buildMinio.Run(); buildErr != nil {
 		panic(buildErr)
@@ -70,7 +69,8 @@ func startApp() error {
 func InitializeScenario(ctx *godog.ScenarioContext) {
 	// Allows our steps to share data between themselves, e.g the response of the last HTTP call (which future steps can check is correct)
 	var stepContext = steps.StepContext{
-		BaseURL: baseURL,
+		BaseURL:         baseURL,
+		BaseInternalURL: baseInternalURL,
 	}
 
 	ctx.Step(`^the VOD API is running$`, startApp)
@@ -80,7 +80,9 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^Mist is running at "([^"]*)"$`, stepContext.StartMist)
 
 	ctx.Step(`^I query the "([^"]*)" endpoint$`, stepContext.CreateGetRequest)
+	ctx.Step(`^I query the internal "([^"]*)" endpoint$`, stepContext.CreateGetRequestInternal)
 	ctx.Step(`^I submit to the "([^"]*)" endpoint with "([^"]*)"$`, stepContext.CreatePostRequest)
+	ctx.Step(`^I submit to the internal "([^"]*)" endpoint with "([^"]*)"$`, stepContext.CreatePostRequestInternal)
 	ctx.Step(`^receive a response within "(\d+)" seconds$`, stepContext.CallAPI)
 	ctx.Step(`^I get an HTTP response with code "([^"]*)"$`, stepContext.CheckHTTPResponseCode)
 	ctx.Step(`^I get an HTTP response with code "([^"]*)" and the following body "([^"]*)"$`, stepContext.CheckHTTPResponseCodeAndBody)

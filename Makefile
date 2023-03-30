@@ -29,10 +29,15 @@ lint:
 
 .PHONY: run
 run:
-	go run main.go
+	CATALYST_API_HTTP_ADDR=127.0.0.1:4949 CATALYST_API_HTTP_INTERNAL_ADDR=127.0.0.1:3939 go run main.go
+
+.PHONY: generate
+generate:
+	go install github.com/golang/mock/mockgen@v1.6.0
+	go generate ./...
 
 .PHONY: test
-test:
+test: generate
 	go test -race ./...
 
 .PHONY: tidy
