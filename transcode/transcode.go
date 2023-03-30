@@ -212,6 +212,9 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	hlsPlaybackBaseURL, mp4PlaybackBaseURL, err := clients.Publish(hlsTargetURL.String(), transcodeRequest.Mp4TargetUrl)
+	if err != nil {
+		return outputs, segmentsCount, err
+	}
 
 	var mp4Outputs []video.OutputVideoFile
 	if transcodeRequest.GenerateMP4 {
