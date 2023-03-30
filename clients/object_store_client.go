@@ -100,7 +100,7 @@ func Publish(hlsTarget string, mp4Target string) (string, string, error) {
 			return "", "", err
 		}
 		hlsRel = hlsPubUrl.Path
-		hlsPlaybackBaseURL, err = PublishDriverSession(hlsTarget, hlsRel)
+		hlsPlaybackBaseURL, err = publishDriverSession(hlsTarget, hlsRel)
 		if err != nil {
 			return "", "", err
 		}
@@ -121,7 +121,7 @@ func Publish(hlsTarget string, mp4Target string) (string, string, error) {
 			// Do not publish the second time, just reuse playbackBaseURL from HLS
 			mp4PlaybackBaseURL = strings.ReplaceAll(hlsPlaybackBaseURL, hlsRel, mp4Rel)
 		} else {
-			mp4PlaybackBaseURL, err = PublishDriverSession(mp4Target, mp4Rel)
+			mp4PlaybackBaseURL, err = publishDriverSession(mp4Target, mp4Rel)
 			if err != nil {
 				return "", "", err
 			}
@@ -130,11 +130,11 @@ func Publish(hlsTarget string, mp4Target string) (string, string, error) {
 	return hlsPlaybackBaseURL, mp4PlaybackBaseURL, nil
 }
 
-// PublishDriverSession tries to publish the given osUrl and returns a publicly accessible video URL.
+// publishDriverSession tries to publish the given osUrl and returns a publicly accessible video URL.
 // If driver supports `Publish()`, e.g. web3.storage, then return the path to the video.
 // If driver does not support `Publish()`, e.g. S3, then return the input osUrl, video should be accessible with osUrl.
 // In case of any other error, return an empty string and an error.
-func PublishDriverSession(osUrl string, relPath string) (string, error) {
+func publishDriverSession(osUrl string, relPath string) (string, error) {
 	osDriver, err := drivers.ParseOSURL(osUrl, true)
 	if err != nil {
 		return "", err
