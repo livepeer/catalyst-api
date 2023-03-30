@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/cucumber/godog"
@@ -48,7 +47,7 @@ func init() {
 }
 
 func startApp() error {
-	app = exec.Command("./app", "-private-bucket", "fixtures/playback-bucket")
+	app = exec.Command("./app", "-private-bucket", "fixtures/playback-bucket", "-gate-url", "http://localhost:3000/api/access-control/gate")
 	outfile, err := os.Create("logs/app.log")
 	if err != nil {
 		return err
@@ -89,6 +88,8 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^my "((failed)|(successful))" request metrics get recorded$`, stepContext.CheckRecordedMetrics)
 	ctx.Step(`^Mist receives a request for segmenting with "([^"]*)" second segments$`, stepContext.CheckMist)
 	ctx.Step(`^the body matches file "([^"]*)"$`, stepContext.CheckHTTPResponseBodyFromFile)
+	ctx.Step(`^the gate API will (allow|deny) playback$`, stepContext.SetGateAPIResponse)
+	ctx.Step(`^the gate API will be called (\d+) times$`, stepContext.CheckGateAPICallCount)
 
 	ctx.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
 		if app != nil && app.Process != nil {
@@ -109,21 +110,4 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 		}
 		return ctx, nil
 	})
-}
-
-func TestFeatures(t *testing.T) {
-	suite := godog.TestSuite{
-		ScenarioInitializer: InitializeScenario,
-		Options: &godog.Options{
-			TestingT:      t,
-			Strict:        true,
-			StopOnFailure: true,
-			Format:        "cucumber",
-			Paths:         []string{"features"},
-		},
-	}
-
-	if suite.Run() != 0 {
-		t.Fatal("non-zero status returned, failed to run feature tests")
-	}
 }

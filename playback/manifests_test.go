@@ -16,13 +16,13 @@ import (
 func TestManifest(t *testing.T) {
 	tests := []struct {
 		name        string
-		req         PlaybackRequest
+		req         Request
 		expected    string
 		expectedErr string
 	}{
 		{
 			name: "master playlist",
-			req: PlaybackRequest{
+			req: Request{
 				PlaybackID: "dbe3q3g6q2kia036",
 				File:       "index.m3u8",
 				AccessKey:  "secretlpkey",
@@ -31,7 +31,7 @@ func TestManifest(t *testing.T) {
 		},
 		{
 			name: "rendition playlist",
-			req: PlaybackRequest{
+			req: Request{
 				PlaybackID: "dbe3q3g6q2kia036",
 				File:       "720p0/index.m3u8",
 				AccessKey:  "secretlpkey",
@@ -40,24 +40,25 @@ func TestManifest(t *testing.T) {
 		},
 		{
 			name: "file not found",
-			req: PlaybackRequest{
+			req: Request{
 				PlaybackID: "dbe3q3g6q2kia036",
 				File:       "doesntexist",
 				AccessKey:  "secretlpkey",
 			},
-			expectedErr: "failed to get master manifest",
+			expectedErr: "failed to get file for playback",
 		},
 		{
 			name: "empty access key",
-			req: PlaybackRequest{
+			req: Request{
 				PlaybackID: "dbe3q3g6q2kia036",
+				File:       "index.m3u8",
 			},
 			expectedErr: errors.EmptyAccessKeyError.Error(),
 		},
 		{
 			name: "invalid m3u8",
-			req: PlaybackRequest{
-				File:      "not_m3u8.txt",
+			req: Request{
+				File:      "not_m3u8.m3u8",
 				AccessKey: "secretlpkey",
 			},
 			expectedErr: "failed to read manifest contents",
@@ -70,14 +71,15 @@ func TestManifest(t *testing.T) {
 	config.PrivateBucketURL = privateBucket
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := Manifest(tt.req)
+			got, err := Handle(tt.req)
 			if tt.expectedErr != "" {
 				require.ErrorContains(t, err, tt.expectedErr)
 			} else {
 				require.NoError(t, err)
 				expectedFile, err := os.ReadFile(path.Join(wd, "../test/fixtures/responses", tt.expected))
 				require.NoError(t, err)
-				gotBytes, err := io.ReadAll(got)
+				defer got.Body.Close()
+				gotBytes, err := io.ReadAll(got.Body)
 				require.NoError(t, err)
 
 				require.Equal(t, strings.TrimSpace(string(expectedFile)), strings.TrimSpace(string(gotBytes)))

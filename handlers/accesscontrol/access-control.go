@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -101,40 +102,14 @@ func (ac *AccessControlHandlersCollection) handleUserNew(payload []byte) []byte 
 	playbackID := lines[0]
 	playbackID = playbackID[strings.Index(playbackID, "+")+1:]
 
-	jwtToken := requestURL.Query().Get("jwt")
-
-	var pubKey string
-	if jwtToken != "" {
-		claims, err := decodeJwt(jwtToken)
-		if err != nil {
-			glog.Errorf("Unable to decode on incoming playbackId=%v jwt=%v", playbackID, jwtToken)
-			return []byte("false")
-		}
-
-		if playbackID != claims.Subject {
-			glog.Errorf("PlaybackId mismatch playbackId=%v != claimed=%v", playbackID, claims.Subject)
-			return []byte("false")
-		}
-
-		glog.Infof("Access control request for playbackId=%v pubkey=%v", playbackID, claims.PublicKey)
-
-		pubKey = claims.PublicKey
-	}
-
-	body, err := json.Marshal(PlaybackAccessControlRequest{Type: "jwt", Pub: pubKey, Stream: playbackID})
+	playbackAccessControlAllowed, err := ac.IsAuthorized(playbackID, requestURL)
 	if err != nil {
-		glog.Errorf("Unable to get playback access control info, JSON marshalling failed. playbackId=%v pubkey=%v", playbackID, pubKey)
-		return []byte("false")
-	}
-
-	playbackAccessControlAllowed, err := ac.GetPlaybackAccessControlInfo(playbackID, pubKey, body)
-	if err != nil {
-		glog.Errorf("Unable to get playback access control info for playbackId=%v pubkey=%v", playbackID, pubKey)
+		glog.Errorf("Unable to get playback access control info for playbackId=%v err=%s", playbackID, err.Error())
 		return []byte("false")
 	}
 
 	if playbackAccessControlAllowed {
-		glog.Infof("Playback access control allowed for playbackId=%v pubkey=%v", playbackID, pubKey)
+		glog.Infof("Playback access control allowed for playbackId=%v", playbackID)
 		return []byte("true")
 	}
 
@@ -142,29 +117,28 @@ func (ac *AccessControlHandlersCollection) handleUserNew(payload []byte) []byte 
 	return []byte("false")
 }
 
-func (ac *AccessControlHandlersCollection) IsAuthorized(reqURL *url.URL) (bool, error) {
-	acReq := PlaybackAccessControlRequest{}
+func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, reqURL *url.URL) (bool, error) {
+	acReq := PlaybackAccessControlRequest{Stream: playbackID}
 	cacheKey := ""
-	tkn := reqURL.Query().Get("tkn")
+	accessKey := reqURL.Query().Get("accessKey")
 	jwt := reqURL.Query().Get("jwt")
-	if tkn != "" {
+	if accessKey != "" {
 		acReq.Type = "accessKey"
-		acReq.AccessKey = tkn
-		cacheKey = tkn
+		acReq.AccessKey = accessKey
+		cacheKey = "accessKey_" + accessKey
 	} else if jwt != "" {
+		acReq.Pub = extractKeyFromJwt(jwt, acReq.Stream)
+		if acReq.Pub == "" {
+			return false, fmt.Errorf("failed to extract key from jwt: %s", jwt)
+		}
+
 		acReq.Type = "jwt"
-		// TODO reuse the jwt logic above
-		acReq.Pub = ""
-		cacheKey = acReq.Pub
-	} else {
-		// no auth method found
-		return false, nil
+		cacheKey = "jwtPubKey_" + acReq.Pub
 	}
-	acReq.Stream = "" // TODO parse out playbackID from url path
 
 	body, err := json.Marshal(acReq)
 	if err != nil {
-		//glog.Errorf("Unable to get playback access control info, JSON marshalling failed. playbackId=%v pubkey=%v", playbackID, pubKey)
+		glog.Errorf("Unable to get playback access control info, JSON marshalling failed. playbackId=%v", acReq.Stream)
 		return false, nil
 	}
 
@@ -280,6 +254,22 @@ func (c *PlaybackGateClaims) Valid() error {
 		return errors.New("exp claim too far in the future")
 	}
 	return nil
+}
+
+func extractKeyFromJwt(tokenString, playbackID string) string {
+	claims, err := decodeJwt(tokenString)
+	if err != nil {
+		glog.Errorf("Unable to decode on incoming playbackId=%v jwt=%v", playbackID, tokenString)
+		return ""
+	}
+
+	if playbackID != claims.Subject {
+		glog.Errorf("PlaybackId mismatch playbackId=%v != claimed=%v", playbackID, claims.Subject)
+		return ""
+	}
+
+	glog.Infof("Access control request for playbackId=%v pubkey=%v", playbackID, claims.PublicKey)
+	return claims.PublicKey
 }
 
 func decodeJwt(tokenString string) (*PlaybackGateClaims, error) {

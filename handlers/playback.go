@@ -6,15 +6,15 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/config"
 	catErrs "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/playback"
+	"github.com/livepeer/catalyst-api/requests"
 )
 
-func ManifestHandler() httprouter.Handle {
+func PlaybackHandler() httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
-		var requestID = config.RandomTrailer(8)
+		requestID := requests.GetRequestId(req)
 
 		err := req.ParseForm()
 		if err != nil {
@@ -22,43 +22,33 @@ func ManifestHandler() httprouter.Handle {
 			return
 		}
 
-		key := req.Form.Get(playback.ManifestKeyParam)
-		if err := checkKey(key); err != nil {
-			handleError(err, req, requestID, w)
-			return
-		}
-		manifest, err := playback.Manifest(playback.PlaybackRequest{
+		key := req.URL.Query().Get(playback.KeyParam)
+		response, err := playback.Handle(playback.Request{
 			RequestID:  requestID,
 			PlaybackID: params.ByName("playbackID"),
 			File:       params.ByName("file"),
 			AccessKey:  key,
+			Range:      req.Header.Get("range"),
 		})
 		if err != nil {
 			handleError(err, req, requestID, w)
 			return
 		}
+		defer response.Body.Close()
 
-		w.Header().Set("content-type", "application/x-mpegurl")
-		_, err = io.Copy(w, manifest)
+		w.Header().Set("content-type", response.ContentType)
+		_, err = io.Copy(w, response.Body)
 		if err != nil {
 			log.LogError(requestID, "failed to write response", err)
 		}
 	}
 }
 
-// temporary hard coded check until real auth is implemented
-func checkKey(key string) error {
-	if key != "secretlpkey" {
-		return catErrs.UnauthorisedError
-	}
-	return nil
-}
-
 func handleError(err error, req *http.Request, requestID string, w http.ResponseWriter) {
 	log.LogError(requestID, "error in playback handler", err, "url", req.URL)
 	switch {
 	case errors.Is(err, catErrs.EmptyAccessKeyError):
-		catErrs.WriteHTTPBadRequest(w, playback.ManifestKeyParam+" param empty", nil)
+		catErrs.WriteHTTPBadRequest(w, playback.KeyParam+" param empty", nil)
 	case errors.Is(err, catErrs.ObjectNotFoundError):
 		catErrs.WriteHTTPNotFound(w, "not found", nil)
 	case errors.Is(err, catErrs.UnauthorisedError):
