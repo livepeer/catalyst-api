@@ -197,6 +197,9 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 			return nil, err
 		}
 		outputVideo.MP4Outputs = outputMP4Files
+		if outputVideo.Manifest == "" {
+			outputVideo.Manifest = mp4PlaybackBaseURL
+		}
 	}
 	return []video.OutputVideo{outputVideo}, nil
 }

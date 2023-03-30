@@ -244,10 +244,14 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		}
 	}
 
-	manifestURL = strings.ReplaceAll(manifestURL, hlsTargetURL.String(), hlsPlaybackBaseURL)
-	output := video.OutputVideo{Type: "object_store"}
+	var manifest string
 	if transcodeRequest.HlsTargetURL != "" {
-		output.Manifest = manifestURL
+		manifest = strings.ReplaceAll(manifestURL, hlsTargetURL.String(), hlsPlaybackBaseURL)
+	} else {
+		manifest = strings.ReplaceAll(manifestURL, hlsTargetURL.String(), mp4PlaybackBaseURL)
+	}
+	output := video.OutputVideo{Type: "object_store", Manifest: manifest}
+	if transcodeRequest.HlsTargetURL != "" {
 		for _, rendition := range transcodedStats {
 			videoManifestURL := strings.ReplaceAll(rendition.ManifestLocation, hlsTargetURL.String(), hlsPlaybackBaseURL)
 			output.Videos = append(output.Videos, video.OutputVideoFile{Location: videoManifestURL, SizeBytes: rendition.Bytes})
