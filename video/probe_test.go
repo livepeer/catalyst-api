@@ -68,3 +68,45 @@ func TestDefaultBitrate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, DefaultProfile720p.Bitrate, track.Bitrate)
 }
+
+func TestProbe(t *testing.T) {
+	require := require.New(t)
+	probe := Probe{}
+	iv, err := probe.ProbeFile("../clients/fixtures/mediaconvert_payloads/sample.mp4")
+	require.NoError(err)
+
+	expectedInput := InputVideo{
+		Duration: 16.254,
+		Tracks: []InputTrack{
+			{
+				Type:    TrackTypeVideo,
+				Codec:   "h264",
+				Bitrate: 1234521,
+				VideoTrack: VideoTrack{
+					Width:  576,
+					Height: 1024,
+					FPS:    30,
+				},
+			},
+			{
+				Type:    TrackTypeAudio,
+				Codec:   "aac",
+				Bitrate: 128248,
+				AudioTrack: AudioTrack{
+					Channels: 2,
+				},
+			},
+		},
+		SizeBytes: 2779520,
+	}
+	require.Equal(expectedInput, iv)
+}
+
+func TestProbe_VideoRotation(t *testing.T) {
+	probe := Probe{}
+	iv, err := probe.ProbeFile("./fixtures/bbb-180rotated.mov")
+	require.NoError(t, err)
+	track, err := iv.GetTrack("video")
+	require.NoError(t, err)
+	require.Equal(t, float64(-180), track.Rotation)
+}

@@ -662,7 +662,7 @@ func (f stubFFprobe) ProbeFile(_ string, _ ...string) (video.InputVideo, error) 
 	}, nil
 }
 
-func Test_checkMistCompatibleCodecs(t *testing.T) {
+func Test_checkMistCompatible(t *testing.T) {
 	type args struct {
 		strategy Strategy
 		iv       video.InputVideo
@@ -712,6 +712,17 @@ func Test_checkMistCompatibleCodecs(t *testing.T) {
 			{
 				Codec: "aac",
 				Type:  video.TrackTypeAudio,
+			},
+		},
+	}
+	videoRotation := video.InputVideo{
+		Tracks: []video.InputTrack{
+			{
+				Codec: "h264",
+				Type:  video.TrackTypeVideo,
+				VideoTrack: video.VideoTrack{
+					Rotation: 1,
+				},
 			},
 		},
 	}
@@ -793,10 +804,19 @@ func Test_checkMistCompatibleCodecs(t *testing.T) {
 			want:          StrategyFallbackExternal,
 			wantSupported: true,
 		},
+		{
+			name: "incompatible with mist - video rotation",
+			args: args{
+				strategy: StrategyFallbackExternal,
+				iv:       videoRotation,
+			},
+			want:          StrategyExternalDominance,
+			wantSupported: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			supported, got := checkMistCompatibleCodecs("requestID", tt.args.strategy, tt.args.iv)
+			supported, got := checkMistCompatible("requestID", tt.args.strategy, tt.args.iv)
 			require.Equal(t, tt.want, got)
 			require.Equal(t, tt.wantSupported, supported)
 		})

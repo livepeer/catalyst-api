@@ -263,7 +263,7 @@ func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 	if p.PipelineStrategy.IsValid() {
 		strategy = p.PipelineStrategy
 	}
-	p.MistSupported, strategy = checkMistCompatibleCodecs(p.RequestID, strategy, p.InputFileInfo)
+	p.MistSupported, strategy = checkMistCompatible(p.RequestID, strategy, p.InputFileInfo)
 	log.AddContext(p.RequestID, "strategy", strategy)
 
 	switch strategy {
@@ -291,22 +291,30 @@ func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 	}
 }
 
-// checkMistCompatibleCodecs checks if the input codecs are compatible with mist and overrides the pipeline strategy
+// checkMistCompatible checks if the input codecs are compatible with mist and overrides the pipeline strategy
 // to external if they are incompatible
-func checkMistCompatibleCodecs(requestID string, strategy Strategy, iv video.InputVideo) (bool, Strategy) {
+func checkMistCompatible(requestID string, strategy Strategy, iv video.InputVideo) (bool, Strategy) {
 	for _, track := range iv.Tracks {
 		// if the codecs are not compatible then override to external pipeline to avoid sending to mist
 		if (track.Type == video.TrackTypeVideo && strings.ToLower(track.Codec) != "h264") ||
 			(track.Type == video.TrackTypeAudio && strings.ToLower(track.Codec) != "aac") {
 			log.Log(requestID, "codec not supported by mist", "trackType", track.Type, "codec", track.Codec)
-			// allow StrategyCatalystDominance to pass through as this is used in tests and we might want to manually force it for debugging
-			if strategy == StrategyCatalystDominance {
-				return false, strategy
-			}
-			return false, StrategyExternalDominance
+			return mistNotSupported(strategy)
+		}
+		if track.Type == video.TrackTypeVideo && track.Rotation != 0 {
+			log.Log(requestID, "video rotation not supported by mist", "rotation", track.Rotation)
+			return mistNotSupported(strategy)
 		}
 	}
 	return true, strategy
+}
+
+func mistNotSupported(strategy Strategy) (bool, Strategy) {
+	// allow StrategyCatalystDominance to pass through as this is used in tests and we might want to manually force it for debugging
+	if strategy == StrategyCatalystDominance {
+		return false, strategy
+	}
+	return false, StrategyExternalDominance
 }
 
 // Starts a single upload job with specified pipeline Handler. If the job is
