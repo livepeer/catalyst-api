@@ -71,7 +71,7 @@ func TestReportsMediaConvertProgress(t *testing.T) {
 	reportProgressCalls := 0
 	_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
 		InputFile:         mustParseURL(t, "file://"+f.Name()),
-		HLSOutputLocation: mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
+		HLSOutputLocation: mustParseURL(t, "s3+https://endpoint.com/bucket/1234"),
 		ReportProgress: func(progress float64) {
 			reportProgressCalls++
 			require.InEpsilon(0.5, progress, 1e-9)
@@ -123,7 +123,7 @@ func TestRetriesOnAccelerationError(t *testing.T) {
 	_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
 		// use a non existing HTTP endpoint for the file
 		InputFile:         mustParseURL(t, "file://"+inputFile.Name()),
-		HLSOutputLocation: mustParseURL(t, "s3+https://endpoint.com/bucket/1234/index.m3u8"),
+		HLSOutputLocation: mustParseURL(t, "s3+https://endpoint.com/bucket/1234"),
 		InputFileInfo:     inputVideo,
 	})
 	require.ErrorContains(err, "done with this test")
