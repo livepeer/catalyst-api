@@ -132,7 +132,8 @@ func main() {
 	}
 
 	// Kick off the callback client, to send job update messages on a regular interval
-	statusClient := clients.NewPeriodicCallbackClient(15 * time.Second).Start()
+	headers := map[string]string{"Authorization": fmt.Sprintf("Bearer %s", cli.APIToken)}
+	statusClient := clients.NewPeriodicCallbackClient(15*time.Second, headers).Start()
 
 	// Emit high-cardinality metrics to a Postrgres database if configured
 	if cli.MetricsDBConnectionString != "" {
