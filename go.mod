@@ -17,7 +17,7 @@ require (
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/lib/pq v1.10.7
 	github.com/livepeer/go-api-client v0.3.1
-	github.com/livepeer/go-tools v0.2.10
+	github.com/livepeer/go-tools v0.2.11
 	github.com/livepeer/joy4 v0.1.1
 	github.com/livepeer/livepeer-data v0.6.4
 	github.com/livepeer/m3u8 v0.11.1
@@ -70,7 +70,7 @@ require (
 	github.com/hashicorp/go-multierror v1.0.0 // indirect
 	github.com/hashicorp/go-sockaddr v1.0.0 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
-	github.com/hashicorp/golang-lru v0.5.4 // indirect
+	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d // indirect
 	github.com/ipfs/bbloom v0.0.4 // indirect
 	github.com/ipfs/go-block-format v0.1.1 // indirect
 	github.com/ipfs/go-blockservice v0.5.0 // indirect

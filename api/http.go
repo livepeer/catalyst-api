@@ -46,6 +46,7 @@ func ListenAndServe(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coo
 func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster) *httprouter.Router {
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
+	withGatingCheck := middleware.NewGatingHandler(cli).GatingCheck
 
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
 	geoHandlers := &geolocation.GeolocationHandlersCollection{
@@ -56,10 +57,12 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 
-	// Manifest endpoint
+	// Playback endpoint
 	router.GET("/asset/hls/:playbackID/*file",
 		withLogging(
-			handlers.ManifestHandler(),
+			withGatingCheck(
+				handlers.PlaybackHandler(),
+			),
 		),
 	)
 
