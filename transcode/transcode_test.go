@@ -117,6 +117,7 @@ func TestItCanTranscode(t *testing.T) {
 			ReportProgress: func(stage clients.TranscodeStatus, completionRatio float64) {
 				statusClient.SendTranscodeStatus(clients.NewTranscodeStatusProgress(callbackServer.URL, "", stage, completionRatio))
 			},
+			HlsTargetURL: topLevelDir,
 		},
 		"streamName",
 		video.InputVideo{
