@@ -337,8 +337,20 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		pipeline = "aws-mediaconvert"
 	}
 
-	videoTrack, _ := p.InputFileInfo.GetTrack(video.TrackTypeVideo)
-	audioTrack, _ := p.InputFileInfo.GetTrack(video.TrackTypeAudio)
+	// Codecs are parsed here primarily to write codec stats for each job
+	var videoCodec, audioCodec string
+	videoTrack, err := p.InputFileInfo.GetTrack(video.TrackTypeVideo)
+	if err != nil {
+		videoCodec = "n/a"
+	} else {
+		videoCodec = videoTrack.Codec
+	}
+	audioTrack, err := p.InputFileInfo.GetTrack(video.TrackTypeAudio)
+	if err != nil {
+		audioCodec = "n/a"
+	} else {
+		audioCodec = audioTrack.Codec
+	}
 
 	si := &JobInfo{
 		UploadJobPayload: p,
@@ -355,8 +367,8 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		transcodedSegments:    0,
 		targetSegmentSizeSecs: p.TargetSegmentSizeSecs,
 		catalystRegion:        os.Getenv("MY_REGION"),
-		sourceCodecVideo:      videoTrack.Codec,
-		sourceCodecAudio:      audioTrack.Codec,
+		sourceCodecVideo:      videoCodec,
+		sourceCodecAudio:      audioCodec,
 	}
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 
