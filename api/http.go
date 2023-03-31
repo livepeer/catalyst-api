@@ -46,6 +46,7 @@ func ListenAndServe(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coo
 func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster) *httprouter.Router {
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
+	withCORS := middleware.AllowCORS()
 	withGatingCheck := middleware.NewGatingHandler(cli).GatingCheck
 
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
@@ -67,7 +68,7 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 	)
 
 	// Handling incoming playback redirection requests
-	redirectHandler := withLogging(geoHandlers.RedirectHandler())
+	redirectHandler := withLogging(withCORS(geoHandlers.RedirectHandler()))
 	router.NotFound = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		redirectHandler(w, r, httprouter.Params{})
 	})
