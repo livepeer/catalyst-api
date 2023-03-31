@@ -102,7 +102,7 @@ func osFetch(playbackID, file, byteRange string) (*drivers.FileInfoReader, error
 	if err != nil {
 		var awsErr awserr.Error
 		if errors.As(err, &awsErr) && awsErr.Code() == s3.ErrCodeNoSuchKey {
-			return nil, fmt.Errorf("invalid request: %w %w", caterrs.ObjectNotFoundError, err)
+			return nil, fmt.Errorf("invalid request: %w %v", caterrs.ObjectNotFoundError, err)
 		}
 		return nil, fmt.Errorf("failed to get file for playback: %w", err)
 	}
