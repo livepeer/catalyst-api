@@ -127,10 +127,10 @@ func (s *StepContext) CheckMist(segmentSize int) error {
 			return fmt.Errorf("received too many Mist segmenting requests (%d)", len(urls))
 		}
 		if len(urls) == 1 {
-			expectedTargetURL := fmt.Sprintf("memory://localhost/source/$currentMediaTime.ts?m3u8=output.m3u8&split=%d", segmentSize)
+			expectedTargetURLSuffix := fmt.Sprintf("source/$currentMediaTime.ts?m3u8=index.m3u8&split=%d", segmentSize)
 			actualTargetURL := urls[0]
-			if expectedTargetURL != actualTargetURL {
-				return fmt.Errorf("incorrect Mist segmenting URL - expected %s but got %s", expectedTargetURL, actualTargetURL)
+			if !strings.HasSuffix(actualTargetURL, expectedTargetURLSuffix) {
+				return fmt.Errorf("incorrect Mist segmenting URL - expected to and with %s but got %s", expectedTargetURLSuffix, actualTargetURL)
 			}
 			return nil
 		}

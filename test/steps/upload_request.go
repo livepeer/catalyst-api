@@ -3,8 +3,7 @@ package steps
 import "encoding/json"
 
 type Output struct {
-	SourceSegments     bool `json:"source_segments,omitempty"`
-	TranscodedSegments bool `json:"transcoded_segments,omitempty"`
+	HLS string `json:"hls,omitempty"`
 }
 
 type OutputLocation struct {
@@ -27,8 +26,7 @@ var DefaultUploadRequest = UploadRequest{
 			Type: "object_store",
 			URL:  "memory://localhost/output.m3u8",
 			Outputs: Output{
-				SourceSegments:     true,
-				TranscodedSegments: true,
+				HLS: "enabled",
 			},
 		},
 	},
