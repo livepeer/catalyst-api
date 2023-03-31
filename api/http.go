@@ -61,8 +61,10 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 	// Playback endpoint
 	router.GET("/asset/hls/:playbackID/*file",
 		withLogging(
-			withGatingCheck(
-				handlers.PlaybackHandler(),
+			withCORS(
+				withGatingCheck(
+					handlers.PlaybackHandler(),
+				),
 			),
 		),
 	)
