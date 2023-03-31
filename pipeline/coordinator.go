@@ -179,10 +179,10 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 }
 
 func NewStubCoordinator() *Coordinator {
-	return NewStubCoordinatorOpts(StrategyCatalystDominance, nil, nil, nil)
+	return NewStubCoordinatorOpts(StrategyCatalystDominance, nil, nil, nil, "")
 }
 
-func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeMist, pipeExternal Handler) *Coordinator {
+func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeMist, pipeExternal Handler, sourceOutputUrl string) *Coordinator {
 	if strategy == "" {
 		strategy = StrategyCatalystDominance
 	}
@@ -190,7 +190,7 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 		statusClient = clients.TranscodeStatusFunc(func(tsm clients.TranscodeStatusMessage) {})
 	}
 	if pipeMist == nil {
-		pipeMist = &mist{MistClient: clients.StubMistClient{}}
+		pipeMist = &mist{MistClient: clients.StubMistClient{}, SourceOutputUrl: sourceOutputUrl}
 	}
 	if pipeExternal == nil {
 		pipeExternal = &external{}

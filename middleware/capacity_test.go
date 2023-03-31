@@ -41,7 +41,7 @@ func TestItErrorsWhenNoCapacityAvailable(t *testing.T) {
 
 	pipeMist, release := pipeline.NewBlockingStubHandler()
 	defer release()
-	coordinator := pipeline.NewStubCoordinatorOpts(pipeline.StrategyCatalystDominance, nil, pipeMist, nil)
+	coordinator := pipeline.NewStubCoordinatorOpts(pipeline.StrategyCatalystDominance, nil, pipeMist, nil, "")
 	coordinator.InputCopy = &clients.StubInputCopy{}
 
 	// Create a lot of in-flight jobs

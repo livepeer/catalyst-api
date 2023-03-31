@@ -44,7 +44,9 @@ func TestOKHandler(t *testing.T) {
 
 func TestVODHandlerProfiles(t *testing.T) {
 	// Create temporary manifest + segment files on the local filesystem
-	inputUrl, outputUrl := createTempManifests(t)
+	tmpDir := os.TempDir()
+	inputUrl := createTempManifest(t, path.Join(tmpDir, "/live/peer/test"))
+	outputDirUrl := strings.TrimRight(inputUrl, "index.m3u8")
 
 	// Define profiles
 	profiles := []video.EncodedProfile{
@@ -108,7 +110,7 @@ func TestVODHandlerProfiles(t *testing.T) {
 	// Set up out own callback client so that we can ensure it just fires once
 	statusClient := clients.NewPeriodicCallbackClient(100*time.Minute, map[string]string{})
 	// Workflow engine
-	vodEngine := pipeline.NewStubCoordinatorOpts("", statusClient, nil, nil)
+	vodEngine := pipeline.NewStubCoordinatorOpts("", statusClient, nil, nil, outputDirUrl)
 	vodEngine.InputCopy = &clients.StubInputCopy{}
 	internalState := vodEngine.Jobs.UnittestIntrospection()
 
@@ -127,7 +129,7 @@ func TestVODHandlerProfiles(t *testing.T) {
 			"url": "%s",
 			"outputs": {"hls": "enabled"}
 		}]
-	}`, inputUrl, callbackServer.URL, outputUrl)
+	}`, inputUrl, callbackServer.URL, outputDirUrl)
 	router := httprouter.New()
 	router.POST("/api/vod", catalystApiHandlers.UploadVOD())
 	router.POST("/api/mist/trigger", mistCallbackHandlers.Trigger())
@@ -138,6 +140,11 @@ func TestVODHandlerProfiles(t *testing.T) {
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 	require.Equal(t, http.StatusOK, rr.Result().StatusCode)
+	res, err := io.ReadAll(rr.Result().Body)
+	require.NoError(t, err)
+	var vodRes UploadVODResponse
+	err = json.Unmarshal(res, &vodRes)
+	require.NoError(t, err)
 
 	// Wait for the request to run its course, then fire callbacks
 	time.Sleep(time.Second)
@@ -175,7 +182,8 @@ waitsegmenting:
 	}())
 
 	// Second request invokes trigger
-	triggerPayload := fmt.Sprintf("%s\n%s\nhls\n1234\n3\n1667489141941\n1667489144941\n10000\n0\n10000", streamName, outputUrl)
+	sourceSegmentsUrl := createTempManifest(t, path.Join(tmpDir, fmt.Sprintf("/live/peer/test/%s/source", vodRes.RequestID)))
+	triggerPayload := fmt.Sprintf("%s\n%s\nhls\n1234\n3\n1667489141941\n1667489144941\n10000\n0\n10000", streamName, sourceSegmentsUrl)
 	req, _ = http.NewRequest("POST", "/api/mist/trigger", bytes.NewBuffer([]byte(triggerPayload)))
 	req.Header.Set("X-Trigger", "RECORDING_END")
 	rr = httptest.NewRecorder()
@@ -345,25 +353,17 @@ func storeTestFile(t *testing.T, path, name, data string) {
 	require.NoError(t, err)
 }
 
-func createTempManifests(t *testing.T) (string, string) {
+func createTempManifest(t *testing.T, dir string) string {
 	drivers.Testing = true
-	tmpDir := os.TempDir()
-	dir := path.Join(tmpDir, "/live/peer/test")
-	sourceDir := path.Join(tmpDir, "/live/peer/test/source")
+
 	err := os.MkdirAll(dir, os.ModePerm)
 	require.NoError(t, err)
-	err = os.MkdirAll(sourceDir, os.ModePerm)
-	require.NoError(t, err)
 
-	storeTestFile(t, dir, "manifest.m3u8", exampleMediaManifest)
-	storeTestFile(t, sourceDir, "manifest.m3u8", exampleMediaManifest)
+	storeTestFile(t, dir, "index.m3u8", exampleMediaManifest)
 	storeTestFile(t, dir, "0.ts", "segment data")
-	storeTestFile(t, sourceDir, "0.ts", "segment data")
 	storeTestFile(t, dir, "5000.ts", "lots of segment data")
-	storeTestFile(t, sourceDir, "5000.ts", "lots of segment data")
-	storedManifest := fmt.Sprintf("file://%s", path.Join(dir, "manifest.m3u8"))
-	// Just in tests we use same manifest for segmenting request and same for transcoding
-	return storedManifest, storedManifest
+	storedManifest := fmt.Sprintf("file://%s", path.Join(dir, "index.m3u8"))
+	return storedManifest
 }
 
 func changeDefaultBroadcasterUrl(t *testing.T, testingServerURL string) func() {
