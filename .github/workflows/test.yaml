@@ -86,7 +86,7 @@ jobs:
       - name: Run cucumber tests
         run: |
           go install github.com/cucumber/godog/cmd/godog@latest
-          make integration-test
+          make generate integration-test
 
       - name: Upload logs
         uses: actions/upload-artifact@v3
