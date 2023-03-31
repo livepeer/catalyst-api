@@ -118,7 +118,7 @@ func (ac *AccessControlHandlersCollection) handleUserNew(payload []byte) []byte 
 }
 
 func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, reqURL *url.URL) (bool, error) {
-	acReq := PlaybackAccessControlRequest{Stream: playbackID}
+	acReq := PlaybackAccessControlRequest{Stream: playbackID, Type: "accessKey"}
 	cacheKey := ""
 	accessKey := reqURL.Query().Get("accessKey")
 	jwt := reqURL.Query().Get("jwt")
