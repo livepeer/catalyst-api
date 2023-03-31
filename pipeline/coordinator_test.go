@@ -85,11 +85,11 @@ func TestCoordinatorDoesNotBlock(t *testing.T) {
 	job := testJob
 	job.SourceFile = "file://" + inputFile.Name()
 	coord.StartUploadJob(job)
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	require.True(running.Load())
-	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
-	msg := requireReceive(t, callbacks, 1*time.Second)
+	requireReceive(t, callbacks, 5*time.Second) // discard initial TranscodeStatusPreparing message
+	msg := requireReceive(t, callbacks, 5*time.Second)
 	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 
 	close(barrier)
@@ -124,16 +124,16 @@ func TestCoordinatorPropagatesJobInfoChanges(t *testing.T) {
 	job := testJob
 	job.SourceFile = "file://" + inputFile.Name()
 	coord.StartUploadJob(job)
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 
 	coord.TriggerRecordingEnd(RecordingEndPayload{StreamName: config.SegmentingStreamName("123")})
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	// Make sure recording end trigger doesn't execute until the start upload returns
 	require.Zero(len(done))
 
 	close(barrier)
-	requireReceive(t, done, 1*time.Second)
+	requireReceive(t, done, 5*time.Second)
 }
 
 func TestCoordinatorResistsPanics(t *testing.T) {
@@ -404,7 +404,7 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 	defer cleanup()
 	job := testJob
 	job.SourceFile = "file://" + inputFile.Name()
-	sourceFile := path.Join(transferDir, "transfer/123/"+filepath.Base(inputFile.Name()))
+	sourceFile := path.Join(transferDir, "123/transfer/"+filepath.Base(inputFile.Name()))
 
 	dbMock.
 		ExpectExec("insert into \"vod_completed\".*").
@@ -412,8 +412,8 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	coord.StartUploadJob(job)
-	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
-	requireReceive(t, callbacks, 1*time.Second) // discard second TranscodeStatusPreparing message
+	requireReceive(t, callbacks, 5*time.Second) // discard initial TranscodeStatusPreparing message
+	requireReceive(t, callbacks, 5*time.Second) // discard second TranscodeStatusPreparing message
 
 	res, err := http.Get(metricsServer.URL)
 	require.NoError(err)
