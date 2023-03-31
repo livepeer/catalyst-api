@@ -28,8 +28,6 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		nodeHost := c.Config.NodeHost
 		redirectPrefixes := c.Config.RedirectPrefixes
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "*")
 
 		if nodeHost != "" {
 			host := r.Host
