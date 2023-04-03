@@ -23,6 +23,18 @@ func (s *StepContext) StartStudioAPI(listen string) error {
 		_, _ = io.WriteString(w, "")
 	})
 	router.POST("/api/access-control/gate", func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			panic(err)
+		}
+		gateRequest := make(map[string]interface{})
+		err = json.Unmarshal(body, &gateRequest)
+		if err != nil {
+			panic(err)
+		}
+		if gateRequest["type"] == "" {
+			panic(fmt.Errorf("type field should not be empty on gate API request: %+v", gateRequest))
+		}
 		s.GateAPICallCount++
 		w.Header().Set("Cache-Control", "max-age=600, stale-while-revalidate=900")
 		w.WriteHeader(s.GateAPIStatus)
