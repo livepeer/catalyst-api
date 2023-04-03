@@ -87,6 +87,7 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 		r := getSideData[float64](sideData, "rotation")
 		if r != nil {
 			rotation = *r
+			break
 		}
 	}
 
@@ -168,12 +169,11 @@ func parseFps(framerate string) (float64, error) {
 	return float64(num) / float64(den), nil
 }
 
-func getSideData[T any](s ffprobe.SideData, key string) *T {
-	v := s[key]
-	switch v.(type) {
-	case T:
-		res := v.(T)
-		return &res
+func getSideData[T any](sideData ffprobe.SideData, key string) *T {
+	if value, ok := sideData[key]; ok {
+		if res, ok := value.(T); ok {
+			return &res
+		}
 	}
 	return nil
 }
