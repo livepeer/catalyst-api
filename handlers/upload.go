@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	errors2 "errors"
 	"fmt"
 	"io"
 	"mime"
@@ -22,11 +23,13 @@ import (
 )
 
 type UploadVODRequestOutputLocationOutputs struct {
-	SourceMp4          bool `json:"source_mp4"`
-	SourceSegments     bool `json:"source_segments"`
-	TranscodedSegments bool `json:"transcoded_segments"`
-	ForceMP4           bool `json:"force_mp4"`
-	AutoMP4            bool `json:"auto_mp4"`
+	SourceMp4          bool   `json:"source_mp4"`
+	SourceSegments     bool   `json:"source_segments"`
+	TranscodedSegments bool   `json:"transcoded_segments"`
+	ForceMP4           bool   `json:"force_mp4"`
+	AutoMP4            bool   `json:"auto_mp4"`
+	HLS                string `json:"hls"`
+	MP4                string `json:"mp4"`
 }
 
 type UploadVODRequestOutputLocation struct {
@@ -72,22 +75,24 @@ func HasContentType(r *http.Request, mimetype string) bool {
 	return false
 }
 
-func (r UploadVODRequest) getSourceOutputURL() (*url.URL, error) {
+func (r UploadVODRequest) getTargetHlsOutput() UploadVODRequestOutputLocation {
 	for _, o := range r.OutputLocations {
-		if o.Outputs.SourceSegments {
-			return url.Parse(o.URL)
+		if o.Outputs.HLS == "enabled" {
+			return o
 		}
 	}
-	return nil, nil
+	return UploadVODRequestOutputLocation{}
 }
 
-func (r UploadVODRequest) getTargetOutput() (UploadVODRequestOutputLocation, error) {
+func (r UploadVODRequest) getTargetMp4Output() (UploadVODRequestOutputLocation, bool) {
 	for _, o := range r.OutputLocations {
-		if o.Outputs.TranscodedSegments {
-			return o, nil
+		if o.Outputs.MP4 == "enabled" {
+			return o, false
+		} else if o.Outputs.MP4 == "only_short" {
+			return o, true
 		}
 	}
-	return UploadVODRequestOutputLocation{}, fmt.Errorf("no output_location with transcoded_segments")
+	return UploadVODRequestOutputLocation{}, false
 }
 
 func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
@@ -133,6 +138,9 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 	}
 
+	// TODO: Remove after task-runner is updated everywhere to the recent version
+	uploadVODRequest.OutputLocations = tempBackwardsCompatibilityUpdate(uploadVODRequest.OutputLocations)
+
 	// If the segment size isn't being overridden then use the default
 	if uploadVODRequest.TargetSegmentSizeSecs <= 0 {
 		uploadVODRequest.TargetSegmentSizeSecs = config.DefaultSegmentSizeSecs
@@ -143,26 +151,19 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	}
 	log.AddContext(requestID, "target_segment_size_secs", uploadVODRequest.TargetSegmentSizeSecs)
 
-	// Create a separate subdirectory for the source segments
-	// Use the output directory specified in request as the output directory of transcoded renditions
-	targetOutput, err := uploadVODRequest.getTargetOutput()
+	hlsTargetOutput := uploadVODRequest.getTargetHlsOutput()
+	hlsTargetURL, err := toTargetURL(hlsTargetOutput, requestID)
 	if err != nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 	}
-	targetURL, err := url.Parse(targetOutput.URL)
+	mp4TargetOutput, mp4OnlyShort := uploadVODRequest.getTargetMp4Output()
+	mp4TargetURL, err := toTargetURL(mp4TargetOutput, requestID)
 	if err != nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
-	}
-	// Hack for web3.storage to distinguish different jobs, before calling Publish()
-	// Can be removed after we address this issue: https://github.com/livepeer/go-tools/issues/16
-	if targetURL.Scheme == "w3s" {
-		targetURL.Host = requestID
-		log.AddContext(requestID, "w3s-url", targetURL.String())
 	}
 
-	sourceOutputURL, err := uploadVODRequest.getSourceOutputURL()
-	if err != nil {
-		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+	if hlsTargetURL == nil && mp4TargetURL == nil {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", errors2.New("none of output enabled: hls or mp4"))
 	}
 
 	if strat := uploadVODRequest.PipelineStrategy; strat != "" && !strat.IsValid() {
@@ -173,18 +174,18 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 
 	// Once we're happy with the request, do the rest of the Segmenting stage asynchronously to allow us to
 	// from the API call and free up the HTTP connection
+
 	d.VODEngine.StartUploadJob(pipeline.UploadJobPayload{
 		SourceFile:            uploadVODRequest.Url,
 		CallbackURL:           uploadVODRequest.CallbackUrl,
-		SourceOutputURL:       sourceOutputURL,
-		TargetURL:             targetURL,
+		HlsTargetURL:          hlsTargetURL,
+		Mp4TargetURL:          mp4TargetURL,
+		Mp4OnlyShort:          mp4OnlyShort,
 		AccessToken:           uploadVODRequest.AccessToken,
 		TranscodeAPIUrl:       uploadVODRequest.TranscodeAPIUrl,
 		RequestID:             requestID,
 		Profiles:              uploadVODRequest.Profiles,
 		PipelineStrategy:      uploadVODRequest.PipelineStrategy,
-		ForceMP4:              targetOutput.Outputs.ForceMP4,
-		AutoMP4:               targetOutput.Outputs.AutoMP4,
 		TargetSegmentSizeSecs: uploadVODRequest.TargetSegmentSizeSecs,
 	})
 
@@ -200,6 +201,46 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	}
 
 	return true, errors.APIError{}
+}
+
+// Temp function to support backwards-compatibility between task-runner and catalyst
+// TODO: Remove after all task-runner instances are updated to the most recent version
+func tempBackwardsCompatibilityUpdate(locations []UploadVODRequestOutputLocation) []UploadVODRequestOutputLocation {
+	var res []UploadVODRequestOutputLocation
+	for _, l := range locations {
+		if l.Outputs.HLS == "" && l.Outputs.MP4 == "" {
+			if l.Outputs.TranscodedSegments {
+				l.Outputs.HLS = "enabled"
+			}
+			if l.Outputs.AutoMP4 {
+				l.Outputs.MP4 = "only_short"
+			}
+			if l.Outputs.ForceMP4 {
+				l.Outputs.MP4 = "enabled"
+			}
+			l.URL = strings.TrimRight(l.URL, "/index.m3u8")
+		}
+		res = append(res, l)
+	}
+	return res
+}
+
+func toTargetURL(ol UploadVODRequestOutputLocation, reqID string) (*url.URL, error) {
+	if ol.URL != "" {
+		tURL, err := url.Parse(ol.URL)
+		if err != nil {
+			return nil, err
+		}
+
+		// Hack for web3.storage to distinguish different jobs, before calling Publish()
+		// Can be removed after we address this issue: https://github.com/livepeer/go-tools/issues/16
+		if tURL.Scheme == "w3s" {
+			tURL.Host = reqID
+			log.AddContext(reqID, "w3s-url", tURL.String())
+		}
+		return tURL, nil
+	}
+	return nil, nil
 }
 
 func CheckSourceURLValid(sourceURL string) error {

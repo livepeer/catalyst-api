@@ -1,36 +1,38 @@
 package handlers
 
 import (
-	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetSourceOutputURL(t *testing.T) {
+func TestGetTargetOutputs(t *testing.T) {
 	tests := []struct {
-		name        string
-		req         UploadVODRequest
-		expectedURL *url.URL
+		name                 string
+		req                  UploadVODRequest
+		expectedHlsURL       string
+		expectedMp4URL       string
+		expectedMp4ShortOnly bool
 	}{
 		{
-			name: "single output location with source segments",
+			name: "single output location with HLS",
 			req: UploadVODRequest{OutputLocations: []UploadVODRequestOutputLocation{{
 				URL: "s3+https://user:pass@bucket",
 				Outputs: UploadVODRequestOutputLocationOutputs{
-					SourceSegments:     true,
-					TranscodedSegments: true,
+					HLS: "enabled",
 				}}}},
-			expectedURL: toUrl("s3+https://user:pass@bucket"),
+			expectedHlsURL: "s3+https://user:pass@bucket",
+			expectedMp4URL: "",
 		},
 		{
-			name: "no location with source segments",
+			name: "no location with HLS",
 			req: UploadVODRequest{OutputLocations: []UploadVODRequestOutputLocation{{
 				URL: "s3+https://user:pass@bucket",
 				Outputs: UploadVODRequestOutputLocationOutputs{
-					TranscodedSegments: true,
+					MP4: "enabled",
 				}}}},
-			expectedURL: nil,
+			expectedHlsURL: "",
+			expectedMp4URL: "s3+https://user:pass@bucket",
 		},
 		{
 			name: "multiple output locations, one with source segments",
@@ -38,96 +40,31 @@ func TestGetSourceOutputURL(t *testing.T) {
 				{
 					URL: "s3+https://first:first@bucket",
 					Outputs: UploadVODRequestOutputLocationOutputs{
-						TranscodedSegments: true,
+						HLS: "enabled",
 					},
 				},
 				{
 					URL: "s3+https://second:second@bucket",
 					Outputs: UploadVODRequestOutputLocationOutputs{
-						TranscodedSegments: true,
-						SourceSegments:     true,
+						MP4: "only_short",
 					},
 				},
 			}},
-			expectedURL: toUrl("s3+https://second:second@bucket"),
+			expectedHlsURL:       "s3+https://first:first@bucket",
+			expectedMp4URL:       "s3+https://second:second@bucket",
+			expectedMp4ShortOnly: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.req.getSourceOutputURL()
-			require.Equal(t, tt.expectedURL, got)
-			require.NoError(t, err)
+			gotHls := tt.req.getTargetHlsOutput()
+			require.Equal(t, tt.expectedHlsURL, gotHls.URL)
+			gotMp4, gotShortOnly := tt.req.getTargetMp4Output()
+			require.Equal(t, tt.expectedMp4URL, gotMp4.URL)
+			require.Equal(t, tt.expectedMp4ShortOnly, gotShortOnly)
 		})
 	}
-}
-
-func TestGetTargetURL(t *testing.T) {
-	tests := []struct {
-		name        string
-		req         UploadVODRequest
-		expectedURL string
-		isErr       bool
-	}{
-		{
-			name: "single output location",
-			req: UploadVODRequest{OutputLocations: []UploadVODRequestOutputLocation{{
-				URL: "s3+https://user:pass@bucket",
-				Outputs: UploadVODRequestOutputLocationOutputs{
-					SourceSegments:     true,
-					TranscodedSegments: true,
-				}}}},
-			expectedURL: "s3+https://user:pass@bucket",
-		},
-		{
-			name: "multiple output locations",
-			req: UploadVODRequest{OutputLocations: []UploadVODRequestOutputLocation{
-				{
-					URL: "s3+https://first:first@bucket",
-					Outputs: UploadVODRequestOutputLocationOutputs{
-						TranscodedSegments: true,
-					},
-				},
-				{
-					URL: "s3+https://second:second@bucket",
-					Outputs: UploadVODRequestOutputLocationOutputs{
-						TranscodedSegments: true,
-						SourceSegments:     true,
-					},
-				},
-			}},
-			expectedURL: "s3+https://first:first@bucket",
-		},
-		{
-			name:        "empty output locations",
-			req:         UploadVODRequest{OutputLocations: []UploadVODRequestOutputLocation{}},
-			expectedURL: "",
-			isErr:       true,
-		},
-		{
-			name:        "nil output locations",
-			req:         UploadVODRequest{},
-			expectedURL: "",
-			isErr:       true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.req.getTargetOutput()
-			require.Equal(t, tt.expectedURL, got.URL)
-			if tt.isErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
-}
-
-func toUrl(URL string) *url.URL {
-	res, _ := url.Parse(URL)
-	return res
 }
 
 func TestItRejectsLocalDomain(t *testing.T) {

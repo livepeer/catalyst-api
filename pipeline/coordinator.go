@@ -59,8 +59,9 @@ func (s Strategy) IsValid() bool {
 type UploadJobPayload struct {
 	SourceFile            string
 	CallbackURL           string
-	SourceOutputURL       *url.URL
-	TargetURL             *url.URL
+	HlsTargetURL          *url.URL
+	Mp4TargetURL          *url.URL
+	Mp4OnlyShort          bool
 	AccessToken           string
 	TranscodeAPIUrl       string
 	HardcodedBroadcasters string
@@ -68,8 +69,6 @@ type UploadJobPayload struct {
 	Profiles              []video.EncodedProfile
 	PipelineStrategy      Strategy
 	TargetSegmentSizeSecs int64
-	AutoMP4               bool
-	ForceMP4              bool
 	GenerateMP4           bool
 	InputFileInfo         video.InputVideo
 	SignedSourceURL       string
@@ -105,6 +104,7 @@ type JobInfo struct {
 	StreamName string
 	// this is only set&used internally in the mist pipeline
 	SegmentingTargetURL string
+	SourceOutputURL     string
 
 	handler      Handler
 	hasFallback  bool
@@ -179,10 +179,10 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 }
 
 func NewStubCoordinator() *Coordinator {
-	return NewStubCoordinatorOpts(StrategyCatalystDominance, nil, nil, nil)
+	return NewStubCoordinatorOpts(StrategyCatalystDominance, nil, nil, nil, "")
 }
 
-func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeMist, pipeExternal Handler) *Coordinator {
+func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeMist, pipeExternal Handler, sourceOutputUrl string) *Coordinator {
 	if strategy == "" {
 		strategy = StrategyCatalystDominance
 	}
@@ -190,7 +190,7 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 		statusClient = clients.TranscodeStatusFunc(func(tsm clients.TranscodeStatusMessage) {})
 	}
 	if pipeMist == nil {
-		pipeMist = &mist{MistClient: clients.StubMistClient{}}
+		pipeMist = &mist{MistClient: clients.StubMistClient{}, SourceOutputUrl: sourceOutputUrl}
 	}
 	if pipeExternal == nil {
 		pipeExternal = &external{}
@@ -235,7 +235,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		if err != nil {
 			return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
 		}
-		newSourceURL := sourceOutputUrl.JoinPath("transfer", si.RequestID, path.Base(sourceURL.Path))
+		newSourceURL := sourceOutputUrl.JoinPath(si.RequestID, "transfer", path.Base(sourceURL.Path))
 
 		inputVideoProbe, signedURL, err := c.InputCopy.CopyInputToS3(si.RequestID, sourceURL, newSourceURL)
 		if err != nil {
@@ -244,12 +244,12 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		p.SourceFile = newSourceURL.String()
 		p.SignedSourceURL = signedURL
 		p.InputFileInfo = inputVideoProbe
-		p.GenerateMP4 = func(forcemp4, automp4 bool, duration float64) bool {
-			if forcemp4 || (automp4 && duration <= maxMP4OutDuration.Seconds()) {
+		p.GenerateMP4 = func(mp4TargetUrl *url.URL, mp4OnlyShort bool, duration float64) bool {
+			if mp4TargetUrl != nil && (!mp4OnlyShort || duration <= maxMP4OutDuration.Seconds()) {
 				return true
 			}
 			return false
-		}(p.ForceMP4, p.AutoMP4, p.InputFileInfo.Duration)
+		}(p.Mp4TargetURL, p.Mp4OnlyShort, p.InputFileInfo.Duration)
 
 		log.AddContext(si.RequestID, "new_source_url", newSourceURL)
 		log.AddContext(si.RequestID, "signed_url", signedURL)
@@ -321,7 +321,9 @@ func checkMistCompatibleCodecs(requestID string, strategy Strategy, iv video.Inp
 func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, foreground, hasFallback bool) <-chan bool {
 	if !foreground {
 		p.RequestID = fmt.Sprintf("bg_%s", p.RequestID)
-		p.TargetURL = p.TargetURL.JoinPath("..", handler.Name(), path.Base(p.TargetURL.Path))
+		if p.HlsTargetURL != nil {
+			p.HlsTargetURL = p.HlsTargetURL.JoinPath("..", handler.Name(), path.Base(p.HlsTargetURL.Path))
+		}
 		// this will prevent the callbacks for this job from actually being sent
 		p.CallbackURL = ""
 	}
@@ -500,8 +502,8 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
 	}
 
 	targetURL := ""
-	if job.TargetURL != nil {
-		targetURL = job.TargetURL.Redacted()
+	if job.HlsTargetURL != nil {
+		targetURL = job.HlsTargetURL.Redacted()
 	}
 	insertDynStmt := `insert into "vod_completed"(
                             "finished_at",

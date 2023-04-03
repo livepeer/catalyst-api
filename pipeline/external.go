@@ -31,12 +31,13 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
 	defer cancel()
 	outputVideos, err := e.transcoder.Transcode(ctx, clients.TranscodeJobArgs{
-		RequestID:       job.RequestID,
-		SegmentSizeSecs: job.targetSegmentSizeSecs,
-		InputFile:       sourceFileUrl,
-		HLSOutputFile:   job.TargetURL,
-		Profiles:        job.Profiles,
-		GenerateMP4:     job.GenerateMP4,
+		RequestID:         job.RequestID,
+		SegmentSizeSecs:   job.targetSegmentSizeSecs,
+		InputFile:         sourceFileUrl,
+		HLSOutputLocation: job.HlsTargetURL,
+		MP4OutputLocation: job.Mp4TargetURL,
+		Profiles:          job.Profiles,
+		GenerateMP4:       job.GenerateMP4,
 		ReportProgress: func(progress float64) {
 			job.ReportProgress(clients.TranscodeStatusTranscoding, progress)
 		},

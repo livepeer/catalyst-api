@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -27,7 +26,9 @@ type TranscodeSegmentRequest struct {
 	SourceFile        string                 `json:"source_location"`
 	CallbackURL       string                 `json:"callback_url"`
 	SourceManifestURL string                 `json:"source_manifest_url"`
-	TargetURL         string                 `json:"target_url"`
+	SourceOutputURL   string                 `json:"source_output_url"`
+	HlsTargetURL      string                 `json:"target_url"`
+	Mp4TargetUrl      string                 `json:"mp4_target_url"`
 	StreamKey         string                 `json:"streamKey"`
 	AccessToken       string                 `json:"accessToken"`
 	TranscodeAPIUrl   string                 `json:"transcodeAPIUrl"`
@@ -62,26 +63,12 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	var segmentsCount = 0
 
-	outputs := []video.OutputVideo{}
+	var outputs []video.OutputVideo
 
-	var targetURL *url.URL
-	var err error
-	if transcodeRequest.TargetURL != "" {
-		targetURL, err = url.Parse(transcodeRequest.TargetURL)
-	} else {
-		// TargetURL not defined in the /api/transcode/file request; for the backwards-compatibility, use SourceManifestURL.
-		// For the /api/vod endpoint, TargetURL is always defined.
-		targetURL, err = url.Parse(path.Dir(transcodeRequest.SourceManifestURL))
-	}
-
+	hlsTargetURL, err := getHlsTargetURL(transcodeRequest)
 	if err != nil {
-		return outputs, segmentsCount, fmt.Errorf("failed to parse transcodeRequest.TargetURL: %s", err)
+		return outputs, segmentsCount, err
 	}
-	tout, err := url.Parse(path.Dir(targetURL.Path))
-	if err != nil {
-		return outputs, segmentsCount, fmt.Errorf("failed to parse targetTranscodedPath: %s", err)
-	}
-	targetTranscodedRenditionOutputURL := targetURL.ResolveReference(tout)
 
 	// Grab some useful parameters to be used later from the TranscodeSegmentRequest
 	sourceManifestOSURL := transcodeRequest.SourceManifestURL
@@ -126,7 +113,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	var jobs *ParallelTranscoding
 	jobs = NewParallelTranscoding(sourceSegmentURLs, func(segment segmentInfo) error {
-		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, targetTranscodedRenditionOutputURL, transcodedStats, &renditionList)
+		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, hlsTargetURL, transcodedStats, &renditionList)
 		segmentsCount++
 		if err != nil {
 			return err
@@ -145,19 +132,18 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Build the manifests and push them to storage
-	manifestURL, err := GenerateAndUploadManifests(sourceManifest, targetTranscodedRenditionOutputURL.String(), transcodedStats)
+	manifestURL, err := GenerateAndUploadManifests(sourceManifest, hlsTargetURL.String(), transcodedStats)
 	if err != nil {
 		return outputs, segmentsCount, err
 	}
 
-	playbackBaseURL, err := clients.PublishDriverSession(targetTranscodedRenditionOutputURL.String(), tout.Path)
-	if err != nil {
-		return outputs, segmentsCount, err
-	}
-
-	var mp4Outputs []video.OutputVideoFile
+	var mp4OutputsPre []video.OutputVideoFile
 	// Transmux received segments from T into a single mp4
 	if transcodeRequest.GenerateMP4 {
+		mp4TargetUrlBase, err := url.Parse(transcodeRequest.Mp4TargetUrl)
+		if err != nil {
+			return outputs, segmentsCount, err
+		}
 		for rendition, segments := range renditionList.RenditionSegmentTable {
 			// a. create folder to hold transmux-ed files in local storage temporarily
 			err := os.MkdirAll(TRANSMUX_STORAGE_DIR, 0700)
@@ -208,25 +194,51 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				break
 			}
 
-			targetMP4URL := targetTranscodedRenditionOutputURL.JoinPath(rendition, filepath.Base(mp4OutputFile.Name()))
+			filename := fmt.Sprintf("%s.mp4", rendition)
 			err = backoff.Retry(func() error {
-				return clients.UploadToOSURL(targetMP4URL.String(), "", bufio.NewReader(mp4OutputFile), UPLOAD_TIMEOUT)
+				return clients.UploadToOSURL(mp4TargetUrlBase.String(), filename, bufio.NewReader(mp4OutputFile), UPLOAD_TIMEOUT)
 			}, clients.UploadRetryBackoff())
 			if err != nil {
 				log.Log(transcodeRequest.RequestID, "failed to upload mp4", "file", mp4OutputFile.Name())
 				break
 			}
 
-			mp4PlaybackURL := strings.ReplaceAll(targetMP4URL.String(), targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
 			mp4Out := video.OutputVideoFile{
 				Type:     "mp4",
-				Location: mp4PlaybackURL,
+				Location: mp4TargetUrlBase.JoinPath(filename).String(),
 			}
-			signedURL, err := clients.SignURL(targetMP4URL)
+			mp4OutputsPre = append(mp4OutputsPre, mp4Out)
+		}
+	}
+
+	hlsPlaybackBaseURL, mp4PlaybackBaseURL, err := clients.Publish(hlsTargetURL.String(), transcodeRequest.Mp4TargetUrl)
+	if err != nil {
+		return outputs, segmentsCount, err
+	}
+
+	var mp4Outputs []video.OutputVideoFile
+	if transcodeRequest.GenerateMP4 {
+		for _, mp4Out := range mp4OutputsPre {
+			mp4Out.Location = strings.ReplaceAll(mp4Out.Location, transcodeRequest.Mp4TargetUrl, mp4PlaybackBaseURL)
+
+			mp4TargetUrl, err := url.Parse(mp4Out.Location)
 			if err != nil {
-				return outputs, segmentsCount, fmt.Errorf("failed to create signed url for %s: %w", targetMP4URL, err)
+				return outputs, segmentsCount, fmt.Errorf("failed to parse mp4Out.Location %s: %w", mp4Out.Location, err)
 			}
-			mp4Out, err = video.PopulateOutput(video.Probe{}, signedURL, mp4Out)
+
+			var probeURL string
+			if mp4TargetUrl.Scheme == "ipfs" {
+				// probe IPFS with web3.storage URL, since ffprobe does not support "ipfs://"
+				probeURL = fmt.Sprintf("https://%s.ipfs.w3s.link/%s", mp4TargetUrl.Host, mp4TargetUrl.Path)
+			} else {
+				var err error
+				probeURL, err = clients.SignURL(mp4TargetUrl)
+				if err != nil {
+					return outputs, segmentsCount, fmt.Errorf("failed to create signed url for %s: %w", mp4TargetUrl, err)
+				}
+			}
+
+			mp4Out, err = video.PopulateOutput(video.Probe{}, probeURL, mp4Out)
 			if err != nil {
 				return outputs, segmentsCount, err
 			}
@@ -235,16 +247,42 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		}
 	}
 
-	manifestURL = strings.ReplaceAll(manifestURL, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
-	output := video.OutputVideo{Type: "object_store", Manifest: manifestURL}
-	for _, rendition := range transcodedStats {
-		videoManifestURL := strings.ReplaceAll(rendition.ManifestLocation, targetTranscodedRenditionOutputURL.String(), playbackBaseURL)
-		output.Videos = append(output.Videos, video.OutputVideoFile{Location: videoManifestURL, SizeBytes: rendition.Bytes})
+	var manifest string
+	if transcodeRequest.HlsTargetURL != "" {
+		manifest = strings.ReplaceAll(manifestURL, hlsTargetURL.String(), hlsPlaybackBaseURL)
+	} else {
+		manifest = strings.ReplaceAll(manifestURL, hlsTargetURL.String(), mp4PlaybackBaseURL)
+	}
+	output := video.OutputVideo{Type: "object_store", Manifest: manifest}
+	if transcodeRequest.HlsTargetURL != "" {
+		for _, rendition := range transcodedStats {
+			videoManifestURL := strings.ReplaceAll(rendition.ManifestLocation, hlsTargetURL.String(), hlsPlaybackBaseURL)
+			output.Videos = append(output.Videos, video.OutputVideoFile{Location: videoManifestURL, SizeBytes: rendition.Bytes})
+		}
 	}
 	output.MP4Outputs = mp4Outputs
 	outputs = []video.OutputVideo{output}
 	// Return outputs for .dtsh file creation
 	return outputs, segmentsCount, nil
+}
+
+// getHlsTargetURL extracts URL for storing rendition HLS segments.
+// If HLS output is requested, then the URL from the VOD request is used
+// If HLS output is not requested, then the URL from source_output flag is used
+func getHlsTargetURL(tsr TranscodeSegmentRequest) (*url.URL, error) {
+	if tsr.HlsTargetURL != "" {
+		hlsTargetURL, err := url.Parse(tsr.HlsTargetURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse transcodeRequest.TargetURL: %s", err)
+		}
+		return hlsTargetURL, nil
+	} else {
+		sourceOutputURL, err := url.Parse(tsr.SourceOutputURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse transcodeRequest.SourceOutputURL: %s", err)
+		}
+		return sourceOutputURL.JoinPath("rendition"), nil
+	}
 }
 
 func transcodeSegment(

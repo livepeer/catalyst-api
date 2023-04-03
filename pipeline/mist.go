@@ -16,6 +16,7 @@ import (
 )
 
 const MIST_SEGMENTING_SUBDIR = "source"
+const MIST_SEGMENTING_TARGET_MANIFEST = "index.m3u8"
 
 type mist struct {
 	MistClient      clients.MistAPIClient
@@ -27,34 +28,18 @@ func (m *mist) Name() string {
 }
 
 func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
-	targetManifestFilename := path.Base(job.TargetURL.Path)
-	targetExtension := path.Ext(targetManifestFilename)
-	if targetExtension != ".m3u8" {
-		return nil, fmt.Errorf("target output file should have .m3u8 extension, found %q", targetExtension)
-	}
-
-	var sourceOutputUrl *url.URL
-	if job.SourceOutputURL != nil {
-		// use SourceOutputURL defined in the vod request
-		sourceOutputUrl = job.SourceOutputURL
-	} else {
-		// no SourceOutputURL defined in the vod request, use SourceOutputUrl defined with the catalyst-api
-		perRequestPath, err := url.JoinPath(m.SourceOutputUrl, job.RequestID, "index.m3u8")
-		if err != nil {
-			return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
-		}
-		if sourceOutputUrl, err = url.Parse(perRequestPath); err != nil {
-			return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
-		}
-	}
-
-	segmentingTargetURL, err := inSameDirectory(*sourceOutputUrl, MIST_SEGMENTING_SUBDIR, targetManifestFilename)
+	sourceOutputBaseURL, err := url.Parse(m.SourceOutputUrl)
 	if err != nil {
-		return nil, fmt.Errorf("cannot create targetSegmentedOutputURL: %w", err)
+		return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
 	}
+	sourceOutputURL := sourceOutputBaseURL.JoinPath(job.RequestID)
+	mistSourceOutputURL := sourceOutputURL.JoinPath(MIST_SEGMENTING_TARGET_MANIFEST)
+	segmentingTargetURL := sourceOutputURL.JoinPath(MIST_SEGMENTING_SUBDIR, MIST_SEGMENTING_TARGET_MANIFEST)
+
+	job.SourceOutputURL = sourceOutputURL.String()
 	job.SegmentingTargetURL = segmentingTargetURL.String()
 
-	mistTargetURL, err := targetURLToMistTargetURL(*sourceOutputUrl, job.TargetSegmentSizeSecs)
+	mistTargetURL, err := targetURLToMistTargetURL(*mistSourceOutputURL, job.TargetSegmentSizeSecs)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create mistTargetURL: %w", err)
 	}
@@ -140,7 +125,9 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 		SourceStreamInfo:  streamInfo,
 		Profiles:          job.Profiles,
 		SourceManifestURL: job.SegmentingTargetURL,
-		TargetURL:         job.TargetURL.String(),
+		SourceOutputURL:   job.SourceOutputURL,
+		HlsTargetURL:      toStr(job.HlsTargetURL),
+		Mp4TargetUrl:      toStr(job.Mp4TargetURL),
 		RequestID:         requestID,
 		ReportProgress:    job.ReportProgress,
 		GenerateMP4:       job.GenerateMP4,
@@ -212,6 +199,13 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 			InputVideo: inputInfo,
 			Outputs:    outputs,
 		}}, nil
+}
+
+func toStr(URL *url.URL) string {
+	if URL != nil {
+		return URL.String()
+	}
+	return ""
 }
 
 func (m *mist) HandlePushEndTrigger(job *JobInfo, p PushEndPayload) (*HandlerOutput, error) {

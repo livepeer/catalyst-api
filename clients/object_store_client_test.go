@@ -43,16 +43,26 @@ func TestItFailsWithMissingFile(t *testing.T) {
 	require.Contains(t, err.Error(), "no such file or directory")
 }
 
-func TestPublishDriverSession(t *testing.T) {
+func TestPublish(t *testing.T) {
 	require := require.New(t)
 
-	s3Url := "s3+http://usename:password@bucket/hls/"
-	s3UrlRes, err := PublishDriverSession(s3Url, "whatever")
+	hlsUrl := "s3+http://username:password@bucket/hls/whatever"
+	mp4Url := "s3+http://username:password@bucket/mp4/whatever"
+	hlsPlaybackUrl, mp4PlaybackUrl, err := Publish(hlsUrl, mp4Url)
 	require.NoError(err)
-	require.Equal(s3Url, s3UrlRes)
+	require.Equal(hlsPlaybackUrl, hlsUrl)
+	require.Equal(mp4PlaybackUrl, mp4Url)
+
+	hlsUrl = "s3+http://first:first@bucket/hls/whatever"
+	mp4Url = "s3+http://second:second@bucket/mp4/whatever"
+	hlsPlaybackUrl, mp4PlaybackUrl, err = Publish(hlsUrl, mp4Url)
+	require.NoError(err)
+	require.Equal(hlsPlaybackUrl, hlsUrl)
+	require.Equal(mp4PlaybackUrl, mp4Url)
 
 	invalidUrl := "invalid://some-invalid-url"
-	invalidUrlRes, err := PublishDriverSession(invalidUrl, "whatever")
+	hlsPlaybackUrl, mp4PlaybackUrl, err = Publish(invalidUrl, invalidUrl)
 	require.Error(err)
-	require.Equal("", invalidUrlRes)
+	require.Equal("", hlsPlaybackUrl)
+	require.Equal("", mp4PlaybackUrl)
 }
