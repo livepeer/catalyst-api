@@ -303,6 +303,12 @@ func TestInvalidPayloadVODUploadHandler(t *testing.T) {
 			"callback_url": "http://localhost/callback",
 			"output_locations": [ { "type": "pinata", "pinata_access_key": "" } ]
 		}`),
+		// none of outputs enabled: hls or mp4
+		[]byte(`{
+			"url": "http://localhost/input",
+			"callback_url": "http://localhost/callback",
+			"output_locations": [ { "type": "object_store", "url": "memory://localhost/output.m3u8", "outputs": {} } ]
+		}`),
 	}
 
 	router := httprouter.New()

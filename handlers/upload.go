@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	errors2 "errors"
 	"fmt"
 	"io"
 	"mime"
@@ -159,6 +160,10 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	mp4TargetURL, err := toTargetURL(mp4TargetOutput, requestID)
 	if err != nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+	}
+
+	if hlsTargetURL == nil && mp4TargetURL == nil {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", errors2.New("none of output enabled: hls or mp4"))
 	}
 
 	if strat := uploadVODRequest.PipelineStrategy; strat != "" && !strat.IsValid() {
