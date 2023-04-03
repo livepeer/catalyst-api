@@ -22,7 +22,7 @@ Feature: Playback
     Given the gate API will deny playback
     When I query the "/asset/hls/dbe3q3g6q2kia036/index.m3u8?accessKey=secretlpkey" endpoint
     And receive a response within "3" seconds
-    Then I get an HTTP response with code "401"
+    Then I get an HTTP response with code "200"
     And the body matches file "responses/hls/unauthorised.m3u8"
 
   Scenario: No token param

@@ -51,7 +51,7 @@ func deny(requestFile string, w http.ResponseWriter) {
 	if !playback.IsManifest(requestFile) {
 		catErrs.WriteHTTPUnauthorized(w, "unauthorised", errors.New("access control denied"))
 	}
-	w.WriteHeader(http.StatusUnauthorized)
+	w.WriteHeader(http.StatusOK)
 	_, err := w.Write([]byte(`#EXTM3U
 #EXT-X-ERROR: Shutting down since this session is not allowed to view this stream
 #EXT-X-ENDLIST`))
