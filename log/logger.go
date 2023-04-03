@@ -86,6 +86,24 @@ func redactKeyvals(keyvals ...interface{}) []interface{} {
 	return res
 }
 
+func RedactLogs(str, delim string) string {
+	if delim == "" {
+		return str
+	}
+
+	splitstr := strings.Split(str, delim)
+	if len(splitstr) == 1 {
+		return str
+	}
+
+	redactedstr := []string{}
+	for _, v := range splitstr {
+		r := RedactURL(v)
+		redactedstr = append(redactedstr, r)
+	}
+	return strings.Join(redactedstr[:], delim)
+}
+
 func RedactURL(str string) string {
 	strLower := strings.ToLower(str)
 	if !strings.HasPrefix(strLower, "http") && !strings.HasPrefix(strLower, "s3") {
