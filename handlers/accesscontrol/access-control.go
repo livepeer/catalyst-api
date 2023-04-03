@@ -139,7 +139,7 @@ func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, reqUR
 	body, err := json.Marshal(acReq)
 	if err != nil {
 		glog.Errorf("Unable to get playback access control info, JSON marshalling failed. playbackId=%v", acReq.Stream)
-		return false, nil
+		return false, err
 	}
 
 	return ac.GetPlaybackAccessControlInfo(acReq.Stream, cacheKey, body)

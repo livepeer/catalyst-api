@@ -33,7 +33,7 @@ func (h *GatingHandler) GatingCheck(next httprouter.Handle) httprouter.Handle {
 		playbackAccessControlAllowed, err := h.AccessControl.IsAuthorized(playbackID, req.URL)
 		if err != nil {
 			log.LogError(requestID, "unable to get playback access control info", err, "playbackID", playbackID, playback.KeyParam, key)
-			deny(params.ByName("file"), w)
+			catErrs.WriteHTTPInternalServerError(w, "unable to get playback access control info", nil)
 			return
 		}
 
@@ -49,7 +49,7 @@ func (h *GatingHandler) GatingCheck(next httprouter.Handle) httprouter.Handle {
 
 func deny(requestFile string, w http.ResponseWriter) {
 	if !playback.IsManifest(requestFile) {
-		catErrs.WriteHTTPUnauthorized(w, "denied", errors.New("access control failed"))
+		catErrs.WriteHTTPUnauthorized(w, "unauthorised", errors.New("access control denied"))
 	}
 	w.WriteHeader(http.StatusUnauthorized)
 	_, err := w.Write([]byte(`#EXTM3U
