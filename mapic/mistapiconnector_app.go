@@ -366,8 +366,7 @@ func (mc *mac) triggerDefaultStream(w http.ResponseWriter, r *http.Request, line
 	//    haven't created new stream in Mist
 	// 2. When someone pulls HLS for stream that exists but is not active (no
 	//    RTMP stream coming in).
-	w.WriteHeader(http.StatusForbidden)
-	w.Write([]byte("false"))
+	w.Write([]byte(""))
 	return true
 }
 
