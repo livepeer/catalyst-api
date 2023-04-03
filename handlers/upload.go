@@ -218,7 +218,7 @@ func tempBackwardsCompatibilityUpdate(locations []UploadVODRequestOutputLocation
 			if l.Outputs.ForceMP4 {
 				l.Outputs.MP4 = "enabled"
 			}
-			l.URL = strings.TrimRight(l.URL, "/index.m3u8")
+			l.URL = strings.TrimSuffix(l.URL, "/index.m3u8")
 		}
 		res = append(res, l)
 	}
