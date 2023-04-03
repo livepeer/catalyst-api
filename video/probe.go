@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gopkg.in/vansante/go-ffprobe.v2"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"gopkg.in/vansante/go-ffprobe.v2"
 )
 
 type Prober interface {
@@ -81,6 +81,16 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 	if err != nil {
 		return InputVideo{}, fmt.Errorf("error parsing fps numerator from probed data: %w", err)
 	}
+
+	var rotation float64
+	for _, sideData := range videoStream.SideDataList {
+		r := getSideData[float64](sideData, "rotation")
+		if r != nil {
+			rotation = *r
+			break
+		}
+	}
+
 	// format file stats into InputVideo
 	iv := InputVideo{
 		Tracks: []InputTrack{
@@ -89,9 +99,10 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 				Codec:   videoStream.CodecName,
 				Bitrate: bitrate,
 				VideoTrack: VideoTrack{
-					Width:  int64(videoStream.Width),
-					Height: int64(videoStream.Height),
-					FPS:    fps,
+					Width:    int64(videoStream.Width),
+					Height:   int64(videoStream.Height),
+					FPS:      fps,
+					Rotation: rotation,
 				},
 			},
 		},
@@ -156,4 +167,13 @@ func parseFps(framerate string) (float64, error) {
 	}
 
 	return float64(num) / float64(den), nil
+}
+
+func getSideData[T any](sideData ffprobe.SideData, key string) *T {
+	if value, ok := sideData[key]; ok {
+		if res, ok := value.(T); ok {
+			return &res
+		}
+	}
+	return nil
 }

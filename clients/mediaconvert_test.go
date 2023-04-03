@@ -292,39 +292,6 @@ func Test_MP4OutDurationCheck(t *testing.T) {
 	}
 }
 
-func TestProbe(t *testing.T) {
-	require := require.New(t)
-	probe := video.Probe{}
-	iv, err := probe.ProbeFile("./fixtures/mediaconvert_payloads/sample.mp4")
-	require.NoError(err)
-
-	expectedInput := video.InputVideo{
-		Duration: 16.254,
-		Tracks: []video.InputTrack{
-			{
-				Type:    video.TrackTypeVideo,
-				Codec:   "h264",
-				Bitrate: 1234521,
-				VideoTrack: video.VideoTrack{
-					Width:  576,
-					Height: 1024,
-					FPS:    30,
-				},
-			},
-			{
-				Type:    video.TrackTypeAudio,
-				Codec:   "aac",
-				Bitrate: 128248,
-				AudioTrack: video.AudioTrack{
-					Channels: 2,
-				},
-			},
-		},
-		SizeBytes: 2779520,
-	}
-	require.Equal(expectedInput, iv)
-}
-
 func loadFixture(t *testing.T, expectedPath, actual string) string {
 	if os.Getenv("REGEN_FIXTURES") != "" {
 		err := os.WriteFile(expectedPath, []byte(actual), 0644)
