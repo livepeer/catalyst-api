@@ -39,7 +39,7 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 		log.LogNoRequestID(
 			"Received Mist Trigger",
 			"trigger_name", triggerName,
-			"payload", string(payload),
+			"payload", log.RedactLogs(string(payload), "\n"),
 		)
 
 		switch triggerName {

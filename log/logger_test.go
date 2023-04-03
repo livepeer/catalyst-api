@@ -38,3 +38,30 @@ func TestRedactURL(t *testing.T) {
 		RedactURL("some not url text"),
 	)
 }
+
+func TestRedactLogs(t *testing.T) {
+	// test logs actually get redacted if s3 prefix urls are detected
+	require.Equal(t,
+		"1336345\ncatalyst_vod_dgchcbad\ns3+https://THIS-SHOULD-BE:xxxxx@storage.googleapis.com/lp-us-catalyst-vod-monster/hls/c35e2oke5zht4ebx/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10\ns3+https://GOOG1ECL5LAFILBTTALJ6EFZTFJQSBC6QVRJWXEKROJW6Y2R7RZ25WPE2VNVA:xxxxx@storage.googleapis.com/lp-us-catalyst-vod-monster/hls/c35e2oke5zht4ebx/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10\n[[1679909056,\"FAIL\",\"onFail 'catalyst_vod_dgchcbad': Could not connect to stream\",\"catalyst_vod_dgchcbad\"],[1679909056,\"FAIL\",\"onFail 'catalyst_vod_dgchcbad': Stream not available for recording\",\"catalyst_vod_dgchcbad\"]]\nnull",
+		RedactLogs("1336345\ncatalyst_vod_dgchcbad\ns3+https://THIS-SHOULD-BE:REDACTED@storage.googleapis.com/lp-us-catalyst-vod-monster/hls/c35e2oke5zht4ebx/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10\ns3+https://GOOG1ECL5LAFILBTTALJ6EFZTFJQSBC6QVRJWXEKROJW6Y2R7RZ25WPE2VNVA:************************@storage.googleapis.com/lp-us-catalyst-vod-monster/hls/c35e2oke5zht4ebx/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10\n[[1679909056,\"FAIL\",\"onFail 'catalyst_vod_dgchcbad': Could not connect to stream\",\"catalyst_vod_dgchcbad\"],[1679909056,\"FAIL\",\"onFail 'catalyst_vod_dgchcbad': Stream not available for recording\",\"catalyst_vod_dgchcbad\"]]\nnull", "\n"),
+	)
+
+	// test logs actually get redacted if http prefix urls are detected
+	require.Equal(t,
+		"1336345\ncatalyst_vod_dgchcbad\nhttps://THIS-SHOULD-BE:xxxxx@storage.googleapis.com/lp-us-catalyst-vod-monster/hls/c35e2oke5zht4ebx/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10\nhttps://GOOG1ECL5LAFILBTTALJ6EFZTFJQSBC6QVRJWXEKROJW6Y2R7RZ25WPE2VNVA:xxxxx@storage.googleapis.com/lp-us-catalyst-vod-monster/hls/c35e2oke5zht4ebx/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10\n[[1679909056,\"FAIL\",\"onFail 'catalyst_vod_dgchcbad': Could not connect to stream\",\"catalyst_vod_dgchcbad\"],[1679909056,\"FAIL\",\"onFail 'catalyst_vod_dgchcbad': Stream not available for recording\",\"catalyst_vod_dgchcbad\"]]\nnull",
+		RedactLogs("1336345\ncatalyst_vod_dgchcbad\nhttps://THIS-SHOULD-BE:REDACTED@storage.googleapis.com/lp-us-catalyst-vod-monster/hls/c35e2oke5zht4ebx/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10\nhttps://GOOG1ECL5LAFILBTTALJ6EFZTFJQSBC6QVRJWXEKROJW6Y2R7RZ25WPE2VNVA:************************@storage.googleapis.com/lp-us-catalyst-vod-monster/hls/c35e2oke5zht4ebx/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10\n[[1679909056,\"FAIL\",\"onFail 'catalyst_vod_dgchcbad': Could not connect to stream\",\"catalyst_vod_dgchcbad\"],[1679909056,\"FAIL\",\"onFail 'catalyst_vod_dgchcbad': Stream not available for recording\",\"catalyst_vod_dgchcbad\"]]\nnull", "\n"),
+	)
+
+	// test we get same log string if the delimiter is not found (e.g \t instead of \n)
+	require.Equal(t,
+		"1336345\ncatalyst_vod_dgchcbad\nhttps://THIS-SHOULD-BE:REDACTED@storage.googleapis.com/lp-us-catalyst-vod-monster/hls/c35e2oke5zht4ebx/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10\nhttps://GOOG1ECL5LAFILBTTALJ6EFZTFJQSBC6QVRJWXEKROJW6Y2R7RZ25WPE2VNVA:************************@storage.googleapis.com/lp-us-catalyst-vod-monster/hls/c35e2oke5zht4ebx/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10\n[[1679909056,\"FAIL\",\"onFail 'catalyst_vod_dgchcbad': Could not connect to stream\",\"catalyst_vod_dgchcbad\"],[1679909056,\"FAIL\",\"onFail 'catalyst_vod_dgchcbad': Stream not available for recording\",\"catalyst_vod_dgchcbad\"]]\nnull",
+		RedactLogs("1336345\ncatalyst_vod_dgchcbad\nhttps://THIS-SHOULD-BE:REDACTED@storage.googleapis.com/lp-us-catalyst-vod-monster/hls/c35e2oke5zht4ebx/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10\nhttps://GOOG1ECL5LAFILBTTALJ6EFZTFJQSBC6QVRJWXEKROJW6Y2R7RZ25WPE2VNVA:************************@storage.googleapis.com/lp-us-catalyst-vod-monster/hls/c35e2oke5zht4ebx/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10\n[[1679909056,\"FAIL\",\"onFail 'catalyst_vod_dgchcbad': Could not connect to stream\",\"catalyst_vod_dgchcbad\"],[1679909056,\"FAIL\",\"onFail 'catalyst_vod_dgchcbad': Stream not available for recording\",\"catalyst_vod_dgchcbad\"]]\nnull", "\t"),
+	)
+
+	// test strings with different delimiters (e.g. \t mixed with \n)
+	require.Equal(t,
+		"1336345\tcatalyst_vod_dgchcbad\tREDACTED",
+		RedactLogs("1336345\tcatalyst_vod_dgchcbad\thttps://THIS-SHOULD-BE:REDACTED@storage.googleapis.com/lp-us-catalyst-vod-monster/hls/c35e2oke5zht4ebx/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10\nhttps://GOOG1ECL5LAFILBTTALJ6EFZTFJQSBC6QVRJWXEKROJW6Y2R7RZ25WPE2VNVA:************************@storage.googleapis.com/lp-us-catalyst-vod-monster/hls/c35e2oke5zht4ebx/source/$currentMediaTime.ts?m3u8=index.m3u8&split=10\n[[1679909056,\"FAIL\",\"onFail 'catalyst_vod_dgchcbad': Could not connect to stream\",\"catalyst_vod_dgchcbad\"],[1679909056,\"FAIL\",\"onFail 'catalyst_vod_dgchcbad': Stream not available for recording\",\"catalyst_vod_dgchcbad\"]]\nnull", "\t"),
+	)
+
+}
