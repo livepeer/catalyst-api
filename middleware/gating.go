@@ -50,6 +50,7 @@ func (h *GatingHandler) GatingCheck(next httprouter.Handle) httprouter.Handle {
 func deny(requestFile string, w http.ResponseWriter) {
 	if !playback.IsManifest(requestFile) {
 		catErrs.WriteHTTPUnauthorized(w, "unauthorised", errors.New("access control denied"))
+		return
 	}
 	w.WriteHeader(http.StatusOK)
 	_, err := w.Write([]byte(`#EXTM3U

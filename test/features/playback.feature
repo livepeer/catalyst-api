@@ -24,6 +24,10 @@ Feature: Playback
     And receive a response within "3" seconds
     Then I get an HTTP response with code "200"
     And the body matches file "responses/hls/unauthorised.m3u8"
+    When I query the "/asset/hls/dbe3q3g6q2kia036/foo.ts?accessKey=secretlpkey" endpoint
+    And receive a response within "3" seconds
+    Then I get an HTTP response with code "401"
+    And the body matches file "responses/unauthorised"
 
   Scenario: No token param
     Given the gate API will allow playback
