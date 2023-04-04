@@ -33,7 +33,7 @@ func (h *GatingHandler) GatingCheck(next httprouter.Handle) httprouter.Handle {
 		playbackAccessControlAllowed, err := h.AccessControl.IsAuthorized(playbackID, req.URL)
 		if err != nil {
 			log.LogError(requestID, "unable to get playback access control info", err, "playbackID", playbackID, playback.KeyParam, key)
-			catErrs.WriteHTTPInternalServerError(w, "unable to get playback access control info", nil)
+			catErrs.WriteHTTPInternalServerError(w, "error authorizing playback request", nil)
 			return
 		}
 
