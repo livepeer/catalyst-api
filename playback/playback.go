@@ -37,7 +37,7 @@ func Handle(req Request) (*Response, error) {
 		return nil, err
 	}
 
-	if !strings.HasSuffix(req.File, ".m3u8") {
+	if !IsManifest(req.File) {
 		return &Response{
 			Body:        f.Body,
 			ContentType: f.ContentType,
@@ -107,4 +107,8 @@ func osFetch(playbackID, file, byteRange string) (*drivers.FileInfoReader, error
 		return nil, fmt.Errorf("failed to get file for playback: %w", err)
 	}
 	return f, nil
+}
+
+func IsManifest(requestFile string) bool {
+	return strings.HasSuffix(requestFile, ".m3u8")
 }

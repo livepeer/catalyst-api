@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gopkg.in/vansante/go-ffprobe.v2"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"gopkg.in/vansante/go-ffprobe.v2"
 )
 
 type Prober interface {
