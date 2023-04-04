@@ -119,7 +119,6 @@ type (
 		createStreamLock          sync.Mutex
 		mistHot                   string
 		checkBandwidth            bool
-		sendAudio                 string
 		baseStreamName            string
 		streamInfo                map[string]*streamInfo // public key to info
 		producer                  event.AMQPProducer
@@ -731,9 +730,9 @@ func (mc *mac) baseNameForStream(stream *api.Stream) string {
 
 func (mc *mac) shouldEnableAudio(stream *api.Stream) bool {
 	audio := false
-	if mc.sendAudio == audioAlways {
+	if mc.config.MistSendAudio == audioAlways {
 		audio = true
-	} else if mc.sendAudio == audioRecord {
+	} else if mc.config.MistSendAudio == audioRecord {
 		audio = stream.Record
 	}
 	return audio
