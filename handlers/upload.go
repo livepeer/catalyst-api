@@ -23,13 +23,8 @@ import (
 )
 
 type UploadVODRequestOutputLocationOutputs struct {
-	SourceMp4          bool   `json:"source_mp4"`
-	SourceSegments     bool   `json:"source_segments"`
-	TranscodedSegments bool   `json:"transcoded_segments"`
-	ForceMP4           bool   `json:"force_mp4"`
-	AutoMP4            bool   `json:"auto_mp4"`
-	HLS                string `json:"hls"`
-	MP4                string `json:"mp4"`
+	HLS string `json:"hls"`
+	MP4 string `json:"mp4"`
 }
 
 type UploadVODRequestOutputLocation struct {
@@ -138,9 +133,6 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 	}
 
-	// TODO: Remove after task-runner is updated everywhere to the recent version
-	uploadVODRequest.OutputLocations = tempBackwardsCompatibilityUpdate(uploadVODRequest.OutputLocations)
-
 	// If the segment size isn't being overridden then use the default
 	if uploadVODRequest.TargetSegmentSizeSecs <= 0 {
 		uploadVODRequest.TargetSegmentSizeSecs = config.DefaultSegmentSizeSecs
@@ -201,28 +193,6 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	}
 
 	return true, errors.APIError{}
-}
-
-// Temp function to support backwards-compatibility between task-runner and catalyst
-// TODO: Remove after all task-runner instances are updated to the most recent version
-func tempBackwardsCompatibilityUpdate(locations []UploadVODRequestOutputLocation) []UploadVODRequestOutputLocation {
-	var res []UploadVODRequestOutputLocation
-	for _, l := range locations {
-		if l.Outputs.HLS == "" && l.Outputs.MP4 == "" {
-			if l.Outputs.TranscodedSegments {
-				l.Outputs.HLS = "enabled"
-			}
-			if l.Outputs.AutoMP4 {
-				l.Outputs.MP4 = "only_short"
-			}
-			if l.Outputs.ForceMP4 {
-				l.Outputs.MP4 = "enabled"
-			}
-			l.URL = strings.TrimSuffix(l.URL, "/index.m3u8")
-		}
-		res = append(res, l)
-	}
-	return res
 }
 
 func toTargetURL(ol UploadVODRequestOutputLocation, reqID string) (*url.URL, error) {

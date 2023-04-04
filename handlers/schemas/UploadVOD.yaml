@@ -41,13 +41,11 @@ properties:
             format: "uri"
           outputs:
             type: "object"
-            properites:
-              source_mp4:
-                type: "boolean"
-              source_segments:
-                type: "boolean"
-              transcoded_segments:
-                type: "boolean"
+            properties:
+              hls:
+                type: "string"
+              mp4:
+                type: "string"
         required:
         - "type"
         - "url"
@@ -62,13 +60,11 @@ properties:
             minLength: 1
           outputs:
             type: "object"
-            properites:
-              source_mp4:
-                type: "boolean"
-              source_segments:
-                type: "boolean"
-              transcoded_segments:
-                type: "boolean"
+            properties:
+              hls:
+                type: "string"
+              mp4:
+                type: "string"
         required:
         - "type"
         - "pinata_access_key"

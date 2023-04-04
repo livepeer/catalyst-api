@@ -223,15 +223,14 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 				"type": "object_store",
 				"url": "memory://localhost/output.m3u8",
  				"outputs": {
-					"source_segments": true,
-					"transcoded_segments": true
+					"hls": "enabled"
 				}
 			},
 			{
 				"type": "pinata",
 				"pinata_access_key": "abc",
  				"outputs": {
-					"transcoded_segments": true
+					"hls": "enabled"
 				}
 			}
 		]
