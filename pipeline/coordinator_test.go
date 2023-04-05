@@ -726,6 +726,19 @@ func Test_checkMistCompatible(t *testing.T) {
 			},
 		},
 	}
+	largeVideo := video.InputVideo{
+		Tracks: []video.InputTrack{
+			{
+				Codec: "h264",
+				Type:  video.TrackTypeVideo,
+			},
+			{
+				Codec: "aac",
+				Type:  video.TrackTypeAudio,
+			},
+		},
+		SizeBytes: 105906176, // 101 Megabytes
+	}
 	tests := []struct {
 		name          string
 		args          args
@@ -809,6 +822,15 @@ func Test_checkMistCompatible(t *testing.T) {
 			args: args{
 				strategy: StrategyFallbackExternal,
 				iv:       videoRotation,
+			},
+			want:          StrategyExternalDominance,
+			wantSupported: false,
+		},
+		{
+			name: "incompatible with mist - large video",
+			args: args{
+				strategy: StrategyFallbackExternal,
+				iv:       largeVideo,
 			},
 			want:          StrategyExternalDominance,
 			wantSupported: false,
