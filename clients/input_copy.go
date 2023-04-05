@@ -34,7 +34,7 @@ type InputCopy struct {
 
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
 func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
-	if strings.HasSuffix(inputFile.Host, "storage.googleapis.com") && strings.HasPrefix(inputFile.Path, "/directUpload") {
+	if isDirectUpload(inputFile) {
 		log.Log(requestID, "Direct upload detected", "source", inputFile.String())
 		signedURL = inputFile.String()
 		osTransferURL = inputFile
@@ -93,6 +93,12 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVi
 	log.Log(requestID, "probed video track:", "codec", videoTrack.Codec, "bitrate", videoTrack.Bitrate, "duration", videoTrack.DurationSec, "w", videoTrack.Width, "h", videoTrack.Height, "pix-format", videoTrack.PixelFormat, "FPS", videoTrack.FPS)
 	log.Log(requestID, "probed audio track", "codec", audioTrack.Codec, "bitrate", audioTrack.Bitrate, "duration", audioTrack.DurationSec, "channels", audioTrack.Channels)
 	return
+}
+
+func isDirectUpload(inputFile *url.URL) bool {
+	return strings.HasSuffix(inputFile.Host, "storage.googleapis.com") &&
+		strings.HasPrefix(inputFile.Path, "/directUpload") &&
+		(inputFile.Scheme == "https" || inputFile.Scheme == "http")
 }
 
 func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
