@@ -2,12 +2,12 @@ package clients
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -23,36 +23,48 @@ const MaxCopyFileDuration = 2 * time.Hour
 const PresignDuration = 24 * time.Hour
 
 type InputCopier interface {
-	CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL) (video.InputVideo, string, error)
+	CopyInputToS3(requestID string, inputFile *url.URL) (video.InputVideo, string, *url.URL, error)
 }
 
 type InputCopy struct {
-	S3    S3
-	Probe video.Prober
+	S3              S3
+	Probe           video.Prober
+	SourceOutputUrl string
 }
 
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
-func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL) (inputVideoProbe video.InputVideo, signedURL string, err error) {
-	if osTransferURL == nil {
-		err = errors.New("osTransferURL was nil")
-		return
-	}
+func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
+	if isDirectUpload(inputFile) {
+		log.Log(requestID, "Direct upload detected", "source", inputFile.String())
+		signedURL = inputFile.String()
+		osTransferURL = inputFile
+	} else {
+		var (
+			size            int64
+			sourceOutputUrl *url.URL
+		)
+		sourceOutputUrl, err = url.Parse(s.SourceOutputUrl)
+		if err != nil {
+			err = fmt.Errorf("cannot create sourceOutputUrl: %w", err)
+			return
+		}
+		osTransferURL = sourceOutputUrl.JoinPath(requestID, "transfer", path.Base(inputFile.Path))
+		log.Log(requestID, "Copying input file to S3", "source", inputFile.String(), "dest", osTransferURL.String())
+		size, err = CopyFile(context.Background(), inputFile.String(), osTransferURL.String(), "", requestID)
+		if err != nil {
+			err = fmt.Errorf("error copying input file to S3: %w", err)
+			return
+		}
+		if size <= 0 {
+			err = fmt.Errorf("zero bytes found for source: %s", inputFile)
+			return
+		}
+		log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", osTransferURL.String())
 
-	log.Log(requestID, "Copying input file to S3", "source", inputFile.String(), "dest", osTransferURL.String())
-	size, err := CopyFile(context.Background(), inputFile.String(), osTransferURL.String(), "", requestID)
-	if err != nil {
-		err = fmt.Errorf("error copying input file to S3: %w", err)
-		return
-	}
-	if size <= 0 {
-		err = fmt.Errorf("zero bytes found for source: %s", inputFile)
-		return
-	}
-	log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", osTransferURL.String())
-
-	signedURL, err = SignURL(osTransferURL)
-	if err != nil {
-		return
+		signedURL, err = SignURL(osTransferURL)
+		if err != nil {
+			return
+		}
 	}
 
 	log.Log(requestID, "starting probe", "source", inputFile.String(), "dest", osTransferURL.String())
@@ -81,6 +93,12 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 	log.Log(requestID, "probed video track:", "codec", videoTrack.Codec, "bitrate", videoTrack.Bitrate, "duration", videoTrack.DurationSec, "w", videoTrack.Width, "h", videoTrack.Height, "pix-format", videoTrack.PixelFormat, "FPS", videoTrack.FPS)
 	log.Log(requestID, "probed audio track", "codec", audioTrack.Codec, "bitrate", audioTrack.Bitrate, "duration", audioTrack.DurationSec, "channels", audioTrack.Channels)
 	return
+}
+
+func isDirectUpload(inputFile *url.URL) bool {
+	return strings.HasSuffix(inputFile.Host, "storage.googleapis.com") &&
+		strings.HasPrefix(inputFile.Path, "/directUpload") &&
+		(inputFile.Scheme == "https" || inputFile.Scheme == "http")
 }
 
 func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
@@ -158,6 +176,6 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 
 type StubInputCopy struct{}
 
-func (s *StubInputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL) (inputVideoProbe video.InputVideo, signedURL string, err error) {
-	return video.InputVideo{}, "", nil
+func (s *StubInputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (video.InputVideo, string, *url.URL, error) {
+	return video.InputVideo{}, "", &url.URL{}, nil
 }

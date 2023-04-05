@@ -139,10 +139,9 @@ type Coordinator struct {
 
 	pipeMist, pipeExternal Handler
 
-	Jobs            *cache.Cache[*JobInfo]
-	MetricsDB       *sql.DB
-	InputCopy       clients.InputCopier
-	SourceOutputUrl string
+	Jobs      *cache.Cache[*JobInfo]
+	MetricsDB *sql.DB
+	InputCopy clients.InputCopier
 }
 
 func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
@@ -172,9 +171,9 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 		Jobs:         cache.New[*JobInfo](),
 		MetricsDB:    metricsDB,
 		InputCopy: &clients.InputCopy{
-			Probe: video.Probe{},
+			Probe:           video.Probe{},
+			SourceOutputUrl: sourceOutputURL,
 		},
-		SourceOutputUrl: sourceOutputURL,
 	}, nil
 }
 
@@ -231,18 +230,12 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 			return nil, fmt.Errorf("error parsing source as url: %w", err)
 		}
 
-		sourceOutputUrl, err := url.Parse(c.SourceOutputUrl)
-		if err != nil {
-			return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
-		}
-		newSourceURL := sourceOutputUrl.JoinPath(si.RequestID, "transfer", path.Base(sourceURL.Path))
-
-		inputVideoProbe, signedURL, err := c.InputCopy.CopyInputToS3(si.RequestID, sourceURL, newSourceURL)
+		inputVideoProbe, signedNewSourceURL, newSourceURL, err := c.InputCopy.CopyInputToS3(si.RequestID, sourceURL)
 		if err != nil {
 			return nil, fmt.Errorf("error copying input to storage: %w", err)
 		}
-		p.SourceFile = newSourceURL.String()
-		p.SignedSourceURL = signedURL
+		p.SourceFile = newSourceURL.String()   // OS URL used by mist
+		p.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert
 		p.InputFileInfo = inputVideoProbe
 		p.GenerateMP4 = func(mp4TargetUrl *url.URL, mp4OnlyShort bool, duration float64) bool {
 			if mp4TargetUrl != nil && (!mp4OnlyShort || duration <= maxMP4OutDuration.Seconds()) {
@@ -252,7 +245,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		}(p.Mp4TargetURL, p.Mp4OnlyShort, p.InputFileInfo.Duration)
 
 		log.AddContext(si.RequestID, "new_source_url", newSourceURL)
-		log.AddContext(si.RequestID, "signed_url", signedURL)
+		log.AddContext(si.RequestID, "signed_url", signedNewSourceURL)
 
 		c.startUploadJob(p)
 		return nil, nil

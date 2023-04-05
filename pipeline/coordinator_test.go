@@ -61,7 +61,10 @@ func setupTransferDir(t *testing.T, coor *Coordinator) (inputFile *os.File, tran
 		require.NoError(t, inputFile.Close())
 	}
 
-	coor.SourceOutputUrl = transferDir
+	coor.InputCopy = &clients.InputCopy{
+		Probe:           video.Probe{},
+		SourceOutputUrl: transferDir,
+	}
 	return
 }
 
@@ -493,6 +496,8 @@ func Test_ProbeErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			callbackHandler, callbacks := callbacksRecorder()
 			coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil, "")
+			inputFile, transferDir, cleanup := setupTransferDir(t, coord)
+			defer cleanup()
 			coord.InputCopy = &clients.InputCopy{
 				Probe: stubFFprobe{
 					FPS:  tt.fps,
@@ -500,9 +505,8 @@ func Test_ProbeErrors(t *testing.T) {
 					Size: tt.size,
 					Err:  tt.probeErr,
 				},
+				SourceOutputUrl: transferDir,
 			}
-			inputFile, _, cleanup := setupTransferDir(t, coord)
-			defer cleanup()
 
 			job := testJob
 			job.SourceFile = "file://" + inputFile.Name()
