@@ -294,8 +294,8 @@ func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 // checkMistCompatible checks if the input codecs are compatible with mist and overrides the pipeline strategy
 // to external if they are incompatible
 func checkMistCompatible(requestID string, strategy Strategy, iv video.InputVideo) (bool, Strategy) {
-	// Mist currently struggles with large files, so we don't send it any files bigger than 100Mb
-	if iv.SizeBytes > 1024*1024*100 {
+	// Mist currently struggles with large files, so we don't send it any files bigger than 200Mb
+	if iv.SizeBytes > 1024*1024*200 {
 		return mistNotSupported(strategy)
 	}
 
