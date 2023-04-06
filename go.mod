@@ -12,7 +12,7 @@ require (
 	github.com/golang/glog v1.1.1
 	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.3.0
-	github.com/hashicorp/memberlist v0.1.3
+	github.com/hashicorp/memberlist v0.5.0
 	github.com/hashicorp/serf v0.8.2
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/lib/pq v1.10.7
