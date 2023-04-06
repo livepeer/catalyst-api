@@ -58,6 +58,14 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}
 	}
+	if payload == "a valid ffmpeg upload vod request" {
+		req := DefaultUploadRequest
+		req.URL = "file://" + sourceFile.Name()
+		req.PipelineStrategy = "ffmpeglivepeer"
+		if payload, err = req.ToJSON(); err != nil {
+			return fmt.Errorf("failed to build upload request JSON: %s", err)
+		}
+	}
 	if payload == "a valid upload vod request with a custom segment size" {
 		req := DefaultUploadRequest
 		req.URL = "file://" + sourceFile.Name()
