@@ -741,7 +741,7 @@ func Test_checkMistCompatible(t *testing.T) {
 				Type:  video.TrackTypeAudio,
 			},
 		},
-		SizeBytes: 525336576, // 201 Megabytes
+		SizeBytes: 1074790400, // 1025 Megabytes
 	}
 	tests := []struct {
 		name          string

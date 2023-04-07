@@ -36,7 +36,7 @@ const MaxSegmentSizeSecs = 20
 const MAX_JOBS_IN_FLIGHT = 8
 
 // How big an input file has to be before we avoid routing it to Mist (because of known issues handling large files)
-const MAX_MIST_INPUT_SIZE_BYTES = 1024 * 1024 * 500
+const MAX_MIST_INPUT_SIZE_BYTES = 1024 * 1024 * 1024
 
 // The maximum allowed input file size
 const MaxInputFileSizeBytes = 30 * 1024 * 1024 * 1024 // 30 GiB
