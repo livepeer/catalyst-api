@@ -35,16 +35,17 @@ type UploadVODRequestOutputLocation struct {
 }
 
 type UploadVODRequest struct {
-	Url             string                           `json:"url"`
-	CallbackUrl     string                           `json:"callback_url"`
-	OutputLocations []UploadVODRequestOutputLocation `json:"output_locations,omitempty"`
-	AccessToken     string                           `json:"accessToken"`
-	TranscodeAPIUrl string                           `json:"transcodeAPIUrl"`
+	Url			string					`json:"url"`
+	CallbackUrl		string					`json:"callback_url"`
+	OutputLocations		[]UploadVODRequestOutputLocation	`json:"output_locations,omitempty"`
+	AccessToken		string					`json:"accessToken"`
+	TranscodeAPIUrl		string					`json:"transcodeAPIUrl"`
+	SourceManifestUrl	string                  		`json:"sourceManifestUrl"`
 
 	// Forwarded to transcoding stage:
-	TargetSegmentSizeSecs int64                  `json:"target_segment_size_secs"`
-	Profiles              []video.EncodedProfile `json:"profiles"`
-	PipelineStrategy      pipeline.Strategy      `json:"pipeline_strategy"`
+	TargetSegmentSizeSecs	int64					`json:"target_segment_size_secs"`
+	Profiles		[]video.EncodedProfile			`json:"profiles"`
+	PipelineStrategy	pipeline.Strategy			`json:"pipeline_strategy"`
 }
 
 type UploadVODResponse struct {
@@ -125,13 +126,15 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 	}
 
-	// Generate a Request ID that will be used throughout all logging
-	var requestID = config.RandomTrailer(8)
-	log.AddContext(requestID, "source", uploadVODRequest.Url)
-
-	if err := CheckSourceURLValid(uploadVODRequest.Url); err != nil {
+	// Select the correct URL for the source file URL and verify it's valid
+	sourceFileURL, err := CheckSourceURLValid(uploadVODRequest.Url, uploadVODRequest.SourceManifestUrl)
+	if err != nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 	}
+
+	// Generate a Request ID that will be used throughout all logging
+	var requestID = config.RandomTrailer(8)
+	log.AddContext(requestID, "source", sourceFileURL)
 
 	// If the segment size isn't being overridden then use the default
 	if uploadVODRequest.TargetSegmentSizeSecs <= 0 {
@@ -168,7 +171,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	// from the API call and free up the HTTP connection
 
 	d.VODEngine.StartUploadJob(pipeline.UploadJobPayload{
-		SourceFile:            uploadVODRequest.Url,
+		SourceFile:            sourceFileURL,
 		CallbackURL:           uploadVODRequest.CallbackUrl,
 		HlsTargetURL:          hlsTargetURL,
 		Mp4TargetURL:          mp4TargetURL,
@@ -213,19 +216,28 @@ func toTargetURL(ol UploadVODRequestOutputLocation, reqID string) (*url.URL, err
 	return nil, nil
 }
 
-func CheckSourceURLValid(sourceURL string) error {
-	if sourceURL == "" {
-		return fmt.Errorf("empty source URL")
+func CheckSourceURLValid(sourceURL, sourceManifestURL string) (string, error) {
+	var source string
+	// The incoming request can use either the 'url' field (for mp4 sources) 
+	// or the 'sourceManifestUrl' field (for hls sources e.g. recordings)
+	if sourceURL == "" && sourceManifestURL == "" {
+		return "", fmt.Errorf("empty source URL")
+	} else if sourceURL != "" && sourceManifestURL != "" {
+		return "", fmt.Errorf("cannot specify both 'url' and 'sourceManifestUrl' in request")
+	} else if sourceURL != "" && sourceManifestURL == "" {
+		source = sourceURL
+	} else if sourceURL == "" && sourceManifestURL != "" {
+		source = sourceManifestURL
 	}
 
-	u, err := url.Parse(sourceURL)
+	u, err := url.Parse(source)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if strings.HasSuffix(u.Hostname(), ".local") {
-		return fmt.Errorf(".local domains are not valid")
+		return "", fmt.Errorf(".local domains are not valid")
 	}
 
-	return nil
+	return source, nil
 }

@@ -32,7 +32,9 @@ type InputCopy struct {
 	SourceOutputUrl string
 }
 
-// CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
+// For non-direct-uploads, CopyInputToS3 copies the input video to our S3 transfer bucket.
+// For direct uploads, no copy is done since it's already in our GCP bucket.
+// In boths of the above cases, this function also probes the input file.
 func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
 	if isDirectUpload(inputFile) {
 		log.Log(requestID, "Direct upload detected", "source", inputFile.String())
@@ -97,7 +99,7 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVi
 
 func isDirectUpload(inputFile *url.URL) bool {
 	return strings.HasSuffix(inputFile.Host, "storage.googleapis.com") &&
-		strings.HasPrefix(inputFile.Path, "/directUpload") &&
+		(strings.HasPrefix(inputFile.Path, "/directUpload") || strings.Contains(inputFile.Path, "recording")) &&
 		(inputFile.Scheme == "https" || inputFile.Scheme == "http")
 }
 
