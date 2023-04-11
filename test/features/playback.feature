@@ -43,3 +43,13 @@ Feature: Playback
     And receive a response within "3" seconds
     Then I get an HTTP response with code "200"
     And the gate API will be called 1 times
+
+  Scenario: HEAD requests
+    Given the gate API will allow playback
+    When I query the "/asset/hls/dbe3q3g6q2kia036/index.m3u8?accessKey=secretlpkey" endpoint with "HEAD"
+    And receive a response within "3" seconds
+    Then I get an HTTP response with code "200"
+    And the headers match
+      | key                         | value |
+      | accept-ranges               | bytes |
+      | Access-Control-Allow-Origin | *     |

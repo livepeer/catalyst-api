@@ -9,18 +9,23 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/cucumber/godog"
 )
 
-func (s *StepContext) CreateGetRequest(endpoint string) error {
-	return s.getRequest(s.BaseURL, endpoint)
+func (s *StepContext) CreateRequest(endpoint, _, method string) error {
+	return s.request(s.BaseURL, endpoint, method)
 }
 
 func (s *StepContext) CreateGetRequestInternal(endpoint string) error {
-	return s.getRequest(s.BaseInternalURL, endpoint)
+	return s.request(s.BaseInternalURL, endpoint, "")
 }
 
-func (s *StepContext) getRequest(baseURL, endpoint string) error {
-	r, err := http.NewRequest(http.MethodGet, baseURL+endpoint, nil)
+func (s *StepContext) request(baseURL, endpoint, method string) error {
+	if method == "" {
+		method = http.MethodGet
+	}
+	r, err := http.NewRequest(method, baseURL+endpoint, nil)
 	if err != nil {
 		return err
 	}
@@ -233,5 +238,23 @@ func (s *StepContext) CheckRecordedMetrics(metricsType string) error {
 		return fmt.Errorf("not a valid upload_vod_request_count metric")
 	}
 
+	return nil
+}
+
+func (s *StepContext) CheckHTTPHeaders(expectedHeaders *godog.Table) error {
+	for i, row := range expectedHeaders.Rows {
+		if i < 1 {
+			continue // skip header row
+		}
+		if len(row.Cells) < 2 {
+			continue
+		}
+		expectedKey := row.Cells[0]
+		expectedValue := row.Cells[1]
+		actualValue := s.latestResponse.Header.Get(expectedKey.Value)
+		if expectedValue.Value != actualValue {
+			return fmt.Errorf("expected to get header %s with value %s. got: %s", expectedKey.Value, expectedValue.Value, actualValue)
+		}
+	}
 	return nil
 }
