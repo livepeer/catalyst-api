@@ -46,7 +46,7 @@ func TestVODHandlerProfiles(t *testing.T) {
 	// Create temporary manifest + segment files on the local filesystem
 	tmpDir := os.TempDir()
 	inputUrl := createTempManifest(t, path.Join(tmpDir, "/live/peer/test"))
-	outputDirUrl := strings.TrimRight(inputUrl, "index.m3u8")
+	outputDirUrl := strings.TrimSuffix(inputUrl, "index.m3u8")
 
 	// Define profiles
 	profiles := []video.EncodedProfile{

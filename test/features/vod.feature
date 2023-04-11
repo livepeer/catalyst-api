@@ -41,4 +41,6 @@ Scenario: Submit a video asset to stream as VOD with the FFMPEG / Livepeer pipel
     And receive a response within "3" seconds
     Then I get an HTTP response with code "200"
     And my "successful" request metrics get recorded
+    And all of the source segments are written to storage within "10" seconds
+    And the source manifest is written to storage within "5" seconds
     # TODO: Check for callbacks being received and transcoding success

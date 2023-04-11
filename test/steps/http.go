@@ -118,6 +118,11 @@ func (s *StepContext) CallAPI() error {
 	return nil
 }
 
+func (s *StepContext) Wait() error {
+	time.Sleep(time.Second * 5)
+	return nil
+}
+
 func (s *StepContext) CheckHTTPResponseCodeAndBody(code int, expectedBody string) error {
 	err := s.CheckHTTPResponseCode(code)
 	if err != nil {

@@ -158,7 +158,7 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 		var err error
 		extTranscoder, err = clients.ParseTranscodeProviderURL(extTranscoderURL)
 		if err != nil {
-			return nil, fmt.Errorf("error creting external transcoder: %v", err)
+			return nil, fmt.Errorf("error creating external transcoder: %v", err)
 		}
 	}
 	if strategy != StrategyCatalystDominance && extTranscoder == nil {

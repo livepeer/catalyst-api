@@ -13,6 +13,7 @@ import (
 
 var baseURL = "http://127.0.0.1:8989"
 var baseInternalURL = "http://127.0.0.1:7979"
+var sourceOutputDir string
 var app *exec.Cmd
 
 func init() {
@@ -46,7 +47,8 @@ func init() {
 }
 
 func startApp() error {
-	app = exec.Command("./app", "-private-bucket", "fixtures/playback-bucket", "-gate-url", "http://localhost:3000/api/access-control/gate", "-source-output", fmt.Sprintf("file://%s/%s/", os.TempDir(), "livepeer/source"))
+	sourceOutputDir = fmt.Sprintf("file://%s/%s/", os.TempDir(), "livepeer/source")
+	app = exec.Command("./app", "-private-bucket", "fixtures/playback-bucket", "-gate-url", "http://localhost:3000/api/access-control/gate", "-source-output", sourceOutputDir)
 	outfile, err := os.Create("logs/app.log")
 	if err != nil {
 		return err
@@ -69,6 +71,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	var stepContext = steps.StepContext{
 		BaseURL:         baseURL,
 		BaseInternalURL: baseInternalURL,
+		SourceOutputDir: sourceOutputDir,
 	}
 
 	ctx.Step(`^the VOD API is running$`, startApp)
@@ -83,6 +86,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^I submit to the "([^"]*)" endpoint with "([^"]*)"$`, stepContext.CreatePostRequest)
 	ctx.Step(`^I submit to the internal "([^"]*)" endpoint with "([^"]*)"$`, stepContext.CreatePostRequestInternal)
 	ctx.Step(`^receive a response within "(\d+)" seconds$`, stepContext.CallAPI)
+	ctx.Step(`^we wait for 5 seconds$`, stepContext.Wait)
 	ctx.Step(`^I get an HTTP response with code "([^"]*)"$`, stepContext.CheckHTTPResponseCode)
 	ctx.Step(`^I get an HTTP response with code "([^"]*)" and the following body "([^"]*)"$`, stepContext.CheckHTTPResponseCodeAndBody)
 	ctx.Step(`^my "((failed)|(successful))" request metrics get recorded$`, stepContext.CheckRecordedMetrics)
@@ -91,6 +95,8 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the gate API will (allow|deny) playback$`, stepContext.SetGateAPIResponse)
 	ctx.Step(`^the gate API will be called (\d+) times$`, stepContext.CheckGateAPICallCount)
 	ctx.Step(`^the headers match$`, stepContext.CheckHTTPHeaders)
+	ctx.Step(`^all of the source segments are written to storage within "([^"]*)" seconds$`, stepContext.AllOfTheSourceSegmentsAreWrittenToStorageWithinSeconds)
+	ctx.Step(`^the source manifest is written to storage within "([^"]*)" seconds$`, stepContext.TheSourceManifestIsWrittenToStorageWithinSeconds)
 
 	ctx.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
 		if app != nil && app.Process != nil {

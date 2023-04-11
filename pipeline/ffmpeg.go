@@ -1,15 +1,20 @@
 package pipeline
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"net/url"
+	"os/exec"
+	"strings"
 
 	"github.com/livepeer/catalyst-api/clients"
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/log"
 )
 
 type ffmpeg struct {
+	// The base of where to output source segments to
 	SourceOutputUrl string
 }
 
@@ -31,15 +36,38 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	job.SegmentingTargetURL = segmentingTargetURL.String()
 	log.AddContext(job.RequestID, "segmented_url", job.SegmentingTargetURL)
 
-	// TODO: Segment
+	// Begin Segmenting
 	log.Log(job.RequestID, "Beginning segmenting via FFMPEG/Livepeer pipeline")
 	job.ReportProgress(clients.TranscodeStatusPreparing, 0.5)
 
-	// TODO: Segmenting Finished
+	// FFMPEG fails when presented with a raw IP + Path type URL, so we prepend "http://" to it
+	internalAddress := config.HTTPInternalAddress
+	if !strings.HasPrefix(internalAddress, "http") {
+		internalAddress = "http://" + internalAddress
+	}
+
+	cmd := exec.Command(
+		"ffmpeg",
+		"-i", job.SourceFile,
+		"-c", "copy",
+		"-f", "hls",
+		"-method", "PUT",
+		// TODO: Don't hardcode this URL
+		fmt.Sprintf("%s/api/ffmpeg/%s/index.m3u8", internalAddress, job.StreamName),
+	)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		log.LogError(job.RequestID, "error segmenting via ffmpeg", err, "stdout", stdout.String(), "stderr", stderr.String())
+		return nil, err
+	}
+
+	// Segmenting Finished
 	job.ReportProgress(clients.TranscodeStatusPreparingCompleted, 1)
-	log.Log(job.RequestID, "Beginning transcoding via FFMPEG/Livepeer pipeline")
 
 	// TODO: Transcode
+	log.Log(job.RequestID, "Beginning transcoding via FFMPEG/Livepeer pipeline")
 	job.ReportProgress(clients.TranscodeStatusTranscoding, 0.5)
 
 	// TODO: Transcoding Finished

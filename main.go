@@ -19,6 +19,7 @@ import (
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
+
 	//"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/catalyst-api/pipeline"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
@@ -121,6 +122,7 @@ func main() {
 	config.ImportArweaveGatewayURLs = cli.ImportArweaveGatewayURLs
 	config.RecordingCallback = cli.RecordingCallback
 	config.PrivateBucketURL = cli.PrivateBucketURL
+	config.HTTPInternalAddress = cli.HTTPInternalAddress
 
 	var (
 		metricsDB *sql.DB
