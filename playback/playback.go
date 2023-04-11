@@ -27,8 +27,10 @@ type Request struct {
 }
 
 type Response struct {
-	Body        io.ReadCloser
-	ContentType string
+	Body          io.ReadCloser
+	ContentType   string
+	ContentLength *int64
+	ETag          string
 }
 
 func Handle(req Request) (*Response, error) {
@@ -39,8 +41,10 @@ func Handle(req Request) (*Response, error) {
 
 	if !IsManifest(req.File) {
 		return &Response{
-			Body:        f.Body,
-			ContentType: f.ContentType,
+			Body:          f.Body,
+			ContentType:   f.ContentType,
+			ContentLength: f.Size,
+			ETag:          f.ETag,
 		}, nil
 	}
 	// don't close the body for non-manifest files where we return above as we simply proxying the body back

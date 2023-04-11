@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -36,11 +37,30 @@ func PlaybackHandler() httprouter.Handle {
 		}
 		defer response.Body.Close()
 
+		w.Header().Set("accept-ranges", "bytes")
 		w.Header().Set("content-type", response.ContentType)
+		if response.ContentLength != nil {
+			w.Header().Set("content-length", fmt.Sprintf("%d", *response.ContentLength))
+		}
+		w.Header().Set("etag", response.ETag)
+		w.WriteHeader(http.StatusOK)
+
+		if req.Method == http.MethodHead {
+			return
+		}
 		_, err = io.Copy(w, response.Body)
 		if err != nil {
 			log.LogError(requestID, "failed to write response", err)
 		}
+	}
+}
+
+func PlaybackOptionsHandler() httprouter.Handle {
+	return func(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
+		w.Header().Set("allow", "GET, HEAD, OPTIONS")
+		w.Header().Set("content-length", "0")
+		w.Header().Set("accept-ranges", "bytes")
+		w.WriteHeader(http.StatusOK)
 	}
 }
 

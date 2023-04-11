@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/cucumber/godog"
 	"github.com/livepeer/catalyst-api/test/steps"
@@ -59,8 +58,8 @@ func startApp() error {
 		return err
 	}
 
-	// Wait for app to start - TODO: Be smarter and do this with a healthcheck
-	time.Sleep(2 * time.Second)
+	// Wait for app to start
+	steps.WaitForStartup(baseURL + "/ok")
 
 	return nil
 }
@@ -79,7 +78,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^Mist is running at "([^"]*)"$`, stepContext.StartMist)
 	ctx.Step(`^ffmpeg is available$`, stepContext.CheckFfmpeg)
 
-	ctx.Step(`^I query the "([^"]*)" endpoint$`, stepContext.CreateGetRequest)
+	ctx.Step(`^I query the "([^"]*)" endpoint( with "([^"]*)")?$`, stepContext.CreateRequest)
 	ctx.Step(`^I query the internal "([^"]*)" endpoint$`, stepContext.CreateGetRequestInternal)
 	ctx.Step(`^I submit to the "([^"]*)" endpoint with "([^"]*)"$`, stepContext.CreatePostRequest)
 	ctx.Step(`^I submit to the internal "([^"]*)" endpoint with "([^"]*)"$`, stepContext.CreatePostRequestInternal)
@@ -91,6 +90,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the body matches file "([^"]*)"$`, stepContext.CheckHTTPResponseBodyFromFile)
 	ctx.Step(`^the gate API will (allow|deny) playback$`, stepContext.SetGateAPIResponse)
 	ctx.Step(`^the gate API will be called (\d+) times$`, stepContext.CheckGateAPICallCount)
+	ctx.Step(`^the headers match$`, stepContext.CheckHTTPHeaders)
 
 	ctx.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
 		if app != nil && app.Process != nil {
