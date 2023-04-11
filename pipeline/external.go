@@ -63,7 +63,7 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	}, nil
 }
 
-// Boilerlplate to implement the Handler interface
+// Boilerplate to implement the Handler interface
 
 func (e *external) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*HandlerOutput, error) {
 	return nil, errors.New("unexpected RECORDING_END trigger on external transcode provider pipeline")

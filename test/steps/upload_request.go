@@ -1,6 +1,8 @@
 package steps
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 type Output struct {
 	HLS string `json:"hls,omitempty"`
@@ -17,6 +19,7 @@ type UploadRequest struct {
 	CallbackURL           string           `json:"callback_url,omitempty"`
 	TargetSegmentSizeSecs int64            `json:"target_segment_size_secs,omitempty"`
 	OutputLocations       []OutputLocation `json:"output_locations,omitempty"`
+	PipelineStrategy      string           `json:"pipeline_strategy,omitempty"`
 }
 
 var DefaultUploadRequest = UploadRequest{

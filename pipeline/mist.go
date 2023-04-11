@@ -15,8 +15,8 @@ import (
 	"github.com/livepeer/catalyst-api/video"
 )
 
-const MIST_SEGMENTING_SUBDIR = "source"
-const MIST_SEGMENTING_TARGET_MANIFEST = "index.m3u8"
+const SEGMENTING_SUBDIR = "source"
+const SEGMENTING_TARGET_MANIFEST = "index.m3u8"
 
 type mist struct {
 	MistClient      clients.MistAPIClient
@@ -33,8 +33,8 @@ func (m *mist) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
 	}
 	sourceOutputURL := sourceOutputBaseURL.JoinPath(job.RequestID)
-	mistSourceOutputURL := sourceOutputURL.JoinPath(MIST_SEGMENTING_TARGET_MANIFEST)
-	segmentingTargetURL := sourceOutputURL.JoinPath(MIST_SEGMENTING_SUBDIR, MIST_SEGMENTING_TARGET_MANIFEST)
+	mistSourceOutputURL := sourceOutputURL.JoinPath(SEGMENTING_TARGET_MANIFEST)
+	segmentingTargetURL := sourceOutputURL.JoinPath(SEGMENTING_SUBDIR, SEGMENTING_TARGET_MANIFEST)
 
 	job.SourceOutputURL = sourceOutputURL.String()
 	job.SegmentingTargetURL = segmentingTargetURL.String()
@@ -234,7 +234,7 @@ func inSameDirectory(base url.URL, paths ...string) (*url.URL, error) {
 //	s3+https://xyz:xyz@storage.googleapis.com/a/b/c/seg_$currentMediaTime.ts?m3u8=index.m3u8&split=5
 func targetURLToMistTargetURL(targetURL url.URL, targetSegmentLengthSecs int64) (string, error) {
 	targetManifestFilename := path.Base(targetURL.Path)
-	segmentingTargetURL, err := inSameDirectory(targetURL, MIST_SEGMENTING_SUBDIR, "$currentMediaTime.ts")
+	segmentingTargetURL, err := inSameDirectory(targetURL, SEGMENTING_SUBDIR, "$currentMediaTime.ts")
 	if err != nil {
 		return "", fmt.Errorf("cannot create segmentingTargetURL: %w", err)
 	}

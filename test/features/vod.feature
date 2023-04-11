@@ -34,3 +34,10 @@ Scenario: Submit a video asset to stream as VOD with a custom segment size
     Then I get an HTTP response with code "200"
     And my "successful" request metrics get recorded
     And Mist receives a request for segmenting with "3" second segments
+
+Scenario: Submit a video asset to stream as VOD with the FFMPEG / Livepeer pipeline
+    When I submit to the internal "/api/vod" endpoint with "a valid ffmpeg upload vod request"
+    And receive a response within "3" seconds
+    Then I get an HTTP response with code "200"
+    And my "successful" request metrics get recorded
+    # TODO: Check for callbacks being received and transcoding success
