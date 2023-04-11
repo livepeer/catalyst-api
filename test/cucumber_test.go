@@ -77,6 +77,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^an object store is available$`, stepContext.StartObjectStore)
 	ctx.Step(`^Studio API server is running at "([^"]*)"$`, stepContext.StartStudioAPI)
 	ctx.Step(`^Mist is running at "([^"]*)"$`, stepContext.StartMist)
+	ctx.Step(`^ffmpeg is available$`, stepContext.CheckFfmpeg)
 
 	ctx.Step(`^I query the "([^"]*)" endpoint$`, stepContext.CreateGetRequest)
 	ctx.Step(`^I query the internal "([^"]*)" endpoint$`, stepContext.CreateGetRequestInternal)

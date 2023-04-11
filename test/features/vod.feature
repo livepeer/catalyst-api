@@ -5,10 +5,11 @@ Feature: VOD Streaming
 
   Background: The app is running
     Given the VOD API is running
-    Given the Client app is authenticated
-    Given an object store is available
-    Given Studio API server is running at "localhost:3000"
-    Given Mist is running at "localhost:4242"
+    And the Client app is authenticated
+    And an object store is available
+    And Studio API server is running at "localhost:3000"
+    And Mist is running at "localhost:4242"
+    And ffmpeg is available
 
   Scenario: HTTP API Startup
     When I query the internal "/ok" endpoint
