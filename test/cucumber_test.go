@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/cucumber/godog"
 	"github.com/livepeer/catalyst-api/test/steps"
@@ -59,8 +58,8 @@ func startApp() error {
 		return err
 	}
 
-	// Wait for app to start - TODO: Be smarter and do this with a healthcheck
-	time.Sleep(2 * time.Second)
+	// Wait for app to start
+	steps.WaitForStartup(baseURL + "/ok")
 
 	return nil
 }

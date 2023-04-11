@@ -8,7 +8,9 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/julienschmidt/httprouter"
 	"github.com/minio/madmin-go"
 )
@@ -25,13 +27,29 @@ func (s *StepContext) StartStudioAPI(listen string) error {
 		w.Header().Set("Cache-Control", "max-age=600, stale-while-revalidate=900")
 		w.WriteHeader(s.GateAPIStatus)
 	})
+	router.GET("/ok", func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+		w.WriteHeader(http.StatusOK)
+	})
 
 	s.Studio = http.Server{Addr: listen, Handler: router}
 	go func() {
 		_ = s.Studio.ListenAndServe()
 	}()
 
+	WaitForStartup("http://" + listen + "/ok")
+
 	return nil
+}
+
+func WaitForStartup(url string) {
+	retries := backoff.WithMaxRetries(backoff.NewConstantBackOff(time.Second), 5)
+	err := backoff.Retry(func() error {
+		_, err := http.Get(url)
+		return err
+	}, retries)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (s *StepContext) StartMist(listen string) error {
