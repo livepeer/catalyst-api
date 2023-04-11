@@ -33,7 +33,7 @@ const (
 	// Only execute the external pipeline.
 	StrategyExternalDominance Strategy = "external"
 	// Only execute the FFMPEG / Livepeer pipeline
-	StrategyFfmpegLivepeerDominance Strategy = "ffmpeglivepeer"
+	StrategyCatalystFfmpegDominance Strategy = "catalyst_ffmpeg"
 	// Execute the Mist pipeline in foreground and the external transcoder in background.
 	StrategyBackgroundExternal Strategy = "background_external"
 	// Execute the external transcoder pipeline in foreground and Mist in background.
@@ -50,7 +50,7 @@ const (
 
 func (s Strategy) IsValid() bool {
 	switch s {
-	case StrategyCatalystDominance, StrategyExternalDominance, StrategyFfmpegLivepeerDominance, StrategyBackgroundExternal, StrategyBackgroundMist, StrategyFallbackExternal:
+	case StrategyCatalystDominance, StrategyExternalDominance, StrategyCatalystFfmpegDominance, StrategyBackgroundExternal, StrategyBackgroundMist, StrategyFallbackExternal:
 		return true
 	default:
 		return false
@@ -139,7 +139,7 @@ type Coordinator struct {
 	strategy     Strategy
 	statusClient clients.TranscodeStatusClient
 
-	pipeMist, pipeFfmpegLivepeer, pipeExternal Handler
+	pipeMist, pipeFfmpeg, pipeExternal Handler
 
 	Jobs      *cache.Cache[*JobInfo]
 	MetricsDB *sql.DB
@@ -166,13 +166,13 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 	}
 
 	return &Coordinator{
-		strategy:           strategy,
-		statusClient:       statusClient,
-		pipeFfmpegLivepeer: &ffmpeglivepeer{SourceOutputUrl: sourceOutputURL},
-		pipeMist:           &mist{MistClient: mistClient, SourceOutputUrl: sourceOutputURL},
-		pipeExternal:       &external{extTranscoder},
-		Jobs:               cache.New[*JobInfo](),
-		MetricsDB:          metricsDB,
+		strategy:     strategy,
+		statusClient: statusClient,
+		pipeFfmpeg:   &ffmpeg{SourceOutputUrl: sourceOutputURL},
+		pipeMist:     &mist{MistClient: mistClient, SourceOutputUrl: sourceOutputURL},
+		pipeExternal: &external{extTranscoder},
+		Jobs:         cache.New[*JobInfo](),
+		MetricsDB:    metricsDB,
 		InputCopy: &clients.InputCopy{
 			Probe:           video.Probe{},
 			SourceOutputUrl: sourceOutputURL,
@@ -268,8 +268,8 @@ func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 		c.startOneUploadJob(p, c.pipeMist, true, false)
 	case StrategyExternalDominance:
 		c.startOneUploadJob(p, c.pipeExternal, true, false)
-	case StrategyFfmpegLivepeerDominance:
-		c.startOneUploadJob(p, c.pipeFfmpegLivepeer, true, false)
+	case StrategyCatalystFfmpegDominance:
+		c.startOneUploadJob(p, c.pipeFfmpeg, true, false)
 	case StrategyBackgroundExternal:
 		c.startOneUploadJob(p, c.pipeMist, true, false)
 		c.startOneUploadJob(p, c.pipeExternal, false, false)

@@ -23,7 +23,7 @@ properties:
     enum:
       - catalyst
       - external
-      - ffmpeglivepeer
+      - catalyst_ffmpeg
       - background_external
       - background_mist
       - fallback_external

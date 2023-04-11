@@ -9,15 +9,15 @@ import (
 	"github.com/livepeer/catalyst-api/log"
 )
 
-type ffmpeglivepeer struct {
+type ffmpeg struct {
 	SourceOutputUrl string
 }
 
-func (f *ffmpeglivepeer) Name() string {
-	return "ffmpeglivepeer"
+func (f *ffmpeg) Name() string {
+	return "catalyst_ffmpeg"
 }
 
-func (f *ffmpeglivepeer) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
+func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	log.Log(job.RequestID, "Handling job via FFMPEG/Livepeer pipeline")
 
 	sourceOutputBaseURL, err := url.Parse(f.SourceOutputUrl)
@@ -50,10 +50,10 @@ func (f *ffmpeglivepeer) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, err
 
 // Boilerplate to implement the Handler interface
 
-func (f *ffmpeglivepeer) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*HandlerOutput, error) {
+func (f *ffmpeg) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*HandlerOutput, error) {
 	return nil, errors.New("unexpected RECORDING_END trigger on ffmpeg/livepeer pipeline")
 }
 
-func (f *ffmpeglivepeer) HandlePushEndTrigger(job *JobInfo, p PushEndPayload) (*HandlerOutput, error) {
+func (f *ffmpeg) HandlePushEndTrigger(job *JobInfo, p PushEndPayload) (*HandlerOutput, error) {
 	return nil, errors.New("unexpected PUSH_END trigger on ffmpeg/livepeer pipeline")
 }
