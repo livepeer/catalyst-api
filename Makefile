@@ -21,6 +21,7 @@ fmt:
 
 .PHONY: integration-test
 integration-test:
+	go install github.com/cucumber/godog/cmd/godog@v0.12.5
 	cd test && godog run --strict --stop-on-failure 2> ./logs/test.log
 
 .PHONY: lint
@@ -47,4 +48,4 @@ tidy:
 
 .PHONY: test-canary
 test-canary:
-	cd test && CUCUMBER_ENV=canary godog run --strict --stop-on-failure 2> ./logs/test.log
+	CUCUMBER_ENV=canary $(MAKE) integration-test
