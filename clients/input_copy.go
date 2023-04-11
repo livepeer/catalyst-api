@@ -99,7 +99,6 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVi
 
 func isDirectUpload(inputFile *url.URL) bool {
 	return strings.HasSuffix(inputFile.Host, "storage.googleapis.com") &&
-		(strings.HasPrefix(inputFile.Path, "/directUpload") || strings.Contains(inputFile.Path, "recording")) &&
 		(inputFile.Scheme == "https" || inputFile.Scheme == "http")
 }
 
