@@ -90,14 +90,14 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVi
 		err = fmt.Errorf("input file %d bytes was greater than %d bytes", inputVideoProbe.SizeBytes, config.MaxInputFileSizeBytes)
 		return
 	}
-	log.Log(requestID, "probed video track:", "codec", videoTrack.Codec, "bitrate", videoTrack.Bitrate, "duration", videoTrack.DurationSec, "w", videoTrack.Width, "h", videoTrack.Height, "pix-format", videoTrack.PixelFormat, "FPS", videoTrack.FPS)
+	log.Log(requestID, "probed video track:", "container", inputVideoProbe.Format, "codec", videoTrack.Codec, "bitrate", videoTrack.Bitrate, "duration", videoTrack.DurationSec, "w", videoTrack.Width, "h", videoTrack.Height, "pix-format", videoTrack.PixelFormat, "FPS", videoTrack.FPS)
 	log.Log(requestID, "probed audio track", "codec", audioTrack.Codec, "bitrate", audioTrack.Bitrate, "duration", audioTrack.DurationSec, "channels", audioTrack.Channels)
 	return
 }
 
 func isDirectUpload(inputFile *url.URL) bool {
+	// recordings via backup-recording path is also considered a "direct-upload"
 	return strings.HasSuffix(inputFile.Host, "storage.googleapis.com") &&
-		strings.HasPrefix(inputFile.Path, "/directUpload") &&
 		(inputFile.Scheme == "https" || inputFile.Scheme == "http")
 }
 

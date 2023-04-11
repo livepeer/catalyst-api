@@ -76,6 +76,7 @@ func TestProbe(t *testing.T) {
 	require.NoError(err)
 
 	expectedInput := InputVideo{
+		Format:   "mov,mp4,m4a,3gp,3g2,mj2",
 		Duration: 16.254,
 		Tracks: []InputTrack{
 			{
