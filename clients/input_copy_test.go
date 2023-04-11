@@ -14,9 +14,19 @@ func Test_isDirectUpload(t *testing.T) {
 		want      bool
 	}{
 		{
-			name:      "direct upload",
+			name:      "direct upload w/ directUpload in path",
 			inputFile: "https://lp-us-vod-com.storage.googleapis.com/directUpload/2697c12g97x2sxn4",
 			want:      true,
+		},
+		{
+			name:      "direct upload w/o directUpload in path",
+			inputFile: "https://lp-us-vod-com.storage.googleapis.com/2697c12g97x2sxn4",
+			want:      true,
+		},
+		{
+			name:      "not direct upload w/ directUpload in path",
+			inputFile: "https://lp-us-vod-com.storage.HELLO.com/2697c12g97x2sxn4",
+			want:      false,
 		},
 		{
 			name:      "not direct upload",

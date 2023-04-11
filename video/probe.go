@@ -71,6 +71,11 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 			return InputVideo{}, fmt.Errorf("error parsing bitrate from probed data: %w", err)
 		}
 	}
+	fileFormat := probeData.Format.FormatName
+	if fileFormat == "hls" {
+		// correct bitrates cannot be probed for hls manifests, so override with default bitrate
+		bitrate = DefaultProfile720p.Bitrate
+	}
 	// parse filesize
 	size, err := strconv.ParseInt(probeData.Format.Size, 10, 64)
 	if err != nil {
@@ -79,7 +84,14 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 	// parse fps
 	fps, err := parseFps(videoStream.AvgFrameRate)
 	if err != nil {
-		return InputVideo{}, fmt.Errorf("error parsing fps numerator from probed data: %w", err)
+		return InputVideo{}, fmt.Errorf("error parsing avg fps numerator from probed data: %w", err)
+	}
+	// if fps is 0, try parsing the RFrameRate in the probed data which can be valid for hls files
+	if fps == 0 {
+		fps, err = parseFps(videoStream.RFrameRate)
+		if err != nil {
+			return InputVideo{}, fmt.Errorf("error parsing real fps numerator from probed data: %w", err)
+		}
 	}
 
 	var rotation float64
@@ -93,6 +105,7 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 
 	// format file stats into InputVideo
 	iv := InputVideo{
+		Format: probeData.Format.FormatName,
 		Tracks: []InputTrack{
 			{
 				Type:    TrackTypeVideo,

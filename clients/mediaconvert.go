@@ -241,7 +241,7 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 	payload := createJobPayload(args.InputFile.String(), toStr(args.HLSOutputLocation), mp4OutputLocation, mc.role, accelerated, args.Profiles, args.SegmentSizeSecs)
 	job, err := mc.client.CreateJob(payload)
 	if err != nil {
-		return fmt.Errorf("error creting mediaconvert job: %w", err)
+		return fmt.Errorf("error creating mediaconvert job: %w", err)
 	}
 	jobID := job.Job.Id
 	log.AddContext(args.RequestID, "mediaconvert_job_id", aws.StringValue(jobID))
