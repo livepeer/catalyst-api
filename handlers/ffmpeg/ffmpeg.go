@@ -7,6 +7,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/pipeline"
 )
 
@@ -38,8 +39,7 @@ func (h *HandlersCollection) NewFile() httprouter.Handle {
 		targetURLBase := strings.TrimSuffix(job.SegmentingTargetURL, "index.m3u8")
 
 		if err := clients.UploadToOSURL(targetURLBase, filename, req.Body, config.SEGMENT_WRITE_TIMEOUT); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte("Error segmenting: " + err.Error()))
+			errors.WriteHTTPInternalServerError(w, "Error Segmenting", err)
 			return
 		}
 	}
