@@ -63,7 +63,9 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		log.LogError(job.RequestID, "error segmenting via ffmpeg", err, "stdout", stdout.String(), "stderr", stderr.String())
+		log.LogError(job.RequestID, "error segmenting via ffmpeg", err)
+		log.Log(job.RequestID, "ffmpeg - stdout", "stdout", stdout.String())
+		log.Log(job.RequestID, "ffmpeg - stderr", "stderr", stderr.String())
 		return nil, err
 	}
 
