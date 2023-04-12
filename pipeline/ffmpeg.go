@@ -49,15 +49,15 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	cmd := exec.Command(
 		"ffmpeg",
-		"-i", job.SourceFile,
-		"-c", "copy",
-		"-f", "hls",
-		"-hls_segment_type", "mpegts",
-		"-hls_playlist_type", "vod",
-		"-hls_list_size", "0",
-		"-hls_time", strconv.FormatInt(job.TargetSegmentSizeSecs, 10),
-		"-method", "PUT",
-		fmt.Sprintf("%s/api/ffmpeg/%s/index.m3u8", internalAddress, job.StreamName),
+		"-i", job.SourceFile, // Input MP4 / MOV file
+		"-c", "copy", // Make sure we don't try to do any transcoding
+		"-f", "hls", // Output to HLS (segments + manifest)
+		"-hls_segment_type", "mpegts", // Use mpegts rather than fmp4 segments for compatibility reasons
+		"-hls_playlist_type", "vod", // Mark this as a VOD rather than Live playlist
+		"-hls_list_size", "0", // Unbounded playlist size since this isn't Live
+		"-hls_time", strconv.FormatInt(job.TargetSegmentSizeSecs, 10), // Tell FFMPEG what segment size (secs) to aim for
+		"-method", "PUT", // Send the segments and playlist to ourselves over HTTP as they're ready
+		fmt.Sprintf("%s/api/ffmpeg/%s/index.m3u8", internalAddress, job.StreamName), // Local HTTP API to send to
 	)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
