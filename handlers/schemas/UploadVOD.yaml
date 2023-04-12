@@ -1,5 +1,7 @@
 type: "object"
 properties:
+  external_id:
+    type: "string"
   url:
     type: "string"
     format: "uri"
