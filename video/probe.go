@@ -82,12 +82,12 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 		return InputVideo{}, fmt.Errorf("error parsing fps numerator from probed data: %w", err)
 	}
 
-	var rotation float64
-	for _, sideData := range videoStream.SideDataList {
-		r := getSideData[float64](sideData, "rotation")
-		if r != nil {
-			rotation = *r
-			break
+	var rotation int64
+	displaySideData, err := videoStream.SideDataList.GetSideData("Display Matrix")
+	if err == nil {
+		r, err := displaySideData.GetInt("rotation")
+		if err == nil {
+			rotation = r
 		}
 	}
 
@@ -167,13 +167,4 @@ func parseFps(framerate string) (float64, error) {
 	}
 
 	return float64(num) / float64(den), nil
-}
-
-func getSideData[T any](sideData ffprobe.SideData, key string) *T {
-	if value, ok := sideData[key]; ok {
-		if res, ok := value.(T); ok {
-			return &res
-		}
-	}
-	return nil
 }

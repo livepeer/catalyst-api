@@ -41,7 +41,7 @@ type VideoTrack struct {
 	Height      int64   `json:"height,omitempty"`
 	PixelFormat string  `json:"pixel_format,omitempty"`
 	FPS         float64 `json:"fps,omitempty"`
-	Rotation    float64 `json:"rotation,omitempty"`
+	Rotation    int64   `json:"rotation,omitempty"`
 }
 
 type AudioTrack struct {
