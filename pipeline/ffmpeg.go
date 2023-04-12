@@ -49,7 +49,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	cmd := exec.Command(
 		"ffmpeg",
-		"-i", job.SourceFile, // Input MP4 / MOV file
+		"-i", job.SignedSourceURL, // Input MP4 / MOV file
 		"-c", "copy", // Make sure we don't try to do any transcoding
 		"-f", "hls", // Output to HLS (segments + manifest)
 		"-hls_segment_type", "mpegts", // Use mpegts rather than fmp4 segments for compatibility reasons
