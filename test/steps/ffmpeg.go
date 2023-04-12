@@ -1,12 +1,15 @@
 package steps
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/grafov/m3u8"
 )
 
 // Confirm that we have an ffmpeg binary on the system the tests are running on
@@ -57,34 +60,28 @@ func (s *StepContext) TheSourceManifestIsWrittenToStorageWithinSeconds(secs, num
 	if err != nil {
 		return err
 	}
-	manifest := string(manifestBytes)
+	if !strings.HasSuffix(strings.TrimSpace(string(manifestBytes)), "#EXT-X-ENDLIST") {
+		return fmt.Errorf("did not receive a closing tag on the manifest within %d seconds. Got: %s", secs, string(manifestBytes))
+	}
 
 	// Do some basic checks that our manifest looks as we'd expect
-	if !strings.HasSuffix(strings.TrimSpace(manifest), "#EXT-X-ENDLIST") {
-		return fmt.Errorf("did not receive a closing tag on the manifest within %d seconds. Got: %s", secs, manifest)
+	manifest, manifestType, err := m3u8.DecodeFrom(bytes.NewReader(manifestBytes), true)
+	if err != nil {
+		return fmt.Errorf("error parsing manifest: %w", err)
 	}
-	if !strings.HasPrefix(manifest, "#EXTM3U") {
-		return fmt.Errorf("expected manifest to begin with #EXTM3U but got: %s", manifest)
-	}
-	if !strings.Contains(manifest, "#EXT-X-VERSION:3") {
-		return fmt.Errorf("expected manifest to contain #EXT-X-VERSION:3 but got: %s", manifest)
-	}
-	if !strings.Contains(manifest, "#EXT-X-TARGETDURATION:10") {
-		return fmt.Errorf("expected manifest to contain #EXT-X-TARGETDURATION:10 but got: %s", manifest)
+	if manifestType != m3u8.MEDIA {
+		return fmt.Errorf("expected Media playlist, but got a Master playlist")
 	}
 
-	for segNum := 0; segNum < numSegments; segNum++ {
-		expectedSegmentFilename := fmt.Sprintf("index%d.ts", segNum)
-		hasSegment := strings.Contains(manifest, expectedSegmentFilename)
-		if !hasSegment {
-			return fmt.Errorf("could not find segment %s in the following manifest: %s", expectedSegmentFilename, manifest)
-		}
+	mediaManifest := manifest.(*m3u8.MediaPlaylist)
+	if len(mediaManifest.GetAllSegments()) != numSegments {
+		return fmt.Errorf("expected %d segments but got %d in the following manifest: %s", numSegments, len(mediaManifest.Segments), manifest)
 	}
-
-	// Check one segment past the end to ensure we don't have more segments that we expect
-	notExpectedSegmentFilename := fmt.Sprintf("index%d.ts", numSegments)
-	if strings.Contains(manifest, notExpectedSegmentFilename) {
-		return fmt.Errorf("found unexpected segment %s in the following manifest: %s", notExpectedSegmentFilename, manifest)
+	if mediaManifest.Version() != 3 {
+		return fmt.Errorf("expected manifest to be HLSv3 but got version: %d", mediaManifest.Version())
+	}
+	if mediaManifest.TargetDuration != 10.0 {
+		return fmt.Errorf("expected manifest to have a Target Duration of 10 but got: %f", mediaManifest.TargetDuration)
 	}
 
 	return nil
