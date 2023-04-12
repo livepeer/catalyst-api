@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/livepeer/catalyst-api/clients"
@@ -51,6 +52,10 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		"-i", job.SourceFile,
 		"-c", "copy",
 		"-f", "hls",
+		"-hls_segment_type", "mpegts",
+		"-hls_playlist_type", "vod",
+		"-hls_list_size", "0",
+		"-hls_time", strconv.FormatInt(job.TargetSegmentSizeSecs, 10),
 		"-method", "PUT",
 		fmt.Sprintf("%s/api/ffmpeg/%s/index.m3u8", internalAddress, job.StreamName),
 	)
