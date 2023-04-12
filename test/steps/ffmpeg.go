@@ -47,7 +47,10 @@ func (s *StepContext) TheSourceManifestIsWrittenToStorageWithinSeconds(secs, num
 	for x := 0; x < secs; x++ {
 		manifestBytes, err = os.ReadFile(sourceManifest)
 		if err == nil {
-			break
+			// Only break if the full manifest has been written
+			if strings.HasSuffix(strings.TrimSpace(string(manifestBytes)), "#EXT-X-ENDLIST") {
+				break
+			}
 		}
 		time.Sleep(time.Second)
 	}
@@ -57,11 +60,11 @@ func (s *StepContext) TheSourceManifestIsWrittenToStorageWithinSeconds(secs, num
 	manifest := string(manifestBytes)
 
 	// Do some basic checks that our manifest looks as we'd expect
+	if !strings.HasSuffix(strings.TrimSpace(manifest), "#EXT-X-ENDLIST") {
+		return fmt.Errorf("did not receive a closing tag on the manifest within %d seconds. Got: %s", secs, manifest)
+	}
 	if !strings.HasPrefix(manifest, "#EXTM3U") {
 		return fmt.Errorf("expected manifest to begin with #EXTM3U but got: %s", manifest)
-	}
-	if !strings.HasSuffix(strings.TrimSpace(manifest), "#EXT-X-ENDLIST") {
-		return fmt.Errorf("expected manifest to end with #EXT-X-ENDLIST but got: %s", manifest)
 	}
 	if !strings.Contains(manifest, "#EXT-X-VERSION:3") {
 		return fmt.Errorf("expected manifest to contain #EXT-X-VERSION:3 but got: %s", manifest)
