@@ -34,6 +34,7 @@ Feature: Playback
     When I query the "/asset/hls/dbe3q3g6q2kia036/index.m3u8" endpoint
     And receive a response within "3" seconds
     Then I get an HTTP response with code "400"
+    And the gate API call was valid
 
   Scenario: Gate API caching
     Given the gate API will allow playback

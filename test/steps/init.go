@@ -32,9 +32,7 @@ func (s *StepContext) StartStudioAPI(listen string) error {
 		if err != nil {
 			panic(err)
 		}
-		if gateRequest["type"] == "" {
-			panic(fmt.Errorf("type field should not be empty on gate API request: %+v", gateRequest))
-		}
+		s.GateAPICallType = gateRequest["type"]
 		s.GateAPICallCount++
 		w.Header().Set("Cache-Control", "max-age=600, stale-while-revalidate=900")
 		w.WriteHeader(s.GateAPIStatus)
