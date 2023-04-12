@@ -13,6 +13,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestItReturnsAnErrorWhenJobDoesntExist(t *testing.T) {
+	h := HandlersCollection{
+		VODEngine: pipeline.NewStubCoordinator(),
+	}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/api/ffmpeg/exampleStreamName/index.m3u8", strings.NewReader("example manifest contents"))
+
+	h.NewFile()(
+		w,
+		r,
+		[]httprouter.Param{
+			{
+				Key:   "id",
+				Value: "THIS-DOES-NOT-EXIST",
+			},
+			{
+				Key:   "filename",
+				Value: "index.m3u8",
+			},
+		},
+	)
+	require.Equal(t, http.StatusNotFound, w.Code)
+}
+
 func TestItWritesAReceivedFileToStorage(t *testing.T) {
 	tempDir, err := os.MkdirTemp(os.TempDir(), "TestItWritesAReceivedFileToStorage*")
 	require.NoError(t, err)
