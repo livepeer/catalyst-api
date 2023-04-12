@@ -40,7 +40,9 @@ Scenario: Submit a video asset to stream as VOD with the FFMPEG / Livepeer pipel
     When I submit to the internal "/api/vod" endpoint with "a valid ffmpeg upload vod request"
     And receive a response within "3" seconds
     Then I get an HTTP response with code "200"
+    And I receive a Request ID in the response body
     And my "successful" request metrics get recorded
-    And all of the source segments are written to storage within "10" seconds
-    And the source manifest is written to storage within "5" seconds
-    # TODO: Check for callbacks being received and transcoding success
+    And "4" source segments are written to storage within "5" seconds
+    And the source manifest is written to storage within "3" seconds and contains "4" segments
+    # TODO: Check for callbacks being received
+    # TODO: Check for transcoding success

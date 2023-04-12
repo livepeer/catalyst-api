@@ -9,6 +9,7 @@ import (
 
 type StepContext struct {
 	latestResponse        *http.Response
+	latestRequestID       string
 	pendingRequest        *http.Request
 	pendingRequestPayload string
 	mistPushStartURLs     []string

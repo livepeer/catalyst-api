@@ -52,7 +52,6 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		"-c", "copy",
 		"-f", "hls",
 		"-method", "PUT",
-		// TODO: Don't hardcode this URL
 		fmt.Sprintf("%s/api/ffmpeg/%s/index.m3u8", internalAddress, job.StreamName),
 	)
 	var stdout, stderr bytes.Buffer
