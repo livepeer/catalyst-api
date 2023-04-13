@@ -75,7 +75,7 @@ func (s *StepContext) TheSourceManifestIsWrittenToStorageWithinSeconds(secs, num
 
 	mediaManifest := manifest.(*m3u8.MediaPlaylist)
 	if len(mediaManifest.GetAllSegments()) != numSegments {
-		return fmt.Errorf("expected %d segments but got %d in the following manifest: %s", numSegments, len(mediaManifest.Segments), manifest)
+		return fmt.Errorf("expected %d segments but got %d in the following manifest: %s", numSegments, len(mediaManifest.GetAllSegments()), manifest)
 	}
 	if mediaManifest.Version() != 3 {
 		return fmt.Errorf("expected manifest to be HLSv3 but got version: %d", mediaManifest.Version())
