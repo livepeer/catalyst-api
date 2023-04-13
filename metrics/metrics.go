@@ -26,6 +26,7 @@ type CatalystAPIMetrics struct {
 	UploadVODRequestCount       prometheus.Counter
 	UploadVODRequestDurationSec *prometheus.SummaryVec
 	TranscodeSegmentDurationSec prometheus.Histogram
+	PlaybackRequestDurationSec  *prometheus.SummaryVec
 
 	TranscodingStatusUpdate ClientMetrics
 	BroadcasterClient       ClientMetrics
@@ -59,6 +60,10 @@ func NewMetrics() *CatalystAPIMetrics {
 			Help:    "Time taken to transcode a segment",
 			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
 		}),
+		PlaybackRequestDurationSec: promauto.NewSummaryVec(prometheus.SummaryOpts{
+			Name: "catalyst_playback_request_duration_seconds",
+			Help: "The latency of the requests made to /asset/hls in seconds broken up by success and status code",
+		}, []string{"success", "status_code", "version"}),
 
 		// Clients metrics
 

@@ -1,13 +1,17 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"runtime/debug"
+	"strconv"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type responseWriter struct {
@@ -30,7 +34,15 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.wroteHeader = true
 }
 
+func LogAndMetrics(metric *prometheus.SummaryVec) func(httprouter.Handle) httprouter.Handle {
+	return logRequest(metric)
+}
+
 func LogRequest() func(httprouter.Handle) httprouter.Handle {
+	return logRequest(nil)
+}
+
+func logRequest(metric *prometheus.SummaryVec) func(httprouter.Handle) httprouter.Handle {
 	return func(next httprouter.Handle) httprouter.Handle {
 		fn := func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 			start := time.Now()
@@ -44,14 +56,22 @@ func LogRequest() func(httprouter.Handle) httprouter.Handle {
 			}()
 
 			next(wrapped, r, ps)
+			duration := time.Since(start)
 			log.LogNoRequestID("received HTTP request",
 				"remote", r.RemoteAddr,
 				"proto", r.Proto,
 				"method", r.Method,
 				"uri", r.URL.RequestURI(),
-				"duration", time.Since(start),
+				"duration", duration,
 				"status", wrapped.status,
 			)
+
+			if metric != nil {
+				success := wrapped.status < 400
+				metric.
+					WithLabelValues(strconv.FormatBool(success), fmt.Sprint(wrapped.status), config.Version).
+					Observe(duration.Seconds())
+			}
 		}
 
 		return fn
