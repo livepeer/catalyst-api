@@ -31,7 +31,7 @@ require (
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.1.0
 	golang.org/x/text v0.9.0
-	gopkg.in/vansante/go-ffprobe.v2 v2.1.1
+	gopkg.in/vansante/go-ffprobe.v2 v2.1.2-0.20230412093356-81f7fcbea828
 	sigs.k8s.io/yaml v1.3.0
 )
 
@@ -173,5 +173,3 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace gopkg.in/vansante/go-ffprobe.v2 => github.com/mjh1/go-ffprobe v0.0.0-20230402193815-b6c2609ab5da

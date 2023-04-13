@@ -108,19 +108,5 @@ func TestProbe_VideoRotation(t *testing.T) {
 	require.NoError(t, err)
 	track, err := iv.GetTrack("video")
 	require.NoError(t, err)
-	require.Equal(t, float64(-180), track.Rotation)
-}
-
-func Test_getSideData(t *testing.T) {
-	sideData := make(map[string]interface{})
-	sideData["rotation"] = float64(180)
-	found := getSideData[float64](sideData, "rotation")
-	require.NotNil(t, found)
-	require.Equal(t, float64(180), *found)
-
-	wrongType := getSideData[int](sideData, "rotation")
-	require.Nil(t, wrongType)
-
-	keyNotFound := getSideData[float64](sideData, "foo")
-	require.Nil(t, keyNotFound)
+	require.Equal(t, int64(-180), track.Rotation)
 }
