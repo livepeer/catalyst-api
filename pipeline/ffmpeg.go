@@ -1,17 +1,15 @@
 package pipeline
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net/url"
-	"os/exec"
-	"strconv"
 	"strings"
 
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/video"
 )
 
 type ffmpeg struct {
@@ -47,25 +45,8 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		internalAddress = "http://" + internalAddress
 	}
 
-	cmd := exec.Command(
-		"ffmpeg",
-		"-i", job.SignedSourceURL, // Input MP4 / MOV file
-		"-c", "copy", // Make sure we don't try to do any transcoding
-		"-f", "hls", // Output to HLS (segments + manifest)
-		"-hls_segment_type", "mpegts", // Use mpegts rather than fmp4 segments for compatibility reasons
-		"-hls_playlist_type", "vod", // Mark this as a VOD rather than Live playlist
-		"-hls_list_size", "0", // Unbounded playlist size since this isn't Live
-		"-hls_time", strconv.FormatInt(job.TargetSegmentSizeSecs, 10), // Tell FFMPEG what segment size (secs) to aim for
-		"-method", "PUT", // Send the segments and playlist to ourselves over HTTP as they're ready
-		fmt.Sprintf("%s/api/ffmpeg/%s/index.m3u8", internalAddress, job.StreamName), // Local HTTP API to send to
-	)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		log.LogError(job.RequestID, "error segmenting via ffmpeg", err)
-		log.Log(job.RequestID, "ffmpeg - stdout", "stdout", stdout.String())
-		log.Log(job.RequestID, "ffmpeg - stderr", "stderr", stderr.String())
+	destinationURL := fmt.Sprintf("%s/api/ffmpeg/%s/index.m3u8", internalAddress, job.StreamName)
+	if err := video.Segment(job.SignedSourceURL, destinationURL, job.TargetSegmentSizeSecs); err != nil {
 		return nil, err
 	}
 
