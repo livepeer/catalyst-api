@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/livepeer/catalyst-api/clients"
-	"github.com/livepeer/catalyst-api/video"
 )
 
 type external struct {
@@ -55,10 +54,8 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	return &HandlerOutput{
 		Result: &UploadJobResult{
-			InputVideo: video.InputVideo{
-				// TODO: Figure out what to do here. Studio doesn't use these anyway.
-			},
-			Outputs: outputVideos,
+			InputVideo: job.InputFileInfo,
+			Outputs:    outputVideos,
 		},
 	}, nil
 }
