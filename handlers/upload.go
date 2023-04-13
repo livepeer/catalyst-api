@@ -35,6 +35,7 @@ type UploadVODRequestOutputLocation struct {
 }
 
 type UploadVODRequest struct {
+	ExternalID      string                           `json:"external_id,omitempty"`
 	Url             string                           `json:"url"`
 	CallbackUrl     string                           `json:"callback_url"`
 	OutputLocations []UploadVODRequestOutputLocation `json:"output_locations,omitempty"`
@@ -127,7 +128,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 
 	// Generate a Request ID that will be used throughout all logging
 	var requestID = config.RandomTrailer(8)
-	log.AddContext(requestID, "source", uploadVODRequest.Url)
+	log.AddContext(requestID, "source", uploadVODRequest.Url, "external_id", uploadVODRequest.ExternalID)
 
 	if err := CheckSourceURLValid(uploadVODRequest.Url); err != nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
@@ -176,6 +177,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		AccessToken:           uploadVODRequest.AccessToken,
 		TranscodeAPIUrl:       uploadVODRequest.TranscodeAPIUrl,
 		RequestID:             requestID,
+		ExternalID:            uploadVODRequest.ExternalID,
 		Profiles:              uploadVODRequest.Profiles,
 		PipelineStrategy:      uploadVODRequest.PipelineStrategy,
 		TargetSegmentSizeSecs: uploadVODRequest.TargetSegmentSizeSecs,

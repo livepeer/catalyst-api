@@ -71,10 +71,10 @@ type RecordingEvent struct {
 
 type TranscodeStatusMessage struct {
 	// Internal fields, not included in the message we send
-	RequestID string `json:"-"`
-	URL       string `json:"-"`
+	URL string `json:"-"`
 
 	// Fields included in all status messages
+	RequestID       string          `json:"request_id"`
 	CompletionRatio float64         `json:"completion_ratio"` // No omitempty or we lose this for 0% completion case
 	Status          TranscodeStatus `json:"status"`
 	Timestamp       int64           `json:"timestamp"`

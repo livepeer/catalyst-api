@@ -23,6 +23,7 @@ type StepContext struct {
 	MinioAdmin            *madmin.AdminClient
 	GateAPIStatus         int
 	GateAPICallCount      int
+	GateAPICallType       interface{}
 }
 
 var mistPushStartURLMutex sync.Mutex

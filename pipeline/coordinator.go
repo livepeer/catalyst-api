@@ -68,6 +68,7 @@ type UploadJobPayload struct {
 	TranscodeAPIUrl       string
 	HardcodedBroadcasters string
 	RequestID             string
+	ExternalID            string
 	Profiles              []video.EncodedProfile
 	PipelineStrategy      Strategy
 	TargetSegmentSizeSecs int64
@@ -533,6 +534,7 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
                             "finished_at",
                             "started_at",
                             "request_id",
+                            "external_id",
                             "source_codec_video",
                             "source_codec_audio",
                             "pipeline",
@@ -547,12 +549,13 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
                             "source_url",
                             "target_url",
                             "in_fallback_mode"
-                            ) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`
+                            ) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`
 	_, err := c.MetricsDB.Exec(
 		insertDynStmt,
 		time.Now().Unix(),
 		job.startTime.Unix(),
 		job.RequestID,
+		job.ExternalID,
 		job.sourceCodecVideo,
 		job.sourceCodecAudio,
 		job.pipeline,

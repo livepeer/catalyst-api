@@ -2,6 +2,7 @@ package steps
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -284,6 +285,13 @@ func (s *StepContext) CheckHTTPHeaders(expectedHeaders *godog.Table) error {
 		if expectedValue.Value != actualValue {
 			return fmt.Errorf("expected to get header %s with value %s. got: %s", expectedKey.Value, expectedValue.Value, actualValue)
 		}
+	}
+	return nil
+}
+
+func (s *StepContext) CheckGateAPICallValid() error {
+	if s.GateAPICallType == "" {
+		return errors.New("type field should not be empty on gate API request")
 	}
 	return nil
 }
