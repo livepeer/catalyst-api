@@ -39,7 +39,7 @@ func (h *HandlersCollection) NewFile() httprouter.Handle {
 		targetURLBase := strings.TrimSuffix(job.SegmentingTargetURL, "index.m3u8")
 
 		if err := clients.UploadToOSURL(targetURLBase, filename, req.Body, config.SEGMENT_WRITE_TIMEOUT); err != nil {
-			errors.WriteHTTPInternalServerError(w, "Error Segmenting", err)
+			errors.WriteHTTPInternalServerError(w, "Error uploading segment", err)
 			return
 		}
 	}
