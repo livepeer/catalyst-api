@@ -9,6 +9,7 @@ import (
 
 type StepContext struct {
 	latestResponse        *http.Response
+	latestRequestID       string
 	pendingRequest        *http.Request
 	pendingRequestPayload string
 	mistPushStartURLs     []string
@@ -16,6 +17,7 @@ type StepContext struct {
 	timeoutSecs           int64
 	BaseURL               string
 	BaseInternalURL       string
+	SourceOutputDir       string
 	Mist                  http.Server
 	Studio                http.Server
 	MinioAdmin            *madmin.AdminClient

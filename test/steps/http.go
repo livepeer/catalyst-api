@@ -1,6 +1,7 @@
 package steps
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,10 @@ import (
 
 	"github.com/cucumber/godog"
 )
+
+type VODUploadResponse struct {
+	RequestID string `json:"request_id"`
+}
 
 func (s *StepContext) CreateRequest(endpoint, _, method string) error {
 	return s.request(s.BaseURL, endpoint, method)
@@ -116,6 +121,30 @@ func (s *StepContext) CallAPI() error {
 	s.latestResponse = resp
 	s.pendingRequest = nil
 
+	return nil
+}
+
+func (s *StepContext) SaveRequestID() error {
+	body, err := io.ReadAll(s.latestResponse.Body)
+	if err != nil {
+		return err
+	}
+
+	var resp VODUploadResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return err
+	}
+	if resp.RequestID == "" {
+		return fmt.Errorf("did not receive a Request ID in the HTTP response")
+	}
+
+	s.latestRequestID = resp.RequestID
+
+	return nil
+}
+
+func (s *StepContext) Wait() error {
+	time.Sleep(time.Second * 5)
 	return nil
 }
 

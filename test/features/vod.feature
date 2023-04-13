@@ -5,10 +5,11 @@ Feature: VOD Streaming
 
   Background: The app is running
     Given the VOD API is running
-    Given the Client app is authenticated
-    Given an object store is available
-    Given Studio API server is running at "localhost:3000"
-    Given Mist is running at "localhost:4242"
+    And the Client app is authenticated
+    And an object store is available
+    And Studio API server is running at "localhost:3000"
+    And Mist is running at "localhost:4242"
+    And ffmpeg is available
 
   Scenario: HTTP API Startup
     When I query the internal "/ok" endpoint
@@ -39,5 +40,9 @@ Scenario: Submit a video asset to stream as VOD with the FFMPEG / Livepeer pipel
     When I submit to the internal "/api/vod" endpoint with "a valid ffmpeg upload vod request"
     And receive a response within "3" seconds
     Then I get an HTTP response with code "200"
+    And I receive a Request ID in the response body
     And my "successful" request metrics get recorded
-    # TODO: Check for callbacks being received and transcoding success
+    And "4" source segments are written to storage within "5" seconds
+    And the source manifest is written to storage within "3" seconds and contains "4" segments
+    # TODO: Check for callbacks being received
+    # TODO: Check for transcoding success
