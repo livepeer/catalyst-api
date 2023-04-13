@@ -90,6 +90,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the gate API will (allow|deny) playback$`, stepContext.SetGateAPIResponse)
 	ctx.Step(`^the gate API will be called (\d+) times$`, stepContext.CheckGateAPICallCount)
 	ctx.Step(`^the headers match$`, stepContext.CheckHTTPHeaders)
+	ctx.Step(`^the gate API call was valid$`, stepContext.CheckGateAPICallValid)
 
 	ctx.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
 		if app != nil && app.Process != nil {
