@@ -41,7 +41,7 @@ func TestItReturnsAnErrorWhenJobDoesntExist(t *testing.T) {
 func TestItWritesAReceivedFileToStorage(t *testing.T) {
 	tempDir, err := os.MkdirTemp(os.TempDir(), "TestItWritesAReceivedFileToStorage*")
 	require.NoError(t, err)
-	segmentingTarget := filepath.Join(tempDir, "index.m3u8")
+	segmentingTarget := filepath.Join(tempDir, "something.m3u8")
 
 	h := HandlersCollection{
 		VODEngine: pipeline.NewStubCoordinator(),
@@ -72,7 +72,7 @@ func TestItWritesAReceivedFileToStorage(t *testing.T) {
 	require.Equal(t, w.Code, http.StatusOK)
 
 	// Check the file got written to Object Storage
-	targetFileContents, err := os.ReadFile(segmentingTarget)
+	targetFileContents, err := os.ReadFile(filepath.Join(tempDir, "index.m3u8"))
 	require.NoError(t, err)
 	require.Equal(t, "example manifest contents", string(targetFileContents))
 }

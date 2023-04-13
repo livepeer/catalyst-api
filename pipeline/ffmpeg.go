@@ -9,6 +9,7 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/transcode"
 	"github.com/livepeer/catalyst-api/video"
 )
 
@@ -53,14 +54,84 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	// Segmenting Finished
 	job.ReportProgress(clients.TranscodeStatusPreparingCompleted, 1)
 
-	// TODO: Transcode
+	// Transcode Beginning
 	log.Log(job.RequestID, "Beginning transcoding via FFMPEG/Livepeer pipeline")
-	job.ReportProgress(clients.TranscodeStatusTranscoding, 0.5)
+	job.ReportProgress(clients.TranscodeStatusTranscoding, 0.1)
 
-	// TODO: Transcoding Finished
+	transcodeRequest := transcode.TranscodeSegmentRequest{
+		SourceFile:        job.SourceFile,
+		CallbackURL:       job.CallbackURL,
+		AccessToken:       job.AccessToken,
+		TranscodeAPIUrl:   job.TranscodeAPIUrl,
+		Profiles:          job.Profiles,
+		SourceManifestURL: job.SegmentingTargetURL,
+		SourceOutputURL:   job.SourceOutputURL,
+		HlsTargetURL:      toStr(job.HlsTargetURL),
+		Mp4TargetUrl:      toStr(job.Mp4TargetURL),
+		RequestID:         job.RequestID,
+		ReportProgress:    job.ReportProgress,
+		GenerateMP4:       job.GenerateMP4,
+	}
+
+	inputInfo := video.InputVideo{
+		Format:    "mp4",
+		Duration:  job.InputFileInfo.Duration,
+		SizeBytes: int64(job.sourceBytes),
+		Tracks: []video.InputTrack{
+			// Video Track
+			{
+				Type:         "video",
+				Codec:        job.sourceCodecVideo,
+				Bitrate:      job.sourceBitrateVideo,
+				DurationSec:  job.InputFileInfo.Duration,
+				StartTimeSec: 0,
+				VideoTrack: video.VideoTrack{
+					Width:  job.sourceWidth,
+					Height: job.sourceHeight,
+					FPS:    job.sourceFPS,
+				},
+			},
+			// Audio Track
+			{
+				Type:         "audio",
+				Codec:        job.sourceCodecAudio,
+				Bitrate:      job.sourceBitrateAudio,
+				DurationSec:  job.InputFileInfo.Duration,
+				StartTimeSec: 0,
+				AudioTrack: video.AudioTrack{
+					Channels:   job.sourceChannels,
+					SampleRate: job.sourceSampleRate,
+					SampleBits: job.sourceSampleBits,
+				},
+			},
+		},
+	}
+
+	job.state = "transcoding"
+
+	sourceManifest, err := transcode.DownloadRenditionManifest(transcodeRequest.SourceManifestURL)
+	if err != nil {
+		return nil, fmt.Errorf("error downloading source manifest: %s", err)
+	}
+
+	job.sourceSegments = len(sourceManifest.Segments)
+
+	outputs, transcodedSegments, err := transcode.RunTranscodeProcess(transcodeRequest, job.StreamName, inputInfo)
+	if err != nil {
+		log.LogError(job.RequestID, "RunTranscodeProcess returned an error", err)
+		return nil, fmt.Errorf("transcoding failed: %w", err)
+	}
+
+	job.transcodedSegments = transcodedSegments
+
+	// Transcoding Finished
 	job.ReportProgress(clients.TranscodeStatusCompleted, 1)
 
-	return ContinuePipeline, nil
+	return &HandlerOutput{
+		Result: &UploadJobResult{
+			InputVideo: inputInfo,
+			Outputs:    outputs,
+		}}, nil
 }
 
 // Boilerplate to implement the Handler interface

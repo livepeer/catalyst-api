@@ -115,11 +115,20 @@ type JobInfo struct {
 	startTime    time.Time
 	result       chan bool
 
-	sourceBytes           int64
-	sourceSegments        int
-	sourceDurationMs      int64
-	sourceCodecVideo      string
-	sourceCodecAudio      string
+	sourceBytes        int64
+	sourceSegments     int
+	sourceDurationMs   int64
+	sourceCodecVideo   string
+	sourceCodecAudio   string
+	sourceWidth        int64
+	sourceHeight       int64
+	sourceFPS          float64
+	sourceBitrateVideo int64
+	sourceBitrateAudio int64
+	sourceChannels     int
+	sourceSampleRate   int
+	sourceSampleBits   int
+
 	transcodedSegments    int
 	targetSegmentSizeSecs int64
 	pipeline              string
@@ -384,6 +393,14 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		catalystRegion:        os.Getenv("MY_REGION"),
 		sourceCodecVideo:      videoCodec,
 		sourceCodecAudio:      audioCodec,
+		sourceWidth:           videoTrack.Width,
+		sourceHeight:          videoTrack.Height,
+		sourceFPS:             videoTrack.FPS,
+		sourceBitrateVideo:    videoTrack.Bitrate,
+		sourceBitrateAudio:    audioTrack.Bitrate,
+		sourceChannels:        audioTrack.Channels,
+		sourceSampleRate:      audioTrack.SampleRate,
+		sourceSampleBits:      audioTrack.SampleBits,
 	}
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 

@@ -62,6 +62,12 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
 		return fmt.Errorf("failed to write to source file: %s", err)
 	}
 
+	destinationDir, err := os.MkdirTemp(os.TempDir(), "transcoded*")
+	if err != nil {
+		return fmt.Errorf("failed to create a destination directory: %s", err)
+	}
+	s.TranscodedOutputDir = destinationDir
+
 	if payload == "a valid upload vod request" {
 		req := DefaultUploadRequest
 		req.URL = "file://" + sourceFile.Name()
@@ -73,6 +79,15 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
 		req := DefaultUploadRequest
 		req.URL = "file://" + sourceFile.Name()
 		req.PipelineStrategy = "catalyst_ffmpeg"
+		req.OutputLocations = []OutputLocation{
+			{
+				Type: "object_store",
+				URL:  "file://" + destinationDir,
+				Outputs: Output{
+					HLS: "enabled",
+				},
+			},
+		}
 		if payload, err = req.ToJSON(); err != nil {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}

@@ -6,6 +6,7 @@ import (
 
 type Output struct {
 	HLS string `json:"hls,omitempty"`
+	MP4 string `json:"mp4,omitempty"`
 }
 
 type OutputLocation struct {

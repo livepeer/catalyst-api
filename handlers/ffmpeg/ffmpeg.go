@@ -2,7 +2,7 @@ package ffmpeg
 
 import (
 	"net/http"
-	"strings"
+	"regexp"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/clients"
@@ -33,10 +33,11 @@ func (h *HandlersCollection) NewFile() httprouter.Handle {
 		}
 
 		// job.SegmentingTargetURL comes in the format the Mist wants, looking like:
-		//   protocol://abc@123:s3.com/a/b/c/index.m3u8
+		//   protocol://abc@123:s3.com/a/b/c/<something>.m3u8
 		// but since this endpoint receives both .ts segments and m3u8 updates, we strip off the filename
 		// and pass the one ffmpeg gives us to UploadToOSURL instead
-		targetURLBase := strings.TrimSuffix(job.SegmentingTargetURL, "index.m3u8")
+		reg := regexp.MustCompile(`[^/]+.m3u8$`)
+		targetURLBase := reg.ReplaceAllString(job.SegmentingTargetURL, "")
 
 		if err := clients.UploadToOSURL(targetURLBase, filename, req.Body, config.SEGMENT_WRITE_TIMEOUT); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Error uploading segment", err)
