@@ -23,14 +23,14 @@ func PlaybackHandler() httprouter.Handle {
 			return
 		}
 
-		key := req.URL.Query().Get(playback.KeyParam)
-		response, err := playback.Handle(playback.Request{
+		playbackReq := playback.Request{
 			RequestID:  requestID,
 			PlaybackID: params.ByName("playbackID"),
 			File:       params.ByName("file"),
-			AccessKey:  key,
+			AccessKey:  req.URL.Query().Get(playback.KeyParam),
 			Range:      req.Header.Get("range"),
-		})
+		}
+		response, err := playback.Handle(playbackReq)
 		if err != nil {
 			handleError(err, req, requestID, w)
 			return
@@ -39,11 +39,18 @@ func PlaybackHandler() httprouter.Handle {
 
 		w.Header().Set("accept-ranges", "bytes")
 		w.Header().Set("content-type", response.ContentType)
+		w.Header().Set("cache-control", "max-age=0")
 		if response.ContentLength != nil {
 			w.Header().Set("content-length", fmt.Sprintf("%d", *response.ContentLength))
 		}
 		w.Header().Set("etag", response.ETag)
-		w.WriteHeader(http.StatusOK)
+
+		if response.ContentRange != "" {
+			w.Header().Set("content-range", response.ContentRange)
+			w.WriteHeader(http.StatusPartialContent)
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
 
 		if req.Method == http.MethodHead {
 			return
