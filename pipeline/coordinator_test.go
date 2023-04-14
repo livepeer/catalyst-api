@@ -82,7 +82,7 @@ func TestCoordinatorDoesNotBlock(t *testing.T) {
 			return nil, errors.New("test error")
 		},
 	}
-	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler, "")
+	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler, blockHandler, "")
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
 	job := testJob
@@ -120,7 +120,7 @@ func TestCoordinatorPropagatesJobInfoChanges(t *testing.T) {
 			return ContinuePipeline, nil
 		},
 	}
-	coord := NewStubCoordinatorOpts("", nil, blockHandler, blockHandler, "")
+	coord := NewStubCoordinatorOpts("", nil, blockHandler, blockHandler, blockHandler, "")
 
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
@@ -148,7 +148,7 @@ func TestCoordinatorResistsPanics(t *testing.T) {
 			panic("oh no!")
 		},
 	}
-	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler, "")
+	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler, blockHandler, "")
 
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
@@ -170,7 +170,7 @@ func TestCoordinatorCatalystDominance(t *testing.T) {
 
 	mist, calls := recordingHandler(nil)
 	external := allFailingHandler(t)
-	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, nil, mist, external, "")
+	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, nil, mist, nil, external, "")
 
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
@@ -206,9 +206,9 @@ func TestCoordinatorBackgroundJobsStrategies(t *testing.T) {
 	doTest := func(strategy Strategy) {
 		var coord *Coordinator
 		if strategy == StrategyBackgroundExternal {
-			coord = NewStubCoordinatorOpts(strategy, callbackHandler, fgHandler, bgHandler, "")
+			coord = NewStubCoordinatorOpts(strategy, callbackHandler, fgHandler, nil, bgHandler, "")
 		} else if strategy == StrategyBackgroundMist {
-			coord = NewStubCoordinatorOpts(strategy, callbackHandler, bgHandler, fgHandler, "")
+			coord = NewStubCoordinatorOpts(strategy, callbackHandler, bgHandler, nil, fgHandler, "")
 		} else {
 			t.Fatalf("Unexpected strategy: %s", strategy)
 		}
@@ -250,10 +250,10 @@ func TestCoordinatorFallbackStrategySuccess(t *testing.T) {
 	require := require.New(t)
 
 	callbackHandler, callbacks := callbacksRecorder()
-	mist, mistCalls := recordingHandler(nil)
+	ffmpeg, ffmpegCalls := recordingHandler(nil)
 	external, externalCalls := recordingHandler(nil)
 
-	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, mist, external, "")
+	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, nil, ffmpeg, external, "")
 
 	// Start a job that will complete successfully on mist, which should not
 	// trigger the external pipeline
@@ -267,7 +267,7 @@ func TestCoordinatorFallbackStrategySuccess(t *testing.T) {
 	msg := requireReceive(t, callbacks, 1*time.Second)
 	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 
-	mistJob := requireReceive(t, mistCalls, 1*time.Second)
+	mistJob := requireReceive(t, ffmpegCalls, 1*time.Second)
 	require.Equal("123", mistJob.RequestID)
 
 	// Check successful completion of the mist event
@@ -275,7 +275,7 @@ func TestCoordinatorFallbackStrategySuccess(t *testing.T) {
 	require.Equal(clients.TranscodeStatusCompleted, msg.Status)
 
 	time.Sleep(1 * time.Second)
-	require.Zero(len(mistCalls))
+	require.Zero(len(ffmpegCalls))
 	require.Zero(len(callbacks))
 	// nothing should have happened on the external flow
 	require.Zero(len(externalCalls))
@@ -285,7 +285,7 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 	require := require.New(t)
 
 	callbackHandler, callbacks := callbacksRecorder()
-	mist, mistCalls := recordingHandler(errors.New("mist error"))
+	ffmpeg, ffmpegCalls := recordingHandler(errors.New("ffmpeg error"))
 	externalCalls := make(chan *JobInfo, 10)
 	external := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
@@ -295,7 +295,7 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 		},
 	}
 
-	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, mist, external, "")
+	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, nil, ffmpeg, external, "")
 
 	// Start a job which mist will fail and only then call the external one
 	inputFile, _, cleanup := setupTransferDir(t, coord)
@@ -309,7 +309,7 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 	require.Equal("123", msg.RequestID)
 	require.Equal(clients.TranscodeStatusPreparing, msg.Status)
 
-	mistJob := requireReceive(t, mistCalls, 1*time.Second)
+	mistJob := requireReceive(t, ffmpegCalls, 1*time.Second)
 	require.Equal("123", mistJob.RequestID)
 
 	// External provider pipeline will trigger the initial preparing trigger as well
@@ -333,7 +333,7 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 	require.Equal(clients.TranscodeStatusCompleted, msg.Status)
 
 	time.Sleep(1 * time.Second)
-	require.Zero(len(mistCalls))
+	require.Zero(len(ffmpegCalls))
 	require.Zero(len(externalCalls))
 	require.Zero(len(callbacks))
 }
@@ -345,7 +345,7 @@ func TestAllowsOverridingStrategyOnRequest(t *testing.T) {
 	external, externalCalls := recordingHandler(nil)
 
 	// create coordinator with strategy catalyst dominance (external should never be called)
-	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, nil, mist, external, "")
+	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, nil, mist, nil, external, "")
 
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
@@ -400,7 +400,7 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 
 	db, dbMock, err := sqlmock.New()
 	require.NoError(err)
-	coord := NewStubCoordinatorOpts(StrategyBackgroundMist, callbackHandler, mist, external, "")
+	coord := NewStubCoordinatorOpts(StrategyBackgroundMist, callbackHandler, mist, nil, external, "")
 	coord.MetricsDB = db
 
 	inputFile, transferDir, cleanup := setupTransferDir(t, coord)
@@ -441,7 +441,7 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 
 func Test_EmptyFile(t *testing.T) {
 	callbackHandler, callbacks := callbacksRecorder()
-	coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil, "")
+	coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil, nil, "")
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
 
@@ -495,7 +495,7 @@ func Test_ProbeErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			callbackHandler, callbacks := callbacksRecorder()
-			coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil, "")
+			coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil, nil, "")
 			inputFile, transferDir, cleanup := setupTransferDir(t, coord)
 			defer cleanup()
 			coord.InputCopy = &clients.InputCopy{
@@ -529,7 +529,7 @@ func Test_InputCopiedToTransferLocation(t *testing.T) {
 			return testHandlerResult, nil
 		},
 	}
-	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, callbackHandler, mist, nil, "")
+	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, callbackHandler, mist, nil, nil, "")
 	f, transferDir, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
 
