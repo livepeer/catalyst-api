@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/ethereum/go-ethereum/common"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/signer/core/apitypes"
 	"github.com/livepeer/go-livepeer/eth"
 )
@@ -31,6 +33,15 @@ type Event struct {
 	Message     map[string]any `json:"message"`
 }
 
+func (e *Event) TypedData(types apitypes.Types) apitypes.TypedData {
+	return apitypes.TypedData{
+		Types:       types,
+		PrimaryType: e.PrimaryType,
+		Domain:      e.Domain.TypedDataDomain(),
+		Message:     e.Message,
+	}
+}
+
 type SignedEvent struct {
 	Signature string `json:"sig"`
 	Event     Event  `json:"event"`
@@ -50,12 +61,7 @@ func (s *Signer) Sign(event Event) SignedEvent {
 	if err != nil {
 		panic(err)
 	}
-	typedData := apitypes.TypedData{
-		Types:       s.Types,
-		PrimaryType: event.PrimaryType,
-		Domain:      event.Domain.TypedDataDomain(),
-		Message:     event.Message,
-	}
+	typedData := event.TypedData(s.Types)
 	b, err := am.SignTypedData(typedData)
 	if err != nil {
 		panic(fmt.Errorf("error signing typed data: %w", err))
@@ -66,4 +72,22 @@ func (s *Signer) Sign(event Event) SignedEvent {
 		Event:     event,
 		Signature: sig,
 	}
+}
+
+func (s *Signer) Verify(signedEvent SignedEvent) (common.Address, error) {
+	sig, err := hexutil.Decode(signedEvent.Signature)
+	sig[64] -= 27
+	if err != nil {
+		return common.Address{}, err
+	}
+	typedData := signedEvent.Event.TypedData(s.Types)
+	hash, _, err := apitypes.TypedDataAndHash(typedData)
+	if err != nil {
+		return common.Address{}, err
+	}
+	rpk, err := crypto.SigToPub(hash, sig)
+	if err != nil {
+		return common.Address{}, err
+	}
+	return crypto.PubkeyToAddress(*rpk), nil
 }
