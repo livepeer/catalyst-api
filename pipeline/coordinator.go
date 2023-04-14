@@ -38,7 +38,7 @@ const (
 	StrategyBackgroundExternal Strategy = "background_external"
 	// Execute the external transcoder pipeline in foreground and Mist in background.
 	StrategyBackgroundMist Strategy = "background_mist"
-	// Execute the Mist pipeline first and fallback to the external transcoding
+	// Execute the FFMPEG pipeline first and fallback to the external transcoding
 	// provider on errors.
 	StrategyFallbackExternal Strategy = "fallback_external"
 )
@@ -191,10 +191,10 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 }
 
 func NewStubCoordinator() *Coordinator {
-	return NewStubCoordinatorOpts(StrategyCatalystDominance, nil, nil, nil, "")
+	return NewStubCoordinatorOpts(StrategyCatalystDominance, nil, nil, nil, nil, "")
 }
 
-func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeMist, pipeExternal Handler, sourceOutputUrl string) *Coordinator {
+func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeMist, pipeFfmpeg, pipeExternal Handler, sourceOutputUrl string) *Coordinator {
 	if strategy == "" {
 		strategy = StrategyCatalystDominance
 	}
@@ -204,6 +204,9 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 	if pipeMist == nil {
 		pipeMist = &mist{MistClient: clients.StubMistClient{}, SourceOutputUrl: sourceOutputUrl}
 	}
+	if pipeFfmpeg == nil {
+		pipeFfmpeg = &ffmpeg{SourceOutputUrl: sourceOutputUrl}
+	}
 	if pipeExternal == nil {
 		pipeExternal = &external{}
 	}
@@ -211,6 +214,7 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 		strategy:     strategy,
 		statusClient: statusClient,
 		pipeMist:     pipeMist,
+		pipeFfmpeg:   pipeFfmpeg,
 		pipeExternal: pipeExternal,
 		Jobs:         cache.New[*JobInfo](),
 		InputCopy: &clients.InputCopy{
@@ -289,7 +293,7 @@ func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 	case StrategyFallbackExternal:
 		// nolint:errcheck
 		go recovered(func() (t bool, e error) {
-			success := <-c.startOneUploadJob(p, c.pipeMist, true, true)
+			success := <-c.startOneUploadJob(p, c.pipeFfmpeg, true, true)
 			if !success {
 				p.InFallbackMode = true
 				log.Log(p.RequestID, "Entering fallback pipeline")
