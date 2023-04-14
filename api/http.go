@@ -12,6 +12,7 @@ import (
 	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/handlers/geolocation"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/catalyst-api/pipeline"
 )
@@ -59,7 +60,7 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 
 	// Playback endpoint
-	playback := withLogging(
+	playback := middleware.LogAndMetrics(metrics.Metrics.PlaybackRequestDurationSec)(
 		withCORS(
 			withGatingCheck(
 				handlers.PlaybackHandler(),

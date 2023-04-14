@@ -90,7 +90,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^we wait for 5 seconds$`, stepContext.Wait)
 	ctx.Step(`^I get an HTTP response with code "([^"]*)"$`, stepContext.CheckHTTPResponseCode)
 	ctx.Step(`^I get an HTTP response with code "([^"]*)" and the following body "([^"]*)"$`, stepContext.CheckHTTPResponseCodeAndBody)
-	ctx.Step(`^my "((failed)|(successful))" request metrics get recorded$`, stepContext.CheckRecordedMetrics)
+	ctx.Step(`^my "(failed|successful)" (vod|playback) request metrics get recorded$`, stepContext.CheckRecordedMetrics)
 	ctx.Step(`^Mist receives a request for segmenting with "([^"]*)" second segments$`, stepContext.CheckMist)
 	ctx.Step(`^the body matches file "([^"]*)"$`, stepContext.CheckHTTPResponseBodyFromFile)
 	ctx.Step(`^the gate API will (allow|deny) playback$`, stepContext.SetGateAPIResponse)

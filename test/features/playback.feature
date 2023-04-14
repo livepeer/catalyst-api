@@ -10,6 +10,7 @@ Feature: Playback
     And receive a response within "3" seconds
     Then I get an HTTP response with code "200"
     And the body matches file "responses/hls/dbe3q3g6q2kia036/index.m3u8"
+    And my "successful" playback request metrics get recorded
 
   Scenario: Rendition playlist requests
     Given the gate API will allow playback
@@ -17,6 +18,7 @@ Feature: Playback
     And receive a response within "3" seconds
     Then I get an HTTP response with code "200"
     And the body matches file "responses/hls/dbe3q3g6q2kia036/720p0/index.m3u8"
+    And my "successful" playback request metrics get recorded
 
   Scenario: Gate API deny
     Given the gate API will deny playback
@@ -28,6 +30,7 @@ Feature: Playback
     And receive a response within "3" seconds
     Then I get an HTTP response with code "401"
     And the body matches file "responses/unauthorised"
+    And my "failed" playback request metrics get recorded
 
   Scenario: No token param
     Given the gate API will allow playback

@@ -251,7 +251,7 @@ func (s *StepContext) CheckGateAPICallCount(expectedCount int) error {
 	return nil
 }
 
-func (s *StepContext) CheckRecordedMetrics(metricsType string) error {
+func (s *StepContext) CheckRecordedMetrics(metricsType, requestType string) error {
 	var url = s.BaseInternalURL + "/metrics"
 
 	res, err := http.Get(url)
@@ -264,23 +264,30 @@ func (s *StepContext) CheckRecordedMetrics(metricsType string) error {
 		return err
 	}
 
-	if metricsType == "failure" {
-		r := regexp.MustCompile(`\nupload_vod_request_duration_seconds_count{status_code="500",success="false",version="cucumber-test-version"} 1\n`)
+	metric := "upload_vod_request_duration_seconds_count"
+	if requestType == "playback" {
+		metric = "catalyst_playback_request_duration_seconds_count"
+	}
+
+	if metricsType == "failed" {
+		r := regexp.MustCompile(fmt.Sprintf(`\n%s{status_code="\d+",success="false",version="cucumber-test-version"} .+\n`, metric))
 		if !r.Match(body) {
-			return fmt.Errorf("not a valid failure upload_vod_request_duration_seconds_count")
+			return fmt.Errorf("not a valid failure %s: %q", metric, body)
 		}
 	}
 
 	if metricsType == "successful" {
-		r := regexp.MustCompile(`\nupload_vod_request_duration_seconds_count{status_code="200",success="true",version="cucumber-test-version"} 1\n`)
+		r := regexp.MustCompile(fmt.Sprintf(`\n%s{status_code="200",success="true",version="cucumber-test-version"} .+\n`, metric))
 		if !r.Match(body) {
-			return fmt.Errorf("not a valid success upload_vod_request_duration_seconds: %q", body)
+			return fmt.Errorf("not a valid success %s: %q", metric, body)
 		}
 	}
 
-	r := regexp.MustCompile(`\nupload_vod_request_count 1\n`)
-	if !r.Match(body) {
-		return fmt.Errorf("not a valid upload_vod_request_count metric")
+	if requestType == "vod" {
+		r := regexp.MustCompile(`\nupload_vod_request_count 1\n`)
+		if !r.Match(body) {
+			return fmt.Errorf("not a valid upload_vod_request_count metric")
+		}
 	}
 
 	return nil

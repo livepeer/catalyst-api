@@ -21,20 +21,20 @@ Feature: VOD Streaming
     When I submit to the internal "/api/vod" endpoint with "a valid upload vod request"
     And receive a response within "3" seconds
     Then I get an HTTP response with code "200"
-    And my "successful" request metrics get recorded
+    And my "successful" vod request metrics get recorded
     And Mist receives a request for segmenting with "10" second segments
 
   Scenario: Submit a bad request to `/api/vod`
     And I submit to the internal "/api/vod" endpoint with "an invalid upload vod request"
     And receive a response within "3" seconds
     Then I get an HTTP response with code "400"
-    And my "failed" request metrics get recorded
+    And my "failed" vod request metrics get recorded
 
 Scenario: Submit a video asset to stream as VOD with a custom segment size
     When I submit to the internal "/api/vod" endpoint with "a valid upload vod request with a custom segment size"
     And receive a response within "3" seconds
     Then I get an HTTP response with code "200"
-    And my "successful" request metrics get recorded
+    And my "successful" vod request metrics get recorded
     And Mist receives a request for segmenting with "3" second segments
 
 Scenario: Submit a video asset to stream as VOD with the FFMPEG / Livepeer pipeline
@@ -42,7 +42,7 @@ Scenario: Submit a video asset to stream as VOD with the FFMPEG / Livepeer pipel
     And receive a response within "3" seconds
     Then I get an HTTP response with code "200"
     And I receive a Request ID in the response body
-    And my "successful" request metrics get recorded
+    And my "successful" vod request metrics get recorded
     And "4" source segments are written to storage within "5" seconds
     And the source manifest is written to storage within "3" seconds and contains "4" segments
     And the Broadcaster receives "4" segments for transcoding within "10" seconds
