@@ -31,6 +31,7 @@ type Response struct {
 	ContentType   string
 	ContentLength *int64
 	ETag          string
+	ContentRange  string
 }
 
 func Handle(req Request) (*Response, error) {
@@ -45,6 +46,7 @@ func Handle(req Request) (*Response, error) {
 			ContentType:   f.ContentType,
 			ContentLength: f.Size,
 			ETag:          f.ETag,
+			ContentRange:  f.ContentRange,
 		}, nil
 	}
 	// don't close the body for non-manifest files where we return above as we simply proxying the body back
@@ -83,9 +85,12 @@ func Handle(req Request) (*Response, error) {
 		}
 	}
 
+	playlistBuffer := p.Encode()
+	bufferSize := int64(playlistBuffer.Len())
 	return &Response{
-		Body:        io.NopCloser(p.Encode()),
-		ContentType: f.ContentType,
+		Body:          io.NopCloser(playlistBuffer),
+		ContentType:   f.ContentType,
+		ContentLength: &bufferSize,
 	}, nil
 }
 
