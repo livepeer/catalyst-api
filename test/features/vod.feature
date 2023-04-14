@@ -9,6 +9,7 @@ Feature: VOD Streaming
     And an object store is available
     And Studio API server is running at "localhost:3000"
     And Mist is running at "localhost:4242"
+    And a Broadcaster is running at "localhost:8935"
     And ffmpeg is available
 
   Scenario: HTTP API Startup
@@ -44,5 +45,6 @@ Scenario: Submit a video asset to stream as VOD with the FFMPEG / Livepeer pipel
     And my "successful" request metrics get recorded
     And "4" source segments are written to storage within "5" seconds
     And the source manifest is written to storage within "3" seconds and contains "4" segments
+    And the Broadcaster receives "4" segments for transcoding within "10" seconds
+    And "4" transcoded segments and manifests have been written to disk for profiles "270p0,low-bitrate" within "5" seconds
     # TODO: Check for callbacks being received
-    # TODO: Check for transcoding success

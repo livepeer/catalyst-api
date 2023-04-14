@@ -80,6 +80,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^Studio API server is running at "([^"]*)"$`, stepContext.StartStudioAPI)
 	ctx.Step(`^Mist is running at "([^"]*)"$`, stepContext.StartMist)
 	ctx.Step(`^ffmpeg is available$`, stepContext.CheckFfmpeg)
+	ctx.Step(`^a Broadcaster is running at "([^"]*)"$`, stepContext.StartBroadcaster)
 
 	ctx.Step(`^I query the "([^"]*)" endpoint( with "([^"]*)")?$`, stepContext.CreateRequest)
 	ctx.Step(`^I query the internal "([^"]*)" endpoint$`, stepContext.CreateGetRequestInternal)
@@ -99,6 +100,8 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^"(\d+)" source segments are written to storage within "(\d+)" seconds$`, stepContext.AllOfTheSourceSegmentsAreWrittenToStorageWithinSeconds)
 	ctx.Step(`^the source manifest is written to storage within "(\d+)" seconds and contains "(\d+)" segments$`, stepContext.TheSourceManifestIsWrittenToStorageWithinSeconds)
 	ctx.Step(`^the gate API call was valid$`, stepContext.CheckGateAPICallValid)
+	ctx.Step(`^the Broadcaster receives "(\d+)" segments for transcoding within "(\d+)" seconds$`, stepContext.BroadcasterReceivesSegmentsWithinSeconds)
+	ctx.Step(`^"(\d+)" transcoded segments and manifests have been written to disk for profiles "([^"]*)" within "(\d+)" seconds$`, stepContext.TranscodedSegmentsWrittenToDiskWithinSeconds)
 
 	ctx.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
 		if app != nil && app.Process != nil {
@@ -117,6 +120,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 		if stepContext.MinioAdmin != nil {
 			_ = stepContext.MinioAdmin.ServiceStop(ctx)
 		}
+		_ = stepContext.Broadcaster.Shutdown(ctx)
 		return ctx, nil
 	})
 }
