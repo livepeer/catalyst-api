@@ -28,7 +28,10 @@ func TestSign(t *testing.T) {
 		Message:     testMessage,
 	}
 	signedEvent := signer.Sign(event)
-	b, err := json.Marshal(signedEvent)
+	_, err := json.Marshal(signedEvent)
 	require.NoError(t, err)
-	panic(string(b))
+
+	addr, err := signer.Verify(signedEvent)
+	require.NoError(t, err)
+	panic(addr)
 }
