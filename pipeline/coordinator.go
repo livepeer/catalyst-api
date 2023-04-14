@@ -360,8 +360,8 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 	log.AddContext(p.RequestID, "stream_name", streamName)
 	log.AddContext(p.RequestID, "handler", handler.Name())
 
-	var pipeline = "mist"
-	if handler.Name() == "external" {
+	var pipeline = handler.Name()
+	if pipeline == "external" {
 		pipeline = "aws-mediaconvert"
 	}
 
