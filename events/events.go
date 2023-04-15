@@ -1,6 +1,7 @@
 package events
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/big"
 
@@ -28,9 +29,9 @@ func (t *Domain) TypedDataDomain() apitypes.TypedDataDomain {
 }
 
 type Event struct {
-	PrimaryType string         `json:"primaryType"`
-	Domain      Domain         `json:"domain"`
-	Message     map[string]any `json:"message"`
+	PrimaryType string `json:"primaryType"`
+	Domain      Domain `json:"domain"`
+	Message     Action `json:"message"`
 }
 
 func (e *Event) TypedData(types apitypes.Types) apitypes.TypedData {
@@ -38,7 +39,7 @@ func (e *Event) TypedData(types apitypes.Types) apitypes.TypedData {
 		Types:       types,
 		PrimaryType: e.PrimaryType,
 		Domain:      e.Domain.TypedDataDomain(),
-		Message:     e.Message,
+		Message:     e.Message.Map(),
 	}
 }
 
@@ -90,4 +91,28 @@ func (s *Signer) Verify(signedEvent SignedEvent) (common.Address, error) {
 		return common.Address{}, err
 	}
 	return crypto.PubkeyToAddress(*rpk), nil
+}
+
+type Action interface {
+	Map() map[string]any
+}
+
+// Base action suitable for inheriting by every other action
+type ActionBase struct{}
+
+// Returns a map version of this event suitable for
+func (a ActionBase) Map() map[string]any {
+	// lol very hacky implementation obviously
+	data, err := json.Marshal(a)
+
+	if err != nil {
+		panic(err)
+	}
+
+	newMap := map[string]any{}
+	err = json.Unmarshal(data, &newMap)
+	if err != nil {
+		panic(err)
+	}
+	return newMap
 }

@@ -11,16 +11,12 @@ import (
 
 func TestSign(t *testing.T) {
 	signer := events.Signer{Types: Types}
-	var testMessage = map[string]interface{}{
-		"time": big.NewInt(1681403259137),
-		"data": map[string]any{
-			"id": "my-awesome-stream",
-			"targets": []map[string]any{
-				{
-					"url": "rtmp://localhost/foo/bar",
-				},
-			},
-		},
+	var testMessage = ChannelDefinition{
+		ID:   "my-awesome-stream",
+		Time: *big.NewInt(1681403259137),
+		MultistreamTargets: []MultistreamTarget{{
+			URL: "rtmp://localhost/foo/bar",
+		}},
 	}
 	event := events.Event{
 		PrimaryType: "EventChannelDefinitionMeta",
