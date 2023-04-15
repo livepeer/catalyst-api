@@ -1,6 +1,8 @@
 package schema
 
 import (
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/signer/core/apitypes"
 	"github.com/livepeer/catalyst-api/events"
 )
@@ -27,23 +29,17 @@ var Types = apitypes.Types{
 			Type: "string",
 		},
 	},
-	"EventChannelDefinitionMeta": {
-		{
-			Name: "time",
-			Type: "int64",
-		},
-		{
-			Name: "data",
-			Type: "EventChannelDefinition",
-		},
-	},
-	"EventChannelDefinition": {
+	"ChannelDefinition": {
 		{
 			Name: "id",
 			Type: "string",
 		},
 		{
-			Name: "targets",
+			Name: "time",
+			Type: "int64",
+		},
+		{
+			Name: "multistreamTargets",
 			Type: "MultistreamTarget[]",
 		},
 	},
@@ -53,4 +49,15 @@ var Types = apitypes.Types{
 			Type: "string",
 		},
 	},
+}
+
+type ChannelDefinition struct {
+	events.ActionBase
+	ID                 string              `json:"id"`
+	Time               big.Int             `json:"time"`
+	MultistreamTargets []MultistreamTarget `json:"multistreamTargets"`
+}
+
+type MultistreamTarget struct {
+	URL string
 }
