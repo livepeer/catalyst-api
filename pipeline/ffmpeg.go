@@ -114,7 +114,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		return nil, fmt.Errorf("error downloading source manifest: %s", err)
 	}
 
-	job.sourceSegments = len(sourceManifest.Segments)
+	job.sourceSegments = len(sourceManifest.GetAllSegments())
 
 	outputs, transcodedSegments, err := transcode.RunTranscodeProcess(transcodeRequest, job.StreamName, inputInfo)
 	if err != nil {
