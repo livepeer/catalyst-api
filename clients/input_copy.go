@@ -34,7 +34,7 @@ type InputCopy struct {
 
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
 func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
-	if isDirectUpload(inputFile) {
+	if isDirectUpload(inputFile) || isHLSInput(inputFile) {
 		log.Log(requestID, "Direct upload detected", "source", inputFile.String())
 		signedURL = inputFile.String()
 		osTransferURL = inputFile
@@ -99,6 +99,14 @@ func isDirectUpload(inputFile *url.URL) bool {
 	// recordings via backup-recording path is also considered a "direct-upload"
 	return strings.HasSuffix(inputFile.Host, "storage.googleapis.com") &&
 		(inputFile.Scheme == "https" || inputFile.Scheme == "http")
+}
+
+func isHLSInput(inputFile *url.URL) bool {
+	ext := strings.LastIndex(inputFile.Path, ".")
+	if ext == -1 {
+		return false
+	}
+	return inputFile.Path[ext:len(inputFile.Path)] == ".m3u8"
 }
 
 func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {

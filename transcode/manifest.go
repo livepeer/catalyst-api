@@ -63,6 +63,7 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 		}
 
 		u, err := manifestURLToSegmentURL(sourceManifestURL, segment.URI)
+		fmt.Println("BBB", u)
 		if err != nil {
 			return nil, err
 		}
@@ -170,11 +171,29 @@ func manifestURLToSegmentURL(manifestURL, segmentFilename string) (string, error
 	if err != nil {
 		return "", fmt.Errorf("failed to parse manifest URL when converting to segment URL: %s", err)
 	}
+	fmt.Println("BBB: base: ", base.String())
 
 	relative, err := url.Parse(segmentFilename)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse segment filename when converting to segment URL: %s", err)
 	}
+	fmt.Println("BBB: relative: ", relative.String())
+
+	// If a manifest is using URL paths instead of relative paths, then override the
+	// relative path to use auth info correctly if GCS is detected (i.e. recordings)
+	if strings.HasSuffix(relative.Host, "storage.googleapis.com") && 
+		(relative.Scheme == "https" || relative.Scheme == "http") {
+			relative.Scheme = base.Scheme
+			relative.Host = base.Host
+			relative.Path = relative.Path
+			relative.User = base.User
+			return relative.String(), nil
+	}
 
 	return base.ResolveReference(relative).String(), nil
 }
+
+
+
+
+

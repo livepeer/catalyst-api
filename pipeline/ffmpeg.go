@@ -11,6 +11,7 @@ import (
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/transcode"
 	"github.com/livepeer/catalyst-api/video"
+
 )
 
 type ffmpeg struct {
@@ -56,8 +57,8 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		}
 	} else {
 		// If hls input is detected, overwrite use the SegmentingTargetURL as the SourceManifestURL
-		job.SegmentingTargetURL = job.SourceFile
-		log.Log(job.RequestID, "YYY", "job.SegmentingTargetURL", job.SegmentingTargetURL) 
+		job.SegmentingTargetURL = "s3+" + job.SourceFile
+		log.Log(job.RequestID, "XXXXXX", "job.SegmentingTargetURL", job.SegmentingTargetURL) 
 	}
 	log.AddContext(job.RequestID, "segmented_url", job.SegmentingTargetURL)
 
@@ -82,6 +83,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		ReportProgress:    job.ReportProgress,
 		GenerateMP4:       job.GenerateMP4,
 	}
+	fmt.Printf("%s %+v", job.RequestID, transcodeRequest)
 
 	inputInfo := video.InputVideo{
 		Format:    job.InputFileInfo.Format,
@@ -125,7 +127,9 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	}
 	segs := sourceManifest.GetAllSegments()
 	job.sourceSegments = len(segs)
-	fmt.Printf(job.RequestID, "XXX: %+v", segs)
+	for _,v := range segs {
+		fmt.Println(job.RequestID, "XXX", v.URI)
+	}
 
 	outputs, transcodedSegments, err := transcode.RunTranscodeProcess(transcodeRequest, job.StreamName, inputInfo)
 	if err != nil {
