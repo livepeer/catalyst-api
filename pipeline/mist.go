@@ -184,7 +184,7 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 		return nil, fmt.Errorf("error downloading source manifest: %s", err)
 	}
 
-	job.sourceSegments = len(sourceManifest.Segments)
+	job.sourceSegments = len(sourceManifest.GetAllSegments())
 
 	outputs, transcodedSegments, err := transcode.RunTranscodeProcess(transcodeRequest, p.StreamName, inputInfo)
 	if err != nil {
