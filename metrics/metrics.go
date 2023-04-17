@@ -36,7 +36,7 @@ type CatalystAPIMetrics struct {
 	VODPipelineMetrics VODPipelineMetrics
 }
 
-var vodLabels = []string{"source_codec_video", "source_codec_audio", "pipeline", "catalyst_region", "num_profiles", "stage", "version", "is_fallback_mode", "is_mist_supported"}
+var vodLabels = []string{"source_codec_video", "source_codec_audio", "pipeline", "catalyst_region", "num_profiles", "stage", "version", "is_fallback_mode", "is_livepeer_supported"}
 
 func NewMetrics() *CatalystAPIMetrics {
 	m := &CatalystAPIMetrics{
