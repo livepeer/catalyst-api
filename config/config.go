@@ -35,9 +35,6 @@ const MaxSegmentSizeSecs = 20
 // the future.
 const MAX_JOBS_IN_FLIGHT = 8
 
-// How big an input file has to be before we avoid routing it to Mist (because of known issues handling large files)
-const MAX_MIST_INPUT_SIZE_BYTES = 1024 * 1024 * 1024
-
 // How long to try writing a single segment to storage for before giving up
 const SEGMENT_WRITE_TIMEOUT = 5 * time.Minute
 

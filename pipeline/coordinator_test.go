@@ -730,19 +730,6 @@ func Test_checkMistCompatible(t *testing.T) {
 			},
 		},
 	}
-	largeVideo := video.InputVideo{
-		Tracks: []video.InputTrack{
-			{
-				Codec: "h264",
-				Type:  video.TrackTypeVideo,
-			},
-			{
-				Codec: "aac",
-				Type:  video.TrackTypeAudio,
-			},
-		},
-		SizeBytes: 1074790400, // 1025 Megabytes
-	}
 	tests := []struct {
 		name          string
 		args          args
@@ -830,19 +817,10 @@ func Test_checkMistCompatible(t *testing.T) {
 			want:          StrategyExternalDominance,
 			wantSupported: false,
 		},
-		{
-			name: "incompatible with mist - large video",
-			args: args{
-				strategy: StrategyFallbackExternal,
-				iv:       largeVideo,
-			},
-			want:          StrategyExternalDominance,
-			wantSupported: false,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			supported, got := checkMistCompatible("requestID", tt.args.strategy, tt.args.iv)
+			supported, got := checkLivepeerCompatible("requestID", tt.args.strategy, tt.args.iv)
 			require.Equal(t, tt.want, got)
 			require.Equal(t, tt.wantSupported, supported)
 		})

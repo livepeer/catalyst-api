@@ -76,7 +76,7 @@ type UploadJobPayload struct {
 	InputFileInfo         video.InputVideo
 	SignedSourceURL       string
 	InFallbackMode        bool
-	MistSupported         bool
+	LivepeerSupported     bool
 }
 
 // UploadJobResult is the object returned by the successful execution of an
@@ -273,7 +273,7 @@ func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 	if p.PipelineStrategy.IsValid() {
 		strategy = p.PipelineStrategy
 	}
-	p.MistSupported, strategy = checkMistCompatible(p.RequestID, strategy, p.InputFileInfo)
+	p.LivepeerSupported, strategy = checkLivepeerCompatible(p.RequestID, strategy, p.InputFileInfo)
 	log.AddContext(p.RequestID, "strategy", strategy)
 	log.Log(p.RequestID, "Starting upload job")
 
@@ -304,32 +304,27 @@ func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 	}
 }
 
-// checkMistCompatible checks if the input codecs are compatible with mist and overrides the pipeline strategy
+// checkLivepeerCompatible checks if the input codecs are compatible with our Livepeer pipeline and overrides the pipeline strategy
 // to external if they are incompatible
-func checkMistCompatible(requestID string, strategy Strategy, iv video.InputVideo) (bool, Strategy) {
-	// Mist currently struggles with large files, so we don't send it any files bigger than MAX_MIST_INPUT_SIZE_BYTES
-	if iv.SizeBytes > config.MAX_MIST_INPUT_SIZE_BYTES {
-		return mistNotSupported(strategy)
-	}
-
+func checkLivepeerCompatible(requestID string, strategy Strategy, iv video.InputVideo) (bool, Strategy) {
 	for _, track := range iv.Tracks {
-		// if the codecs are not compatible then override to external pipeline to avoid sending to mist
+		// if the codecs are not compatible then override to external pipeline to avoid sending to Livepeer
 		if (track.Type == video.TrackTypeVideo && strings.ToLower(track.Codec) != "h264") ||
 			(track.Type == video.TrackTypeAudio && strings.ToLower(track.Codec) != "aac") {
-			log.Log(requestID, "codec not supported by mist", "trackType", track.Type, "codec", track.Codec)
-			return mistNotSupported(strategy)
+			log.Log(requestID, "codec not supported by Livepeer pipeline", "trackType", track.Type, "codec", track.Codec)
+			return livepeerNotSupported(strategy)
 		}
 		if track.Type == video.TrackTypeVideo && track.Rotation != 0 {
-			log.Log(requestID, "video rotation not supported by mist", "rotation", track.Rotation)
-			return mistNotSupported(strategy)
+			log.Log(requestID, "video rotation not supported by Livepeer pipeline", "rotation", track.Rotation)
+			return livepeerNotSupported(strategy)
 		}
 	}
 	return true, strategy
 }
 
-func mistNotSupported(strategy Strategy) (bool, Strategy) {
-	// allow StrategyCatalystDominance to pass through as this is used in tests and we might want to manually force it for debugging
-	if strategy == StrategyCatalystDominance {
+func livepeerNotSupported(strategy Strategy) (bool, Strategy) {
+	// Allow "dominance" strategies to pass through as these are used in tests and we might want to manually force them for debugging
+	if strategy == StrategyCatalystDominance || strategy == StrategyCatalystFfmpegDominance {
 		return false, strategy
 	}
 	return false, StrategyExternalDominance
@@ -503,7 +498,7 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 		job.state,
 		config.Version,
 		strconv.FormatBool(job.InFallbackMode),
-		strconv.FormatBool(job.MistSupported),
+		strconv.FormatBool(job.LivepeerSupported),
 	}
 
 	metrics.Metrics.VODPipelineMetrics.Count.
