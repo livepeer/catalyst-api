@@ -100,7 +100,7 @@ type Action interface {
 // Base action suitable for inheriting by every other action
 type ActionBase struct{}
 
-// Returns a map version of this event suitable for
+// Returns a map version of this event suitable for signing by eth functions
 func (a ActionBase) Map() map[string]any {
 	// lol very hacky implementation obviously
 	data, err := json.Marshal(a)
