@@ -29,27 +29,37 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
 	}
+	log.Log(job.RequestID, "XXX:", "sourceOutputBaseURL", sourceOutputBaseURL.String())
 	sourceOutputURL := sourceOutputBaseURL.JoinPath(job.RequestID)
-	segmentingTargetURL := sourceOutputURL.JoinPath(SEGMENTING_SUBDIR, SEGMENTING_TARGET_MANIFEST)
-
 	job.SourceOutputURL = sourceOutputURL.String()
+	log.Log(job.RequestID, "XXX:", "job.SourceOutputURL", sourceOutputURL.String())
+
+	segmentingTargetURL := sourceOutputURL.JoinPath(SEGMENTING_SUBDIR, SEGMENTING_TARGET_MANIFEST)
 	job.SegmentingTargetURL = segmentingTargetURL.String()
+	log.Log(job.RequestID, "XXX:", "job.SegmentingTargetURL", segmentingTargetURL.String())
+
+	// Begin Segmenting for non-hls input files
+	if job.InputFileInfo.Format != "hls" {
+
+		log.Log(job.RequestID, "Beginning segmenting via FFMPEG/Livepeer pipeline")
+		job.ReportProgress(clients.TranscodeStatusPreparing, 0.5)
+
+		// FFMPEG fails when presented with a raw IP + Path type URL, so we prepend "http://" to it
+		internalAddress := config.HTTPInternalAddress
+		if !strings.HasPrefix(internalAddress, "http") {
+			internalAddress = "http://" + internalAddress
+		}
+
+		destinationURL := fmt.Sprintf("%s/api/ffmpeg/%s/index.m3u8", internalAddress, job.StreamName)
+		if err := video.Segment(job.SignedSourceURL, destinationURL, job.TargetSegmentSizeSecs); err != nil {
+			return nil, err
+		}
+	} else {
+		// If hls input is detected, overwrite use the SegmentingTargetURL as the SourceManifestURL
+		job.SegmentingTargetURL = job.SourceFile
+		log.Log(job.RequestID, "YYY", "job.SegmentingTargetURL", job.SegmentingTargetURL) 
+	}
 	log.AddContext(job.RequestID, "segmented_url", job.SegmentingTargetURL)
-
-	// Begin Segmenting
-	log.Log(job.RequestID, "Beginning segmenting via FFMPEG/Livepeer pipeline")
-	job.ReportProgress(clients.TranscodeStatusPreparing, 0.5)
-
-	// FFMPEG fails when presented with a raw IP + Path type URL, so we prepend "http://" to it
-	internalAddress := config.HTTPInternalAddress
-	if !strings.HasPrefix(internalAddress, "http") {
-		internalAddress = "http://" + internalAddress
-	}
-
-	destinationURL := fmt.Sprintf("%s/api/ffmpeg/%s/index.m3u8", internalAddress, job.StreamName)
-	if err := video.Segment(job.SignedSourceURL, destinationURL, job.TargetSegmentSizeSecs); err != nil {
-		return nil, err
-	}
 
 	// Segmenting Finished
 	job.ReportProgress(clients.TranscodeStatusPreparingCompleted, 1)
@@ -74,7 +84,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	}
 
 	inputInfo := video.InputVideo{
-		Format:    "mp4",
+		Format:    job.InputFileInfo.Format,
 		Duration:  job.InputFileInfo.Duration,
 		SizeBytes: int64(job.sourceBytes),
 		Tracks: []video.InputTrack{
@@ -113,8 +123,9 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error downloading source manifest: %s", err)
 	}
-
-	job.sourceSegments = len(sourceManifest.GetAllSegments())
+	segs := sourceManifest.GetAllSegments()
+	job.sourceSegments = len(segs)
+	fmt.Printf(job.RequestID, "XXX: %+v", segs)
 
 	outputs, transcodedSegments, err := transcode.RunTranscodeProcess(transcodeRequest, job.StreamName, inputInfo)
 	if err != nil {
