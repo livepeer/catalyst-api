@@ -6,12 +6,13 @@ import (
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
-func Segment(sourceURL string, outputManifestURL string, targetSegmentSize int64) error {
+func Segment(requestID string, sourceURL string, outputManifestURL string, targetSegmentSize int64) error {
 	err := ffmpeg.Input(sourceURL).
 		Output(
 			outputManifestURL,
 			ffmpeg.KwArgs{
-				"c":                 "copy",
+				"c:a":               "copy",
+				"c:v":               "copy",
 				"f":                 "hls",
 				"hls_segment_type":  "mpegts",
 				"hls_playlist_type": "vod",
