@@ -370,7 +370,7 @@ func (mc *mac) triggerDefaultStream(w http.ResponseWriter, r *http.Request, line
 }
 
 func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
-	if len(lines) != 3 {
+	if len(lines) != 3 { // TODO: update this to 4 assuming a new line will be added for RecordingSessionID
 		glog.Errorf("Expected 3 lines, got %d, request \n%s", len(lines), rawRequest)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("false"))
@@ -378,6 +378,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 	}
 	// glog.V(model.INSANE).Infof("Parsed request (%d):\n%+v", len(lines), lines)
 	pu, err := url.Parse(lines[0])
+	recordingID := lines[1] // HACK: using timestamp field as a hack to simulate RecordingSessionID until Mist changes are ready
 	streamKey := lines[2]
 	var responseName string
 	if err != nil {
@@ -395,7 +396,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 			return false
 		}
 	}
-	glog.V(model.VVERBOSE).Infof("Requested stream key is '%s'", streamKey)
+	glog.Infof("Requested stream key is '%s'", streamKey)
 	// ask API
 	stream, err := mc.lapi.GetStreamByKey(streamKey)
 	if err != nil || stream == nil {
@@ -404,7 +405,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 		w.Write([]byte("false"))
 		return false
 	}
-	glog.V(model.VERBOSE).Infof("For stream %s got info %+v", streamKey, stream)
+	glog.Infof("For stream %s got info %+v", streamKey, stream)
 
 	if stream.Deleted {
 		glog.Infof("Stream %s was deleted, so deleting Mist's stream configuration", streamKey)
@@ -448,7 +449,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 		} else {
 			responseName = mc.wildcardPlaybackID(stream)
 		}
-		ok, err := mc.lapi.SetActive(stream.ID, true, info.startedAt)
+		ok, err := mc.lapi.SetActive(stream.ID, recordingID, true, info.startedAt)
 		if err != nil {
 			glog.Error(err)
 		} else if !ok {
