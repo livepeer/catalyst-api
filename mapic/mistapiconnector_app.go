@@ -251,6 +251,7 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 		}
 		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
 			glog.Infof("Setting stream's protocol=%s manifestID=%s playbackID=%s active status to false", protocol, info.id, playbackID)
+			// TODO: change
 			_, err := mc.lapi.SetActive(info.id, false, info.startedAt)
 			if err != nil {
 				glog.Error(err)
@@ -378,7 +379,6 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 	}
 	// glog.V(model.INSANE).Infof("Parsed request (%d):\n%+v", len(lines), lines)
 	pu, err := url.Parse(lines[0])
-	recordingID := lines[1] // HACK: using timestamp field as a hack to simulate RecordingSessionID until Mist changes are ready
 	streamKey := lines[2]
 	var responseName string
 	if err != nil {
@@ -449,7 +449,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 		} else {
 			responseName = mc.wildcardPlaybackID(stream)
 		}
-		ok, err := mc.lapi.SetActive(stream.ID, recordingID, true, info.startedAt)
+		ok, err := mc.lapi.SetActive(stream.ID, true, info.startedAt)
 		if err != nil {
 			glog.Error(err)
 		} else if !ok {
