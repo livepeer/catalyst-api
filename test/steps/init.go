@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"time"
@@ -60,51 +59,6 @@ func WaitForStartup(url string) {
 	if err != nil {
 		panic(err)
 	}
-}
-
-func (s *StepContext) StartMist(listen string) error {
-	router := httprouter.New()
-	router.POST("/api2", func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-		body, err := io.ReadAll(req.Body)
-		if err != nil {
-			panic(err)
-		}
-
-		query, err := url.ParseQuery(string(body))
-		if err != nil {
-			panic(err)
-		}
-
-		var command map[string]interface{}
-		err = json.Unmarshal([]byte(query["command"][0]), &command)
-		if err != nil {
-			panic(err)
-		}
-
-		addstream := command["addstream"]
-		push_start := command["push_start"]
-
-		if addstream != nil {
-			stream := addstream.(map[string]interface{})
-
-			for name, value := range stream {
-				source := value.(map[string]interface{})
-				streamName := name
-				_, _ = io.WriteString(w, `{"authorize":{"status":"OK"},"streams":{"`+streamName+`":{"name":"`+streamName+`","source":"`+source["source"].(string)+`"},"incomplete list":1}}`)
-				break
-			}
-		} else if push_start != nil {
-			s.AddMistPushStartURL(push_start.(map[string]interface{})["target"].(string))
-			_, _ = io.WriteString(w, `{"authorize":{"status":"OK"}}`)
-		}
-	})
-
-	s.Mist = http.Server{Addr: listen, Handler: router}
-	go func() {
-		_ = s.Mist.ListenAndServe()
-	}()
-
-	return nil
 }
 
 func (s *StepContext) StartObjectStore() error {
