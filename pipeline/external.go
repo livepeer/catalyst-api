@@ -2,7 +2,6 @@ package pipeline
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"net/url"
@@ -58,14 +57,4 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 			Outputs:    outputVideos,
 		},
 	}, nil
-}
-
-// Boilerplate to implement the Handler interface
-
-func (e *external) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*HandlerOutput, error) {
-	return nil, errors.New("unexpected RECORDING_END trigger on external transcode provider pipeline")
-}
-
-func (e *external) HandlePushEndTrigger(job *JobInfo, p PushEndPayload) (*HandlerOutput, error) {
-	return nil, errors.New("unexpected PUSH_END trigger on external transcode provider pipeline")
 }

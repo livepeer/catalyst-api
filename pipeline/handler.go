@@ -22,12 +22,6 @@ type Handler interface {
 	// Handle start job request. This may start async processes like on mist an
 	// wait for triggers or do the full job synchronously on exeution.
 	HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error)
-	// Handle the recording_end trigger in case a mist stream is created (only
-	// used for segmenting today).
-	HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*HandlerOutput, error)
-	// Handle the push_end trigger in case a mist stream is created (only used for
-	// segmenting today).
-	HandlePushEndTrigger(job *JobInfo, p PushEndPayload) (*HandlerOutput, error)
 }
 
 // HandlerOutput is the result provided by the pipeline handlers when no
