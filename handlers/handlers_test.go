@@ -2,24 +2,14 @@ package handlers
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/clients"
-	"github.com/livepeer/catalyst-api/config"
-	"github.com/livepeer/catalyst-api/mokeypatching"
 	"github.com/livepeer/catalyst-api/pipeline"
-	"github.com/livepeer/catalyst-api/transcode"
-	"github.com/livepeer/go-tools/drivers"
 	"github.com/stretchr/testify/require"
 )
 
@@ -177,59 +167,3 @@ func TestWrongContentTypeVODUploadHandler(t *testing.T) {
 	require.Equal(415, rr.Result().StatusCode)
 	require.JSONEq(rr.Body.String(), `{"error": "Requires application/json content type", "error_detail":""}`)
 }
-
-func storeTestFile(t *testing.T, path, name, data string) {
-	// Store to dir
-	storage, err := drivers.ParseOSURL("file://"+path, true)
-	require.NoError(t, err)
-	_, err = storage.NewSession("").SaveData(context.Background(), name, bytes.NewReader([]byte(data)), nil, 1*time.Second)
-	require.NoError(t, err)
-}
-
-func createTempManifest(t *testing.T, dir string) string {
-	drivers.Testing = true
-
-	err := os.MkdirAll(dir, os.ModePerm)
-	require.NoError(t, err)
-
-	storeTestFile(t, dir, "index.m3u8", exampleMediaManifest)
-	storeTestFile(t, dir, "0.ts", "segment data")
-	storeTestFile(t, dir, "5000.ts", "lots of segment data")
-	storedManifest := fmt.Sprintf("file://%s", path.Join(dir, "index.m3u8"))
-	return storedManifest
-}
-
-func changeDefaultBroadcasterUrl(t *testing.T, testingServerURL string) func() {
-	var err error
-	mokeypatching.MonkeypatchingMutex.Lock()
-	// remember default value
-	originalUrl := config.DefaultBroadcasterURL
-	originalClient := transcode.LocalBroadcasterClient
-	// Modify configuration
-	config.DefaultBroadcasterURL = testingServerURL
-	transcode.LocalBroadcasterClient, err = clients.NewLocalBroadcasterClient(testingServerURL)
-	// Modify PathMistDir configuration
-	require.NoError(t, err)
-	tempDir := t.TempDir()
-	script := path.Join(tempDir, "MistInHLS")
-	err = os.WriteFile(script, []byte("#!/bin/sh\necho livepeer\n"), 0744)
-	require.NoError(t, err)
-
-	return func() {
-		// Restore original values
-		config.DefaultBroadcasterURL = originalUrl
-		transcode.LocalBroadcasterClient = originalClient
-		mokeypatching.MonkeypatchingMutex.Unlock()
-	}
-}
-
-const exampleMediaManifest = `#EXTM3U
-#EXT-X-VERSION:3
-#EXT-X-PLAYLIST-TYPE:VOD
-#EXT-X-TARGETDURATION:5
-#EXT-X-MEDIA-SEQUENCE:0
-#EXTINF:10.4160000000,
-0.ts
-#EXTINF:5.3340000000,
-5000.ts
-#EXT-X-ENDLIST`
