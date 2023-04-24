@@ -496,8 +496,8 @@ github.com/livepeer/go-tools v0.2.12 h1:JsonAT9UXGLnwlBG97Nfd+/SC0E/FOfKFs++ud+e
 github.com/livepeer/go-tools v0.2.12/go.mod h1:/aZ+20XYLdeebFA3CrQTkHUf7DmiGBzh6Bs8JkbelUA=
 github.com/livepeer/joy4 v0.1.1 h1:Tz7gVcmvpG/nfUKHU+XJn6Qke/k32mTWMiH9qB0bhnM=
 github.com/livepeer/joy4 v0.1.1/go.mod h1:xkDdm+akniYxVT9KW1Y2Y7Hso6aW+rZObz3nrA9yTHw=
-github.com/livepeer/livepeer-data v0.6.4 h1:OFmIyKvnYqtXKKFnSORxB+tDPotLHEwRS6SXOEplugo=
-github.com/livepeer/livepeer-data v0.6.4/go.mod h1:/PPM48tccbKbD46eogmRKy7E087z4THaMB4Jfvn1cnI=
+github.com/livepeer/livepeer-data v0.6.5 h1:H/ZbWb20d5BPiBwSxUTTimisZi/f94I/awm+8HnbEbo=
+github.com/livepeer/livepeer-data v0.6.5/go.mod h1:X/toP4ztP47lVlDchllL3BKjeDv09OQo42tzDEmzJxQ=
 github.com/livepeer/m3u8 v0.11.1 h1:VkUJzfNTyjy9mqsgp5JPvouwna8wGZMvd/gAfT5FinU=
 github.com/livepeer/m3u8 v0.11.1/go.mod h1:IUqAtwWPAG2CblfQa4SVzTQoDcEMPyfNOaBSxqHMS04=
 github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0/go.mod h1:zJYVVT2jmtg6P3p1VtQj7WsuWi/y4VnjVBn7F8KPB3I=
