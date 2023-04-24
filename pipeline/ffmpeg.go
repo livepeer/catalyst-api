@@ -55,7 +55,6 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	// Transcode Beginning
 	log.Log(job.RequestID, "Beginning transcoding via FFMPEG/Livepeer pipeline")
-	job.ReportProgress(clients.TranscodeStatusTranscoding, 0.1)
 
 	transcodeRequest := transcode.TranscodeSegmentRequest{
 		SourceFile:        job.SourceFile,
