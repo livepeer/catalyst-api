@@ -10,6 +10,7 @@ import (
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers"
+	"github.com/livepeer/catalyst-api/handlers/actions"
 	"github.com/livepeer/catalyst-api/handlers/geolocation"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
@@ -56,6 +57,7 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 		Cluster:  c,
 		Config:   cli,
 	}
+	actionHandlers := actions.NewActionsHandlersCollection(cli)
 
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 
@@ -72,6 +74,8 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 	for _, path := range [...]string{"/asset/hls/:playbackID/*file", "/webrtc/:playbackID"} {
 		router.OPTIONS(path, withLogging(withCORS(handlers.PreflightOptionsHandler())))
 	}
+
+	router.POST("/action", withLogging(actionHandlers.ActionHandler()))
 
 	// Handling incoming playback redirection requests
 	redirectHandler := withLogging(withCORS(geoHandlers.RedirectHandler()))
