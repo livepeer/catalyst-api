@@ -15,7 +15,7 @@ import (
 	"github.com/livepeer/catalyst-api/metrics"
 )
 
-const MAX_TIME_WITHOUT_UPDATE = 30 * time.Minute
+const MaxTimeWithoutUpdate = 30 * time.Minute
 
 // The default client is only used for the recording event. This is to avoid
 // misusing the singleton client to send transcode status updates, which should
@@ -42,6 +42,7 @@ type PeriodicCallbackClient struct {
 	httpClient               *http.Client
 	callbackInterval         time.Duration
 	headers                  map[string]string
+	staleTimeout             time.Duration
 }
 
 func NewPeriodicCallbackClient(callbackInterval time.Duration, headers map[string]string) *PeriodicCallbackClient {
@@ -60,6 +61,7 @@ func NewPeriodicCallbackClient(callbackInterval time.Duration, headers map[strin
 		requestIDToLatestMessage: map[string]TranscodeStatusMessage{},
 		mapLock:                  sync.RWMutex{},
 		headers:                  headers,
+		staleTimeout:             MaxTimeWithoutUpdate,
 	}
 }
 
@@ -105,7 +107,7 @@ func (pcc *PeriodicCallbackClient) SendTranscodeStatus(tsm TranscodeStatusMessag
 	}
 
 	log.Log(tsm.RequestID, "Updated transcode status",
-		"timestamp", tsm.Timestamp, "status", tsm.Status, "completion_ratio", tsm.CompletionRatio,
+		"timestamp", tsm.Timestamp.UnixMilli(), "status", tsm.Status, "completion_ratio", tsm.CompletionRatio,
 		"error", tsm.Error)
 }
 
@@ -139,14 +141,13 @@ func (pcc *PeriodicCallbackClient) SendCallbacks() {
 	log.LogNoRequestID(fmt.Sprintf("Sending %d callbacks", len(pcc.requestIDToLatestMessage)))
 	for _, tsm := range pcc.requestIDToLatestMessage {
 		// Check timestamp and give up on the job if we haven't received an update for a long time
-		cutoff := int64(config.Clock.GetTimestampUTC() - MAX_TIME_WITHOUT_UPDATE.Milliseconds())
-		if tsm.Timestamp < cutoff {
+		if tsm.Timestamp.Before(config.Clock.GetTime().Add(-pcc.staleTimeout)) {
 			delete(pcc.requestIDToLatestMessage, tsm.RequestID)
 			log.Log(
 				tsm.RequestID,
 				"timed out waiting for callback updates",
-				"last_timestamp", tsm.Timestamp,
-				"cutoff_timestamp", cutoff)
+				"last_timestamp", tsm.Timestamp.UnixMilli(),
+			)
 			continue
 		}
 
