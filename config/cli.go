@@ -22,7 +22,6 @@ type Cli struct {
 	MistUser                  string
 	MistPassword              string
 	MistPort                  int
-	MistHttpPort              int
 	MistConnectTimeout        time.Duration
 	MistStreamSource          string
 	MistHardcodedBroadcasters string

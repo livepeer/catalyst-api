@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -30,7 +29,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
 	}
 	sourceOutputURL := sourceOutputBaseURL.JoinPath(job.RequestID)
-	segmentingTargetURL := sourceOutputURL.JoinPath(SEGMENTING_SUBDIR, SEGMENTING_TARGET_MANIFEST)
+	segmentingTargetURL := sourceOutputURL.JoinPath(config.SEGMENTING_SUBDIR, config.SEGMENTING_TARGET_MANIFEST)
 
 	job.SourceOutputURL = sourceOutputURL.String()
 	job.SegmentingTargetURL = segmentingTargetURL.String()
@@ -134,12 +133,9 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		}}, nil
 }
 
-// Boilerplate to implement the Handler interface
-
-func (f *ffmpeg) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*HandlerOutput, error) {
-	return nil, errors.New("unexpected RECORDING_END trigger on ffmpeg/livepeer pipeline")
-}
-
-func (f *ffmpeg) HandlePushEndTrigger(job *JobInfo, p PushEndPayload) (*HandlerOutput, error) {
-	return nil, errors.New("unexpected PUSH_END trigger on ffmpeg/livepeer pipeline")
+func toStr(URL *url.URL) string {
+	if URL != nil {
+		return URL.String()
+	}
+	return ""
 }

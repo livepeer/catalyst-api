@@ -82,7 +82,7 @@ func TestCoordinatorDoesNotBlock(t *testing.T) {
 			return nil, errors.New("test error")
 		},
 	}
-	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler, blockHandler, "")
+	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler, "")
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
 	job := testJob
@@ -103,42 +103,6 @@ func TestCoordinatorDoesNotBlock(t *testing.T) {
 	require.Zero(len(callbacks))
 }
 
-func TestCoordinatorPropagatesJobInfoChanges(t *testing.T) {
-	require := require.New(t)
-
-	barrier := make(chan struct{})
-	done := make(chan struct{}, 1)
-	blockHandler := &StubHandler{
-		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
-			<-barrier
-			job.SourceFile = "new-source-file"
-			return ContinuePipeline, nil
-		},
-		handleRecordingEndTrigger: func(job *JobInfo, p RecordingEndPayload) (*HandlerOutput, error) {
-			defer func() { done <- struct{}{} }()
-			require.Equal("new-source-file", job.SourceFile)
-			return ContinuePipeline, nil
-		},
-	}
-	coord := NewStubCoordinatorOpts("", nil, blockHandler, blockHandler, blockHandler, "")
-
-	inputFile, _, cleanup := setupTransferDir(t, coord)
-	defer cleanup()
-	job := testJob
-	job.SourceFile = "file://" + inputFile.Name()
-	coord.StartUploadJob(job)
-	time.Sleep(500 * time.Millisecond)
-
-	coord.TriggerRecordingEnd(RecordingEndPayload{StreamName: config.SegmentingStreamName("123")})
-	time.Sleep(2 * time.Second)
-
-	// Make sure recording end trigger doesn't execute until the start upload returns
-	require.Zero(len(done))
-
-	close(barrier)
-	requireReceive(t, done, 5*time.Second)
-}
-
 func TestCoordinatorResistsPanics(t *testing.T) {
 	require := require.New(t)
 
@@ -148,7 +112,7 @@ func TestCoordinatorResistsPanics(t *testing.T) {
 			panic("oh no!")
 		},
 	}
-	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler, blockHandler, "")
+	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler, "")
 
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
@@ -168,9 +132,9 @@ func TestCoordinatorResistsPanics(t *testing.T) {
 func TestCoordinatorCatalystDominance(t *testing.T) {
 	require := require.New(t)
 
-	mist, calls := recordingHandler(nil)
+	ffmpeg, calls := recordingHandler(nil)
 	external := allFailingHandler(t)
-	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, nil, mist, nil, external, "")
+	coord := NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, nil, ffmpeg, external, "")
 
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
@@ -206,9 +170,7 @@ func TestCoordinatorBackgroundJobsStrategies(t *testing.T) {
 	doTest := func(strategy Strategy) {
 		var coord *Coordinator
 		if strategy == StrategyBackgroundExternal {
-			coord = NewStubCoordinatorOpts(strategy, callbackHandler, fgHandler, nil, bgHandler, "")
-		} else if strategy == StrategyBackgroundMist {
-			coord = NewStubCoordinatorOpts(strategy, callbackHandler, bgHandler, nil, fgHandler, "")
+			coord = NewStubCoordinatorOpts(strategy, callbackHandler, fgHandler, bgHandler, "")
 		} else {
 			t.Fatalf("Unexpected strategy: %s", strategy)
 		}
@@ -243,7 +205,6 @@ func TestCoordinatorBackgroundJobsStrategies(t *testing.T) {
 	}
 
 	doTest(StrategyBackgroundExternal)
-	doTest(StrategyBackgroundMist)
 }
 
 func TestCoordinatorFallbackStrategySuccess(t *testing.T) {
@@ -253,9 +214,9 @@ func TestCoordinatorFallbackStrategySuccess(t *testing.T) {
 	ffmpeg, ffmpegCalls := recordingHandler(nil)
 	external, externalCalls := recordingHandler(nil)
 
-	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, nil, ffmpeg, external, "")
+	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, ffmpeg, external, "")
 
-	// Start a job that will complete successfully on mist, which should not
+	// Start a job that will complete successfully on ffmpeg, which should not
 	// trigger the external pipeline
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
@@ -270,7 +231,7 @@ func TestCoordinatorFallbackStrategySuccess(t *testing.T) {
 	mistJob := requireReceive(t, ffmpegCalls, 1*time.Second)
 	require.Equal("123", mistJob.RequestID)
 
-	// Check successful completion of the mist event
+	// Check successful completion of the ffmpeg event
 	msg = requireReceive(t, callbacks, 1*time.Second)
 	require.Equal(clients.TranscodeStatusCompleted, msg.Status)
 
@@ -295,9 +256,9 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 		},
 	}
 
-	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, nil, ffmpeg, external, "")
+	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, ffmpeg, external, "")
 
-	// Start a job which mist will fail and only then call the external one
+	// Start a job which ffmpeg will fail and only then call the external one
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
 	job := testJob
@@ -341,29 +302,29 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 func TestAllowsOverridingStrategyOnRequest(t *testing.T) {
 	require := require.New(t)
 
-	mist, mistCalls := recordingHandler(errors.New("mist error"))
+	ffmpeg, ffmpegCalls := recordingHandler(errors.New("ffmpeg error"))
 	external, externalCalls := recordingHandler(nil)
 
 	// create coordinator with strategy catalyst dominance (external should never be called)
-	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, nil, mist, nil, external, "")
+	coord := NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, nil, ffmpeg, external, "")
 
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
-	// Override the strategy to background mist, which will call the external provider *and* the mist provider
+	// Override the strategy to background external, which will call the external provider *and* the ffmpeg provider
 	p := testJob
-	p.PipelineStrategy = StrategyBackgroundMist
+	p.PipelineStrategy = StrategyBackgroundExternal
 	p.SourceFile = "file://" + inputFile.Name()
 	coord.StartUploadJob(p)
 
 	// Check that it was really called
-	meconJob := requireReceive(t, externalCalls, 500*time.Second)
-	require.Equal("123", meconJob.RequestID)
-	require.Equal("catalyst_vod_123", meconJob.StreamName)
+	ffmpegJob := requireReceive(t, ffmpegCalls, 500*time.Second)
+	require.Equal("123", ffmpegJob.RequestID)
+	require.Equal("catalyst_vod_123", ffmpegJob.StreamName)
 
-	// Sanity check that mist also ran (in background)
-	mistJob := requireReceive(t, mistCalls, 1*time.Second)
-	require.Equal("bg_"+meconJob.RequestID, mistJob.RequestID)
-	require.Equal("catalyst_vod_bg_"+meconJob.RequestID, mistJob.StreamName)
+	// Sanity check that ffmpeg also ran
+	externalJob := requireReceive(t, externalCalls, 1*time.Second)
+	require.Equal("bg_"+ffmpegJob.RequestID, externalJob.RequestID)
+	require.Equal("catalyst_vod_bg_"+ffmpegJob.RequestID, externalJob.StreamName)
 }
 
 func setJobInfoFields(job *JobInfo) {
@@ -384,7 +345,7 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 	metricsServer := httptest.NewServer(promhttp.Handler())
 	defer metricsServer.Close()
 
-	mist := &StubHandler{
+	ffmpeg := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			setJobInfoFields(job)
 			return testHandlerResult, nil
@@ -400,7 +361,7 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 
 	db, dbMock, err := sqlmock.New()
 	require.NoError(err)
-	coord := NewStubCoordinatorOpts(StrategyBackgroundMist, callbackHandler, mist, nil, external, "")
+	coord := NewStubCoordinatorOpts(StrategyBackgroundExternal, callbackHandler, ffmpeg, external, "")
 	coord.MetricsDB = db
 
 	inputFile, transferDir, cleanup := setupTransferDir(t, coord)
@@ -441,7 +402,7 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 
 func Test_EmptyFile(t *testing.T) {
 	callbackHandler, callbacks := callbacksRecorder()
-	coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil, nil, "")
+	coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil, "")
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
 
@@ -495,7 +456,7 @@ func Test_ProbeErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			callbackHandler, callbacks := callbacksRecorder()
-			coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil, nil, "")
+			coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil, "")
 			inputFile, transferDir, cleanup := setupTransferDir(t, coord)
 			defer cleanup()
 			coord.InputCopy = &clients.InputCopy{
@@ -523,13 +484,13 @@ func Test_InputCopiedToTransferLocation(t *testing.T) {
 	require := require.New(t)
 	var actualTransferInput string
 	callbackHandler, callbacks := callbacksRecorder()
-	mist := &StubHandler{
+	ffmpeg := &StubHandler{
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			actualTransferInput = job.SourceFile
 			return testHandlerResult, nil
 		},
 	}
-	coord := NewStubCoordinatorOpts(StrategyCatalystDominance, callbackHandler, mist, nil, nil, "")
+	coord := NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, callbackHandler, ffmpeg, nil, "")
 	f, transferDir, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
 
@@ -739,50 +700,23 @@ func Test_checkMistCompatible(t *testing.T) {
 		{
 			name: "catalyst dominance",
 			args: args{
-				strategy: StrategyCatalystDominance,
+				strategy: StrategyCatalystFfmpegDominance,
 				iv:       inCompatibleVideoAndAudio,
 			},
-			want:          StrategyCatalystDominance,
+			want:          StrategyCatalystFfmpegDominance,
 			wantSupported: false,
 		},
 		{
 			name: "catalyst dominance",
 			args: args{
-				strategy: StrategyCatalystDominance,
+				strategy: StrategyCatalystFfmpegDominance,
 				iv:       inCompatibleVideo,
 			},
-			want:          StrategyCatalystDominance,
+			want:          StrategyCatalystFfmpegDominance,
 			wantSupported: false,
 		},
 		{
-			name: "incompatible with mist - StrategyBackgroundMist",
-			args: args{
-				strategy: StrategyBackgroundMist,
-				iv:       inCompatibleVideoAndAudio,
-			},
-			want:          StrategyExternalDominance,
-			wantSupported: false,
-		},
-		{
-			name: "incompatible with mist - StrategyBackgroundMist",
-			args: args{
-				strategy: StrategyBackgroundMist,
-				iv:       inCompatibleVideo,
-			},
-			want:          StrategyExternalDominance,
-			wantSupported: false,
-		},
-		{
-			name: "compatible with mist - StrategyBackgroundMist",
-			args: args{
-				strategy: StrategyBackgroundMist,
-				iv:       compatibleVideoAndAudio,
-			},
-			want:          StrategyBackgroundMist,
-			wantSupported: true,
-		},
-		{
-			name: "incompatible with mist - StrategyFallbackExternal",
+			name: "incompatible with ffmpeg - StrategyFallbackExternal",
 			args: args{
 				strategy: StrategyFallbackExternal,
 				iv:       inCompatibleVideo,
@@ -791,7 +725,7 @@ func Test_checkMistCompatible(t *testing.T) {
 			wantSupported: false,
 		},
 		{
-			name: "incompatible with mist - StrategyFallbackExternal",
+			name: "incompatible with ffmpeg - StrategyFallbackExternal",
 			args: args{
 				strategy: StrategyFallbackExternal,
 				iv:       inCompatibleAudio,
@@ -800,7 +734,7 @@ func Test_checkMistCompatible(t *testing.T) {
 			wantSupported: false,
 		},
 		{
-			name: "compatible with mist - StrategyFallbackExternal",
+			name: "compatible with ffmpeg - StrategyFallbackExternal",
 			args: args{
 				strategy: StrategyFallbackExternal,
 				iv:       compatibleVideoAndAudio,
@@ -809,7 +743,7 @@ func Test_checkMistCompatible(t *testing.T) {
 			wantSupported: true,
 		},
 		{
-			name: "incompatible with mist - video rotation",
+			name: "incompatible with ffmpeg - video rotation",
 			args: args{
 				strategy: StrategyFallbackExternal,
 				iv:       videoRotation,

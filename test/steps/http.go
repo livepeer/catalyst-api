@@ -75,10 +75,11 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}
 	}
-	if payload == "a valid ffmpeg upload vod request" {
+	if payload == "a valid ffmpeg upload vod request with a custom segment size" {
 		req := DefaultUploadRequest
 		req.URL = "file://" + sourceFile.Name()
 		req.PipelineStrategy = "catalyst_ffmpeg"
+		req.TargetSegmentSizeSecs = 9
 		req.OutputLocations = []OutputLocation{
 			{
 				Type: "object_store",
@@ -88,14 +89,6 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
 				},
 			},
 		}
-		if payload, err = req.ToJSON(); err != nil {
-			return fmt.Errorf("failed to build upload request JSON: %s", err)
-		}
-	}
-	if payload == "a valid upload vod request with a custom segment size" {
-		req := DefaultUploadRequest
-		req.URL = "file://" + sourceFile.Name()
-		req.TargetSegmentSizeSecs = 3
 		if payload, err = req.ToJSON(); err != nil {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}
@@ -175,26 +168,6 @@ func (s *StepContext) CheckHTTPResponseCodeAndBody(code int, expectedBody string
 	}
 
 	return nil
-}
-
-func (s *StepContext) CheckMist(segmentSize int) error {
-	timeoutSecs := 5
-	for counter := 0; counter < timeoutSecs; counter++ {
-		urls := s.GetMistPushStartURLs()
-		if len(urls) > 1 {
-			return fmt.Errorf("received too many Mist segmenting requests (%d)", len(urls))
-		}
-		if len(urls) == 1 {
-			expectedTargetURLSuffix := fmt.Sprintf("source/$currentMediaTime.ts?m3u8=index.m3u8&split=%d", segmentSize)
-			actualTargetURL := urls[0]
-			if !strings.HasSuffix(actualTargetURL, expectedTargetURLSuffix) {
-				return fmt.Errorf("incorrect Mist segmenting URL - expected to and with %s but got %s", expectedTargetURLSuffix, actualTargetURL)
-			}
-			return nil
-		}
-		time.Sleep(time.Second)
-	}
-	return fmt.Errorf("did not receive a Mist segmenting request within %d seconds", timeoutSecs)
 }
 
 func (s *StepContext) CheckHTTPResponseCode(code int) error {

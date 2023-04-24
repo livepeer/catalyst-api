@@ -17,7 +17,6 @@ import (
 	"github.com/livepeer/catalyst-api/handlers/admin"
 	"github.com/livepeer/catalyst-api/handlers/ffmpeg"
 	"github.com/livepeer/catalyst-api/handlers/geolocation"
-	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/log"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/middleware"
@@ -64,7 +63,6 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 		Cluster:  c,
 	}
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
-	mistCallbackHandlers := &misttriggers.MistCallbackHandlersCollection{VODEngine: vodEngine}
 	ffmpegSegmentingHandlers := &ffmpeg.HandlersCollection{VODEngine: vodEngine}
 	accessControlHandlers := accesscontrol.NewAccessControlHandlersCollection(cli)
 	adminHandlers := &admin.AdminHandlersCollection{Cluster: c}
@@ -100,9 +98,6 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 			),
 		),
 	)
-
-	// Endpoint to receive "Triggers" (callbacks) from Mist
-	router.POST("/api/mist/trigger", withLogging(mistCallbackHandlers.Trigger()))
 
 	// Endpoint to receive segments and manifests that ffmpeg produces
 	router.PUT("/api/ffmpeg/:id/:filename", withLogging(ffmpegSegmentingHandlers.NewFile()))

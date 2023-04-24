@@ -28,16 +28,12 @@ import (
 type Strategy string
 
 const (
-	// Only execute the Catalyst (Mist) pipeline.
-	StrategyCatalystDominance Strategy = "catalyst"
-	// Only execute the external pipeline.
+	// Only execute the external pipeline
 	StrategyExternalDominance Strategy = "external"
 	// Only execute the FFMPEG / Livepeer pipeline
 	StrategyCatalystFfmpegDominance Strategy = "catalyst_ffmpeg"
-	// Execute the Mist pipeline in foreground and the external transcoder in background.
+	// Execute the FFMPEG / Livepeer pipeline in foreground and the external transcoder in background.
 	StrategyBackgroundExternal Strategy = "background_external"
-	// Execute the external transcoder pipeline in foreground and Mist in background.
-	StrategyBackgroundMist Strategy = "background_mist"
 	// Execute the FFMPEG pipeline first and fallback to the external transcoding
 	// provider on errors.
 	StrategyFallbackExternal Strategy = "fallback_external"
@@ -50,7 +46,7 @@ const (
 
 func (s Strategy) IsValid() bool {
 	switch s {
-	case StrategyCatalystDominance, StrategyExternalDominance, StrategyCatalystFfmpegDominance, StrategyBackgroundExternal, StrategyBackgroundMist, StrategyFallbackExternal:
+	case StrategyExternalDominance, StrategyCatalystFfmpegDominance, StrategyBackgroundExternal, StrategyFallbackExternal:
 		return true
 	default:
 		return false
@@ -149,15 +145,14 @@ type Coordinator struct {
 	strategy     Strategy
 	statusClient clients.TranscodeStatusClient
 
-	pipeMist, pipeFfmpeg, pipeExternal Handler
+	pipeFfmpeg, pipeExternal Handler
 
 	Jobs      *cache.Cache[*JobInfo]
 	MetricsDB *sql.DB
 	InputCopy clients.InputCopier
 }
 
-func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
-	sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB) (*Coordinator, error) {
+func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB) (*Coordinator, error) {
 
 	if !strategy.IsValid() {
 		return nil, fmt.Errorf("invalid strategy: %s", strategy)
@@ -171,7 +166,7 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 			return nil, fmt.Errorf("error creating external transcoder: %v", err)
 		}
 	}
-	if strategy != StrategyCatalystDominance && extTranscoder == nil {
+	if strategy != StrategyCatalystFfmpegDominance && extTranscoder == nil {
 		return nil, fmt.Errorf("external transcoder is required for strategy: %v", strategy)
 	}
 
@@ -179,7 +174,6 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 		strategy:     strategy,
 		statusClient: statusClient,
 		pipeFfmpeg:   &ffmpeg{SourceOutputUrl: sourceOutputURL},
-		pipeMist:     &mist{MistClient: mistClient, SourceOutputUrl: sourceOutputURL},
 		pipeExternal: &external{extTranscoder},
 		Jobs:         cache.New[*JobInfo](),
 		MetricsDB:    metricsDB,
@@ -191,18 +185,15 @@ func NewCoordinator(strategy Strategy, mistClient clients.MistAPIClient,
 }
 
 func NewStubCoordinator() *Coordinator {
-	return NewStubCoordinatorOpts(StrategyCatalystDominance, nil, nil, nil, nil, "")
+	return NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, nil, nil, nil, "")
 }
 
-func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeMist, pipeFfmpeg, pipeExternal Handler, sourceOutputUrl string) *Coordinator {
+func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeFfmpeg, pipeExternal Handler, sourceOutputUrl string) *Coordinator {
 	if strategy == "" {
-		strategy = StrategyCatalystDominance
+		strategy = StrategyCatalystFfmpegDominance
 	}
 	if statusClient == nil {
 		statusClient = clients.TranscodeStatusFunc(func(tsm clients.TranscodeStatusMessage) {})
-	}
-	if pipeMist == nil {
-		pipeMist = &mist{MistClient: clients.StubMistClient{}, SourceOutputUrl: sourceOutputUrl}
 	}
 	if pipeFfmpeg == nil {
 		pipeFfmpeg = &ffmpeg{SourceOutputUrl: sourceOutputUrl}
@@ -213,7 +204,6 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 	return &Coordinator{
 		strategy:     strategy,
 		statusClient: statusClient,
-		pipeMist:     pipeMist,
 		pipeFfmpeg:   pipeFfmpeg,
 		pipeExternal: pipeExternal,
 		Jobs:         cache.New[*JobInfo](),
@@ -278,18 +268,13 @@ func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 	log.Log(p.RequestID, "Starting upload job")
 
 	switch strategy {
-	case StrategyCatalystDominance:
-		c.startOneUploadJob(p, c.pipeMist, true, false)
 	case StrategyExternalDominance:
 		c.startOneUploadJob(p, c.pipeExternal, true, false)
 	case StrategyCatalystFfmpegDominance:
 		c.startOneUploadJob(p, c.pipeFfmpeg, true, false)
 	case StrategyBackgroundExternal:
-		c.startOneUploadJob(p, c.pipeMist, true, false)
+		c.startOneUploadJob(p, c.pipeFfmpeg, true, false)
 		c.startOneUploadJob(p, c.pipeExternal, false, false)
-	case StrategyBackgroundMist:
-		c.startOneUploadJob(p, c.pipeExternal, true, false)
-		c.startOneUploadJob(p, c.pipeMist, false, false)
 	case StrategyFallbackExternal:
 		// nolint:errcheck
 		go recovered(func() (t bool, e error) {
@@ -324,7 +309,7 @@ func checkLivepeerCompatible(requestID string, strategy Strategy, iv video.Input
 
 func livepeerNotSupported(strategy Strategy) (bool, Strategy) {
 	// Allow "dominance" strategies to pass through as these are used in tests and we might want to manually force them for debugging
-	if strategy == StrategyCatalystDominance || strategy == StrategyCatalystFfmpegDominance {
+	if strategy == StrategyCatalystFfmpegDominance {
 		return false, strategy
 	}
 	return false, StrategyExternalDominance
@@ -410,41 +395,6 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		return si.handler.HandleStartUploadJob(si)
 	})
 	return si.result
-}
-
-// TriggerRecordingEnd handles RECORDING_END trigger from mist.
-func (c *Coordinator) TriggerRecordingEnd(p RecordingEndPayload) {
-	si := c.Jobs.Get(p.StreamName)
-	if si == nil {
-		log.LogNoRequestID("RECORDING_END trigger invoked for unknown stream", "stream_name", p.StreamName)
-		return
-	}
-	c.runHandlerAsync(si, func() (*HandlerOutput, error) {
-		return si.handler.HandleRecordingEndTrigger(si, p)
-	})
-}
-
-// TriggerPushEnd handles PUSH_END trigger from mist.
-func (c *Coordinator) TriggerPushEnd(p PushEndPayload) {
-	si := c.Jobs.Get(p.StreamName)
-	if si == nil {
-		log.Log(si.RequestID, "PUSH_END trigger invoked for unknown stream", "streamName", p.StreamName)
-		return
-	}
-	c.runHandlerAsync(si, func() (*HandlerOutput, error) {
-		return si.handler.HandlePushEndTrigger(si, p)
-	})
-}
-
-func (c *Coordinator) InFlightMistPipelineJobs() int {
-	keys := c.Jobs.GetKeys()
-	count := 0
-	for _, k := range keys {
-		if c.Jobs.Get(k).handler == c.pipeMist {
-			count++
-		}
-	}
-	return count
 }
 
 // runHandlerAsync starts a background go-routine to run the handler function

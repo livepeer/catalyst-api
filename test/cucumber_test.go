@@ -78,7 +78,6 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the Client app is authenticated$`, stepContext.SetAuthHeaders)
 	ctx.Step(`^an object store is available$`, stepContext.StartObjectStore)
 	ctx.Step(`^Studio API server is running at "([^"]*)"$`, stepContext.StartStudioAPI)
-	ctx.Step(`^Mist is running at "([^"]*)"$`, stepContext.StartMist)
 	ctx.Step(`^ffmpeg is available$`, stepContext.CheckFfmpeg)
 	ctx.Step(`^a Broadcaster is running at "([^"]*)"$`, stepContext.StartBroadcaster)
 
@@ -91,7 +90,6 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^I get an HTTP response with code "([^"]*)"$`, stepContext.CheckHTTPResponseCode)
 	ctx.Step(`^I get an HTTP response with code "([^"]*)" and the following body "([^"]*)"$`, stepContext.CheckHTTPResponseCodeAndBody)
 	ctx.Step(`^my "(failed|successful)" (vod|playback) request metrics get recorded$`, stepContext.CheckRecordedMetrics)
-	ctx.Step(`^Mist receives a request for segmenting with "([^"]*)" second segments$`, stepContext.CheckMist)
 	ctx.Step(`^the body matches file "([^"]*)"$`, stepContext.CheckHTTPResponseBodyFromFile)
 	ctx.Step(`^the gate API will (allow|deny) playback$`, stepContext.SetGateAPIResponse)
 	ctx.Step(`^the gate API will be called (\d+) times$`, stepContext.CheckGateAPICallCount)
@@ -115,7 +113,6 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 			}
 		}
 
-		_ = stepContext.Mist.Shutdown(ctx)
 		_ = stepContext.Studio.Shutdown(ctx)
 		if stepContext.MinioAdmin != nil {
 			_ = stepContext.MinioAdmin.ServiceStop(ctx)

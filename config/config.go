@@ -11,10 +11,6 @@ var Version string
 // Used so that we can generate fixed timestamps in tests
 var Clock TimestampGenerator = RealTimestampGenerator{}
 
-// Path to Mist's binaries that we shell out to for transcoding and header file creation.
-// Defaults to empty, which uses PATH
-var PathMistDir = ""
-
 // Port that the local Broadcaster runs on
 const DefaultBroadcasterPort = 8935
 
@@ -37,6 +33,12 @@ const MAX_JOBS_IN_FLIGHT = 8
 
 // How long to try writing a single segment to storage for before giving up
 const SEGMENT_WRITE_TIMEOUT = 5 * time.Minute
+
+// The subpath that we write source segments into
+const SEGMENTING_SUBDIR = "source"
+
+// The name of the manifest we create that contains source segments
+const SEGMENTING_TARGET_MANIFEST = "index.m3u8"
 
 // The maximum allowed input file size
 const MaxInputFileSizeBytes = 30 * 1024 * 1024 * 1024 // 30 GiB
