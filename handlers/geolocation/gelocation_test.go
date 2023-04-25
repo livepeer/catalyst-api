@@ -32,6 +32,10 @@ var fakeSerfMember = cluster.Member{
 
 var prefixes = [...]string{"video", "videorec", "stream", "playback", "vod"}
 
+func randomPrefix() string {
+	return prefixes[rand.Intn(len(prefixes))]
+}
+
 func randomPlaybackID(length int) string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
 
@@ -45,7 +49,7 @@ func randomPlaybackID(length int) string {
 func TestPlaybackIDParserWithPrefix(t *testing.T) {
 	for i := 0; i < rand.Int()%16+1; i++ {
 		id := randomPlaybackID(rand.Int()%24 + 1)
-		path := fmt.Sprintf("/hls/%s+%s/index.m3u8", prefixes[rand.Intn(len(prefixes))], id)
+		path := fmt.Sprintf("/hls/%s+%s/index.m3u8", randomPrefix(), id)
 		_, playbackID, _, parsed := parsePlaybackID(path)
 		if !parsed {
 			t.Fail()
@@ -58,7 +62,7 @@ func TestPlaybackIDParserWithSegment(t *testing.T) {
 	for i := 0; i < rand.Int()%16+1; i++ {
 		id := randomPlaybackID(rand.Int()%24 + 1)
 		seg := "2_1"
-		path := fmt.Sprintf("/hls/%s+%s/%s/index.m3u8", prefixes[rand.Intn(len(prefixes))], id, seg)
+		path := fmt.Sprintf("/hls/%s+%s/%s/index.m3u8", randomPrefix(), id, seg)
 		_, playbackID, suffix, parsed := parsePlaybackID(path)
 		if !parsed {
 			t.Fail()
@@ -92,6 +96,14 @@ func getJSURLs(proto, host string) []string {
 	var urls []string
 	for _, prefix := range prefixes {
 		urls = append(urls, fmt.Sprintf("%s://%s/json_%s+%s.js", proto, host, prefix, playbackID))
+	}
+	return urls
+}
+
+func getWebRTCURLs(proto, host string) []string {
+	var urls []string
+	for _, prefix := range prefixes {
+		urls = append(urls, fmt.Sprintf("%s://%s/webrtc/%s.js", proto, host, playbackID))
 	}
 	return urls
 }
@@ -240,6 +252,23 @@ func TestRedirectHandlerJS_Correct(t *testing.T) {
 		result(n).
 		hasStatus(http.StatusFound).
 		hasHeader("Location", getJSURLs("https", closestNodeAddr)...)
+}
+
+func TestRedirectHandlerWebRTC_Correct(t *testing.T) {
+	n := mockHandlers(t)
+
+	path := fmt.Sprintf("/webrtc/%s", playbackID)
+
+	requireReq(t, path).
+		result(n).
+		hasStatus(http.StatusFound).
+		hasHeader("Location", getWebRTCURLs("http", closestNodeAddr)...)
+
+	requireReq(t, path).
+		withHeader("X-Forwarded-Proto", "https").
+		result(n).
+		hasStatus(http.StatusFound).
+		hasHeader("Location", getWebRTCURLs("https", closestNodeAddr)...)
 }
 
 func TestNodeHostRedirect(t *testing.T) {

@@ -178,7 +178,7 @@ func parsePlaybackIDWebRTC(path string) (string, string, string, bool) {
 }
 
 func parsePlaybackID(path string) (string, string, string, bool) {
-	parsers := []func(string) (string, string, string, bool){parsePlaybackIDHLS, parsePlaybackIDJS}
+	parsers := []func(string) (string, string, string, bool){parsePlaybackIDHLS, parsePlaybackIDJS, parsePlaybackIDWebRTC}
 	for _, parser := range parsers {
 		prefix, playbackID, suffix, isValid := parser(path)
 		if isValid {
