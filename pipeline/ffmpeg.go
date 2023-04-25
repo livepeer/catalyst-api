@@ -37,6 +37,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	job.SourceOutputURL = sourceOutputURL.String()
 	job.SegmentingTargetURL = segmentingTargetURL.String()
 	log.AddContext(job.RequestID, "segmented_url", job.SegmentingTargetURL)
+	job.ReportProgress(clients.TranscodeStatusPreparing, 0.3)
 
 	// Create a temporary local file to write to
 	sourceFilename := filepath.Join(os.TempDir(), config.RandomTrailer(8))
