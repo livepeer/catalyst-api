@@ -103,7 +103,7 @@ func getJSURLs(proto, host string) []string {
 func getWebRTCURLs(proto, host string) []string {
 	var urls []string
 	for _, prefix := range prefixes {
-		urls = append(urls, fmt.Sprintf("%s://%s/webrtc/%s.js", proto, host, playbackID))
+		urls = append(urls, fmt.Sprintf("%s://%s/webrtc/%s+%s", proto, host, prefix, playbackID))
 	}
 	return urls
 }
