@@ -1,8 +1,11 @@
 package pipeline
 
 import (
+	"context"
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/livepeer/catalyst-api/clients"
@@ -35,6 +38,21 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	job.SegmentingTargetURL = segmentingTargetURL.String()
 	log.AddContext(job.RequestID, "segmented_url", job.SegmentingTargetURL)
 
+	// Create a temporary local file to write to
+	sourceFilename := filepath.Join(os.TempDir(), config.RandomTrailer(8))
+	out, err := os.Create(sourceFilename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create local file (%s) for segmenting: %s", sourceFilename, err)
+	}
+	defer out.Close()
+	defer os.Remove(sourceFilename) // Clean up the file as soon as we're done segmenting
+
+	// Copy the file locally because of issues with ffmpeg segmenting and remote files
+	_, err = clients.CopyFile(context.Background(), job.SignedSourceURL, sourceFilename, "", job.RequestID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to copy file (%s) locally for segmenting: %s", job.SignedSourceURL, err)
+	}
+
 	// Begin Segmenting
 	log.Log(job.RequestID, "Beginning segmenting via FFMPEG/Livepeer pipeline")
 	job.ReportProgress(clients.TranscodeStatusPreparing, 0.5)
@@ -46,7 +64,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	}
 
 	destinationURL := fmt.Sprintf("%s/api/ffmpeg/%s/index.m3u8", internalAddress, job.StreamName)
-	if err := video.Segment(job.SignedSourceURL, destinationURL, job.TargetSegmentSizeSecs); err != nil {
+	if err := video.Segment(sourceFilename, destinationURL, job.TargetSegmentSizeSecs); err != nil {
 		return nil, err
 	}
 
