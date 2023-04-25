@@ -164,8 +164,21 @@ func parsePlaybackIDJS(path string) (string, string, string, bool) {
 	return prefix, playbackID, "/json_%s.js", true
 }
 
+func parsePlaybackIDWebRTC(path string) (string, string, string, bool) {
+	r := regexp.MustCompile(`^/webrtc/([\w+-]+)$`)
+	m := r.FindStringSubmatch(path)
+	if len(m) < 2 {
+		return "", "", "", false
+	}
+	prefix, playbackID := parsePlus(m[1])
+	if playbackID == "" {
+		return "", "", "", false
+	}
+	return prefix, playbackID, "/webrtc/%s", true
+}
+
 func parsePlaybackID(path string) (string, string, string, bool) {
-	parsers := []func(string) (string, string, string, bool){parsePlaybackIDHLS, parsePlaybackIDJS}
+	parsers := []func(string) (string, string, string, bool){parsePlaybackIDHLS, parsePlaybackIDJS, parsePlaybackIDWebRTC}
 	for _, parser := range parsers {
 		prefix, playbackID, suffix, isValid := parser(path)
 		if isValid {
