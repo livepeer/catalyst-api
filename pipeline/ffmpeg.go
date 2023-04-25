@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
@@ -47,7 +48,9 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	defer os.Remove(localSourceFile.Name()) // Clean up the file as soon as we're done segmenting
 
 	// Copy the file locally because of issues with ffmpeg segmenting and remote files
-	_, err = clients.CopyFile(context.Background(), job.SignedSourceURL, localSourceFile.Name(), "", job.RequestID)
+	// We can be aggressive with the timeout because we're copying from cloud storage
+	timeout, _ := context.WithTimeout(context.Background(), 30*time.Minute)
+	_, err = clients.CopyFile(timeout, job.SignedSourceURL, localSourceFile.Name(), "", job.RequestID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to copy file (%s) locally for segmenting: %s", job.SignedSourceURL, err)
 	}
