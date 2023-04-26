@@ -111,3 +111,13 @@ func TestProbe_VideoRotation(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(-180), track.Rotation)
 }
+
+func TestProbe_VP9(t *testing.T) {
+	// We don't support VP9 in an MP4 container so should reject
+	_, err := Probe{}.ProbeFile("./fixtures/mp4_vp9.mp4")
+	require.ErrorContains(t, err, "VP9 in an MP4 container is not supported")
+
+	// But in a webm container is fine
+	_, err = Probe{}.ProbeFile("./fixtures/webm_vp9.webm")
+	require.NoError(t, err)
+}
