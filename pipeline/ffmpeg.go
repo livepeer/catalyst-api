@@ -118,6 +118,9 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	job.sourceSegments = len(sourceManifest.GetAllSegments())
 
 	sourceSegmentURLs, err := transcode.GetSourceSegmentURLs(transcodeRequest.SourceManifestURL, sourceManifest)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching source segment URLs: %w", err)
+	}
 	for _, seg := range sourceSegmentURLs {
 		probeURL, err := clients.SignURL(seg.URL)
 		if err != nil {
