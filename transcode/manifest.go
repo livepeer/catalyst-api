@@ -62,7 +62,7 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 			break
 		}
 
-		u, err := manifestURLToSegmentURL(sourceManifestURL, segment.URI)
+		u, err := ManifestURLToSegmentURL(sourceManifestURL, segment.URI)
 		if err != nil {
 			return nil, err
 		}
@@ -165,7 +165,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 	return res, nil
 }
 
-func manifestURLToSegmentURL(manifestURL, segmentFilename string) (*url.URL, error) {
+func ManifestURLToSegmentURL(manifestURL, segmentFilename string) (*url.URL, error) {
 	base, err := url.Parse(manifestURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse manifest URL when converting to segment URL: %s", err)

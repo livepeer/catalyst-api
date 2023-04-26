@@ -66,11 +66,11 @@ func TestItCanDownloadAValidRenditionManifest(t *testing.T) {
 }
 
 func TestItCanConvertRelativeURLsToOSURLs(t *testing.T) {
-	u, err := manifestURLToSegmentURL("/tmp/file/something.m3u8", "001.ts")
+	u, err := ManifestURLToSegmentURL("/tmp/file/something.m3u8", "001.ts")
 	require.NoError(t, err)
 	require.Equal(t, "/tmp/file/001.ts", u.String())
 
-	u, err = manifestURLToSegmentURL("s3+https://REDACTED:REDACTED@storage.googleapis.com/something/output.m3u8", "001.ts")
+	u, err = ManifestURLToSegmentURL("s3+https://REDACTED:REDACTED@storage.googleapis.com/something/output.m3u8", "001.ts")
 	require.NoError(t, err)
 	require.Equal(t, "s3+https://REDACTED:REDACTED@storage.googleapis.com/something/001.ts", u.String())
 }

@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"github.com/grafov/m3u8"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -115,20 +116,18 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		return nil, fmt.Errorf("error downloading source manifest: %s", err)
 	}
 
-	job.sourceSegments = len(sourceManifest.GetAllSegments())
+	sourceSegments := sourceManifest.GetAllSegments()
+	job.sourceSegments = len(sourceSegments)
 
-	sourceSegmentURLs, err := transcode.GetSourceSegmentURLs(transcodeRequest.SourceManifestURL, sourceManifest)
-	if err != nil {
-		return nil, fmt.Errorf("error fetching source segment URLs: %w", err)
-	}
-	for _, seg := range sourceSegmentURLs {
-		probeURL, err := clients.SignURL(seg.URL)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create signed url for %s: %w", seg.URL, err)
+	if job.sourceSegments > 0 {
+		firstSeg := sourceSegments[0]
+		lastSeg := sourceSegments[job.sourceSegments-1]
+
+		if err := probeSourceSegment(firstSeg, transcodeRequest.SourceManifestURL); err != nil {
+			return nil, err
 		}
-		_, err = video.Probe{}.ProbeFile(probeURL)
-		if err != nil {
-			return nil, fmt.Errorf("probe failed for segment %s: %w", seg.URL, err)
+		if err := probeSourceSegment(lastSeg, transcodeRequest.SourceManifestURL); err != nil {
+			return nil, err
 		}
 	}
 
@@ -148,6 +147,22 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 			InputVideo: inputInfo,
 			Outputs:    outputs,
 		}}, nil
+}
+
+func probeSourceSegment(seg *m3u8.MediaSegment, sourceManifestURL string) error {
+	u, err := transcode.ManifestURLToSegmentURL(sourceManifestURL, seg.URI)
+	if err != nil {
+		return fmt.Errorf("error checking source segments: %w", err)
+	}
+	probeURL, err := clients.SignURL(u)
+	if err != nil {
+		return fmt.Errorf("failed to create signed url for %s: %w", u, err)
+	}
+	_, err = video.Probe{}.ProbeFile(probeURL)
+	if err != nil {
+		return fmt.Errorf("probe failed for segment %s: %w", u, err)
+	}
+	return nil
 }
 
 func copyFileToLocalTmpAndSegment(job *JobInfo) error {
