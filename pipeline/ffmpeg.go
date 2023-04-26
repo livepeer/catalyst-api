@@ -125,9 +125,6 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	job.transcodedSegments = transcodedSegments
 
-	// Transcoding Finished
-	job.ReportProgress(clients.TranscodeStatusCompleted, 1)
-
 	return &HandlerOutput{
 		Result: &UploadJobResult{
 			InputVideo: inputInfo,
