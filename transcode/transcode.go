@@ -296,7 +296,7 @@ func transcodeSegment(
 
 	var tr clients.TranscodeResult
 	err := backoff.Retry(func() error {
-		rc, err := clients.DownloadOSURL(segment.Input.URL)
+		rc, err := clients.DownloadOSURL(segment.Input.URL.String())
 		if err != nil {
 			return fmt.Errorf("failed to download source segment %q: %s", segment.Input, err)
 		}

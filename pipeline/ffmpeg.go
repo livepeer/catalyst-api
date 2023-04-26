@@ -117,6 +117,18 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	job.sourceSegments = len(sourceManifest.GetAllSegments())
 
+	sourceSegmentURLs, err := transcode.GetSourceSegmentURLs(transcodeRequest.SourceManifestURL, sourceManifest)
+	for _, seg := range sourceSegmentURLs {
+		probeURL, err := clients.SignURL(seg.URL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create signed url for %s: %w", seg.URL, err)
+		}
+		_, err = video.Probe{}.ProbeFile(probeURL)
+		if err != nil {
+			return nil, fmt.Errorf("probe failed for segment %s: %w", seg.URL, err)
+		}
+	}
+
 	outputs, transcodedSegments, err := transcode.RunTranscodeProcess(transcodeRequest, job.StreamName, inputInfo)
 	if err != nil {
 		log.LogError(job.RequestID, "RunTranscodeProcess returned an error", err)
