@@ -1,17 +1,29 @@
 package events
 
 import (
+	"bytes"
+
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/signer/core/apitypes"
+	"github.com/livepeer/catalyst-api/schema/domain"
 )
 
 // an event, with an address, for which we have verified the signature.
 type SignedEvent struct {
-	PrimaryType string
-	Domain      Domain
-	Action      Action
-	Signature   string
-	Address     ethcommon.Address
+	Domain    Domain
+	Action    Action
+	Signature string
+	Address   ethcommon.Address
+}
+
+// convert to UnverifiedEvent suitable for JSON serialization
+func (s *SignedEvent) UnverifiedEvent() UnverifiedEvent {
+	return UnverifiedEvent{
+		PrimaryType: s.Action.Type(),
+		Domain:      s.Domain,
+		Message:     ActionToMap(s.Action),
+		Signature:   s.Signature,
+	}
 }
 
 // an unverified event. Don't trust it without first producing a SignedEvent with .Verify()
@@ -40,10 +52,37 @@ type Domain struct {
 }
 
 // convert to a TypedDataDomain suitable for signing by eth tooling
-func (t *Domain) TypedDataDomain() apitypes.TypedDataDomain {
+func (d *Domain) TypedDataDomain() apitypes.TypedDataDomain {
 	return apitypes.TypedDataDomain{
-		Name:    t.Name,
-		Version: t.Version,
-		Salt:    t.Salt,
+		Name:    d.Name,
+		Version: d.Version,
+		Salt:    d.Salt,
 	}
+}
+
+// produce a hash of this typed data domain, suitable for comparing with another
+func (d *Domain) Hash() ([]byte, error) {
+	typedDataDomain := d.TypedDataDomain()
+	typedData := apitypes.TypedData{
+		Types:       domain.Types,
+		PrimaryType: "EIP712Domain",
+		Domain:      typedDataDomain,
+	}
+	domainSeparator, err := typedData.HashStruct("EIP712Domain", typedData.Domain.Map())
+	if err != nil {
+		return []byte{}, err
+	}
+	return domainSeparator, nil
+}
+
+func (d *Domain) Equal(d2 *Domain) (bool, error) {
+	hash1, err := d.Hash()
+	if err != nil {
+		return false, err
+	}
+	hash2, err := d.Hash()
+	if err != nil {
+		return false, err
+	}
+	return bytes.Equal(hash1, hash2), nil
 }

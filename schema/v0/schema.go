@@ -48,3 +48,13 @@ var Types = apitypes.Types{
 		},
 	},
 }
+
+var Schema = events.Schema{
+	Types:  Types,
+	Domain: Domain,
+	Actions: map[string]func() events.Action{
+		"ChannelDefinition": func() events.Action {
+			return &ChannelDefinition{}
+		},
+	},
+}
