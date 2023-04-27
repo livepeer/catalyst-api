@@ -90,12 +90,3 @@ var invalidBody = []byte(`
 		}
 	}
 `)
-
-// func TestInvalidVerify(t *testing.T) {
-// 	signer := events.Signer{Types: Types}
-// 	var unverified events.UnverifiedEvent
-// 	err := json.Unmarshal(invalidBody, &unverified)
-// 	require.NoError(t, err)
-// 	_, err = signer.Verify(unverified)
-// 	require.Error(t, err)
-// }

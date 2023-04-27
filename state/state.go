@@ -36,7 +36,7 @@ func NewMachine() *Machine {
 func (s *Machine) HandleEvent(e *events.SignedEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	switch act := e.Event.Message.(type) {
+	switch act := e.Action.(type) {
 	case v0.ChannelDefinition:
 		ss := StreamState{}
 		ss.MultistreamTargets = make([]*StreamStateMultistreamTarget, len(act.MultistreamTargets))
