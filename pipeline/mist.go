@@ -179,7 +179,7 @@ func (m *mist) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*
 	job.sourceBytes = int64(p.WrittenBytes)
 	job.sourceDurationMs = p.StreamMediaDurationMillis
 
-	sourceManifest, err := transcode.DownloadRenditionManifest(transcodeRequest.SourceManifestURL)
+	sourceManifest, err := clients.DownloadRenditionManifest(transcodeRequest.RequestID, transcodeRequest.SourceManifestURL)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading source manifest: %s", err)
 	}

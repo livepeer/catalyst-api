@@ -49,14 +49,11 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVi
 			return
 		}
 		osTransferURL = sourceOutputUrl.JoinPath(requestID, "transfer", path.Base(inputFile.Path))
-		log.Log(requestID, "Copying input file to S3", "source", inputFile.String(), "dest", osTransferURL.String())
-		size, err = CopyFile(context.Background(), inputFile.String(), osTransferURL.String(), "", requestID)
+		log.Log(requestID, "XXX: urls", "osTransferURL", osTransferURL, "path.Base(inputFile.Path)", path.Base(inputFile.Path), "sourceOutputUrl", sourceOutputUrl.String())
+
+		size, err = copyFile(requestID, inputFile, osTransferURL)
 		if err != nil {
-			err = fmt.Errorf("error copying input file to S3: %w", err)
-			return
-		}
-		if size <= 0 {
-			err = fmt.Errorf("zero bytes found for source: %s", inputFile)
+			err = fmt.Errorf("failed to copy file(s): %w", err)
 			return
 		}
 		log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", osTransferURL.String())
@@ -95,6 +92,74 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVi
 	return
 }
 
+func isHLSInput(inputFile *url.URL) bool {
+	ext := strings.LastIndex(inputFile.Path, ".")
+	if ext == -1 {
+		return false
+	}
+	return inputFile.Path[ext:] == ".m3u8"
+}
+
+func getDestLoc(srcManifestUrl, dstTransferUrl *url.URL, srcSegmentUrl string) string {
+
+     // Resolve common paths between srcManifestUrl and srcSegmentUrl
+     relUrl, err := srcManifestUrl.Parse(srcSegmentUrl)
+     if err != nil {
+         // Handle error
+     }
+     fmt.Println("relUrl", relUrl)
+
+     // Replace file name in dstTransferUrl with the resolved path
+     relPath := relUrl.Path[1:] // remove leading slash
+     dstPath := path.Join(path.Dir(dstTransferUrl.Path), relPath)
+     dstTransferUrl.Path = dstPath
+ 
+     return dstTransferUrl.String()
+
+}
+
+func copyFile(requestID string, srcInputUrl, dstOutputUrl *url.URL) (size int64, err error) { 
+	fileList := make(map[string]string)
+	if isHLSInput(srcInputUrl) {
+		// Download the m3u8 manifest using the input url
+		playlist, err := DownloadRenditionManifest(requestID, srcInputUrl.String())
+		if err != nil {
+			return 0, fmt.Errorf("error downloading HLS input manifest: %s", err)
+		}
+		// Save the mapping between the input manifest file and its corresponding OS-transfer destination 
+		fileList[srcInputUrl.String()] = dstOutputUrl.String()
+		// Now get a list of the OS-compatible segment URLs from the input manifest file
+		sourceSegmentUrls, err := GetSourceSegmentURLs(srcInputUrl.String(), playlist)
+		if err != nil {
+			return 0, fmt.Errorf("error generating source segment URLs for HLS input manifest: %s", err)
+		}
+		for _, srcSegmentUrl := range sourceSegmentUrls {
+			fileList[srcSegmentUrl.URL] = getDestLoc(srcInputUrl, dstOutputUrl, srcSegmentUrl.URL)
+		}
+
+	} else {
+		fileList[srcInputUrl.String()] = dstOutputUrl.String()
+	}
+
+	fmt.Println("XXX", fileList)
+	var byteCount int64
+	for inFile, outFile := range fileList {
+		log.Log(requestID, "Copying input file to S3", "source", inFile, "dest", outFile)
+		size, err = CopyFile(context.Background(), inFile, outFile, "", requestID)
+		if err != nil {
+			err = fmt.Errorf("error copying input file to S3: %w", err)
+			return size, err
+		}
+		if size <= 0 {
+			err = fmt.Errorf("zero bytes found for source: %s", inFile)
+			return size, err
+		}
+		byteCount = size + byteCount
+	}
+	return size, nil
+}
+
+
 func isDirectUpload(inputFile *url.URL) bool {
 	// recordings via backup-recording path is also considered a "direct-upload"
 	return strings.HasSuffix(inputFile.Host, "storage.googleapis.com") &&
@@ -110,7 +175,7 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 		byteAccWriter := ByteAccumulatorWriter{count: 0}
 		defer func() { writtenBytes = byteAccWriter.count }()
 
-		c, err := getFile(ctx, sourceURL, requestID)
+		c, err := getFile(ctx, requestID, sourceURL)
 		if err != nil {
 			return fmt.Errorf("download error: %w", err)
 		}
@@ -127,7 +192,7 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 	return
 }
 
-func getFile(ctx context.Context, url, requestID string) (io.ReadCloser, error) {
+func getFile(ctx context.Context, requestID, url string) (io.ReadCloser, error) {
 	_, err := drivers.ParseOSURL(url, true)
 	if err == nil {
 		return DownloadOSURL(url)
@@ -155,6 +220,7 @@ func newRetryableHttpClient() *http.Client {
 }
 
 func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
+	fmt.Println("XXX", "getFileHTTP")
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, xerrors.Unretriable(fmt.Errorf("error creating http request: %w", err))

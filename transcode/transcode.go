@@ -84,13 +84,13 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Download the "source" manifest that contains all the segments we'll be transcoding
-	sourceManifest, err := DownloadRenditionManifest(sourceManifestOSURL)
+	sourceManifest, err := clients.DownloadRenditionManifest(transcodeRequest.RequestID, sourceManifestOSURL)
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("error downloading source manifest: %s", err)
 	}
 
 	// Generate the full segment URLs from the manifest
-	sourceSegmentURLs, err := GetSourceSegmentURLs(sourceManifestOSURL, sourceManifest)
+	sourceSegmentURLs, err := clients.GetSourceSegmentURLs(sourceManifestOSURL, sourceManifest)
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("error generating source segment URLs: %s", err)
 	}
@@ -132,7 +132,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Build the manifests and push them to storage
-	manifestURL, err := GenerateAndUploadManifests(sourceManifest, hlsTargetURL.String(), transcodedStats)
+	manifestURL, err := clients.GenerateAndUploadManifests(sourceManifest, hlsTargetURL.String(), transcodedStats)
 	if err != nil {
 		return outputs, segmentsCount, err
 	}
@@ -290,7 +290,7 @@ func transcodeSegment(
 	transcodeRequest TranscodeSegmentRequest,
 	transcodeProfiles []video.EncodedProfile,
 	targetOSURL *url.URL,
-	transcodedStats []*RenditionStats,
+	transcodedStats []*video.RenditionStats,
 	renditionList *video.TRenditionList,
 ) error {
 	start := time.Now()
@@ -391,14 +391,14 @@ func channelFromWaitgroup(wg *sync.WaitGroup) chan bool {
 }
 
 type segmentInfo struct {
-	Input SourceSegment
+	Input clients.SourceSegment
 	Index int
 }
 
-func statsFromProfiles(profiles []video.EncodedProfile) []*RenditionStats {
-	stats := []*RenditionStats{}
+func statsFromProfiles(profiles []video.EncodedProfile) []*video.RenditionStats {
+	stats := []*video.RenditionStats{}
 	for _, profile := range profiles {
-		stats = append(stats, &RenditionStats{
+		stats = append(stats, &video.RenditionStats{
 			Name:   profile.Name,
 			Width:  profile.Width,  // TODO: extract this from actual media retrieved from B
 			Height: profile.Height, // TODO: extract this from actual media retrieved from B
@@ -407,7 +407,7 @@ func statsFromProfiles(profiles []video.EncodedProfile) []*RenditionStats {
 	}
 	return stats
 }
-
+/*
 type RenditionStats struct {
 	Name             string
 	Width            int64
@@ -418,7 +418,7 @@ type RenditionStats struct {
 	ManifestLocation string
 	BitsPerSecond    uint32
 }
-
+*/
 func TranscodeRetryBackoff() backoff.BackOff {
 	return backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10)
 }
