@@ -62,15 +62,6 @@ func PlaybackHandler() httprouter.Handle {
 	}
 }
 
-func PlaybackOptionsHandler() httprouter.Handle {
-	return func(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
-		w.Header().Set("allow", "GET, HEAD, OPTIONS")
-		w.Header().Set("content-length", "0")
-		w.Header().Set("accept-ranges", "bytes")
-		w.WriteHeader(http.StatusOK)
-	}
-}
-
 func handleError(err error, req *http.Request, requestID string, w http.ResponseWriter) {
 	log.LogError(requestID, "error in playback handler", err, "url", req.URL)
 	switch {
