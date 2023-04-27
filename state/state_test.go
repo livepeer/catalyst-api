@@ -12,19 +12,18 @@ func TestSign(t *testing.T) {
 	machine := NewMachine()
 	evt := &events.SignedEvent{
 		Signature: "fake",
-		Event: events.Event{
-			Message: v0.ChannelDefinition{
-				ID: "awesome-stream",
-				MultistreamTargets: []v0.MultistreamTarget{
-					{URL: "rtmp://localhost/foo/bar"},
-				},
-			},
+		Action: v0.ChannelDefinition{
+			ID:   "my-awesome-stream",
+			Time: int64(1681403259137),
+			MultistreamTargets: []v0.MultistreamTarget{{
+				URL: "rtmp://localhost/foo/bar",
+			}},
 		},
 	}
 	machine.HandleEvent(evt)
 
 	require.Len(t, machine.State.Streams, 1)
-	stream, ok := machine.State.Streams["awesome-stream"]
+	stream, ok := machine.State.Streams["my-awesome-stream"]
 	require.True(t, ok)
 	require.Len(t, stream.MultistreamTargets, 1)
 	tar := stream.MultistreamTargets[0]
