@@ -20,7 +20,10 @@ import (
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/crypto"
+	"github.com/livepeer/catalyst-api/events"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
+	v0 "github.com/livepeer/catalyst-api/schema/v0"
+	"github.com/livepeer/catalyst-api/state"
 
 	//"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/catalyst-api/pipeline"
@@ -181,7 +184,14 @@ func main() {
 		NodeName:                 cli.NodeName,
 	})
 
+	// Start Serf
 	c := cluster.NewCluster(&cli)
+
+	// Initialize signer for validating events
+	signer := events.NewEIP712Signer(&v0.Schema, []*events.Schema{&v0.Schema})
+
+	// Initialize state machine
+	machine := state.NewMachine()
 
 	// Initialize root context; cancelling this prompts all components to shut down cleanly
 	group, ctx := errgroup.WithContext(context.Background())
@@ -191,11 +201,11 @@ func main() {
 	})
 
 	group.Go(func() error {
-		return api.ListenAndServe(ctx, cli, vodEngine, bal, c)
+		return api.ListenAndServe(ctx, cli, vodEngine, bal, c, signer)
 	})
 
 	group.Go(func() error {
-		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c)
+		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, machine)
 	})
 
 	if cli.ShouldMapic() {
@@ -216,6 +226,10 @@ func main() {
 		return reconcileBalancer(ctx, bal, c)
 	})
 
+	group.Go(func() error {
+		return reconcileMachine(ctx, c, signer, machine)
+	})
+
 	err = group.Wait()
 	glog.Infof("Shutdown complete. Reason for shutdown: %s", err)
 }
@@ -231,6 +245,26 @@ func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Clu
 			err := bal.UpdateMembers(ctx, list)
 			if err != nil {
 				return fmt.Errorf("failed to update load balancer from member list: %w", err)
+			}
+		}
+	}
+}
+
+// Validate new events and pass them to state machine
+func reconcileMachine(ctx context.Context, c cluster.Cluster, signer events.Signer, machine *state.Machine) error {
+	eventCh := c.EventChan()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case unverified := <-eventCh:
+			signed, err := signer.Verify(*unverified)
+			if err != nil {
+				glog.Errorf("error validating event: %w", err)
+			}
+			err = machine.HandleEvent(signed)
+			if err != nil {
+				glog.Errorf("error feeding event to state machine: %w", err)
 			}
 		}
 	}

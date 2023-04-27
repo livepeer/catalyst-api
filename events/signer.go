@@ -8,18 +8,32 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/signer/core/apitypes"
+	"github.com/golang/glog"
 	"github.com/livepeer/go-livepeer/eth"
 )
 
 // schema-aware signer for signing actions and verifying untrusted payloads
-type Signer struct {
+type Signer interface {
+	Sign(action Action) (*SignedEvent, error)
+	Verify(unverified UnverifiedEvent) (*SignedEvent, error)
+}
+
+// Signer implemented with EIP712
+type EIP712Signer struct {
 	// When I sign an action, which schema should I use?
 	PrimarySchema *Schema
 	// All supported schemas for verification purposes
 	Schemas []*Schema
 }
 
-func (s *Signer) Sign(action Action) (*SignedEvent, error) {
+func NewEIP712Signer(primarySchema *Schema, schemas []*Schema) Signer {
+	return &EIP712Signer{
+		PrimarySchema: primarySchema,
+		Schemas:       schemas,
+	}
+}
+
+func (s *EIP712Signer) Sign(action Action) (*SignedEvent, error) {
 	id := new(big.Int).SetInt64(int64(80001))
 	am, err := eth.NewAccountManager(ethcommon.HexToAddress(""), ".", id, "secretpassword")
 	if err != nil {
@@ -58,7 +72,7 @@ func (s *Signer) Sign(action Action) (*SignedEvent, error) {
 	}, nil
 }
 
-func (s *Signer) Verify(unverified UnverifiedEvent) (*SignedEvent, error) {
+func (s *EIP712Signer) Verify(unverified UnverifiedEvent) (*SignedEvent, error) {
 	// find the correct schema for this action
 	var schema *Schema
 	for _, s := range s.Schemas {
@@ -83,6 +97,7 @@ func (s *Signer) Verify(unverified UnverifiedEvent) (*SignedEvent, error) {
 		Message:     unverified.Message,
 	}
 	hash, _, err := apitypes.TypedDataAndHash(typedData)
+	glog.Infof("hash: %s", hexutil.Bytes(hash))
 	if err != nil {
 		return nil, err
 	}
@@ -91,6 +106,7 @@ func (s *Signer) Verify(unverified UnverifiedEvent) (*SignedEvent, error) {
 		return nil, err
 	}
 	addr := crypto.PubkeyToAddress(*rpk)
+	glog.Infof("addr: %s", addr)
 	actionGenerator, ok := schema.Actions[unverified.PrimaryType]
 	if !ok {
 		return nil, fmt.Errorf("unknown action domain: %s", unverified.Domain)

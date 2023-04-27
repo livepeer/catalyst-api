@@ -21,11 +21,12 @@ import (
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/catalyst-api/pipeline"
+	"github.com/livepeer/catalyst-api/state"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster) error {
-	router := NewCatalystAPIRouterInternal(cli, vodEngine, mapic, bal, c)
+func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, machine *state.Machine) error {
+	router := NewCatalystAPIRouterInternal(cli, vodEngine, mapic, bal, c, machine)
 	server := http.Server{Addr: cli.HTTPInternalAddress, Handler: router}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -51,7 +52,7 @@ func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipe
 	return server.Shutdown(ctx)
 }
 
-func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster) *httprouter.Router {
+func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, machine *state.Machine) *httprouter.Router {
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
 	withAuth := middleware.IsAuthorized
@@ -66,7 +67,7 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	ffmpegSegmentingHandlers := &ffmpeg.HandlersCollection{VODEngine: vodEngine}
 	accessControlHandlers := accesscontrol.NewAccessControlHandlersCollection(cli)
 	encryptionHandlers := accesscontrol.NewEncryptionHandlersCollection(cli)
-	adminHandlers := &admin.AdminHandlersCollection{Cluster: c}
+	adminHandlers := &admin.AdminHandlersCollection{Cluster: c, Machine: machine}
 
 	// Simple endpoint for healthchecks
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
@@ -108,6 +109,7 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 
 	// Temporary endpoint for admin queries
 	router.GET("/admin/members", withLogging(adminHandlers.MembersHandler()))
+	router.GET("/admin/state", withLogging(adminHandlers.StateHandler()))
 
 	return router
 }

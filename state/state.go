@@ -37,13 +37,15 @@ func (s *Machine) HandleEvent(e *events.SignedEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch act := e.Action.(type) {
-	case v0.ChannelDefinition:
+
+	case *v0.ChannelDefinition:
 		ss := StreamState{}
 		ss.MultistreamTargets = make([]*StreamStateMultistreamTarget, len(act.MultistreamTargets))
 		for i, target := range act.MultistreamTargets {
 			ss.MultistreamTargets[i] = &StreamStateMultistreamTarget{URL: target.URL}
 		}
 		s.State.Streams[act.ID] = &ss
+
 	default:
 		return fmt.Errorf("unknown action type: %s", act)
 	}

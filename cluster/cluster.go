@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net"
@@ -15,21 +16,25 @@ import (
 	"github.com/hashicorp/memberlist"
 	"github.com/hashicorp/serf/serf"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/events"
 )
 
 type Cluster interface {
 	Start(ctx context.Context) error
 	MembersFiltered(filter map[string]string, status, name string) ([]Member, error)
 	Member(filter map[string]string, status, name string) (Member, error)
-	MemberChan() chan []Member
+	MemberChan() <-chan []Member
+	EventChan() <-chan *events.UnverifiedEvent
 	ResolveNodeURL(streamURL string) (string, error)
+	BroadcastEvent(signed *events.SignedEvent) error
 }
 
 type ClusterImpl struct {
 	config   *config.Cli
 	serf     *serf.Serf
-	eventCh  chan serf.Event
+	serfCh   chan serf.Event
 	memberCh chan []Member
+	eventCh  chan *events.UnverifiedEvent
 }
 
 type Member struct {
@@ -43,8 +48,9 @@ var mediaFilter = map[string]string{"node": "media"}
 func NewCluster(config *config.Cli) Cluster {
 	c := ClusterImpl{
 		config:   config,
-		eventCh:  make(chan serf.Event, 64),
+		serfCh:   make(chan serf.Event, 64),
 		memberCh: make(chan []Member),
+		eventCh:  make(chan *events.UnverifiedEvent),
 	}
 	return &c
 }
@@ -89,7 +95,7 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	serfConfig.MemberlistConfig = memberlistConfig
 	serfConfig.NodeName = c.config.NodeName
 	serfConfig.Tags = c.config.Tags
-	serfConfig.EventCh = c.eventCh
+	serfConfig.EventCh = c.serfCh
 	serfConfig.ProtocolVersion = 5
 
 	c.serf, err = serf.Create(serfConfig)
@@ -196,8 +202,13 @@ func (c *ClusterImpl) Member(filter map[string]string, status, name string) (Mem
 }
 
 // Subscribe to changes in the member list. Please only call me once. I only have one channel internally.
-func (c *ClusterImpl) MemberChan() chan []Member {
+func (c *ClusterImpl) MemberChan() <-chan []Member {
 	return c.memberCh
+}
+
+// Subscribe to user action events that we hear about from the cluster. Please only call me once.
+func (c *ClusterImpl) EventChan() <-chan *events.UnverifiedEvent {
+	return c.eventCh
 }
 
 // Given a dtsc:// or https:// url, resolve the proper address of the node via serf tags
@@ -234,6 +245,36 @@ func ResolveNodeURL(c Cluster, streamURL string) (string, error) {
 	return u2.String(), nil
 }
 
+func (c *ClusterImpl) BroadcastEvent(signed *events.SignedEvent) error {
+	payload, err := json.Marshal(signed.UnverifiedEvent())
+	if err != nil {
+		return fmt.Errorf("error marshalling event payload: %w", err)
+	}
+	err = c.serf.UserEvent("UserAction", payload, false)
+	if err != nil {
+		return fmt.Errorf("error broadcasting serf event: %w", err)
+	}
+	return nil
+}
+
+func (c *ClusterImpl) handleUserAction(evt serf.UserEvent) {
+	err := func() error {
+		if evt.Name != "UserAction" {
+			return fmt.Errorf("unrecognized user action name, expected 'UserAction', got '%s'", evt.Name)
+		}
+		var unverified events.UnverifiedEvent
+		err := json.Unmarshal(evt.Payload, &unverified)
+		if err != nil {
+			return fmt.Errorf("error unmarshalling event: %w", err)
+		}
+		c.eventCh <- &unverified
+		return nil
+	}()
+	if err != nil {
+		glog.Errorf("error handling user action: %w", err)
+	}
+}
+
 func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 	inbox := make(chan serf.Event, 1)
 	go func() {
@@ -241,14 +282,19 @@ func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return
-			case e := <-c.eventCh:
-				select {
-				case <-ctx.Done():
-					return
-				case inbox <- e:
-					// Event is now in the inbox
-				default:
-					// Overflow event gets dropped
+			case e := <-c.serfCh:
+				switch evt := e.(type) {
+				case serf.UserEvent:
+					go c.handleUserAction(evt)
+				case serf.MemberEvent:
+					select {
+					case <-ctx.Done():
+						return
+					case inbox <- e:
+						// Event is now in the inbox
+					default:
+						// Overflow event gets dropped
+					}
 				}
 			}
 		}
