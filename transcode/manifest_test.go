@@ -66,13 +66,13 @@ func TestItCanDownloadAValidRenditionManifest(t *testing.T) {
 }
 
 func TestItCanConvertRelativeURLsToOSURLs(t *testing.T) {
-	u, err := manifestURLToSegmentURL("/tmp/file/something.m3u8", "001.ts")
+	u, err := ManifestURLToSegmentURL("/tmp/file/something.m3u8", "001.ts")
 	require.NoError(t, err)
-	require.Equal(t, "/tmp/file/001.ts", u)
+	require.Equal(t, "/tmp/file/001.ts", u.String())
 
-	u, err = manifestURLToSegmentURL("s3+https://REDACTED:REDACTED@storage.googleapis.com/something/output.m3u8", "001.ts")
+	u, err = ManifestURLToSegmentURL("s3+https://REDACTED:REDACTED@storage.googleapis.com/something/output.m3u8", "001.ts")
 	require.NoError(t, err)
-	require.Equal(t, "s3+https://REDACTED:REDACTED@storage.googleapis.com/something/001.ts", u)
+	require.Equal(t, "s3+https://REDACTED:REDACTED@storage.googleapis.com/something/001.ts", u.String())
 }
 
 func TestItParsesManifestAndConvertsRelativeURLs(t *testing.T) {
@@ -86,8 +86,8 @@ func TestItParsesManifestAndConvertsRelativeURLs(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 2, len(us))
-	require.Equal(t, "s3+https://REDACTED:REDACTED@storage.googleapis.com/something/0.ts", us[0].URL)
-	require.Equal(t, "s3+https://REDACTED:REDACTED@storage.googleapis.com/something/5000.ts", us[1].URL)
+	require.Equal(t, "s3+https://REDACTED:REDACTED@storage.googleapis.com/something/0.ts", us[0].URL.String())
+	require.Equal(t, "s3+https://REDACTED:REDACTED@storage.googleapis.com/something/5000.ts", us[1].URL.String())
 }
 
 func TestItCanGenerateAndWriteManifests(t *testing.T) {

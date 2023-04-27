@@ -48,7 +48,7 @@ func DownloadRenditionManifest(sourceManifestOSURL string) (m3u8.MediaPlaylist, 
 }
 
 type SourceSegment struct {
-	URL            string
+	URL            *url.URL
 	DurationMillis int64
 }
 
@@ -62,7 +62,7 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 			break
 		}
 
-		u, err := manifestURLToSegmentURL(sourceManifestURL, segment.URI)
+		u, err := ManifestURLToSegmentURL(sourceManifestURL, segment.URI)
 		if err != nil {
 			return nil, err
 		}
@@ -165,16 +165,16 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 	return res, nil
 }
 
-func manifestURLToSegmentURL(manifestURL, segmentFilename string) (string, error) {
+func ManifestURLToSegmentURL(manifestURL, segmentFilename string) (*url.URL, error) {
 	base, err := url.Parse(manifestURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse manifest URL when converting to segment URL: %s", err)
+		return nil, fmt.Errorf("failed to parse manifest URL when converting to segment URL: %s", err)
 	}
 
 	relative, err := url.Parse(segmentFilename)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse segment filename when converting to segment URL: %s", err)
+		return nil, fmt.Errorf("failed to parse segment filename when converting to segment URL: %s", err)
 	}
 
-	return base.ResolveReference(relative).String(), nil
+	return base.ResolveReference(relative), nil
 }

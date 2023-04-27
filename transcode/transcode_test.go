@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -181,9 +182,9 @@ func TestParallelJobFailureStopsNextBatch(t *testing.T) {
 	config.TranscodingParallelSleep = 0
 	sourceSegmentURLs := []SourceSegment{
 		// First 3 jobs run in parallel, second one fails
-		{"1.ts", 1000}, {"2.ts", 1000}, {"3.ts", 1000},
+		{segmentURL(t, "1.ts"), 1000}, {segmentURL(t, "2.ts"), 1000}, {segmentURL(t, "3.ts"), 1000},
 		// Rest of jobs should not be processed
-		{"4.ts", 1000}, {"5.ts", 1000}, {"6.ts", 1000},
+		{segmentURL(t, "4.ts"), 1000}, {segmentURL(t, "5.ts"), 1000}, {segmentURL(t, "6.ts"), 1000},
 	}
 	halted := fmt.Errorf("halted")
 	m := sync.Mutex{}
@@ -212,14 +213,20 @@ func TestParallelJobFailureStopsNextBatch(t *testing.T) {
 	time.Sleep(10 * time.Millisecond) // wait for other workers to exit
 }
 
+func segmentURL(t *testing.T, u string) *url.URL {
+	out, err := url.Parse(u)
+	require.NoError(t, err)
+	return out
+}
+
 func TestParallelJobSaveTime(t *testing.T) {
 	config.TranscodingParallelJobs = 3
 	config.TranscodingParallelSleep = 0
 	sourceSegmentURLs := []SourceSegment{
 		// First 3 jobs should end at ~51ms mark
-		{"1.ts", 1000}, {"2.ts", 1000}, {"3.ts", 1000},
+		{segmentURL(t, "1.ts"), 1000}, {segmentURL(t, "2.ts"), 1000}, {segmentURL(t, "3.ts"), 1000},
 		// Second 3 jobs should end at ~101ms mark
-		{"4.ts", 1000}, {"5.ts", 1000}, {"6.ts", 1000},
+		{segmentURL(t, "4.ts"), 1000}, {segmentURL(t, "5.ts"), 1000}, {segmentURL(t, "6.ts"), 1000},
 	}
 	start := time.Now()
 	jobs := NewParallelTranscoding(sourceSegmentURLs, func(segment segmentInfo) error {
