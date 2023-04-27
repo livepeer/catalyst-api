@@ -1,16 +1,19 @@
 package events
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 type Action interface {
-	Map() map[string]any
+	// Map() map[string]any
+	Type() string
+	// LoadMap(map[string]any) error
 }
 
 // Base action suitable for inheriting by every other action
 type ActionBase struct{}
 
-// Returns a map version of this event suitable for signing by eth functions
-func (a ActionBase) Map() map[string]any {
+func ActionToMap(a any) map[string]any {
 	// lol very hacky implementation obviously
 	data, err := json.Marshal(a)
 
@@ -23,5 +26,25 @@ func (a ActionBase) Map() map[string]any {
 	if err != nil {
 		panic(err)
 	}
+	// err = LoadMap(&a, newMap)
+	// if err != nil {
+	// 	panic(err)
+	// }
 	return newMap
+}
+
+// Imports a map version of this event, suitable for building an Action from JSON
+func LoadMap(a any, m map[string]any) error {
+	// lol very hacky implementation obviously
+	data, err := json.Marshal(m)
+
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal(data, a)
+	if err != nil {
+		return err
+	}
+	return nil
 }

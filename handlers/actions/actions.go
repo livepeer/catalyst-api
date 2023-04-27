@@ -32,6 +32,7 @@ func (act *ActionHandlersCollection) ActionHandler() httprouter.Handle {
 			errors.WriteHTTPBadRequest(w, "Cannot handle request body", err)
 			return
 		}
+
 		// Verify it's generally semantically valid
 		// Verify that it matches some of our action schema
 		// Verify that it's correctly signed
