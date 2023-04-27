@@ -1,25 +1,34 @@
-package transcode
+package clients
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"path"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/grafov/m3u8"
-	"github.com/livepeer/catalyst-api/clients"
+	"github.com/livepeer/catalyst-api/video"
 )
 
-const MASTER_MANIFEST_FILENAME = "index.m3u8"
+const (
+	MASTER_MANIFEST_FILENAME = "index.m3u8"
+	MANIFEST_UPLOAD_TIMEOUT  = 5 * time.Minute
+)
 
-func DownloadRenditionManifest(sourceManifestOSURL string) (m3u8.MediaPlaylist, error) {
+func DownloadRetryBackoff() backoff.BackOff {
+	return backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10)
+}
+
+func DownloadRenditionManifest(requestID, sourceManifestOSURL string) (m3u8.MediaPlaylist, error) {
 	var playlist m3u8.Playlist
 	var playlistType m3u8.ListType
 
 	err := backoff.Retry(func() error {
-		rc, err := clients.DownloadOSURL(sourceManifestOSURL)
+		rc, err := getFile(context.Background(), requestID, sourceManifestOSURL)
 		if err != nil {
 			return fmt.Errorf("error downloading manifest: %s", err)
 		}
@@ -28,7 +37,7 @@ func DownloadRenditionManifest(sourceManifestOSURL string) (m3u8.MediaPlaylist, 
 			return fmt.Errorf("error decoding manifest: %s", err)
 		}
 		return nil
-	}, TranscodeRetryBackoff())
+	}, DownloadRetryBackoff())
 	if err != nil {
 		return m3u8.MediaPlaylist{}, err
 	}
@@ -52,7 +61,7 @@ type SourceSegment struct {
 	DurationMillis int64
 }
 
-// Loop over each segment and convert it from a relative to a full ObjectStore-compatible URL
+// Loop over each segment in a given manifest and convert it from a relative path to a full ObjectStore-compatible URL
 func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist) ([]SourceSegment, error) {
 	var urls []SourceSegment
 	for _, segment := range manifest.Segments {
@@ -74,13 +83,12 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 			},
 		)
 	}
-
 	return urls, nil
 }
 
 // Generate a Master manifest, plus one Rendition manifest for each Profile we're transcoding, then write them to storage
 // Returns the master manifest URL on success
-func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL string, transcodedStats []*RenditionStats) (string, error) {
+func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL string, transcodedStats []*video.RenditionStats) (string, error) {
 	// Generate the master + rendition output manifests
 	masterPlaylist := m3u8.NewMasterPlaylist()
 
@@ -137,8 +145,8 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		manifestFilename := "index.m3u8"
 		renditionManifestBaseURL := fmt.Sprintf("%s/%s", targetOSURL, profile.Name)
 		err = backoff.Retry(func() error {
-			return clients.UploadToOSURL(renditionManifestBaseURL, manifestFilename, strings.NewReader(renditionPlaylist.String()), UPLOAD_TIMEOUT)
-		}, clients.UploadRetryBackoff())
+			return UploadToOSURL(renditionManifestBaseURL, manifestFilename, strings.NewReader(renditionPlaylist.String()), MANIFEST_UPLOAD_TIMEOUT)
+		}, UploadRetryBackoff())
 		if err != nil {
 			return "", fmt.Errorf("failed to upload rendition playlist: %s", err)
 		}
@@ -151,8 +159,8 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 	}
 
 	err := backoff.Retry(func() error {
-		return clients.UploadToOSURL(targetOSURL, MASTER_MANIFEST_FILENAME, strings.NewReader(masterPlaylist.String()), UPLOAD_TIMEOUT)
-	}, clients.UploadRetryBackoff())
+		return UploadToOSURL(targetOSURL, MASTER_MANIFEST_FILENAME, strings.NewReader(masterPlaylist.String()), MANIFEST_UPLOAD_TIMEOUT)
+	}, UploadRetryBackoff())
 	if err != nil {
 		return "", fmt.Errorf("failed to upload master playlist: %s", err)
 	}
