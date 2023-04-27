@@ -49,14 +49,10 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVi
 			return
 		}
 		osTransferURL = sourceOutputUrl.JoinPath(requestID, "transfer", path.Base(inputFile.Path))
-		log.Log(requestID, "Copying input file to S3", "source", inputFile.String(), "dest", osTransferURL.String())
-		size, err = CopyFile(context.Background(), inputFile.String(), osTransferURL.String(), "", requestID)
+
+		size, err = CopyAllInputFiles(requestID, inputFile, osTransferURL)
 		if err != nil {
-			err = fmt.Errorf("error copying input file to S3: %w", err)
-			return
-		}
-		if size <= 0 {
-			err = fmt.Errorf("zero bytes found for source: %s", inputFile)
+			err = fmt.Errorf("failed to copy file(s): %w", err)
 			return
 		}
 		log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", osTransferURL.String())
@@ -95,9 +91,99 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVi
 	return
 }
 
+func isHLSInput(inputFile *url.URL) bool {
+	ext := strings.LastIndex(inputFile.Path, ".")
+	if ext == -1 {
+		return false
+	}
+	return inputFile.Path[ext:] == ".m3u8"
+}
+
+// Given a source manifest URL (e.g. https://storage.googleapis.com/foo/bar/output.m3u8) and
+// a source segment URL (e.g. https://storate.googleapis.com/foo/bar/0.ts), generate a target
+// OS-compatible transfer URL for each segment that uses the destination transfer URL for the source manifest
+// (e.g. if destination transfer URL is:
+// https://USER:PASS@storage.googleapi.com/hello/world/transfer/output.m3u8
+// then detination transfer URL for each segment will be:
+// https://USER:PASS@storage.googleapi.com/hello/world/transfer/0.ts)
+// In other words, this function is used to generate an OS-compatible transfer target URL for
+// each segment in a manifest -- this is where the calling function will copy each segment to.
+func getSegmentTransferLocation(srcManifestUrl, dstTransferUrl *url.URL, srcSegmentUrl string) (string, error) {
+	srcSegmentParsedURL, err := url.Parse(srcSegmentUrl)
+	if err != nil {
+		return "", fmt.Errorf("error parsing source segment url: %s", err)
+	}
+	path1 := srcManifestUrl.Path
+	path2 := srcSegmentParsedURL.Path
+
+	// Find the common prefix of the two paths
+	i := 0
+	for ; i < len(path1) && i < len(path2); i++ {
+		if path1[i] != path2[i] {
+			break
+		}
+	}
+	// Extract the relative path by removing the common prefix
+	relPath := path2[i:]
+	relPath = strings.TrimPrefix(relPath, "/")
+
+	dstTransferParsedURL, _ := url.Parse(dstTransferUrl.String())
+
+	newURL := *dstTransferParsedURL
+	newURL.Path = path.Dir(newURL.Path) + "/" + relPath
+	return newURL.String(), nil
+}
+
+// CopyAllInputFiles will copy the m3u8 manifest and all ts segments for HLS input whereas
+// it will copy just the single video file for MP4/MOV input
+func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL) (size int64, err error) {
+	fileList := make(map[string]string)
+	if isHLSInput(srcInputUrl) {
+		// Download the m3u8 manifest using the input url
+		playlist, err := DownloadRenditionManifest(requestID, srcInputUrl.String())
+		if err != nil {
+			return 0, fmt.Errorf("error downloading HLS input manifest: %s", err)
+		}
+		// Save the mapping between the input m3u8 manifest file to its corresponding OS-transfer destination url
+		fileList[srcInputUrl.String()] = dstOutputUrl.String()
+		// Now get a list of the OS-compatible segment URLs from the input manifest file
+		sourceSegmentUrls, err := GetSourceSegmentURLs(srcInputUrl.String(), playlist)
+		if err != nil {
+			return 0, fmt.Errorf("error generating source segment URLs for HLS input manifest: %s", err)
+		}
+		// Then save the mapping between the OS-compatible segment URLs to its OS-transfer destination url
+		for _, srcSegmentUrl := range sourceSegmentUrls {
+			u, err := getSegmentTransferLocation(srcInputUrl, dstOutputUrl, srcSegmentUrl.URL.String())
+			if err != nil {
+				return 0, fmt.Errorf("error generating an OS compatible transfer location for each segment: %s", err)
+			}
+			fileList[srcSegmentUrl.URL.String()] = u
+		}
+
+	} else {
+		fileList[srcInputUrl.String()] = dstOutputUrl.String()
+	}
+
+	var byteCount int64
+	for inFile, outFile := range fileList {
+		log.Log(requestID, "Copying input file to S3", "source", inFile, "dest", outFile)
+		size, err = CopyFile(context.Background(), inFile, outFile, "", requestID)
+		if err != nil {
+			err = fmt.Errorf("error copying input file to S3: %w", err)
+			return size, err
+		}
+		if size <= 0 {
+			err = fmt.Errorf("zero bytes found for source: %s", inFile)
+			return size, err
+		}
+		byteCount = size + byteCount
+	}
+	return size, nil
+}
+
 func isDirectUpload(inputFile *url.URL) bool {
-	// recordings via backup-recording path is also considered a "direct-upload"
 	return strings.HasSuffix(inputFile.Host, "storage.googleapis.com") &&
+		strings.HasPrefix(inputFile.Path, "/directUpload") &&
 		(inputFile.Scheme == "https" || inputFile.Scheme == "http")
 }
 
@@ -110,7 +196,7 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 		byteAccWriter := ByteAccumulatorWriter{count: 0}
 		defer func() { writtenBytes = byteAccWriter.count }()
 
-		c, err := getFile(ctx, sourceURL, requestID)
+		c, err := getFile(ctx, requestID, sourceURL)
 		if err != nil {
 			return fmt.Errorf("download error: %w", err)
 		}
@@ -127,7 +213,7 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 	return
 }
 
-func getFile(ctx context.Context, url, requestID string) (io.ReadCloser, error) {
+func getFile(ctx context.Context, requestID, url string) (io.ReadCloser, error) {
 	_, err := drivers.ParseOSURL(url, true)
 	if err == nil {
 		return DownloadOSURL(url)

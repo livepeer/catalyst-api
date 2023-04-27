@@ -51,9 +51,13 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	log.AddContext(job.RequestID, "segmented_url", job.SegmentingTargetURL)
 	job.ReportProgress(clients.TranscodeStatusPreparing, 0.3)
 
-	// Segmenting
-	if err := copyFileToLocalTmpAndSegment(job); err != nil {
-		return nil, err
+	// Segment only for non-HLS inputs
+	if job.InputFileInfo.Format != "hls" {
+		if err := copyFileToLocalTmpAndSegment(job); err != nil {
+			return nil, err
+		}
+	} else {
+		job.SegmentingTargetURL = job.SourceFile
 	}
 	job.ReportProgress(clients.TranscodeStatusPreparingCompleted, 1)
 
@@ -76,7 +80,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	}
 
 	inputInfo := video.InputVideo{
-		Format:    "mp4",
+		Format:    job.InputFileInfo.Format,
 		Duration:  job.InputFileInfo.Duration,
 		SizeBytes: int64(job.sourceBytes),
 		Tracks: []video.InputTrack{
@@ -111,7 +115,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	job.state = "transcoding"
 
-	sourceManifest, err := transcode.DownloadRenditionManifest(transcodeRequest.SourceManifestURL)
+	sourceManifest, err := clients.DownloadRenditionManifest(transcodeRequest.RequestID, transcodeRequest.SourceManifestURL)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading source manifest: %s", err)
 	}
@@ -119,7 +123,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	sourceSegments := sourceManifest.GetAllSegments()
 	job.sourceSegments = len(sourceSegments)
 
-	if job.sourceSegments > 0 {
+	if job.sourceSegments > 0 && job.InputFileInfo.Format != "hls" {
 		firstSeg := sourceSegments[0]
 		lastSeg := sourceSegments[job.sourceSegments-1]
 
@@ -147,7 +151,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 }
 
 func probeSourceSegment(seg *m3u8.MediaSegment, sourceManifestURL string) error {
-	u, err := transcode.ManifestURLToSegmentURL(sourceManifestURL, seg.URI)
+	u, err := clients.ManifestURLToSegmentURL(sourceManifestURL, seg.URI)
 	if err != nil {
 		return fmt.Errorf("error checking source segments: %w", err)
 	}

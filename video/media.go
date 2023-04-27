@@ -71,3 +71,14 @@ func (r *TRenditionList) GetSegmentList(rendName string) *TSegmentList {
 	defer r.mu.Unlock()
 	return r.RenditionSegmentTable[rendName]
 }
+
+type RenditionStats struct {
+	Name             string
+	Width            int64
+	Height           int64
+	FPS              int64
+	Bytes            int64
+	DurationMs       float64
+	ManifestLocation string
+	BitsPerSecond    uint32
+}

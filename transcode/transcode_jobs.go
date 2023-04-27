@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 )
 
@@ -19,7 +20,7 @@ type ParallelTranscoding struct {
 	completedSegments int
 }
 
-func NewParallelTranscoding(sourceSegmentURLs []SourceSegment, work func(segment segmentInfo) error) *ParallelTranscoding {
+func NewParallelTranscoding(sourceSegmentURLs []clients.SourceSegment, work func(segment segmentInfo) error) *ParallelTranscoding {
 	jobs := &ParallelTranscoding{
 		queue:         make(chan segmentInfo, len(sourceSegmentURLs)),
 		errors:        make(chan error, 100),
