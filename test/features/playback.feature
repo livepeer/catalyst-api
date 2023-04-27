@@ -57,3 +57,14 @@ Feature: Playback
       | key                         | value |
       | accept-ranges               | bytes |
       | Access-Control-Allow-Origin | *     |
+
+  Scenario: OPTIONS requests
+    Given the gate API will allow playback
+    When I query the "/asset/hls/dbe3q3g6q2kia036/index.m3u8?accessKey=secretlpkey" endpoint with "OPTIONS"
+    And receive a response within "3" seconds
+    Then I get an HTTP response with code "200"
+    And the headers match
+      | key                         | value                  |
+      | accept-ranges               | bytes                  |
+      | allow                       | GET, HEAD, OPTIONS     |
+      | content-length              | 0                      |
