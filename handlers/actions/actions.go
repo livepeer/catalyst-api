@@ -6,17 +6,22 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/events"
 )
 
-type ActionHandlersCollection struct{}
+type ActionHandlersCollection struct {
+	Signer  events.Signer
+	Cluster cluster.Cluster
+}
 
-type PlaybackAccessControlEntry struct{}
-
-func NewActionsHandlersCollection(cli config.Cli) *ActionHandlersCollection {
-	return &ActionHandlersCollection{}
+func NewActionsHandlersCollection(cli config.Cli, signer events.Signer, cluster cluster.Cluster) *ActionHandlersCollection {
+	return &ActionHandlersCollection{
+		Signer:  signer,
+		Cluster: cluster,
+	}
 }
 
 func (act *ActionHandlersCollection) ActionHandler() httprouter.Handle {
@@ -32,10 +37,15 @@ func (act *ActionHandlersCollection) ActionHandler() httprouter.Handle {
 			errors.WriteHTTPBadRequest(w, "Cannot handle request body", err)
 			return
 		}
-
-		// Verify it's generally semantically valid
-		// Verify that it matches some of our action schema
-		// Verify that it's correctly signed
-		// Pass it to the signer
+		signed, err := act.Signer.Verify(unverified)
+		if err != nil {
+			errors.WriteHTTPBadRequest(w, "Could not validate event signature", err)
+		}
+		// TODO: Add check for allowlisted address here
+		err = act.Cluster.BroadcastEvent(signed)
+		if err != nil {
+			errors.WriteHTTPInternalServerError(w, "Could not broadcast event", err)
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

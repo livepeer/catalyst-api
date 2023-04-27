@@ -9,6 +9,7 @@ import (
 	"github.com/livepeer/catalyst-api/balancer"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/events"
 	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/handlers/actions"
 	"github.com/livepeer/catalyst-api/handlers/geolocation"
@@ -18,8 +19,8 @@ import (
 	"github.com/livepeer/catalyst-api/pipeline"
 )
 
-func ListenAndServe(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster) error {
-	router := NewCatalystAPIRouter(cli, vodEngine, bal, c)
+func ListenAndServe(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster, signer events.Signer) error {
+	router := NewCatalystAPIRouter(cli, vodEngine, bal, c, signer)
 	server := http.Server{Addr: cli.HTTPAddress, Handler: router}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -45,7 +46,7 @@ func ListenAndServe(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coo
 	return server.Shutdown(ctx)
 }
 
-func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster) *httprouter.Router {
+func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster, signer events.Signer) *httprouter.Router {
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
 	withCORS := middleware.AllowCORS()
@@ -57,7 +58,7 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 		Cluster:  c,
 		Config:   cli,
 	}
-	actionHandlers := actions.NewActionsHandlersCollection(cli)
+	actionHandlers := actions.NewActionsHandlersCollection(cli, signer, c)
 
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 
