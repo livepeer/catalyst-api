@@ -78,10 +78,10 @@ func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) err
 }
 
 type StreamHealthPayload struct {
-	StreamName string                  `json:"streamName"`
-	SessionID  string                  `json:"sessionId"`
-	IsActive   bool                    `json:"isActive"`
-	IsHealthy  bool                    `json:"isHealthy"`
+	StreamName string                  `json:"stream_name"`
+	SessionID  string                  `json:"session_id"`
+	IsActive   bool                    `json:"is_active"`
+	IsHealthy  bool                    `json:"is_healthy"`
 	Tracks     map[string]TrackDetails `json:"tracks,omitempty"`
 	Issues     string                  `json:"issues,omitempty"`
 }
