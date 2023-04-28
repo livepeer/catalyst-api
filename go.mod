@@ -5,7 +5,7 @@ go 1.20
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/DATA-DOG/go-sqlmock v1.5.0
-	github.com/aws/aws-sdk-go v1.44.244
+	github.com/aws/aws-sdk-go v1.44.253
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cucumber/godog v0.12.5
 	github.com/golang-jwt/jwt/v4 v4.5.0
