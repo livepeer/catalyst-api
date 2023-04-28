@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/livepeer/catalyst-api/log"
+	"github.com/golang/glog"
 )
 
-// This is written as catalalyst-api-native code, since that's where it's
+// This was originally written as catalalyst-api code, since that's where it's
 // supposed to go. Currently, catalyst-api has no connection with Mist anymore
 // though, so it's easier to plug this into mist-api-connector instead for now.
 // TODO: Move this to catalyst-api when its got the Mist plumbing back.
@@ -28,47 +28,26 @@ import (
 func TriggerStreamBuffer(req *http.Request, lines []string) error {
 	body, err := ParseStreamBufferPayload(lines)
 	if err != nil {
-		log.LogNoRequestID("Error parsing STREAM_BUFFER payload",
-			"error", err, "payload", strings.Join(lines, "\n"))
+		glog.Infof("Error parsing STREAM_BUFFER payload error=%q payload=%s", err, strings.Join(lines, "\n"))
 		return err
 	}
 
 	headers := req.Header
 	headersStr := ""
 	for key, values := range headers {
-		headersStr += fmt.Sprintf("%s=%v;, ", key, values)
+		headersStr += fmt.Sprintf("%s=%v, ", key, values)
 	}
 	rawBody, _ := json.Marshal(body)
-	log.LogNoRequestID("Got STREAM_BUFFER trigger", "headers", headersStr, "payload", rawBody)
+	glog.Infof("Got STREAM_BUFFER trigger headers=%q payload=%s", headersStr, rawBody)
 
 	return nil
 }
 
 type StreamBufferPayload struct {
-	StreamName    string
-	StreamState   string
-	StreamDetails *StreamDetails
-}
-
-func ParseStreamBufferPayload(lines []string) (*StreamBufferPayload, error) {
-	if len(lines) < 2 || len(lines) > 3 {
-		return nil, fmt.Errorf("invalid payload: expected 2 or 3 lines but got %d", len(lines))
-	}
-
-	streamName := lines[0]
-	streamState := lines[1]
-	streamDetailsStr := lines[2]
-
-	streamDetails, err := ParseStreamDetails(streamState, []byte(streamDetailsStr))
-	if err != nil {
-		return nil, fmt.Errorf("error parsing stream details JSON: %w", err)
-	}
-
-	return &StreamBufferPayload{
-		StreamName:    streamName,
-		StreamState:   streamState,
-		StreamDetails: streamDetails,
-	}, nil
+	StreamName string                  `json:"streamName"`
+	State      string                  `json:"state"`
+	Tracks     map[string]TrackDetails `json:"tracks"`
+	Issues     string                  `json:"issues"`
 }
 
 type TrackDetails struct {
@@ -80,12 +59,36 @@ type TrackDetails struct {
 	Width  int                    `json:"width,omitempty"`
 }
 
-type StreamDetails struct {
+func ParseStreamBufferPayload(lines []string) (*StreamBufferPayload, error) {
+	if len(lines) < 2 || len(lines) > 3 {
+		return nil, fmt.Errorf("invalid payload: expected 2 or 3 lines but got %d", len(lines))
+	}
+
+	streamName := lines[0]
+	streamState := lines[1]
+	streamDetailsStr := lines[2]
+
+	streamDetails, err := ParseMistStreamDetails(streamState, []byte(streamDetailsStr))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing stream details JSON: %w", err)
+	}
+
+	return &StreamBufferPayload{
+		StreamName: streamName,
+		State:      streamState,
+		Tracks:     streamDetails.Tracks,
+		Issues:     streamDetails.Issues,
+	}, nil
+}
+
+type MistStreamDetails struct {
 	Tracks map[string]TrackDetails
 	Issues string
 }
 
-func ParseStreamDetails(streamState string, data []byte) (*StreamDetails, error) {
+// Mists saves the tracks and issues in the same JSON object, so we need to
+// parse them separately. e.g. {track-id-1: {...}, issues: "..."}
+func ParseMistStreamDetails(streamState string, data []byte) (*MistStreamDetails, error) {
 	if streamState == "EMPTY" {
 		return nil, nil
 	}
@@ -112,5 +115,5 @@ func ParseStreamDetails(streamState string, data []byte) (*StreamDetails, error)
 		return nil, fmt.Errorf("eror parsing stream details tracks: %w", err)
 	}
 
-	return &StreamDetails{tracks, issues}, nil
+	return &MistStreamDetails{tracks, issues}, nil
 }
