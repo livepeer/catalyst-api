@@ -52,6 +52,7 @@ type Cli struct {
 	RetryJoin                 []string
 	EncryptKey                string
 	GateURL                   string
+	StreamHealthHookURL       string
 }
 
 // Return our own URL for callback trigger purposes

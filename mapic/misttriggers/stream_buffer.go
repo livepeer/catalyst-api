@@ -1,13 +1,32 @@
 package misttriggers
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/golang/glog"
+	"github.com/hashicorp/go-retryablehttp"
+	"github.com/livepeer/catalyst-api/config"
 )
+
+var hookClient *http.Client
+
+func init() {
+	client := retryablehttp.NewClient()
+	client.RetryMax = 2                   // Attempte request a maximum of this+1 times
+	client.RetryWaitMin = 1 * time.Second // Wait at least this long between retries
+	client.RetryWaitMax = 5 * time.Second // Wait at most this long between retries (exponential backoff)
+	client.HTTPClient = &http.Client{
+		Timeout: 5 * time.Second, // Give up on requests that take more than this long
+	}
+
+	hookClient = client.StandardClient()
+}
 
 // This was originally written as catalalyst-api code, since that's where it's
 // supposed to go. Currently, catalyst-api has no connection with Mist anymore
@@ -25,29 +44,78 @@ import (
 // {JSON object with stream details, only when state is not EMPTY}
 //
 // Read the Mist documentation for more details on each of the stream states.
-func TriggerStreamBuffer(req *http.Request, lines []string) error {
+func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) error {
+	sessionID := req.Header.Get("X-UUID")
+
 	body, err := ParseStreamBufferPayload(lines)
 	if err != nil {
 		glog.Infof("Error parsing STREAM_BUFFER payload error=%q payload=%s", err, strings.Join(lines, "\n"))
 		return err
 	}
 
-	headers := req.Header
-	headersStr := ""
-	for key, values := range headers {
-		headersStr += fmt.Sprintf("%s=%v, ", key, values)
-	}
 	rawBody, _ := json.Marshal(body)
-	glog.Infof("Got STREAM_BUFFER trigger headers=%q payload=%s", headersStr, rawBody)
+	glog.Infof("Got STREAM_BUFFER trigger sessionId=%q payload=%s", sessionID, rawBody)
+
+	streamHealth := StreamHealthPayload{
+		StreamName: body.StreamName,
+		SessionID:  sessionID,
+		State:      body.State,
+	}
+	if details := body.Details; details != nil {
+		streamHealth.Tracks = details.Tracks
+		streamHealth.Issues = details.Issues
+	}
+
+	err = PostStreamHealthPayload(cli.StreamHealthHookURL, cli.APIToken, streamHealth)
+	if err != nil {
+		glog.Infof("Error pushing STREAM_HEALTH payload error=%q payload=%s", err, rawBody)
+		return err
+	}
+
+	return nil
+}
+
+type StreamHealthPayload struct {
+	StreamName string                  `json:"streamName"`
+	SessionID  string                  `json:"sessionId"`
+	State      string                  `json:"state"`
+	Tracks     map[string]TrackDetails `json:"tracks"`
+	Issues     string                  `json:"issues"`
+}
+
+func PostStreamHealthPayload(url, apiToken string, payload StreamHealthPayload) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("error marshalling stream health payload: %w", err)
+	}
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("error creating stream health request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiToken)
+
+	resp, err := hookClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("error pushing stream health to hook: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("error reading stream health hook response: %w", err)
+		}
+		glog.Warningf("Error pushing stream health to hook status=%d body=%q", resp.StatusCode, respBody)
+	}
 
 	return nil
 }
 
 type StreamBufferPayload struct {
-	StreamName string                  `json:"streamName"`
-	State      string                  `json:"state"`
-	Tracks     map[string]TrackDetails `json:"tracks"`
-	Issues     string                  `json:"issues"`
+	StreamName string
+	State      string
+	Details    *MistStreamDetails
 }
 
 type TrackDetails struct {
@@ -76,8 +144,7 @@ func ParseStreamBufferPayload(lines []string) (*StreamBufferPayload, error) {
 	return &StreamBufferPayload{
 		StreamName: streamName,
 		State:      streamState,
-		Tracks:     streamDetails.Tracks,
-		Issues:     streamDetails.Issues,
+		Details:    streamDetails,
 	}, nil
 }
 

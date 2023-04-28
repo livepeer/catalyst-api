@@ -270,7 +270,7 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 }
 
 func (mc *mac) triggerStreamBuffer(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
-	err := misttriggers.TriggerStreamBuffer(r, lines)
+	err := misttriggers.TriggerStreamBuffer(mc.config, r, lines)
 	if err != nil {
 		glog.Errorf("Error handling stream buffer trigger error=%q", err)
 		w.WriteHeader(http.StatusInternalServerError)
