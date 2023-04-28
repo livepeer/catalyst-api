@@ -53,6 +53,7 @@ jobs:
           files: ./coverage.out
           name: ${{ github.event.repository.name }}
           verbose: true
+
   cucumber-test:
     name: Cucumber tests
     runs-on: ubuntu-20.04
