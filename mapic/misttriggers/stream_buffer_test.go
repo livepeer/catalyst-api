@@ -109,7 +109,8 @@ func TestTriggerStreamBufferE2E(t *testing.T) {
 		err := json.NewDecoder(r.Body).Decode(&receivedPayload)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("error unmarshalling payload"))
+			_, err := w.Write([]byte("error unmarshalling payload"))
+			require.NoError(t, err)
 			return
 		}
 
