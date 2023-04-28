@@ -3,6 +3,7 @@ package clients
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/video"
@@ -77,7 +78,7 @@ type TranscodeStatusMessage struct {
 	RequestID       string          `json:"request_id"`
 	CompletionRatio float64         `json:"completion_ratio"` // No omitempty or we lose this for 0% completion case
 	Status          TranscodeStatus `json:"status"`
-	Timestamp       int64           `json:"timestamp"`
+	Timestamp       time.Time       `json:"timestamp"`
 
 	// Only used for the "Error" status message
 	Error       string `json:"error,omitempty"`
@@ -96,7 +97,7 @@ func NewTranscodeStatusProgress(url, requestID string, status TranscodeStatus, c
 		RequestID:       requestID,
 		CompletionRatio: OverallCompletionRatio(status, currentStageCompletionRatio),
 		Status:          status,
-		Timestamp:       config.Clock.GetTimestampUTC(),
+		Timestamp:       config.Clock.GetTime(),
 	}
 }
 
@@ -107,7 +108,7 @@ func NewTranscodeStatusError(url, requestID, errorMsg string, unretriable bool) 
 		Error:       errorMsg,
 		Unretriable: unretriable,
 		Status:      TranscodeStatusError,
-		Timestamp:   config.Clock.GetTimestampUTC(),
+		Timestamp:   config.Clock.GetTime(),
 	}
 }
 
@@ -118,7 +119,7 @@ func NewTranscodeStatusCompleted(url, requestID string, iv video.InputVideo, ov 
 		CompletionRatio: OverallCompletionRatio(TranscodeStatusCompleted, 1),
 		RequestID:       requestID,
 		Status:          TranscodeStatusCompleted,
-		Timestamp:       config.Clock.GetTimestampUTC(),
+		Timestamp:       config.Clock.GetTime(),
 		Type:            "video", // Assume everything is a video for now
 		InputVideo:      iv,
 		Outputs:         ov,

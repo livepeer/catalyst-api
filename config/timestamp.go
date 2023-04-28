@@ -3,19 +3,19 @@ package config
 import "time"
 
 type TimestampGenerator interface {
-	GetTimestampUTC() int64
+	GetTime() time.Time
 }
 
 type RealTimestampGenerator struct{}
 
-func (t RealTimestampGenerator) GetTimestampUTC() int64 {
-	return time.Now().Unix()
+func (t RealTimestampGenerator) GetTime() time.Time {
+	return time.Now()
 }
 
 type FixedTimestampGenerator struct {
-	Timestamp int64
+	Timestamp time.Time
 }
 
-func (t FixedTimestampGenerator) GetTimestampUTC() int64 {
+func (t FixedTimestampGenerator) GetTime() time.Time {
 	return t.Timestamp
 }

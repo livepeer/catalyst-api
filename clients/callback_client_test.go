@@ -88,6 +88,23 @@ func TestItSendsPeriodicHeartbeats(t *testing.T) {
 	require.Equal(t, int64(1), atomic.LoadInt64(&tries), "Expected the client to have sent 1 status within the timeframe")
 }
 
+func TestItTimesOutOldUpdates(t *testing.T) {
+	// Counter for the number of retries we've done
+	var tries int64
+	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&tries, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer svr.Close()
+
+	client := NewPeriodicCallbackClient(100*time.Millisecond, map[string]string{}).Start()
+	client.staleTimeout = time.Millisecond
+	client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusTranscoding, 1))
+
+	time.Sleep(200 * time.Millisecond)
+	require.Equal(t, int64(0), atomic.LoadInt64(&tries))
+}
+
 func TestTranscodeStatusErrorNotifcation(t *testing.T) {
 	// Set up a dummy server to receive the callbacks
 	var requestCount int64
