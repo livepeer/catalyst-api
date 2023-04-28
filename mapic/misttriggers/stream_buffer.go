@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -102,7 +102,7 @@ func PostStreamHealthPayload(url, apiToken string, payload StreamHealthPayload) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		respBody, err := ioutil.ReadAll(resp.Body)
+		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("error reading stream health hook response: %w", err)
 		}
