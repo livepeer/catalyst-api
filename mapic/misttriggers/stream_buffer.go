@@ -59,9 +59,11 @@ func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) err
 	streamHealth := StreamHealthPayload{
 		StreamName: body.StreamName,
 		SessionID:  sessionID,
-		State:      body.State,
+		IsActive:   body.State != "EMPTY",
+		IsHealthy:  body.State == "FULL" || body.State == "RECOVER",
 	}
 	if details := body.Details; details != nil {
+		streamHealth.IsHealthy = streamHealth.IsHealthy && details.Issues == ""
 		streamHealth.Tracks = details.Tracks
 		streamHealth.Issues = details.Issues
 	}
@@ -78,7 +80,8 @@ func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) err
 type StreamHealthPayload struct {
 	StreamName string                  `json:"streamName"`
 	SessionID  string                  `json:"sessionId"`
-	State      string                  `json:"state"`
+	IsActive   bool                    `json:"isActive"`
+	IsHealthy  bool                    `json:"isHealthy"`
 	Tracks     map[string]TrackDetails `json:"tracks,omitempty"`
 	Issues     string                  `json:"issues,omitempty"`
 }
