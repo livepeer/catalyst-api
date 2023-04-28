@@ -62,7 +62,8 @@ func TestPostStreamHealthPayloadFailsWithInvalidURL(t *testing.T) {
 	streamHealthPayload := StreamHealthPayload{
 		StreamName: "stream1",
 		SessionID:  "session1",
-		State:      "FULL",
+		IsActive:   true,
+		IsHealthy:  true,
 		Tracks:     nil,
 		Issues:     "",
 	}
@@ -84,7 +85,8 @@ func TestPostStreamHealthPayloadWithTestServer(t *testing.T) {
 	streamHealthPayload := StreamHealthPayload{
 		StreamName: "stream1",
 		SessionID:  "session1",
-		State:      "FULL",
+		IsActive:   true,
+		IsHealthy:  true,
 		Tracks:     nil,
 		Issues:     "No issues",
 	}
@@ -123,15 +125,16 @@ func TestTriggerStreamBufferE2E(t *testing.T) {
 		StreamHealthHookURL: server.URL,
 		APIToken:            "apiToken",
 	}
-	err = TriggerStreamBuffer(cli, req, strings.Split(streamBufferPayloadFull, "\n"))
+	err = TriggerStreamBuffer(cli, req, strings.Split(streamBufferPayloadIssues, "\n"))
 	require.NoError(t, err)
 
 	// Check the payload received by the test server
 	require.Equal(t, receivedAuthHeader, "Bearer apiToken")
 	require.Equal(t, receivedPayload.StreamName, "stream1")
 	require.Equal(t, receivedPayload.SessionID, "session1")
-	require.Equal(t, receivedPayload.State, "FULL")
+	require.Equal(t, receivedPayload.IsActive, true)
+	require.Equal(t, receivedPayload.IsHealthy, false)
 	require.Len(t, receivedPayload.Tracks, 1)
 	require.Contains(t, receivedPayload.Tracks, "track1")
-	require.Equal(t, receivedPayload.Issues, "")
+	require.Equal(t, receivedPayload.Issues, "Stream is feeling under the weather")
 }
