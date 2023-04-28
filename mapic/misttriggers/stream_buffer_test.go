@@ -11,16 +11,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	streamBufferPayloadFull    = "stream1\nFULL\n{\"track1\":{\"codec\":\"h264\",\"kbits\":1000,\"keys\":{\"B\":\"1\"},\"fpks\":30,\"height\":720,\"width\":1280}}"
-	streamBufferPayloadIssues  = "stream1\nRECOVER\n{\"track1\":{\"codec\":\"h264\",\"kbits\":1000,\"keys\":{\"B\":\"1\"},\"fpks\":30,\"height\":720,\"width\":1280},\"issues\":\"Stream is feeling under the weather\"}"
-	streamBufferPayloadEmpty   = "stream1\nEMPTY\n"
-	streamBufferPayloadInvalid = "stream1\nFULL\n{\"track1\":{\"codec\":\"h264\",\"kbits\":1000,\"keys\":{\"B\":\"1\"},\"fpks\":30,\"height\":720,\"width\":1280},\"issues\":false}"
+var (
+	streamBufferPayloadFull = []string{
+		"stream1", "FULL", `{"track1":{"codec":"h264","kbits":1000,"keys":{"B":"1"},"fpks":30,"height":720,"width":1280}}`,
+	}
+	streamBufferPayloadIssues = []string{
+		"stream1", "RECOVER", `{"track1":{"codec":"h264","kbits":1000,"keys":{"B":"1"},"fpks":30,"height":720,"width":1280},"issues":"Stream is feeling under the weather"}`,
+	}
+	streamBufferPayloadInvalid = []string{
+		"stream1", "FULL", `{"track1":{},"issues":false}`,
+	}
+	streamBufferPayloadEmpty = []string{"stream1", "EMPTY"}
 )
 
 func TestItCanParseAValidStreamBufferPayload(t *testing.T) {
-	lines := strings.Split(streamBufferPayloadFull, "\n")
-	p, err := ParseStreamBufferPayload(lines)
+	p, err := ParseStreamBufferPayload(streamBufferPayloadFull)
 	require.NoError(t, err)
 	require.Equal(t, p.StreamName, "stream1")
 	require.Equal(t, p.State, "FULL")
@@ -31,8 +36,7 @@ func TestItCanParseAValidStreamBufferPayload(t *testing.T) {
 }
 
 func TestItCanParseAStreamBufferPayloadWithStreamIssues(t *testing.T) {
-	lines := strings.Split(streamBufferPayloadIssues, "\n")
-	p, err := ParseStreamBufferPayload(lines)
+	p, err := ParseStreamBufferPayload(streamBufferPayloadIssues)
 	require.NoError(t, err)
 	require.Equal(t, p.StreamName, "stream1")
 	require.Equal(t, p.State, "RECOVER")
@@ -43,8 +47,7 @@ func TestItCanParseAStreamBufferPayloadWithStreamIssues(t *testing.T) {
 }
 
 func TestItCanParseAValidStreamBufferPayloadWithEmptyState(t *testing.T) {
-	lines := strings.Split(streamBufferPayloadEmpty, "\n")
-	p, err := ParseStreamBufferPayload(lines)
+	p, err := ParseStreamBufferPayload(streamBufferPayloadEmpty)
 	require.NoError(t, err)
 	require.Equal(t, p.StreamName, "stream1")
 	require.Equal(t, p.State, "EMPTY")
@@ -52,8 +55,7 @@ func TestItCanParseAValidStreamBufferPayloadWithEmptyState(t *testing.T) {
 }
 
 func TestItFailsToParseAnInvalidStreamBufferPayload(t *testing.T) {
-	lines := strings.Split(streamBufferPayloadInvalid, "\n")
-	_, err := ParseStreamBufferPayload(lines)
+	_, err := ParseStreamBufferPayload(streamBufferPayloadInvalid)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "issues field is not a string")
 }
@@ -116,7 +118,8 @@ func TestTriggerStreamBufferE2E(t *testing.T) {
 	defer server.Close()
 
 	// Prepare the request and payload
-	req, err := http.NewRequest("GET", "http://example.com", strings.NewReader(streamBufferPayloadFull))
+	payload := strings.NewReader(strings.Join(streamBufferPayloadIssues, "\n"))
+	req, err := http.NewRequest("GET", "http://example.com", payload)
 	require.NoError(t, err)
 	req.Header.Set("X-UUID", "session1")
 
@@ -125,7 +128,7 @@ func TestTriggerStreamBufferE2E(t *testing.T) {
 		StreamHealthHookURL: server.URL,
 		APIToken:            "apiToken",
 	}
-	err = TriggerStreamBuffer(cli, req, strings.Split(streamBufferPayloadIssues, "\n"))
+	err = TriggerStreamBuffer(cli, req, streamBufferPayloadIssues)
 	require.NoError(t, err)
 
 	// Check the payload received by the test server

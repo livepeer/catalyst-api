@@ -137,7 +137,10 @@ func ParseStreamBufferPayload(lines []string) (*StreamBufferPayload, error) {
 
 	streamName := lines[0]
 	streamState := lines[1]
-	streamDetailsStr := lines[2]
+	var streamDetailsStr string
+	if len(lines) == 3 {
+		streamDetailsStr = lines[2]
+	}
 
 	streamDetails, err := ParseMistStreamDetails(streamState, []byte(streamDetailsStr))
 	if err != nil {
