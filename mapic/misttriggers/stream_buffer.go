@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 )
 
@@ -26,12 +25,12 @@ import (
 // {JSON object with stream details, only when state is not EMPTY}
 //
 // Read the Mist documentation for more details on each of the stream states.
-func TriggerStreamBuffer(w http.ResponseWriter, req *http.Request, payload []byte) {
-	body, err := ParseStreamBufferPayload(string(payload))
+func TriggerStreamBuffer(req *http.Request, lines []string) error {
+	body, err := ParseStreamBufferPayload(lines)
 	if err != nil {
-		log.LogNoRequestID("Error parsing STREAM_BUFFER payload", "error", err, "payload", string(payload))
-		errors.WriteHTTPBadRequest(w, "Error parsing STREAM_BUFFER payload", err)
-		return
+		log.LogNoRequestID("Error parsing STREAM_BUFFER payload",
+			"error", err, "payload", strings.Join(lines, "\n"))
+		return err
 	}
 
 	headers := req.Header
@@ -41,6 +40,8 @@ func TriggerStreamBuffer(w http.ResponseWriter, req *http.Request, payload []byt
 	}
 	rawBody, _ := json.Marshal(body)
 	log.LogNoRequestID("Got STREAM_BUFFER trigger", "headers", headersStr, "payload", rawBody)
+
+	return nil
 }
 
 type StreamBufferPayload struct {
@@ -49,9 +50,7 @@ type StreamBufferPayload struct {
 	StreamDetails *StreamDetails
 }
 
-func ParseStreamBufferPayload(payload string) (*StreamBufferPayload, error) {
-	lines := strings.Split(strings.TrimSuffix(payload, "\n"), "\n")
-
+func ParseStreamBufferPayload(lines []string) (*StreamBufferPayload, error) {
 	if len(lines) < 2 || len(lines) > 3 {
 		return nil, fmt.Errorf("invalid payload: expected 2 or 3 lines but got %d", len(lines))
 	}
