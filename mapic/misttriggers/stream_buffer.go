@@ -79,8 +79,8 @@ type StreamHealthPayload struct {
 	StreamName string                  `json:"streamName"`
 	SessionID  string                  `json:"sessionId"`
 	State      string                  `json:"state"`
-	Tracks     map[string]TrackDetails `json:"tracks"`
-	Issues     string                  `json:"issues"`
+	Tracks     map[string]TrackDetails `json:"tracks,omitempty"`
+	Issues     string                  `json:"issues,omitempty"`
 }
 
 func PostStreamHealthPayload(url, apiToken string, payload StreamHealthPayload) error {
