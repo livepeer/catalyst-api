@@ -15,8 +15,6 @@ import (
 	"github.com/livepeer/catalyst-api/metrics"
 )
 
-const MaxTimeWithoutUpdate = 30 * time.Minute
-
 // The default client is only used for the recording event. This is to avoid
 // misusing the singleton client to send transcode status updates, which should
 // be sent through the JobInfo.ReportStatus function instead.
@@ -61,7 +59,7 @@ func NewPeriodicCallbackClient(callbackInterval time.Duration, headers map[strin
 		requestIDToLatestMessage: map[string]TranscodeStatusMessage{},
 		mapLock:                  sync.RWMutex{},
 		headers:                  headers,
-		staleTimeout:             MaxTimeWithoutUpdate,
+		staleTimeout:             MaxCopyFileDuration,
 	}
 }
 
