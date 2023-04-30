@@ -29,12 +29,12 @@ var Types = apitypes.Types{
 	},
 	"ChannelDefinition": {
 		{
-			Name: "time",
-			Type: "int64",
-		},
-		{
 			Name: "signer",
 			Type: "address",
+		},
+		{
+			Name: "time",
+			Type: "int64",
 		},
 		{
 			Name: "id",
