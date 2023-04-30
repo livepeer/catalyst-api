@@ -8,7 +8,6 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/signer/core/apitypes"
-	"github.com/golang/glog"
 	"github.com/livepeer/go-livepeer/eth"
 )
 
@@ -43,11 +42,17 @@ func (s *EIP712Signer) Sign(action Action) (*SignedEvent, error) {
 	if err != nil {
 		return nil, err
 	}
+	actionMap := ActionToMap(action)
+	addrStr := fmt.Sprintf("%s", am.Account().Address)
+	if actionMap["signer"] != addrStr {
+		return nil, fmt.Errorf("address mismatch signing action, signer.address=%s, action.singer=%s", addrStr, actionMap["signer"])
+	}
+	actionMap["signer"] = addrStr
 	typedData := apitypes.TypedData{
 		Types:       s.PrimarySchema.Types,
 		Domain:      s.PrimarySchema.Domain.TypedDataDomain(),
 		PrimaryType: action.Type(),
-		Message:     ActionToMap(action),
+		Message:     actionMap,
 	}
 	_, err = typedData.HashStruct("EIP712Domain", typedData.Domain.Map())
 	if err != nil {
@@ -97,7 +102,6 @@ func (s *EIP712Signer) Verify(unverified UnverifiedEvent) (*SignedEvent, error) 
 		Message:     unverified.Message,
 	}
 	hash, _, err := apitypes.TypedDataAndHash(typedData)
-	glog.Infof("hash: %s", hexutil.Bytes(hash))
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +110,6 @@ func (s *EIP712Signer) Verify(unverified UnverifiedEvent) (*SignedEvent, error) 
 		return nil, err
 	}
 	addr := crypto.PubkeyToAddress(*rpk)
-	glog.Infof("addr: %s", addr)
 	actionGenerator, ok := schema.Actions[unverified.PrimaryType]
 	if !ok {
 		return nil, fmt.Errorf("unknown action domain: %s", unverified.Domain)
@@ -115,6 +118,10 @@ func (s *EIP712Signer) Verify(unverified UnverifiedEvent) (*SignedEvent, error) 
 	err = LoadMap(action, unverified.Message)
 	if err != nil {
 		return nil, err
+	}
+	addrString := fmt.Sprintf("%s", addr)
+	if addrString != action.SignerAddress() {
+		return nil, fmt.Errorf("incorrect signer for action! signer=%s action.signer=%s", addrString, action.SignerAddress())
 	}
 	return &SignedEvent{
 		Domain:    schema.Domain,

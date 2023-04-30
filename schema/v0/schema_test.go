@@ -21,8 +21,9 @@ func getSigner() events.Signer {
 func TestSign(t *testing.T) {
 	signer := getSigner()
 	var testMessage = ChannelDefinition{
-		ID:   "my-awesome-stream",
-		Time: int64(1681403259137),
+		ID:     "my-awesome-stream",
+		Signer: "0x1964035e4C3cD05b8Ff839EFBf37063D8d1Ba7ae",
+		Time:   int64(1681403259137),
 		MultistreamTargets: []MultistreamTarget{{
 			URL: "rtmp://localhost/foo/bar",
 		}},
@@ -54,9 +55,8 @@ func TestModified(t *testing.T) {
 	var unverified events.UnverifiedEvent
 	err := json.Unmarshal(modifiedBody, &unverified)
 	require.NoError(t, err)
-	signed, err := signer.Verify(unverified)
-	require.NoError(t, err)
-	require.NotEqual(t, signed.Address.String(), "0x1964035e4C3cD05b8Ff839EFBf37063D8d1Ba7ae")
+	_, err = signer.Verify(unverified)
+	require.Error(t, err)
 }
 
 var validBodyStr = `
@@ -74,9 +74,10 @@ var validBodyStr = `
 					"url": "rtmp://localhost/foo/bar"
 				}
 			],
+			"signer": "0x1964035e4C3cD05b8Ff839EFBf37063D8d1Ba7ae",
 			"time": 1681403259137
 		},
-		"signature": "0xa9130d4936a436e57da67112aaa41751cb210bc5766c674a6b931a7263f8f53b13cc67fe809aee8b1b2eecdff9c27cd51bf374e0a725a6df07b86666489a85d11b"
+		"signature": "0x85027f5d0f266e0f998164f8c854b8faa507c5acd9e2415276cd8cfd3cac5be246494aebe4b489c0ddf15a5e81c2f5edbd905c64aaca991047109e051d174b101c"
 	}
 `
 

@@ -7,6 +7,7 @@ import (
 type Action interface {
 	// Map() map[string]any
 	Type() string
+	SignerAddress() string
 	// LoadMap(map[string]any) error
 }
 
