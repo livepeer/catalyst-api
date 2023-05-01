@@ -48,7 +48,6 @@ func (e *UnverifiedEvent) TypedData(types apitypes.Types) apitypes.TypedData {
 type Domain struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
-	Salt    string `json:"salt"`
 }
 
 // convert to a TypedDataDomain suitable for signing by eth tooling
@@ -56,7 +55,6 @@ func (d *Domain) TypedDataDomain() apitypes.TypedDataDomain {
 	return apitypes.TypedDataDomain{
 		Name:    d.Name,
 		Version: d.Version,
-		Salt:    d.Salt,
 	}
 }
 
