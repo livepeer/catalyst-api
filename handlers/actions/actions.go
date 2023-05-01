@@ -40,11 +40,13 @@ func (act *ActionHandlersCollection) ActionHandler() httprouter.Handle {
 		signed, err := act.Signer.Verify(unverified)
 		if err != nil {
 			errors.WriteHTTPBadRequest(w, "Could not validate event signature", err)
+			return
 		}
 		// TODO: Add check for allowlisted address here
 		err = act.Cluster.BroadcastEvent(signed)
 		if err != nil {
 			errors.WriteHTTPInternalServerError(w, "Could not broadcast event", err)
+			return
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}
