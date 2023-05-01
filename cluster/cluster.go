@@ -97,6 +97,7 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	serfConfig.Tags = c.config.Tags
 	serfConfig.EventCh = c.serfCh
 	serfConfig.ProtocolVersion = 5
+	serfConfig.UserEventSizeLimit = 9216
 
 	c.serf, err = serf.Create(serfConfig)
 	if err != nil {
