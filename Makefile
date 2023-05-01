@@ -7,7 +7,7 @@ all: build fmt test lint integration-test tidy
 
 .PHONY: build
 build:
-	go build -ldflags="$(ldflags)" -o "$(GO_BUILD_DIR)catalyst-api" main.go
+	CGO_ENABLED=0 go build -ldflags="$(ldflags)" -o "$(GO_BUILD_DIR)catalyst-api" main.go
 	cp scripts/* "$(GO_BUILD_DIR)"
 
 .PHONY: build-linux
@@ -40,7 +40,7 @@ generate:
 
 .PHONY: test
 test: generate
-	go test -race ./...
+	CGO_ENABLED=0 go test -race ./...
 
 .PHONY: tidy
 tidy:
