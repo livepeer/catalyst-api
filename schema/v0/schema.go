@@ -9,7 +9,6 @@ import (
 var Domain = events.Domain{
 	Name:    "Livepeer Decentralized Video Protocol",
 	Version: "0.0.1",
-	Salt:    "f8b3858ac49ca50b138587d5dace09bd102b9d24d2567d9a5cde2f6122810931",
 }
 
 var Types = apitypes.Types{
@@ -20,10 +19,6 @@ var Types = apitypes.Types{
 		},
 		{
 			Name: "version",
-			Type: "string",
-		},
-		{
-			Name: "salt",
 			Type: "string",
 		},
 	},

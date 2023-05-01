@@ -2,8 +2,7 @@
   "primaryType": "ChannelDefinition",
   "domain": {
     "name": "Livepeer Decentralized Video Protocol",
-    "version": "0.0.1",
-    "salt": "f8b3858ac49ca50b138587d5dace09bd102b9d24d2567d9a5cde2f6122810931"
+    "version": "0.0.1"
   },
   "message": {
     "id": "my-awesome-stream",
@@ -15,5 +14,5 @@
     "signer": "0x1964035e4C3cD05b8Ff839EFBf37063D8d1Ba7ae",
     "time": 1681403259137
   },
-  "signature": "0xef0d818467991664fa638642aee445e3e054c813a5d58ed33bf1ca6b65af76fa74231dafa740470a7c1a5953598cb6d9b3a6bad840ec19e53c04072024b88dcd1b"
+  "signature": "0x34ed2b69881f79f153c0a4e6e3313e58b642be227cd91cc2ef1e7e8d04d3c89a272a3cea8da87b0b3b52c91b484d6f6d36ed9921bda89755ff60d1918d6268861c"
 }
