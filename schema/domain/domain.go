@@ -12,9 +12,5 @@ var Types = apitypes.Types{
 			Name: "version",
 			Type: "string",
 		},
-		{
-			Name: "salt",
-			Type: "string",
-		},
 	},
 }
