@@ -180,11 +180,11 @@ func TestItCalculatesTheTranscodeCompletionPercentageCorrectly(t *testing.T) {
 func TestParallelJobFailureStopsNextBatch(t *testing.T) {
 	config.TranscodingParallelJobs = 3
 	config.TranscodingParallelSleep = 0
-	sourceSegmentURLs := []SourceSegment{
+	sourceSegmentURLs := []clients.SourceSegment{
 		// First 3 jobs run in parallel, second one fails
-		{segmentURL(t, "1.ts"), 1000}, {segmentURL(t, "2.ts"), 1000}, {segmentURL(t, "3.ts"), 1000},
+		{URL: segmentURL(t, "1.ts"), DurationMillis: 1000}, {URL: segmentURL(t, "2.ts"), DurationMillis: 1000}, {URL: segmentURL(t, "3.ts"), DurationMillis: 1000},
 		// Rest of jobs should not be processed
-		{segmentURL(t, "4.ts"), 1000}, {segmentURL(t, "5.ts"), 1000}, {segmentURL(t, "6.ts"), 1000},
+		{URL: segmentURL(t, "4.ts"), DurationMillis: 1000}, {URL: segmentURL(t, "5.ts"), DurationMillis: 1000}, {URL: segmentURL(t, "6.ts"), DurationMillis: 1000},
 	}
 	halted := fmt.Errorf("halted")
 	m := sync.Mutex{}
@@ -222,11 +222,11 @@ func segmentURL(t *testing.T, u string) *url.URL {
 func TestParallelJobSaveTime(t *testing.T) {
 	config.TranscodingParallelJobs = 3
 	config.TranscodingParallelSleep = 0
-	sourceSegmentURLs := []SourceSegment{
+	sourceSegmentURLs := []clients.SourceSegment{
 		// First 3 jobs should end at ~51ms mark
-		{segmentURL(t, "1.ts"), 1000}, {segmentURL(t, "2.ts"), 1000}, {segmentURL(t, "3.ts"), 1000},
+		{URL: segmentURL(t, "1.ts"), DurationMillis: 1000}, {URL: segmentURL(t, "2.ts"), DurationMillis: 1000}, {URL: segmentURL(t, "3.ts"), DurationMillis: 1000},
 		// Second 3 jobs should end at ~101ms mark
-		{segmentURL(t, "4.ts"), 1000}, {segmentURL(t, "5.ts"), 1000}, {segmentURL(t, "6.ts"), 1000},
+		{URL: segmentURL(t, "4.ts"), DurationMillis: 1000}, {URL: segmentURL(t, "5.ts"), DurationMillis: 1000}, {URL: segmentURL(t, "6.ts"), DurationMillis: 1000},
 	}
 	start := time.Now()
 	jobs := NewParallelTranscoding(sourceSegmentURLs, func(segment segmentInfo) error {
