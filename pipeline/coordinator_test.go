@@ -415,7 +415,7 @@ func Test_EmptyFile(t *testing.T) {
 	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
 	msg := requireReceive(t, callbacks, 1*time.Second)
 	require.Equal(t, clients.TranscodeStatusError, msg.Status)
-	require.Equal(t, "error copying input to storage: zero bytes found for source: "+job.SourceFile, msg.Error)
+	require.Equal(t, "error copying input to storage: failed to copy file(s): zero bytes found for source: "+job.SourceFile, msg.Error)
 }
 
 func Test_ProbeErrors(t *testing.T) {

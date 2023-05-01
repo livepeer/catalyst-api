@@ -1,4 +1,4 @@
-package transcode
+package clients
 
 import (
 	"os"
@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/grafov/m3u8"
+	"github.com/livepeer/catalyst-api/video"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,7 +29,7 @@ const validMediaManifest = `#EXTM3U
 #EXT-X-ENDLIST`
 
 func TestDownloadRenditionManifestFailsWhenItCantFindTheManifest(t *testing.T) {
-	_, err := DownloadRenditionManifest("/tmp/something/x.m3u8")
+	_, err := DownloadRenditionManifest("blah", "/tmp/something/x.m3u8")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "error downloading manifest")
 }
@@ -39,7 +40,7 @@ func TestDownloadRenditionManifestFailsWhenItCantParseTheManifest(t *testing.T) 
 	_, err = manifestFile.WriteString("This isn't a manifest!")
 	require.NoError(t, err)
 
-	_, err = DownloadRenditionManifest(manifestFile.Name())
+	_, err = DownloadRenditionManifest("blah", manifestFile.Name())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "error decoding manifest")
 }
@@ -50,7 +51,7 @@ func TestDownloadRenditionManifestFailsWhenItReceivesAMasterManifest(t *testing.
 	_, err = manifestFile.WriteString(validMasterManifest)
 	require.NoError(t, err)
 
-	_, err = DownloadRenditionManifest(manifestFile.Name())
+	_, err = DownloadRenditionManifest("blah", manifestFile.Name())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "only Media playlists are supported")
 }
@@ -61,7 +62,7 @@ func TestItCanDownloadAValidRenditionManifest(t *testing.T) {
 	_, err = manifestFile.WriteString(validMediaManifest)
 	require.NoError(t, err)
 
-	_, err = DownloadRenditionManifest(manifestFile.Name())
+	_, err = DownloadRenditionManifest("blah", manifestFile.Name())
 	require.NoError(t, err)
 }
 
@@ -105,7 +106,7 @@ func TestItCanGenerateAndWriteManifests(t *testing.T) {
 	masterManifestURL, err := GenerateAndUploadManifests(
 		*sourceMediaPlaylist,
 		outputDir,
-		[]*RenditionStats{
+		[]*video.RenditionStats{
 			{
 				Name:          "lowlowlow",
 				FPS:           60,
@@ -160,7 +161,7 @@ func TestCompliantMasterManifestOrdering(t *testing.T) {
 	_, err = GenerateAndUploadManifests(
 		*sourceMediaPlaylist,
 		outputDir,
-		[]*RenditionStats{
+		[]*video.RenditionStats{
 			{
 				Name:          "lowlowlow",
 				FPS:           60,
