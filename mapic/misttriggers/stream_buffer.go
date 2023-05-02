@@ -88,9 +88,9 @@ type StreamHealthPayload struct {
 	SessionID  string `json:"session_id"`
 	IsActive   bool   `json:"is_active"`
 
-	IsHealthy   bool   `json:"is_healthy"`
-	Issues      string `json:"issues,omitempty"`
-	HumanIssues string `json:"human_issues,omitempty"`
+	IsHealthy   bool     `json:"is_healthy"`
+	Issues      string   `json:"issues,omitempty"`
+	HumanIssues []string `json:"human_issues,omitempty"`
 
 	Tracks map[string]TrackDetails `json:"tracks,omitempty"`
 	Extra  map[string]any          `json:"extra,omitempty"`
@@ -165,45 +165,47 @@ func ParseStreamBufferPayload(lines []string) (*StreamBufferPayload, error) {
 }
 
 type MistStreamDetails struct {
-	Tracks              map[string]TrackDetails
-	Issues, HumanIssues string
-	Extra               map[string]any
+	Tracks      map[string]TrackDetails
+	Issues      string
+	HumanIssues []string
+	Extra       map[string]any
 }
 
-// Mists saves the tracks and issues in the same JSON object, so we need to
-// parse them separately. e.g. {track-id-1: {...}, issues: "..."}
+// Mists sends the track detail objects in the same JSON object as other
+// non-object fields (string and array issues and numeric metrics). So we need
+// to parse them separately and do a couple of JSON juggling here.
+// e.g. {track-id-1: {...}, issues: "a string", human_issues: ["a", "b"], "jitter": 32}
 func ParseMistStreamDetails(streamState string, data []byte) (*MistStreamDetails, error) {
 	if streamState == "EMPTY" {
 		return nil, nil
 	}
 
-	var tracksAndIssues map[string]any
-	err := json.Unmarshal(data, &tracksAndIssues)
+	var issues struct {
+		Issues      string   `json:"issues"`
+		HumanIssues []string `json:"human_issues"`
+	}
+	err := json.Unmarshal(data, &issues)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing stream details JSON: %w", err)
+		return nil, fmt.Errorf("error unmarshalling issues JSON: %w", err)
 	}
 
-	var (
-		issues, humanIssues string
-		extra               = map[string]any{}
-	)
+	var tracksAndIssues map[string]any
+	err = json.Unmarshal(data, &tracksAndIssues)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshalling JSON: %w", err)
+	}
+	delete(tracksAndIssues, "issues")
+	delete(tracksAndIssues, "human_issues")
+
+	extra := map[string]any{}
 	for key, val := range tracksAndIssues {
-		switch tval := val.(type) {
-		case map[string]any:
+		if _, isObj := val.(map[string]any); isObj {
 			// this is a track, it will be parsed from the serialized obj below
 			continue
-		case string:
-			if key == "issues" {
-				issues = tval
-			} else if key == "human_issues" {
-				humanIssues = tval
-			} else {
-				extra[key] = val
-			}
-		default:
+		} else {
 			extra[key] = val
+			delete(tracksAndIssues, key)
 		}
-		delete(tracksAndIssues, key)
 	}
 
 	tracksJSON, err := json.Marshal(tracksAndIssues) // only tracks now
@@ -216,5 +218,5 @@ func ParseMistStreamDetails(streamState string, data []byte) (*MistStreamDetails
 		return nil, fmt.Errorf("error parsing stream details tracks: %w", err)
 	}
 
-	return &MistStreamDetails{tracks, issues, humanIssues, extra}, nil
+	return &MistStreamDetails{tracks, issues.Issues, issues.HumanIssues, extra}, nil
 }
