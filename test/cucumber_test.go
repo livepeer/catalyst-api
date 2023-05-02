@@ -23,7 +23,10 @@ func init() {
 		"-ldflags", "-X 'github.com/livepeer/catalyst-api/config.Version=cucumber-test-version'",
 		"-o", "test/app",
 	)
+	buildApp.Env = append(os.Environ(), "CGO_ENABLED=0")
 	buildApp.Dir = ".."
+	buildApp.Stderr = os.Stderr
+	buildApp.Stdout = os.Stdout
 	if buildErr := buildApp.Run(); buildErr != nil {
 		panic(buildErr)
 	}
@@ -34,8 +37,10 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	buildMinio.Env = append(os.Environ(), fmt.Sprintf("GOBIN=%s", wd))
+	buildMinio.Env = append(os.Environ(), fmt.Sprintf("GOBIN=%s", wd), "CGO_ENABLED=1")
 	buildMinio.Dir = ".."
+	buildMinio.Stderr = os.Stderr
+	buildMinio.Stdout = os.Stdout
 	if buildErr := buildMinio.Run(); buildErr != nil {
 		panic(buildErr)
 	}

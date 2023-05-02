@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSign(t *testing.T) {
+func TestAction(t *testing.T) {
 	machine := NewMachine()
 	evt := &events.SignedEvent{
 		Signature: "fake",
@@ -20,7 +20,8 @@ func TestSign(t *testing.T) {
 			}},
 		},
 	}
-	machine.HandleEvent(evt)
+	err := machine.HandleEvent(evt)
+	require.NoError(t, err)
 
 	require.Len(t, machine.State.Streams, 1)
 	stream, ok := machine.State.Streams["my-awesome-stream"]
