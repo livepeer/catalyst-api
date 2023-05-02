@@ -44,8 +44,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          make generate
-          go test $(go list ./... | grep -v cucumber) --short --race --covermode=atomic --coverprofile=coverage.out
+          make test-coverage
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3
