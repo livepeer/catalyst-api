@@ -9,9 +9,6 @@ type Action interface {
 	SignerAddress() string
 }
 
-// Base action suitable for inheriting by every other action
-type ActionBase struct{}
-
 // Exports this action to a map
 func ActionToMap(a any) (map[string]any, error) {
 	data, err := json.Marshal(a)

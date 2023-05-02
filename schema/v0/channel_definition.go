@@ -1,11 +1,6 @@
 package v0
 
-import (
-	"github.com/livepeer/catalyst-api/events"
-)
-
 type ChannelDefinition struct {
-	events.ActionBase
 	ID                 string              `json:"id"`
 	Signer             string              `json:"signer"`
 	Time               int64               `json:"time"`
