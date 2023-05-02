@@ -49,7 +49,7 @@ func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) err
 
 	body, err := ParseStreamBufferPayload(lines)
 	if err != nil {
-		glog.Infof("Error parsing STREAM_BUFFER payload error=%q payload=%s", err, strings.Join(lines, "\n"))
+		glog.Infof("Error parsing STREAM_BUFFER payload error=%q payload=%q", err, strings.Join(lines, "\n"))
 		return err
 	}
 
@@ -70,6 +70,8 @@ func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) err
 		streamHealth.IsHealthy = streamHealth.IsHealthy && details.Issues == ""
 		streamHealth.Tracks = details.Tracks
 		streamHealth.Issues = details.Issues
+		streamHealth.HumanIssues = details.HumanIssues
+		streamHealth.Extra = details.Extra
 	}
 
 	err = PostStreamHealthPayload(cli.StreamHealthHookURL, cli.APIToken, streamHealth)
@@ -82,12 +84,16 @@ func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) err
 }
 
 type StreamHealthPayload struct {
-	StreamName string                  `json:"stream_name"`
-	SessionID  string                  `json:"session_id"`
-	IsActive   bool                    `json:"is_active"`
-	IsHealthy  bool                    `json:"is_healthy"`
-	Tracks     map[string]TrackDetails `json:"tracks,omitempty"`
-	Issues     string                  `json:"issues,omitempty"`
+	StreamName string `json:"stream_name"`
+	SessionID  string `json:"session_id"`
+	IsActive   bool   `json:"is_active"`
+
+	IsHealthy   bool   `json:"is_healthy"`
+	Issues      string `json:"issues,omitempty"`
+	HumanIssues string `json:"human_issues,omitempty"`
+
+	Tracks map[string]TrackDetails `json:"tracks,omitempty"`
+	Extra  map[string]any          `json:"extra,omitempty"`
 }
 
 func PostStreamHealthPayload(url, apiToken string, payload StreamHealthPayload) error {
@@ -126,12 +132,12 @@ type StreamBufferPayload struct {
 }
 
 type TrackDetails struct {
-	Codec  string                 `json:"codec"`
-	Kbits  int                    `json:"kbits"`
-	Keys   map[string]interface{} `json:"keys"`
-	Fpks   int                    `json:"fpks,omitempty"`
-	Height int                    `json:"height,omitempty"`
-	Width  int                    `json:"width,omitempty"`
+	Codec  string         `json:"codec"`
+	Kbits  int            `json:"kbits"`
+	Keys   map[string]any `json:"keys"`
+	Fpks   int            `json:"fpks,omitempty"`
+	Height int            `json:"height,omitempty"`
+	Width  int            `json:"width,omitempty"`
 }
 
 func ParseStreamBufferPayload(lines []string) (*StreamBufferPayload, error) {
@@ -159,8 +165,9 @@ func ParseStreamBufferPayload(lines []string) (*StreamBufferPayload, error) {
 }
 
 type MistStreamDetails struct {
-	Tracks map[string]TrackDetails
-	Issues string
+	Tracks              map[string]TrackDetails
+	Issues, HumanIssues string
+	Extra               map[string]any
 }
 
 // Mists saves the tracks and issues in the same JSON object, so we need to
@@ -170,17 +177,34 @@ func ParseMistStreamDetails(streamState string, data []byte) (*MistStreamDetails
 		return nil, nil
 	}
 
-	var tracksAndIssues map[string]interface{}
+	var tracksAndIssues map[string]any
 	err := json.Unmarshal(data, &tracksAndIssues)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing stream details JSON: %w", err)
 	}
 
-	issues, ok := tracksAndIssues["issues"].(string)
-	if raw, keyExists := tracksAndIssues["issues"]; keyExists && !ok {
-		return nil, fmt.Errorf("issues field is not a string: %v", raw)
+	var (
+		issues, humanIssues string
+		extra               = map[string]any{}
+	)
+	for key, val := range tracksAndIssues {
+		switch tval := val.(type) {
+		case map[string]any:
+			// this is a track, it will be parsed from the serialized obj below
+			continue
+		case string:
+			if key == "issues" {
+				issues = tval
+			} else if key == "human_issues" {
+				humanIssues = tval
+			} else {
+				extra[key] = val
+			}
+		default:
+			extra[key] = val
+		}
+		delete(tracksAndIssues, key)
 	}
-	delete(tracksAndIssues, "issues")
 
 	tracksJSON, err := json.Marshal(tracksAndIssues) // only tracks now
 	if err != nil {
@@ -189,8 +213,8 @@ func ParseMistStreamDetails(streamState string, data []byte) (*MistStreamDetails
 
 	var tracks map[string]TrackDetails
 	if err = json.Unmarshal(tracksJSON, &tracks); err != nil {
-		return nil, fmt.Errorf("eror parsing stream details tracks: %w", err)
+		return nil, fmt.Errorf("error parsing stream details tracks: %w", err)
 	}
 
-	return &MistStreamDetails{tracks, issues}, nil
+	return &MistStreamDetails{tracks, issues, humanIssues, extra}, nil
 }

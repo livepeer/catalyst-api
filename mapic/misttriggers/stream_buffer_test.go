@@ -13,13 +13,13 @@ import (
 
 var (
 	streamBufferPayloadFull = []string{
-		"stream1", "FULL", `{"track1":{"codec":"h264","kbits":1000,"keys":{"B":"1"},"fpks":30,"height":720,"width":1280}}`,
+		"stream1", "FULL", `{"track1":{"codec":"h264","kbits":1000,"keys":{"B":"1"},"fpks":30,"height":720,"width":1280},"jitter":420}`,
 	}
 	streamBufferPayloadIssues = []string{
-		"stream1", "RECOVER", `{"track1":{"codec":"h264","kbits":1000,"keys":{"B":"1"},"fpks":30,"height":720,"width":1280},"issues":"Stream is feeling under the weather"}`,
+		"stream1", "RECOVER", `{"track1":{"codec":"h264","kbits":1000,"keys":{"B":"1"},"fpks":30,"height":720,"width":1280},"issues":"The aqueous linear entity, in a manner pertaining to its metaphorical state of existence, appears to be experiencing an ostensibly suboptimal condition that is reminiscent of an individual's disposition when subjected to an unfavorable meteorological phenomenon","human_issues":"Stream is feeling under the weather"}`,
 	}
 	streamBufferPayloadInvalid = []string{
-		"stream1", "FULL", `{"track1":{},"issues":false}`,
+		"stream1", "FULL", `{"track1":{},"notatrack":{"codec":2}}`,
 	}
 	streamBufferPayloadEmpty = []string{"stream1", "EMPTY"}
 )
@@ -33,6 +33,7 @@ func TestItCanParseAValidStreamBufferPayload(t *testing.T) {
 	require.Equal(t, p.Details.Issues, "")
 	require.Len(t, p.Details.Tracks, 1)
 	require.Contains(t, p.Details.Tracks, "track1")
+	require.Equal(t, p.Details.Extra["jitter"], float64(420))
 }
 
 func TestItCanParseAStreamBufferPayloadWithStreamIssues(t *testing.T) {
@@ -41,7 +42,8 @@ func TestItCanParseAStreamBufferPayloadWithStreamIssues(t *testing.T) {
 	require.Equal(t, p.StreamName, "stream1")
 	require.Equal(t, p.State, "RECOVER")
 	require.NotNil(t, p.Details)
-	require.Equal(t, p.Details.Issues, "Stream is feeling under the weather")
+	require.Equal(t, p.Details.HumanIssues, "Stream is feeling under the weather")
+	require.Contains(t, p.Details.Issues, "unfavorable meteorological phenomenon")
 	require.Len(t, p.Details.Tracks, 1)
 	require.Contains(t, p.Details.Tracks, "track1")
 }
@@ -57,7 +59,7 @@ func TestItCanParseAValidStreamBufferPayloadWithEmptyState(t *testing.T) {
 func TestItFailsToParseAnInvalidStreamBufferPayload(t *testing.T) {
 	_, err := ParseStreamBufferPayload(streamBufferPayloadInvalid)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "issues field is not a string")
+	require.Contains(t, err.Error(), "cannot unmarshal number into Go struct field TrackDetails.codec of type string")
 }
 
 func TestPostStreamHealthPayloadFailsWithInvalidURL(t *testing.T) {
@@ -140,5 +142,5 @@ func TestTriggerStreamBufferE2E(t *testing.T) {
 	require.Equal(t, receivedPayload.IsHealthy, false)
 	require.Len(t, receivedPayload.Tracks, 1)
 	require.Contains(t, receivedPayload.Tracks, "track1")
-	require.Equal(t, receivedPayload.Issues, "Stream is feeling under the weather")
+	require.Equal(t, receivedPayload.HumanIssues, "Stream is feeling under the weather")
 }
