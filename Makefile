@@ -40,11 +40,11 @@ generate:
 
 .PHONY: test
 test: generate
-	CGO_ENABLED=0 go test -race ./...
+	CGO_ENABLED=0 go test ./...
 
 .PHONY: test-coverage
 test-coverage: generate
-	CGO_ENABLED=0 go test $(shell go list ./... | grep -v cucumber) --short --race --covermode=atomic --coverprofile=coverage.out
+	CGO_ENABLED=0 go test $(shell go list ./... | grep -v cucumber) --short --covermode=atomic --coverprofile=coverage.out
 
 .PHONY: tidy
 tidy:
