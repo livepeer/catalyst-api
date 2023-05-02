@@ -17,13 +17,17 @@ type SignedEvent struct {
 }
 
 // convert to UnverifiedEvent suitable for JSON serialization
-func (s *SignedEvent) UnverifiedEvent() UnverifiedEvent {
+func (s *SignedEvent) UnverifiedEvent() (UnverifiedEvent, error) {
+	message, err := ActionToMap(s.Action)
+	if err != nil {
+		return UnverifiedEvent{}, err
+	}
 	return UnverifiedEvent{
 		PrimaryType: s.Action.Type(),
 		Domain:      s.Domain,
-		Message:     ActionToMap(s.Action),
+		Message:     message,
 		Signature:   s.Signature,
-	}
+	}, nil
 }
 
 // an unverified event. Don't trust it without first producing a SignedEvent with .Verify()

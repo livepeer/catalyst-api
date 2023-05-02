@@ -247,7 +247,8 @@ func ResolveNodeURL(c Cluster, streamURL string) (string, error) {
 }
 
 func (c *ClusterImpl) BroadcastEvent(signed *events.SignedEvent) error {
-	payload, err := json.Marshal(signed.UnverifiedEvent())
+	unverified, err := signed.UnverifiedEvent()
+	payload, err := json.Marshal(unverified)
 	if err != nil {
 		return fmt.Errorf("error marshalling event payload: %w", err)
 	}
