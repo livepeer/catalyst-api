@@ -70,6 +70,8 @@ func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) err
 		streamHealth.IsHealthy = streamHealth.IsHealthy && details.Issues == ""
 		streamHealth.Tracks = details.Tracks
 		streamHealth.Issues = details.Issues
+		streamHealth.HumanIssues = details.HumanIssues
+		streamHealth.Extra = details.Extra
 	}
 
 	err = PostStreamHealthPayload(cli.StreamHealthHookURL, cli.APIToken, streamHealth)
@@ -82,12 +84,16 @@ func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) err
 }
 
 type StreamHealthPayload struct {
-	StreamName string                  `json:"stream_name"`
-	SessionID  string                  `json:"session_id"`
-	IsActive   bool                    `json:"is_active"`
-	IsHealthy  bool                    `json:"is_healthy"`
-	Tracks     map[string]TrackDetails `json:"tracks,omitempty"`
-	Issues     string                  `json:"issues,omitempty"`
+	StreamName string `json:"stream_name"`
+	SessionID  string `json:"session_id"`
+	IsActive   bool   `json:"is_active"`
+
+	IsHealthy   bool   `json:"is_healthy"`
+	Issues      string `json:"issues,omitempty"`
+	HumanIssues string `json:"human_issues,omitempty"`
+
+	Tracks map[string]TrackDetails `json:"tracks,omitempty"`
+	Extra  map[string]interface{}  `json:"extra,omitempty"`
 }
 
 func PostStreamHealthPayload(url, apiToken string, payload StreamHealthPayload) error {
