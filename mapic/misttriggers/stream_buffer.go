@@ -54,6 +54,10 @@ func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) err
 	}
 
 	rawBody, _ := json.Marshal(body)
+	if cli.StreamHealthHookURL == "" {
+		glog.Infof("Stream health hook URL not set, skipping trigger sessionId=%q payload=%s", sessionID, rawBody)
+		return nil
+	}
 	glog.Infof("Got STREAM_BUFFER trigger sessionId=%q payload=%s", sessionID, rawBody)
 
 	streamHealth := StreamHealthPayload{
