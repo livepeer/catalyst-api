@@ -93,7 +93,7 @@ type StreamHealthPayload struct {
 	HumanIssues string `json:"human_issues,omitempty"`
 
 	Tracks map[string]TrackDetails `json:"tracks,omitempty"`
-	Extra  map[string]interface{}  `json:"extra,omitempty"`
+	Extra  map[string]any          `json:"extra,omitempty"`
 }
 
 func PostStreamHealthPayload(url, apiToken string, payload StreamHealthPayload) error {
@@ -132,12 +132,12 @@ type StreamBufferPayload struct {
 }
 
 type TrackDetails struct {
-	Codec  string                 `json:"codec"`
-	Kbits  int                    `json:"kbits"`
-	Keys   map[string]interface{} `json:"keys"`
-	Fpks   int                    `json:"fpks,omitempty"`
-	Height int                    `json:"height,omitempty"`
-	Width  int                    `json:"width,omitempty"`
+	Codec  string         `json:"codec"`
+	Kbits  int            `json:"kbits"`
+	Keys   map[string]any `json:"keys"`
+	Fpks   int            `json:"fpks,omitempty"`
+	Height int            `json:"height,omitempty"`
+	Width  int            `json:"width,omitempty"`
 }
 
 func ParseStreamBufferPayload(lines []string) (*StreamBufferPayload, error) {
@@ -167,7 +167,7 @@ func ParseStreamBufferPayload(lines []string) (*StreamBufferPayload, error) {
 type MistStreamDetails struct {
 	Tracks              map[string]TrackDetails
 	Issues, HumanIssues string
-	Extra               map[string]interface{}
+	Extra               map[string]any
 }
 
 // Mists saves the tracks and issues in the same JSON object, so we need to
@@ -177,7 +177,7 @@ func ParseMistStreamDetails(streamState string, data []byte) (*MistStreamDetails
 		return nil, nil
 	}
 
-	var tracksAndIssues map[string]interface{}
+	var tracksAndIssues map[string]any
 	err := json.Unmarshal(data, &tracksAndIssues)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing stream details JSON: %w", err)
@@ -185,11 +185,11 @@ func ParseMistStreamDetails(streamState string, data []byte) (*MistStreamDetails
 
 	var (
 		issues, humanIssues string
-		extra               = map[string]interface{}{}
+		extra               = map[string]any{}
 	)
 	for key, val := range tracksAndIssues {
 		switch tval := val.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			// this is a track, it will be parsed from the serialized obj below
 			continue
 		case string:
