@@ -12,7 +12,7 @@ func TestAction(t *testing.T) {
 	machine := NewMachine()
 	evt := &events.SignedEvent{
 		Signature: "fake",
-		Action: v0.ChannelDefinition{
+		Action: &v0.ChannelDefinition{
 			ID:   "my-awesome-stream",
 			Time: int64(1681403259137),
 			MultistreamTargets: []v0.MultistreamTarget{{

@@ -23,30 +23,42 @@ type EIP712Signer struct {
 	PrimarySchema *Schema
 	// All supported schemas for verification purposes
 	Schemas []*Schema
+	// Eth Account Manager
+	AccountManager eth.AccountManager
 }
 
-func NewEIP712Signer(primarySchema *Schema, schemas []*Schema) Signer {
-	return &EIP712Signer{
-		PrimarySchema: primarySchema,
-		Schemas:       schemas,
+type EIP712SignerOptions struct {
+	PrimarySchema       *Schema
+	Schemas             []*Schema
+	EthKeystorePassword string
+	EthKeystorePath     string
+	EthAccountAddr      string
+}
+
+func NewEIP712Signer(opts *EIP712SignerOptions) (Signer, error) {
+	// We don't use this parameter so let's use one that doesn't exist
+	id := new(big.Int).SetInt64(int64(9999999999))
+	am, err := eth.NewAccountManager(ethcommon.HexToAddress(opts.EthAccountAddr), opts.EthKeystorePath, id, opts.EthKeystorePassword)
+	if err != nil {
+		return nil, fmt.Errorf("error initalizing eth.AccountManager: %w", err)
 	}
+	err = am.Unlock(opts.EthKeystorePassword)
+	if err != nil {
+		return nil, fmt.Errorf("error unlcoking eth.AccountManager: %w", err)
+	}
+	return &EIP712Signer{
+		PrimarySchema:  opts.PrimarySchema,
+		Schemas:        opts.Schemas,
+		AccountManager: am,
+	}, nil
 }
 
 func (s *EIP712Signer) Sign(action Action) (*SignedEvent, error) {
-	id := new(big.Int).SetInt64(int64(80001))
-	am, err := eth.NewAccountManager(ethcommon.HexToAddress(""), ".", id, "secretpassword")
-	if err != nil {
-		return nil, err
-	}
-	err = am.Unlock("secretpassword")
-	if err != nil {
-		return nil, err
-	}
 	actionMap, err := ActionToMap(action)
 	if err != nil {
 		return nil, err
 	}
-	addrStr := fmt.Sprintf("%s", am.Account().Address)
+	addrStr := fmt.Sprintf("%s", s.AccountManager.Account().Address)
 	if actionMap["signer"] != addrStr {
 		return nil, fmt.Errorf("address mismatch signing action, signer.address=%s, action.singer=%s", addrStr, actionMap["signer"])
 	}
@@ -66,7 +78,7 @@ func (s *EIP712Signer) Sign(action Action) (*SignedEvent, error) {
 		return nil, fmt.Errorf("error signing struct: %w", err)
 	}
 
-	b, err := am.SignTypedData(typedData)
+	b, err := s.AccountManager.SignTypedData(typedData)
 	if err != nil {
 		return nil, fmt.Errorf("error signing typed data: %w", err)
 	}
@@ -75,11 +87,12 @@ func (s *EIP712Signer) Sign(action Action) (*SignedEvent, error) {
 	return &SignedEvent{
 		Domain:    s.PrimarySchema.Domain,
 		Signature: sig,
-		Address:   am.Account().Address,
+		Address:   s.AccountManager.Account().Address,
 		Action:    action,
 	}, nil
 }
 
+// given an unverified event from an untrusted source, verify its signature
 func (s *EIP712Signer) Verify(unverified UnverifiedEvent) (*SignedEvent, error) {
 	// find the correct schema for this action
 	var schema *Schema

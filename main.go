@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ethereum/go-ethereum/node"
 	"github.com/golang/glog"
 	_ "github.com/lib/pq"
 	"github.com/livepeer/catalyst-api/api"
@@ -57,6 +58,9 @@ func main() {
 	fs.StringVar(&cli.MetricsDBConnectionString, "metrics-db-connection-string", "", "Connection string to use for the metrics Postgres DB. Takes the form: host=X port=X user=X password=X dbname=X")
 	config.URLSliceVarFlag(fs, &cli.ImportIPFSGatewayURLs, "import-ipfs-gateway-urls", "https://vod-import-gtw.mypinata.cloud/ipfs/?pinataGatewayToken={{secrets.LP_PINATA_GATEWAY_TOKEN}},https://w3s.link/ipfs/,https://ipfs.io/ipfs/,https://cloudflare-ipfs.com/ipfs/", "Comma delimited ordered list of IPFS gateways (includes /ipfs/ suffix) to import assets from")
 	config.URLSliceVarFlag(fs, &cli.ImportArweaveGatewayURLs, "import-arweave-gateway-urls", "https://arweave.net/", "Comma delimited ordered list of arweave gateways")
+	fs.StringVar(&cli.EthKeystorePath, "eth-keystore-path", node.DefaultDataDir(), "Path to ETH keystore directory or keyfile")
+	fs.StringVar(&cli.EthKeystorePassword, "eth-keystore-password", "", "Password for existing Eth account address or path to file")
+	fs.StringVar(&cli.EthAccountAddr, "eth-account-addr", "", "Existing Eth account address. For use when multiple ETH accounts exist in the keystore directory")
 
 	// mist-api-connector parameters
 	fs.IntVar(&cli.MistPort, "mist-port", 4242, "Port to connect to Mist")
@@ -188,7 +192,13 @@ func main() {
 	c := cluster.NewCluster(&cli)
 
 	// Initialize signer for validating events
-	signer := events.NewEIP712Signer(&v0.Schema, []*events.Schema{&v0.Schema})
+	signer, err := events.NewEIP712Signer(&events.EIP712SignerOptions{
+		EthKeystorePassword: cli.EthKeystorePassword,
+		EthAccountAddr:      cli.EthAccountAddr,
+		EthKeystorePath:     cli.EthKeystorePath,
+		PrimarySchema:       &v0.Schema,
+		Schemas:             []*events.Schema{&v0.Schema},
+	})
 
 	// Initialize state machine
 	machine := state.NewMachine()
