@@ -213,7 +213,7 @@ func ParseMistStreamDetails(streamState string, data []byte) (*MistStreamDetails
 
 	var tracks map[string]TrackDetails
 	if err = json.Unmarshal(tracksJSON, &tracks); err != nil {
-		return nil, fmt.Errorf("eror parsing stream details tracks: %w", err)
+		return nil, fmt.Errorf("error parsing stream details tracks: %w", err)
 	}
 
 	return &MistStreamDetails{tracks, issues, humanIssues, extra}, nil
