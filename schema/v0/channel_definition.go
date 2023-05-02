@@ -12,11 +12,11 @@ type ChannelDefinition struct {
 	MultistreamTargets []MultistreamTarget `json:"multistreamTargets"`
 }
 
-func (c ChannelDefinition) Type() string {
+func (c *ChannelDefinition) Type() string {
 	return "ChannelDefinition"
 }
 
-func (c ChannelDefinition) SignerAddress() string {
+func (c *ChannelDefinition) SignerAddress() string {
 	return c.Signer
 }
 

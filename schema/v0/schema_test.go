@@ -9,18 +9,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getSigner() events.Signer {
+func getSigner(t *testing.T) events.Signer {
 	schemas := []*events.Schema{&Schema}
-	signer := events.EIP712Signer{
-		Schemas:       schemas,
-		PrimarySchema: &Schema,
-	}
-	return &signer
+	signer, err := events.NewEIP712Signer(&events.EIP712SignerOptions{
+		Schemas:             schemas,
+		PrimarySchema:       &Schema,
+		EthKeystorePassword: "secretpassword",
+		EthKeystorePath:     ".",
+	})
+	require.NoError(t, err)
+	return signer
 }
 
 func TestSign(t *testing.T) {
-	signer := getSigner()
-	var testMessage = ChannelDefinition{
+	signer := getSigner(t)
+	var testMessage = &ChannelDefinition{
 		ID:     "my-awesome-stream",
 		Signer: "0x1964035e4C3cD05b8Ff839EFBf37063D8d1Ba7ae",
 		Time:   int64(1681403259137),
@@ -37,7 +40,7 @@ func TestSign(t *testing.T) {
 }
 
 func TestVerify(t *testing.T) {
-	signer := getSigner()
+	signer := getSigner(t)
 	var unverified events.UnverifiedEvent
 	err := json.Unmarshal(validBody, &unverified)
 	require.NoError(t, err)
@@ -53,7 +56,7 @@ func TestVerify(t *testing.T) {
 }
 
 func TestModified(t *testing.T) {
-	signer := getSigner()
+	signer := getSigner(t)
 	var unverified events.UnverifiedEvent
 	err := json.Unmarshal(modifiedBody, &unverified)
 	require.NoError(t, err)
