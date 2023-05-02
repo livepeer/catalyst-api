@@ -4,7 +4,7 @@ import (
 	"github.com/ethereum/go-ethereum/signer/core/apitypes"
 )
 
-// Defines interfaces for schema
+// Type to be utilized by all supported schemas
 type Schema struct {
 	Domain  Domain
 	Types   apitypes.Types
