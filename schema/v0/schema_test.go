@@ -30,7 +30,9 @@ func TestSign(t *testing.T) {
 	}
 	signedEvent, err := signer.Sign(testMessage)
 	require.NoError(t, err)
-	_, err = json.Marshal(signedEvent.UnverifiedEvent())
+	unverified, err := signedEvent.UnverifiedEvent()
+	require.NoError(t, err)
+	_, err = json.Marshal(unverified)
 	require.NoError(t, err)
 }
 

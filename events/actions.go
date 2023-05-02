@@ -5,33 +5,27 @@ import (
 )
 
 type Action interface {
-	// Map() map[string]any
 	Type() string
 	SignerAddress() string
-	// LoadMap(map[string]any) error
 }
 
 // Base action suitable for inheriting by every other action
 type ActionBase struct{}
 
-func ActionToMap(a any) map[string]any {
-	// lol very hacky implementation obviously
+// Exports this action to a map
+func ActionToMap(a any) (map[string]any, error) {
 	data, err := json.Marshal(a)
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	newMap := map[string]any{}
 	err = json.Unmarshal(data, &newMap)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	// err = LoadMap(&a, newMap)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	return newMap
+	return newMap, nil
 }
 
 // Imports a map version of this event, suitable for building an Action from JSON

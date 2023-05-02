@@ -42,7 +42,10 @@ func (s *EIP712Signer) Sign(action Action) (*SignedEvent, error) {
 	if err != nil {
 		return nil, err
 	}
-	actionMap := ActionToMap(action)
+	actionMap, err := ActionToMap(action)
+	if err != nil {
+		return nil, err
+	}
 	addrStr := fmt.Sprintf("%s", am.Account().Address)
 	if actionMap["signer"] != addrStr {
 		return nil, fmt.Errorf("address mismatch signing action, signer.address=%s, action.singer=%s", addrStr, actionMap["signer"])
