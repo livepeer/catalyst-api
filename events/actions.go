@@ -27,7 +27,6 @@ func ActionToMap(a any) (map[string]any, error) {
 
 // Imports a map version of this event, suitable for building an Action from JSON
 func LoadMap(a any, m map[string]any) error {
-	// lol very hacky implementation obviously
 	data, err := json.Marshal(m)
 
 	if err != nil {
