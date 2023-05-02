@@ -97,6 +97,11 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 		}
 	}
 
+	duration, err := strconv.ParseFloat(videoStream.Duration, 64)
+	if err != nil {
+		duration = probeData.Format.DurationSeconds
+	}
+
 	var rotation int64
 	displaySideData, err := videoStream.SideDataList.GetSideData("Display Matrix")
 	if err == nil {
@@ -122,7 +127,7 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 				},
 			},
 		},
-		Duration:  probeData.Format.Duration().Seconds(),
+		Duration:  duration,
 		SizeBytes: size,
 	}
 	iv = addAudioTrack(probeData, iv)
