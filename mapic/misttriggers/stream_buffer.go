@@ -49,7 +49,7 @@ func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) err
 
 	body, err := ParseStreamBufferPayload(lines)
 	if err != nil {
-		glog.Infof("Error parsing STREAM_BUFFER payload error=%q payload=%s", err, strings.Join(lines, "\n"))
+		glog.Infof("Error parsing STREAM_BUFFER payload error=%q payload=%q", err, strings.Join(lines, "\n"))
 		return err
 	}
 
@@ -159,8 +159,9 @@ func ParseStreamBufferPayload(lines []string) (*StreamBufferPayload, error) {
 }
 
 type MistStreamDetails struct {
-	Tracks map[string]TrackDetails
-	Issues string
+	Tracks              map[string]TrackDetails
+	Issues, HumanIssues string
+	Extra               map[string]interface{}
 }
 
 // Mists saves the tracks and issues in the same JSON object, so we need to
@@ -176,11 +177,28 @@ func ParseMistStreamDetails(streamState string, data []byte) (*MistStreamDetails
 		return nil, fmt.Errorf("error parsing stream details JSON: %w", err)
 	}
 
-	issues, ok := tracksAndIssues["issues"].(string)
-	if raw, keyExists := tracksAndIssues["issues"]; keyExists && !ok {
-		return nil, fmt.Errorf("issues field is not a string: %v", raw)
+	var (
+		issues, humanIssues string
+		extra               = map[string]interface{}{}
+	)
+	for key, val := range tracksAndIssues {
+		switch tval := val.(type) {
+		case map[string]interface{}:
+			// this is a track, it will be parsed from the serialized obj below
+			continue
+		case string:
+			if key == "issues" {
+				issues = tval
+			} else if key == "human_issues" {
+				humanIssues = tval
+			} else {
+				extra[key] = val
+			}
+		default:
+			extra[key] = val
+		}
+		delete(tracksAndIssues, key)
 	}
-	delete(tracksAndIssues, "issues")
 
 	tracksJSON, err := json.Marshal(tracksAndIssues) // only tracks now
 	if err != nil {
@@ -192,5 +210,5 @@ func ParseMistStreamDetails(streamState string, data []byte) (*MistStreamDetails
 		return nil, fmt.Errorf("eror parsing stream details tracks: %w", err)
 	}
 
-	return &MistStreamDetails{tracks, issues}, nil
+	return &MistStreamDetails{tracks, issues, humanIssues, extra}, nil
 }

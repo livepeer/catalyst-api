@@ -19,7 +19,7 @@ var (
 		"stream1", "RECOVER", `{"track1":{"codec":"h264","kbits":1000,"keys":{"B":"1"},"fpks":30,"height":720,"width":1280},"issues":"Stream is feeling under the weather"}`,
 	}
 	streamBufferPayloadInvalid = []string{
-		"stream1", "FULL", `{"track1":{},"issues":false}`,
+		"stream1", "FULL", `{"track1":{},"notatrack":{"codec":2}}`,
 	}
 	streamBufferPayloadEmpty = []string{"stream1", "EMPTY"}
 )
@@ -57,7 +57,7 @@ func TestItCanParseAValidStreamBufferPayloadWithEmptyState(t *testing.T) {
 func TestItFailsToParseAnInvalidStreamBufferPayload(t *testing.T) {
 	_, err := ParseStreamBufferPayload(streamBufferPayloadInvalid)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "issues field is not a string")
+	require.Contains(t, err.Error(), "cannot unmarshal number into Go struct field TrackDetails.codec of type string")
 }
 
 func TestPostStreamHealthPayloadFailsWithInvalidURL(t *testing.T) {
