@@ -1,4 +1,6 @@
 name: golangci-lint
+env:
+  CGO_ENABLED: "0"
 on:
   push:
     tags:
