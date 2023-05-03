@@ -51,6 +51,8 @@ type Cli struct {
 	Tags                      map[string]string
 	RetryJoin                 []string
 	EncryptKey                string
+	VodEncryptPublicKey       string
+	VodEncryptPrivateKey      string
 	GateURL                   string
 	StreamHealthHookURL       string
 }

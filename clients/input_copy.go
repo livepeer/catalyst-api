@@ -63,6 +63,9 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVi
 		}
 	}
 
+	// TODO: Decryption
+	// If encrypted
+
 	log.Log(requestID, "starting probe", "source", inputFile.String(), "dest", osTransferURL.String())
 	inputVideoProbe, err = s.Probe.ProbeFile(signedURL)
 	if err != nil {

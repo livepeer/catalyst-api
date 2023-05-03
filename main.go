@@ -82,6 +82,8 @@ func main() {
 	fs.StringVar(&cli.MistLoadBalancerTemplate, "mist-load-balancer-template", "http://%s:4242", "template for specifying the host that should be queried for Prometheus stat output for this node")
 	config.CommaSliceFlag(fs, &cli.RetryJoin, "retry-join", []string{}, "An agent to join with. This flag be specified multiple times. Does not exit on failure like -join, used to retry until success.")
 	fs.StringVar(&cli.EncryptKey, "encrypt", "", "Key for encrypting network traffic within Serf. Must be a base64-encoded 32-byte key.")
+	fs.StringVar(&cli.VodEncryptPublicKey, "catalyst-public-key", "", "Public key of the catalyst node for encryption")
+	fs.StringVar(&cli.VodEncryptPrivateKey, "catalyst-private-key", "", "Private key of the catalyst node for encryption")
 	fs.StringVar(&cli.GateURL, "gate-url", "http://localhost:3004/api/access-control/gate", "Address to contact playback gating API for access control verification")
 
 	// special parameters
