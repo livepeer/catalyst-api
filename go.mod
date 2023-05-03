@@ -23,7 +23,7 @@ require (
 	github.com/minio/madmin-go v1.7.5
 	github.com/peterbourgon/ff/v3 v3.3.0
 	github.com/pquerna/cachecontrol v0.1.0
-	github.com/prometheus/client_golang v1.15.0
+	github.com/prometheus/client_golang v1.15.1
 	github.com/stretchr/testify v1.8.2
 	github.com/u2takey/ffmpeg-go v0.4.1
 	github.com/xeipuuv/gojsonschema v1.2.0
