@@ -27,7 +27,7 @@ integration-test:
 .PHONY: lint
 lint:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	golangci-lint run
+	CGO_ENABLED=0 golangci-lint run
 
 .PHONY: run
 run:
