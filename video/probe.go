@@ -12,6 +12,8 @@ import (
 	"gopkg.in/vansante/go-ffprobe.v2"
 )
 
+var unsupportedVideoCodecList = []string{"mjpeg", "jpeg", "png"}
+
 type Prober interface {
 	ProbeFile(url string, ffProbeOptions ...string) (InputVideo, error)
 }
@@ -47,8 +49,10 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 		return InputVideo{}, errors.New("error checking for video: no video stream found")
 	}
 	// check for unsupported video stream(s)
-	if strings.ToLower(videoStream.CodecName) == "mjpeg" || strings.ToLower(videoStream.CodecName) == "jpeg" {
-		return InputVideo{}, fmt.Errorf("error checking for video: %s is not supported", videoStream.CodecName)
+	for _, codec := range unsupportedVideoCodecList {
+		if strings.ToLower(videoStream.CodecName) == codec {
+			return InputVideo{}, fmt.Errorf("error checking for video: %s is not supported", videoStream.CodecName)
+		}
 	}
 	if strings.ToLower(videoStream.CodecName) == "vp9" && strings.Contains(probeData.Format.FormatName, "mp4") {
 		return InputVideo{}, fmt.Errorf("error checking for video: VP9 in an MP4 container is not supported")
