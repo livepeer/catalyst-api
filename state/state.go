@@ -45,9 +45,9 @@ func (s *Machine) HandleEvent(e *events.SignedEvent) error {
 			ss.MultistreamTargets[i] = &StreamStateMultistreamTarget{URL: target.URL}
 		}
 		s.State.Streams[act.ID] = &ss
+		return nil
 
 	default:
 		return fmt.Errorf("unknown action type: %s", act)
 	}
-	return nil
 }
