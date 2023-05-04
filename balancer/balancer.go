@@ -78,8 +78,8 @@ func (b *BalancerImpl) waitForStartup(ctx context.Context) {
 
 func (b *BalancerImpl) UpdateMembers(ctx context.Context, members []cluster.Member) error {
 	ctx, cancel := context.WithTimeout(ctx, mistUtilLoadLoopTimeout)
-	b.waitForStartup(ctx)
 	defer cancel()
+	b.waitForStartup(ctx)
 	balancedServers, err := b.getMistLoadBalancerServers(ctx)
 
 	if err != nil {
