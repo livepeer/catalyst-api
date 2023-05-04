@@ -19,9 +19,11 @@ import (
 	"github.com/livepeer/catalyst-api/cluster"
 )
 
+var mistUtilLoadTimeout = 5 * time.Second
+
 type Balancer interface {
 	Start(ctx context.Context) error
-	UpdateMembers(members []cluster.Member) error
+	UpdateMembers(ctx context.Context, members []cluster.Member) error
 	GetBestNode(redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error)
 	QueryMistForClosestNodeSource(playbackID, lat, lon, prefix string, source bool) (string, error)
 }
@@ -73,7 +75,7 @@ func (b *BalancerImpl) waitForStartup() {
 	})
 }
 
-func (b *BalancerImpl) UpdateMembers(members []cluster.Member) error {
+func (b *BalancerImpl) UpdateMembers(ctx context.Context, members []cluster.Member) error {
 	b.waitForStartup()
 	balancedServers, err := b.getMistLoadBalancerServers()
 
@@ -106,7 +108,7 @@ func (b *BalancerImpl) UpdateMembers(members []cluster.Member) error {
 	for k := range balancedServers {
 		if _, ok := membersMap[k]; !ok {
 			glog.Infof("deleting server %s from load balancer\n", k)
-			_, err := b.changeLoadBalancerServers(k, "del")
+			_, err := b.changeLoadBalancerServers(ctx, k, "del")
 			if err != nil {
 				glog.Errorf("Error deleting server %s from load balancer: %v\n", k, err)
 			}
@@ -116,7 +118,7 @@ func (b *BalancerImpl) UpdateMembers(members []cluster.Member) error {
 	for k := range membersMap {
 		if _, ok := balancedServers[k]; !ok {
 			glog.Infof("adding server %s to load balancer\n", k)
-			_, err := b.changeLoadBalancerServers(k, "add")
+			_, err := b.changeLoadBalancerServers(ctx, k, "add")
 			if err != nil {
 				glog.Errorf("Error adding server %s to load balancer: %v\n", k, err)
 			}
@@ -125,10 +127,13 @@ func (b *BalancerImpl) UpdateMembers(members []cluster.Member) error {
 	return nil
 }
 
-func (b *BalancerImpl) changeLoadBalancerServers(server, action string) ([]byte, error) {
+func (b *BalancerImpl) changeLoadBalancerServers(ctx context.Context, server, action string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, mistUtilLoadTimeout)
+	defer cancel()
 	serverTmpl := fmt.Sprintf(b.config.MistLoadBalancerTemplate, server)
 	actionURL := b.endpoint + "?" + action + "server=" + url.QueryEscape(serverTmpl)
 	req, err := http.NewRequest("POST", actionURL, nil)
+	req = req.WithContext(ctx)
 	if err != nil {
 		glog.Errorf("Error creating request: %v", err)
 		return nil, err
