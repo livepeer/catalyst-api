@@ -1,6 +1,7 @@
 package geolocation
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -121,7 +122,7 @@ func mockHandlers(t *testing.T) *GeolocationHandlersCollection {
 	mb := mockbalancer.NewMockBalancer(ctrl)
 	mc := mockcluster.NewMockCluster(ctrl)
 	mb.EXPECT().
-		GetBestNode(prefixes[:], playbackID, "", "", "").
+		GetBestNode(context.Background(), prefixes[:], playbackID, "", "", "").
 		AnyTimes().
 		Return(closestNodeAddr, fmt.Sprintf("%s+%s", prefixes[0], playbackID), nil)
 
@@ -183,7 +184,7 @@ func TestRedirectHandlerHLSVOD_Correct(t *testing.T) {
 	n := mockHandlers(t)
 
 	n.Balancer.(*mockbalancer.MockBalancer).EXPECT().
-		GetBestNode(prefixes[:], playbackID, "", "", "vod").
+		GetBestNode(context.Background(), prefixes[:], playbackID, "", "", "vod").
 		AnyTimes().
 		Return(closestNodeAddr, fmt.Sprintf("%s+%s", "vod", playbackID), nil)
 

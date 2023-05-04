@@ -28,10 +28,10 @@ func (b *BalancerStub) UpdateMembers(ctx context.Context, members []cluster.Memb
 }
 
 // always returns local node
-func (b *BalancerStub) GetBestNode(redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error) {
+func (b *BalancerStub) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error) {
 	return "localhost", playbackID, nil
 }
 
-func (b *BalancerStub) QueryMistForClosestNodeSource(playbackID, lat, lon, prefix string, source bool) (string, error) {
+func (b *BalancerStub) QueryMistForClosestNodeSource(ctx context.Context, playbackID, lat, lon, prefix string, source bool) (string, error) {
 	return "dtsc://localhost", nil
 }

@@ -19,13 +19,14 @@ import (
 	"github.com/livepeer/catalyst-api/cluster"
 )
 
-var mistUtilLoadTimeout = 5 * time.Second
+var mistUtilLoadSingleRequestTimeout = 15 * time.Second
+var mistUtilLoadLoopTimeout = 2 * time.Minute
 
 type Balancer interface {
 	Start(ctx context.Context) error
 	UpdateMembers(ctx context.Context, members []cluster.Member) error
-	GetBestNode(redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error)
-	QueryMistForClosestNodeSource(playbackID, lat, lon, prefix string, source bool) (string, error)
+	GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error)
+	QueryMistForClosestNodeSource(ctx context.Context, playbackID, lat, lon, prefix string, source bool) (string, error)
 }
 
 type Config struct {
@@ -58,15 +59,15 @@ func NewBalancer(config *Config) Balancer {
 
 // start this load balancer instance, execing MistUtilLoad if necessary
 func (b *BalancerImpl) Start(ctx context.Context) error {
-	go b.waitForStartup()
+	go b.waitForStartup(ctx)
 	return b.execBalancer(ctx, b.config.Args)
 }
 
 // wait for the mist LB to be available. can be called multiple times.
-func (b *BalancerImpl) waitForStartup() {
+func (b *BalancerImpl) waitForStartup(ctx context.Context) {
 	b.startupOnce.Do(func() {
 		for {
-			_, err := b.getMistLoadBalancerServers()
+			_, err := b.getMistLoadBalancerServers(ctx)
 			if err == nil {
 				return
 			}
@@ -76,8 +77,10 @@ func (b *BalancerImpl) waitForStartup() {
 }
 
 func (b *BalancerImpl) UpdateMembers(ctx context.Context, members []cluster.Member) error {
-	b.waitForStartup()
-	balancedServers, err := b.getMistLoadBalancerServers()
+	ctx, cancel := context.WithTimeout(ctx, mistUtilLoadLoopTimeout)
+	b.waitForStartup(ctx)
+	defer cancel()
+	balancedServers, err := b.getMistLoadBalancerServers(ctx)
 
 	if err != nil {
 		glog.Errorf("Error getting mist load balancer servers: %v\n", err)
@@ -128,7 +131,7 @@ func (b *BalancerImpl) UpdateMembers(ctx context.Context, members []cluster.Memb
 }
 
 func (b *BalancerImpl) changeLoadBalancerServers(ctx context.Context, server, action string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, mistUtilLoadTimeout)
+	ctx, cancel := context.WithTimeout(ctx, mistUtilLoadSingleRequestTimeout)
 	defer cancel()
 	serverTmpl := fmt.Sprintf(b.config.MistLoadBalancerTemplate, server)
 	actionURL := b.endpoint + "?" + action + "server=" + url.QueryEscape(serverTmpl)
@@ -163,13 +166,16 @@ func (b *BalancerImpl) changeLoadBalancerServers(ctx context.Context, server, ac
 	return bytes, nil
 }
 
-func (b *BalancerImpl) getMistLoadBalancerServers() (map[string]interface{}, error) {
+func (b *BalancerImpl) getMistLoadBalancerServers(ctx context.Context) (map[string]interface{}, error) {
+	ctx, cancel := context.WithTimeout(ctx, mistUtilLoadSingleRequestTimeout)
+	defer cancel()
 	url := b.endpoint + "?lstservers=1"
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		glog.Errorf("Error creating request: %v", err)
 		return nil, err
 	}
+	req = req.WithContext(ctx)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -216,11 +222,11 @@ func (b *BalancerImpl) execBalancer(ctx context.Context, balancerArgs []string) 
 	return b.cmd.Wait()
 }
 
-func (b *BalancerImpl) queryMistForClosestNode(playbackID, lat, lon, prefix string) (string, error) {
+func (b *BalancerImpl) queryMistForClosestNode(ctx context.Context, playbackID, lat, lon, prefix string) (string, error) {
 	// First, check to see if any server has this stream
-	_, err1 := b.QueryMistForClosestNodeSource(playbackID, lat, lon, prefix, true)
+	_, err1 := b.QueryMistForClosestNodeSource(ctx, playbackID, lat, lon, prefix, true)
 	// Then, check the best playback server
-	node, err2 := b.QueryMistForClosestNodeSource(playbackID, lat, lon, prefix, false)
+	node, err2 := b.QueryMistForClosestNodeSource(ctx, playbackID, lat, lon, prefix, false)
 	// If we can't get a playback server, error
 	if err2 != nil {
 		return "", err2
@@ -234,7 +240,7 @@ func (b *BalancerImpl) queryMistForClosestNode(playbackID, lat, lon, prefix stri
 }
 
 // return the best node available for a given stream. will return any node if nobody has the stream.
-func (b *BalancerImpl) GetBestNode(redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error) {
+func (b *BalancerImpl) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error) {
 	var nodeAddr, fullPlaybackID, fallbackAddr string
 	var mu sync.Mutex
 	var err error
@@ -243,7 +249,7 @@ func (b *BalancerImpl) GetBestNode(redirectPrefixes []string, playbackID, lat, l
 	for _, prefix := range redirectPrefixes {
 		waitGroup.Add(1)
 		go func(prefix string) {
-			addr, e := b.queryMistForClosestNode(playbackID, lat, lon, prefix)
+			addr, e := b.queryMistForClosestNode(ctx, playbackID, lat, lon, prefix)
 			mu.Lock()
 			defer mu.Unlock()
 			if e != nil {
@@ -279,7 +285,9 @@ func (b *BalancerImpl) GetBestNode(redirectPrefixes []string, playbackID, lat, l
 	return "", "", err
 }
 
-func (b *BalancerImpl) QueryMistForClosestNodeSource(playbackID, lat, lon, prefix string, source bool) (string, error) {
+func (b *BalancerImpl) QueryMistForClosestNodeSource(ctx context.Context, playbackID, lat, lon, prefix string, source bool) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, mistUtilLoadSingleRequestTimeout)
+	defer cancel()
 	if prefix != "" {
 		prefix += "+"
 	}
@@ -295,6 +303,7 @@ func (b *BalancerImpl) QueryMistForClosestNodeSource(playbackID, lat, lon, prefi
 	if err != nil {
 		return "", err
 	}
+	req = req.WithContext(ctx)
 	if lat != "" && lon != "" {
 		req.Header.Set("X-Latitude", lat)
 		req.Header.Set("X-Longitude", lon)
