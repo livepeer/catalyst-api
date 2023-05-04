@@ -23,7 +23,7 @@ func (b *BalancerStub) Start(ctx context.Context) error {
 	return nil
 }
 
-func (b *BalancerStub) UpdateMembers(members []cluster.Member) error {
+func (b *BalancerStub) UpdateMembers(ctx context.Context, members []cluster.Member) error {
 	return nil
 }
 
