@@ -1,6 +1,7 @@
 package geolocation
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -55,7 +56,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 		lat := r.Header.Get("X-Latitude")
 		lon := r.Header.Get("X-Longitude")
 
-		bestNode, fullPlaybackID, err := c.Balancer.GetBestNode(redirectPrefixes, playbackID, lat, lon, prefix)
+		bestNode, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix)
 		if err != nil {
 			glog.Errorf("failed to find either origin or fallback server for playbackID=%s err=%s", playbackID, err)
 			w.WriteHeader(http.StatusBadGateway)
@@ -99,7 +100,7 @@ func (c *GeolocationHandlersCollection) StreamSourceHandler() httprouter.Handle 
 
 		latStr := fmt.Sprintf("%f", lat)
 		lonStr := fmt.Sprintf("%f", lon)
-		dtscURL, err := c.Balancer.QueryMistForClosestNodeSource(streamName, latStr, lonStr, "", true)
+		dtscURL, err := c.Balancer.QueryMistForClosestNodeSource(context.Background(), streamName, latStr, lonStr, "", true)
 		if err != nil {
 			glog.Errorf("error querying mist for STREAM_SOURCE: %s", err)
 			w.Write([]byte("push://")) // nolint:errcheck
