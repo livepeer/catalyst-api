@@ -153,12 +153,13 @@ type Coordinator struct {
 
 	pipeFfmpeg, pipeExternal Handler
 
-	Jobs      *cache.Cache[*JobInfo]
-	MetricsDB *sql.DB
-	InputCopy clients.InputCopier
+	Jobs                 *cache.Cache[*JobInfo]
+	MetricsDB            *sql.DB
+	InputCopy            clients.InputCopier
+	VodEncryptPrivateKey string
 }
 
-func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB) (*Coordinator, error) {
+func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB, vodEncryptPrivateKey string) (*Coordinator, error) {
 
 	if !strategy.IsValid() {
 		return nil, fmt.Errorf("invalid strategy: %s", strategy)
@@ -187,6 +188,7 @@ func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string,
 			Probe:           video.Probe{},
 			SourceOutputUrl: sourceOutputURL,
 		},
+		VodEncryptPrivateKey: vodEncryptPrivateKey,
 	}, nil
 }
 
@@ -243,7 +245,13 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 			return nil, fmt.Errorf("error parsing source as url: %w", err)
 		}
 
-		inputVideoProbe, signedNewSourceURL, newSourceURL, err := c.InputCopy.CopyInputToS3(si.RequestID, sourceURL)
+		encryptedKey := ""
+
+		if p.Encryption != nil {
+			encryptedKey = p.Encryption.EncryptedKey
+		}
+
+		inputVideoProbe, signedNewSourceURL, newSourceURL, err := c.InputCopy.CopyInputToS3(si.RequestID, sourceURL, encryptedKey, c.VodEncryptPrivateKey)
 		if err != nil {
 			return nil, fmt.Errorf("error copying input to storage: %w", err)
 		}

@@ -2,17 +2,21 @@ package clients
 
 import (
 	"context"
+	"crypto/rsa"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/golang/glog"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/crypto"
 	xerrors "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/video"
@@ -21,9 +25,10 @@ import (
 
 const MaxCopyFileDuration = 2 * time.Hour
 const PresignDuration = 24 * time.Hour
+const LocalSourceFilePattern = "sourcevideo*"
 
 type InputCopier interface {
-	CopyInputToS3(requestID string, inputFile *url.URL) (video.InputVideo, string, *url.URL, error)
+	CopyInputToS3(requestID string, inputFile *url.URL, encryptedKey string, vodEncryptPrivateKey string) (video.InputVideo, string, *url.URL, error)
 }
 
 type InputCopy struct {
@@ -33,14 +38,33 @@ type InputCopy struct {
 }
 
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
-func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
+func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encryptedKey string, vodEncryptPrivateKey string) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
+
+	// Create a temporary local file to write to
+	localSourceFile, err := os.CreateTemp(os.TempDir(), LocalSourceFilePattern)
+	if err != nil {
+		glog.Errorf("failed to create local file on vod upload: %s", err)
+		return
+	}
+	defer localSourceFile.Close()
+	defer os.Remove(localSourceFile.Name()) // Clean up the file as soon as we're done segmenting
+
+	// Copy the file locally because of decryption and ffmpeg segmenting
+	// We can be aggressive with the timeout because we're copying from cloud storage
+	timeout, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+	_, err = CopyFile(timeout, inputFile.String(), localSourceFile.Name(), "", requestID)
+	if err != nil {
+		glog.Errorf("failed to copy file (%s) locally for segmenting: %s", inputFile, err)
+		return
+	}
+
 	if isDirectUpload(inputFile) {
 		log.Log(requestID, "Direct upload detected", "source", inputFile.String())
 		signedURL = inputFile.String()
 		osTransferURL = inputFile
 	} else {
 		var (
-			size            int64
 			sourceOutputUrl *url.URL
 		)
 		sourceOutputUrl, err = url.Parse(s.SourceOutputUrl)
@@ -49,8 +73,42 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVi
 			return
 		}
 		osTransferURL = sourceOutputUrl.JoinPath(requestID, "transfer", path.Base(inputFile.Path))
+	}
 
-		size, err = CopyAllInputFiles(requestID, inputFile, osTransferURL)
+	if encryptedKey != "" {
+
+		var decryptionKey *rsa.PrivateKey
+		decryptionKey, err = crypto.LoadPrivateKey(vodEncryptPrivateKey)
+
+		if err != nil {
+			err = fmt.Errorf("error loading private key: %w", err)
+			return
+		}
+
+		var decryptedSourceFile *os.File
+		defer decryptedSourceFile.Close()
+		defer os.Remove(decryptedSourceFile.Name())
+		decryptedSourceFile, err = os.CreateTemp(os.TempDir(), LocalSourceFilePattern)
+
+		if err != nil {
+			err = fmt.Errorf("error creating temp file: %w", err)
+			return
+		}
+
+		err = crypto.DecryptFile(localSourceFile.Name(), decryptedSourceFile.Name(), decryptionKey, encryptedKey)
+
+		if err != nil {
+			err = fmt.Errorf("error decrypting file: %w", err)
+		}
+
+		localSourceFile = decryptedSourceFile
+
+	}
+
+	if !isDirectUpload(inputFile) {
+		var size int64
+		log.Log(requestID, "Copying input file to S3", "source", inputFile.String(), "dest", osTransferURL.String())
+		size, err = CopyFile(context.Background(), localSourceFile.Name(), osTransferURL.String(), "", requestID)
 		if err != nil {
 			err = fmt.Errorf("failed to copy file(s): %w", err)
 			return
@@ -63,9 +121,7 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVi
 		}
 	}
 
-	// TODO: Decryption
-	// If encrypted
-
+	// TODO: probe the local file instead of the remote URL
 	log.Log(requestID, "starting probe", "source", inputFile.String(), "dest", osTransferURL.String())
 	inputVideoProbe, err = s.Probe.ProbeFile(signedURL)
 	if err != nil {
@@ -266,6 +322,6 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 
 type StubInputCopy struct{}
 
-func (s *StubInputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (video.InputVideo, string, *url.URL, error) {
+func (s *StubInputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encryptedKey string, vodEncryptPrivateKey string) (video.InputVideo, string, *url.URL, error) {
 	return video.InputVideo{}, "", &url.URL{}, nil
 }

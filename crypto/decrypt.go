@@ -43,14 +43,9 @@ func pkcs7Unpad(data []byte) ([]byte, error) {
 	return data[:(length - unpadding)], nil
 }
 
-func DecryptFile(inputFile, outputFile string, privateKey *rsa.PrivateKey, encryptedKeyFile string) {
+func DecryptFile(inputFile, outputFile string, privateKey *rsa.PrivateKey, encryptedKeyB64 string) (err error) {
 
-	data, err := os.ReadFile(encryptedKeyFile)
-	if err != nil {
-		glog.Fatalf("Error reading encrypted key file: %v", err)
-	}
-
-	encryptedKey, err := base64.StdEncoding.DecodeString(string(data))
+	encryptedKey, err := base64.StdEncoding.DecodeString(encryptedKeyB64)
 	if err != nil {
 		glog.Fatalf("Error decoding base64 encoded key: %v", err)
 	}
@@ -76,7 +71,7 @@ func DecryptFile(inputFile, outputFile string, privateKey *rsa.PrivateKey, encry
 	mode := cipher.NewCBCDecrypter(block, iv)
 	mode.CryptBlocks(plaintext, ciphertext)
 
-	data, err = pkcs7Unpad(plaintext)
+	data, err := pkcs7Unpad(plaintext)
 	if err != nil {
 		glog.Fatalf("Error unpadding data: %v", err)
 	}
@@ -85,4 +80,6 @@ func DecryptFile(inputFile, outputFile string, privateKey *rsa.PrivateKey, encry
 	if err != nil {
 		glog.Fatalf("Error writing decrypted data to output file: %v", err)
 	}
+
+	return err
 }

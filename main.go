@@ -146,7 +146,7 @@ func main() {
 
 	// Start the "co-ordinator" that determines whether to send jobs to the Catalyst transcoding pipeline
 	// or an external one
-	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB)
+	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB, cli.VodEncryptPrivateKey)
 	if err != nil {
 		glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 	}
