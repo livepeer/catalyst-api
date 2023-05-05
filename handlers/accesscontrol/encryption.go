@@ -26,8 +26,8 @@ func (ec *EncryptionHandlersCollection) PublicKeyHandler() httprouter.Handle {
 		w.WriteHeader(http.StatusOK)
 
 		responseData := map[string]string{
-			"publicKey": ec.publicKey,
-			"nodeName":  ec.nodeName,
+			"public_key": ec.publicKey,
+			"node_name":  ec.nodeName,
 		}
 
 		res, err := json.Marshal(responseData)
