@@ -24,7 +24,7 @@ type UploadRequest struct {
 }
 
 var DefaultUploadRequest = UploadRequest{
-	CallbackURL: "http://localhost:3000/cb",
+	CallbackURL: "http://localhost:3333/callback/123",
 	OutputLocations: []OutputLocation{
 		{
 			Type: "object_store",

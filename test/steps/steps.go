@@ -20,7 +20,9 @@ type StepContext struct {
 	TranscodedOutputDir         string
 	Studio                      http.Server
 	Broadcaster                 http.Server
+	CallbackHandler             http.Server
 	BroadcasterSegmentsReceived map[string]int // Map of ManifestID -> Num Segments
+	CallbacksReceived           []Callback
 	MinioAdmin                  *madmin.AdminClient
 	GateAPIStatus               int
 	GateAPICallCount            int
