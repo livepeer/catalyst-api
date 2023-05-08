@@ -50,13 +50,13 @@ func (s *StepContext) StartCallbackHandler(listen string) error {
 	router.POST("/callback/:ID", func(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("error reading body: %w", err), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("error reading body: %s", err), http.StatusInternalServerError)
 			return
 		}
 
 		var callback Callback
 		if err := json.Unmarshal(body, &callback); err != nil {
-			http.Error(w, fmt.Sprintf("error parsing callback: %w", err), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("error parsing callback: %s", err), http.StatusInternalServerError)
 			return
 		}
 
