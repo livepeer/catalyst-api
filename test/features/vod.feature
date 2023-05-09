@@ -9,6 +9,7 @@ Feature: VOD Streaming
     And an object store is available
     And Studio API server is running at "localhost:3000"
     And a Broadcaster is running at "localhost:8935"
+    And a callback server is running at "localhost:3333"
     And ffmpeg is available
 
   Scenario: HTTP API Startup
@@ -38,4 +39,4 @@ Scenario: Submit a video asset to stream as VOD with the FFMPEG / Livepeer pipel
     And the source manifest is written to storage within "3" seconds and contains "4" segments
     And the Broadcaster receives "4" segments for transcoding within "10" seconds
     And "4" transcoded segments and manifests have been written to disk for profiles "270p0,low-bitrate" within "5" seconds
-    # TODO: Check for callbacks being received
+    And I receive a "success" callback within "20" seconds

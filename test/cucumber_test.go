@@ -80,6 +80,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^Studio API server is running at "([^"]*)"$`, stepContext.StartStudioAPI)
 	ctx.Step(`^ffmpeg is available$`, stepContext.CheckFfmpeg)
 	ctx.Step(`^a Broadcaster is running at "([^"]*)"$`, stepContext.StartBroadcaster)
+	ctx.Step(`^a callback server is running at "([^"]*)"$`, stepContext.StartCallbackHandler)
 
 	ctx.Step(`^I query the "([^"]*)" endpoint( with "([^"]*)")?$`, stepContext.CreateRequest)
 	ctx.Step(`^I query the internal "([^"]*)" endpoint$`, stepContext.CreateGetRequestInternal)
@@ -100,6 +101,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the gate API call was valid$`, stepContext.CheckGateAPICallValid)
 	ctx.Step(`^the Broadcaster receives "(\d+)" segments for transcoding within "(\d+)" seconds$`, stepContext.BroadcasterReceivesSegmentsWithinSeconds)
 	ctx.Step(`^"(\d+)" transcoded segments and manifests have been written to disk for profiles "([^"]*)" within "(\d+)" seconds$`, stepContext.TranscodedSegmentsWrittenToDiskWithinSeconds)
+	ctx.Step(`^I receive a "([^"]*)" callback within "(\d+)" seconds$`, stepContext.CheckCallback)
 
 	ctx.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
 		if app != nil && app.Process != nil {
@@ -118,6 +120,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 			_ = stepContext.MinioAdmin.ServiceStop(ctx)
 		}
 		_ = stepContext.Broadcaster.Shutdown(ctx)
+		_ = stepContext.CallbackHandler.Shutdown(ctx)
 		return ctx, nil
 	})
 }
