@@ -104,6 +104,8 @@ github.com/cucumber/godog v0.12.5/go.mod h1:u6SD7IXC49dLpPN35kal0oYEjsXZWee4pW6T
 github.com/cucumber/messages-go/v16 v16.0.0/go.mod h1:EJcyR5Mm5ZuDsKJnT2N9KRnBK30BGjtYotDKpwQ0v6g=
 github.com/cucumber/messages-go/v16 v16.0.1 h1:fvkpwsLgnIm0qugftrw2YwNlio+ABe2Iu94Ap8GMYIY=
 github.com/cucumber/messages-go/v16 v16.0.1/go.mod h1:EJcyR5Mm5ZuDsKJnT2N9KRnBK30BGjtYotDKpwQ0v6g=
+github.com/d1str0/pkcs7 v0.0.0-20200424205038-d65c16a5759a h1:NtjeEx9EbZH6iM4BCho0yBMr7VjDu8MagoWU+dBKGpo=
+github.com/d1str0/pkcs7 v0.0.0-20200424205038-d65c16a5759a/go.mod h1:g4F5sZT1Eult6KqY9vzZ6Uf9H5FwP3WsHx8NX3UNfN8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

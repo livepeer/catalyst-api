@@ -39,70 +39,66 @@ type InputCopy struct {
 
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
 func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encryptedKey string, vodEncryptPrivateKey string) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
-
 	// Create a temporary local file to write to
 	localSourceFile, err := os.CreateTemp(os.TempDir(), LocalSourceFilePattern)
 	if err != nil {
-		glog.Errorf("failed to create local file on vod upload: %s", err)
+		glog.Errorf("failed to create local file on vod upload: %w", err)
 		return
 	}
-	defer localSourceFile.Close()
-	defer os.Remove(localSourceFile.Name()) // Clean up the file as soon as we're done segmenting
+	defer func() {
+		localSourceFile.Close()
+		os.Remove(localSourceFile.Name()) // Clean up the file as soon as we're done
+	}()
 
-	// Copy the file locally because of decryption and ffmpeg segmenting
-	// We can be aggressive with the timeout because we're copying from cloud storage
 	timeout, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
-	_, err = CopyFile(timeout, inputFile.String(), localSourceFile.Name(), "", requestID)
-	if err != nil {
-		glog.Errorf("failed to copy file (%s) locally for segmenting: %s", inputFile, err)
+	if _, err = CopyFile(timeout, inputFile.String(), localSourceFile.Name(), "", requestID); err != nil {
+		glog.Errorf("failed to copy file (%s) locally for segmenting: %w", inputFile, err)
 		return
 	}
 
+	var sourceOutputURL *url.URL
 	if isDirectUpload(inputFile) {
 		log.Log(requestID, "Direct upload detected", "source", inputFile.String())
 		signedURL = inputFile.String()
 		osTransferURL = inputFile
 	} else {
-		var (
-			sourceOutputUrl *url.URL
-		)
-		sourceOutputUrl, err = url.Parse(s.SourceOutputUrl)
-		if err != nil {
+		if sourceOutputURL, err = url.Parse(s.SourceOutputUrl); err != nil {
 			err = fmt.Errorf("cannot create sourceOutputUrl: %w", err)
 			return
 		}
-		osTransferURL = sourceOutputUrl.JoinPath(requestID, "transfer", path.Base(inputFile.Path))
+		osTransferURL = sourceOutputURL.ResolveReference(&url.URL{Path: path.Join(requestID, "transfer", path.Base(inputFile.Path))})
 	}
 
 	if encryptedKey != "" {
-
 		var decryptionKey *rsa.PrivateKey
-		decryptionKey, err = crypto.LoadPrivateKey(vodEncryptPrivateKey)
-
-		if err != nil {
-			err = fmt.Errorf("error loading private key: %w", err)
+		if decryptionKey, err = crypto.LoadPrivateKey(vodEncryptPrivateKey); err != nil {
+			glog.Errorf("error loading private key: %w", err)
 			return
 		}
 
 		var decryptedSourceFile *os.File
-		defer decryptedSourceFile.Close()
-		defer os.Remove(decryptedSourceFile.Name())
-		decryptedSourceFile, err = os.CreateTemp(os.TempDir(), LocalSourceFilePattern)
+		if decryptedSourceFile, err = os.CreateTemp(os.TempDir(), LocalSourceFilePattern); err != nil {
+			glog.Errorf("error creating temp file: %w", err)
+			return
+		}
+		defer func() {
+			decryptedSourceFile.Close()
+			os.Remove(decryptedSourceFile.Name())
+		}()
 
-		if err != nil {
-			err = fmt.Errorf("error creating temp file: %w", err)
+		var reader io.Reader
+		if reader, err = crypto.DecryptAESCBC(localSourceFile.Name(), decryptionKey, encryptedKey); err != nil {
+			glog.Errorf("error decrypting file: %w", err)
 			return
 		}
 
-		err = crypto.DecryptFile(localSourceFile.Name(), decryptedSourceFile.Name(), decryptionKey, encryptedKey)
-
-		if err != nil {
-			err = fmt.Errorf("error decrypting file: %w", err)
+		if _, err = io.Copy(decryptedSourceFile, reader); err != nil {
+			glog.Errorf("error copying decrypted file: %w", err)
+			return
 		}
 
 		localSourceFile = decryptedSourceFile
-
 	}
 
 	if !isDirectUpload(inputFile) {

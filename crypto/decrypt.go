@@ -6,33 +6,12 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/base64"
-	"encoding/pem"
 	"fmt"
 	"os"
 
 	"github.com/golang/glog"
 )
-
-func LoadPrivateKey(privateKeyBase64 string) (*rsa.PrivateKey, error) {
-	privateKey, err := base64.StdEncoding.DecodeString(privateKeyBase64)
-	if err != nil {
-		return nil, fmt.Errorf("file-decrypt: error decoding private key: %v", err)
-	}
-
-	block, _ := pem.Decode(privateKey)
-	if block == nil {
-		return nil, fmt.Errorf("file-decrypt: error decoding PEM block from private key")
-	}
-
-	priv, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("file-decrypt: error parsing private key: %v", err)
-	}
-
-	return priv, nil
-}
 
 func pkcs7Unpad(data []byte) ([]byte, error) {
 	length := len(data)
@@ -43,6 +22,7 @@ func pkcs7Unpad(data []byte) ([]byte, error) {
 	return data[:(length - unpadding)], nil
 }
 
+// To be removed
 func DecryptFile(inputFile, outputFile string, privateKey *rsa.PrivateKey, encryptedKeyB64 string) (err error) {
 
 	encryptedKey, err := base64.StdEncoding.DecodeString(encryptedKeyB64)
