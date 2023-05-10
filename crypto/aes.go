@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 
 	"github.com/d1str0/pkcs7"
@@ -63,14 +62,14 @@ func DecryptAESCBCWithIV(reader io.ReadCloser, privateKey *rsa.PrivateKey, encry
 
 	encryptedKey, err := base64.StdEncoding.DecodeString(encryptedKeyB64)
 	if err != nil {
-		glog.Fatalf("Error decoding base64 encoded key: %v", err)
+		glog.Errorf("Error decoding base64 encoded key: %v", err)
 	}
 
 	// Decrypt the key with the RSA private key
 	key, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, encryptedKey, nil)
 
 	if err != nil {
-		log.Fatalf("Error decrypting key: %v", err)
+		glog.Errorf("Error decrypting key: %v", err)
 	}
 
 	if err != nil {
