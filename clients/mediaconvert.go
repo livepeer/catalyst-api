@@ -35,7 +35,14 @@ var errCodesAcceleration = []int64{
 	1043, // Secret Undocumented Error. Returned for this error msg: "Your input files aren't compatible with accelerated transcoding for the following reasons: [You can't use accelerated transcoding with input files that have empty edit lists as in this input: [0].] Disable accelerated transcoding and resubmit your job."
 	1550, // Acceleration Fault: There is an unexpected error with the accelerated transcoding of this job
 }
+var errCodesInput = []int64{
+	1020, // Video Error
+	1021, // Audio Error
+	1030, // Unsupported Codec
+	1092, // Decode Audio Initialization Error
+}
 var ErrJobAcceleration = errors.New("job should not have acceleration")
+var ErrJobInput = errors.New("unsupported video input")
 
 type ByteAccumulatorWriter struct {
 	count int64
@@ -289,6 +296,9 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 			log.Log(args.RequestID, "Mediaconvert job failed", "error", errMsg, "code", code)
 			if contains(code, errCodesAcceleration) {
 				return ErrJobAcceleration
+			}
+			if contains(code, errCodesInput) {
+				return ErrJobInput
 			}
 			return fmt.Errorf("job failed: %s", errMsg)
 		case mediaconvert.JobStatusCanceled:
