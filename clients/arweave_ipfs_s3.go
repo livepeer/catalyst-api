@@ -17,22 +17,6 @@ import (
 const SCHEME_IPFS = "ipfs"
 const SCHEME_ARWEAVE = "ar"
 
-func CopyDStorageToS3(url, s3URL string, requestID string) error {
-	return backoff.Retry(func() error {
-		content, err := DownloadDStorageFromGatewayList(url, requestID, 0)
-		if err != nil {
-			return err
-		}
-
-		err = UploadToOSURL(s3URL, "", content, MaxCopyFileDuration)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}, DStorageRetryBackoff())
-}
-
 func DownloadDStorageFromGatewayList(u, requestID string, retry int) (io.ReadCloser, error) {
 	var err error
 	var gateways []*url.URL
