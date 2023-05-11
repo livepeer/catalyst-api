@@ -18,7 +18,7 @@ const SCHEME_IPFS = "ipfs"
 const SCHEME_ARWEAVE = "ar"
 
 type DStorageDownload struct {
-	gatewaysAttempted []*url.URL
+	gatewaysAttempted []string
 }
 
 func NewDStorageDownload() *DStorageDownload {
@@ -62,10 +62,10 @@ func (d *DStorageDownload) DownloadDStorageFromGatewayList(u, requestID string) 
 	}
 
 	for _, gateway := range gateways {
-		if contains(gateway, d.gatewaysAttempted) {
+		if contains(gateway.String(), d.gatewaysAttempted) {
 			continue
 		}
-		d.gatewaysAttempted = append(d.gatewaysAttempted, gateway)
+		d.gatewaysAttempted = append(d.gatewaysAttempted, gateway.String())
 		opContent := downloadDStorageResourceFromSingleGateway(gateway, resourceID, requestID)
 		if opContent != nil {
 			return opContent, nil

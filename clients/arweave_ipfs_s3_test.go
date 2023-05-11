@@ -172,7 +172,7 @@ func TestDownloadDStorageFromGatewayListRetries(t *testing.T) {
 	require.Equal(t, 0, gatewayCallCount)
 
 	gatewayCallCount = 0
-	dStorage.gatewaysAttempted = config.ImportIPFSGatewayURLs[:2]
+	dStorage.gatewaysAttempted = []string{config.ImportIPFSGatewayURLs[0].String(), config.ImportIPFSGatewayURLs[2].String()}
 	_, err = dStorage.DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID")
 	require.Error(t, err)
 	require.Equal(t, 2, gatewayCallCount)
