@@ -145,6 +145,38 @@ func TestItTriesWithMultipleGateways(t *testing.T) {
 	}
 }
 
+func TestDownloadDStorageFromGatewayListRetries(t *testing.T) {
+	gatewayCallCount := 0
+	var ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gatewayCallCount++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+	u, err := url.Parse(ts.URL)
+	require.NoError(t, err)
+	gatewayCount := 4
+	for i := 0; i < gatewayCount; i++ {
+		config.ImportIPFSGatewayURLs = append(config.ImportIPFSGatewayURLs, u)
+	}
+
+	_, err = DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID", 4)
+	require.Error(t, err)
+	require.Equal(t, 0, gatewayCallCount)
+
+	_, err = DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID", 0)
+	require.Error(t, err)
+	require.Equal(t, 4, gatewayCallCount)
+
+	_, err = DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID", 2)
+	require.Error(t, err)
+	require.Equal(t, 6, gatewayCallCount)
+
+	config.ImportIPFSGatewayURLs = []*url.URL{u}
+	_, err = DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID", 0)
+	require.Error(t, err)
+	require.Equal(t, 7, gatewayCallCount)
+}
+
 func TestItExtractsGatewayDStorageType(t *testing.T) {
 	u, err := url.Parse("https://cloudflare-ipfs.com/ipfs/12345/file.json?queryString=value")
 	require.NoError(t, err)

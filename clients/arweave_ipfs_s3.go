@@ -19,7 +19,7 @@ const SCHEME_ARWEAVE = "ar"
 
 func CopyDStorageToS3(url, s3URL string, requestID string) error {
 	return backoff.Retry(func() error {
-		content, err := DownloadDStorageFromGatewayList(url, requestID)
+		content, err := DownloadDStorageFromGatewayList(url, requestID, 0)
 		if err != nil {
 			return err
 		}
@@ -33,7 +33,7 @@ func CopyDStorageToS3(url, s3URL string, requestID string) error {
 	}, DStorageRetryBackoff())
 }
 
-func DownloadDStorageFromGatewayList(u string, requestID string) (io.ReadCloser, error) {
+func DownloadDStorageFromGatewayList(u, requestID string, retry int) (io.ReadCloser, error) {
 	var err error
 	var gateways []*url.URL
 	dStorageURL, err := url.Parse(u)
@@ -69,7 +69,8 @@ func DownloadDStorageFromGatewayList(u string, requestID string) (io.ReadCloser,
 		}
 	}
 
-	for _, gateway := range gateways {
+	for i := retry; i < len(gateways); i++ {
+		gateway := gateways[i]
 		opContent := downloadDStorageResourceFromSingleGateway(gateway, resourceID, requestID)
 		if opContent != nil {
 			return opContent, nil

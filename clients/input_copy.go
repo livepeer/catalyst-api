@@ -188,7 +188,9 @@ func isDirectUpload(inputFile *url.URL) bool {
 }
 
 func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
+	retry := 0
 	err = backoff.Retry(func() error {
+		defer func() { retry++ }()
 		// currently this timeout is only used for http downloads in the getFileHTTP function when it calls http.NewRequestWithContext
 		ctx, cancel := context.WithTimeout(ctx, MaxCopyFileDuration)
 		defer cancel()
@@ -196,7 +198,7 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 		byteAccWriter := ByteAccumulatorWriter{count: 0}
 		defer func() { writtenBytes = byteAccWriter.count }()
 
-		c, err := getFile(ctx, requestID, sourceURL)
+		c, err := getFile(ctx, requestID, sourceURL, retry)
 		if err != nil {
 			return fmt.Errorf("download error: %w", err)
 		}
@@ -213,12 +215,12 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 	return
 }
 
-func getFile(ctx context.Context, requestID, url string) (io.ReadCloser, error) {
+func getFile(ctx context.Context, requestID, url string, retry int) (io.ReadCloser, error) {
 	_, err := drivers.ParseOSURL(url, true)
 	if err == nil {
 		return DownloadOSURL(url)
 	} else if IsDStorageResource(url) {
-		return DownloadDStorageFromGatewayList(url, requestID)
+		return DownloadDStorageFromGatewayList(url, requestID, retry)
 	} else {
 		return getFileHTTP(ctx, url)
 	}
