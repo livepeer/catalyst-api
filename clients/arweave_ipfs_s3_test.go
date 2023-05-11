@@ -148,34 +148,34 @@ func TestItTriesWithMultipleGateways(t *testing.T) {
 
 func TestDownloadDStorageFromGatewayListRetries(t *testing.T) {
 	gatewayCallCount := 0
-	var ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gatewayCallCount++
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer ts.Close()
-	u, err := url.Parse(ts.URL)
-	require.NoError(t, err)
 	gatewayCount := 4
 	for i := 0; i < gatewayCount; i++ {
+		var ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gatewayCallCount++
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer ts.Close()
+		u, err := url.Parse(ts.URL)
+		require.NoError(t, err)
 		config.ImportIPFSGatewayURLs = append(config.ImportIPFSGatewayURLs, u)
 	}
+	dStorage := NewDStorageDownload()
 
-	_, err = DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID", 6)
-	require.Error(t, err)
-	require.Equal(t, 0, gatewayCallCount)
-
-	_, err = DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID", 0)
+	gatewayCallCount = 0
+	_, err := dStorage.DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID")
 	require.Error(t, err)
 	require.Equal(t, 4, gatewayCallCount)
 
-	_, err = DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID", 2)
+	gatewayCallCount = 0
+	_, err = dStorage.DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID")
 	require.Error(t, err)
-	require.Equal(t, 6, gatewayCallCount)
+	require.Equal(t, 0, gatewayCallCount)
 
-	config.ImportIPFSGatewayURLs = []*url.URL{u}
-	_, err = DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID", 0)
+	gatewayCallCount = 0
+	dStorage.gatewaysAttempted = config.ImportIPFSGatewayURLs[:2]
+	_, err = dStorage.DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID")
 	require.Error(t, err)
-	require.Equal(t, 7, gatewayCallCount)
+	require.Equal(t, 2, gatewayCallCount)
 }
 
 func TestItExtractsGatewayDStorageType(t *testing.T) {
@@ -282,7 +282,7 @@ func Test_IPFSResourceIDParsing(t *testing.T) {
 
 func copyDStorageToS3(url, s3URL string, requestID string) error {
 	return backoff.Retry(func() error {
-		content, err := DownloadDStorageFromGatewayList(url, requestID, 0)
+		content, err := NewDStorageDownload().DownloadDStorageFromGatewayList(url, requestID)
 		if err != nil {
 			return err
 		}

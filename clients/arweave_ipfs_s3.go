@@ -17,7 +17,15 @@ import (
 const SCHEME_IPFS = "ipfs"
 const SCHEME_ARWEAVE = "ar"
 
-func DownloadDStorageFromGatewayList(u, requestID string, retry int) (io.ReadCloser, error) {
+type DStorageDownload struct {
+	gatewaysAttempted []*url.URL
+}
+
+func NewDStorageDownload() *DStorageDownload {
+	return &DStorageDownload{}
+}
+
+func (d *DStorageDownload) DownloadDStorageFromGatewayList(u, requestID string) (io.ReadCloser, error) {
 	var err error
 	var gateways []*url.URL
 	dStorageURL, err := url.Parse(u)
@@ -53,8 +61,11 @@ func DownloadDStorageFromGatewayList(u, requestID string, retry int) (io.ReadClo
 		}
 	}
 
-	for i := retry; i < len(gateways); i++ {
-		gateway := gateways[i]
+	for _, gateway := range gateways {
+		if contains(gateway, d.gatewaysAttempted) {
+			continue
+		}
+		d.gatewaysAttempted = append(d.gatewaysAttempted, gateway)
 		opContent := downloadDStorageResourceFromSingleGateway(gateway, resourceID, requestID)
 		if opContent != nil {
 			return opContent, nil
