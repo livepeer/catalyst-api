@@ -15,7 +15,7 @@ type EncryptionHandlersCollection struct {
 
 func NewEncryptionHandlersCollection(cli config.Cli) *EncryptionHandlersCollection {
 	return &EncryptionHandlersCollection{
-		publicKey: cli.VodEncryptPublicKey,
+		publicKey: cli.VodDecryptPublicKey,
 		nodeName:  cli.NodeName,
 	}
 }

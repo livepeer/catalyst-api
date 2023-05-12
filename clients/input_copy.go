@@ -27,7 +27,7 @@ const PresignDuration = 24 * time.Hour
 const LocalSourceFilePattern = "sourcevideo*"
 
 type InputCopier interface {
-	CopyInputToS3(requestID string, inputFile *url.URL, encryptedKey string, vodEncryptPrivateKey string) (video.InputVideo, string, *url.URL, error)
+	CopyInputToS3(requestID string, inputFile *url.URL, encryptedKey string, VodDecryptPrivateKey string) (video.InputVideo, string, *url.URL, error)
 }
 
 type InputCopy struct {
@@ -37,7 +37,7 @@ type InputCopy struct {
 }
 
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
-func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encryptedKey string, vodEncryptPrivateKey string) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
+func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encryptedKey string, VodDecryptPrivateKey string) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
 	var sourceOutputURL *url.URL
 	var decryptedFile io.Reader
 
@@ -79,7 +79,7 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encrypte
 		}
 
 		var decryptionKey *rsa.PrivateKey
-		if decryptionKey, err = crypto.LoadPrivateKey(vodEncryptPrivateKey); err != nil {
+		if decryptionKey, err = crypto.LoadPrivateKey(VodDecryptPrivateKey); err != nil {
 			glog.Errorf("error loading private key: %w", err)
 			return
 		}
@@ -324,6 +324,6 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 
 type StubInputCopy struct{}
 
-func (s *StubInputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encryptedKey string, vodEncryptPrivateKey string) (video.InputVideo, string, *url.URL, error) {
+func (s *StubInputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encryptedKey string, VodDecryptPrivateKey string) (video.InputVideo, string, *url.URL, error) {
 	return video.InputVideo{}, "", &url.URL{}, nil
 }

@@ -156,10 +156,10 @@ type Coordinator struct {
 	Jobs                 *cache.Cache[*JobInfo]
 	MetricsDB            *sql.DB
 	InputCopy            clients.InputCopier
-	VodEncryptPrivateKey string
+	VodDecryptPrivateKey string
 }
 
-func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB, vodEncryptPrivateKey string) (*Coordinator, error) {
+func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB, VodDecryptPrivateKey string) (*Coordinator, error) {
 
 	if !strategy.IsValid() {
 		return nil, fmt.Errorf("invalid strategy: %s", strategy)
@@ -188,7 +188,7 @@ func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string,
 			Probe:           video.Probe{},
 			SourceOutputUrl: sourceOutputURL,
 		},
-		VodEncryptPrivateKey: vodEncryptPrivateKey,
+		VodDecryptPrivateKey: VodDecryptPrivateKey,
 	}, nil
 }
 
@@ -251,7 +251,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 			encryptedKey = p.Encryption.EncryptedKey
 		}
 
-		inputVideoProbe, signedNewSourceURL, newSourceURL, err := c.InputCopy.CopyInputToS3(si.RequestID, sourceURL, encryptedKey, c.VodEncryptPrivateKey)
+		inputVideoProbe, signedNewSourceURL, newSourceURL, err := c.InputCopy.CopyInputToS3(si.RequestID, sourceURL, encryptedKey, c.VodDecryptPrivateKey)
 		if err != nil {
 			return nil, fmt.Errorf("error copying input to storage: %w", err)
 		}
