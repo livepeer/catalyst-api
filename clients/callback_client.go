@@ -171,7 +171,10 @@ func (pcc *PeriodicCallbackClient) SendCallbacks() {
 		// Send non-terminal callbacks here in an async manner
 		// Terminal callbacks are sent when the job is finished in the sync manner
 		if !tsm.IsTerminal() {
-			go pcc.sendCallback(tsm)
+			go func(tsm TranscodeStatusMessage) {
+				// Ignore errors during async callback sending
+				_ = pcc.sendCallback(tsm)
+			}(tsm)
 		}
 	}
 }

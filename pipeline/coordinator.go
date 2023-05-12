@@ -135,7 +135,8 @@ type JobInfo struct {
 
 func (j *JobInfo) ReportProgress(stage clients.TranscodeStatus, completionRatio float64) {
 	tsm := clients.NewTranscodeStatusProgress(j.CallbackURL, j.RequestID, stage, completionRatio)
-	j.statusClient.SendTranscodeStatus(tsm)
+	// Ignore errors, send the progress next time
+	_ = j.statusClient.SendTranscodeStatus(tsm)
 }
 
 // Coordinator provides the main interface to handle the pipelines. It should be
