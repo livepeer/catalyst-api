@@ -146,13 +146,19 @@ func TestItTriesWithMultipleGateways(t *testing.T) {
 	}
 }
 
-func TestDownloadDStorageFromGatewayListRetries(t *testing.T) {
-	gatewayCallCount := 0
+func TestDownloadDStorageFromGatewayListLooping(t *testing.T) {
+	var gatewayCalls []int
+	var successfulGateway int
 	gatewayCount := 4
 	for i := 0; i < gatewayCount; i++ {
+		gateway := i
 		var ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			gatewayCallCount++
-			w.WriteHeader(http.StatusInternalServerError)
+			gatewayCalls = append(gatewayCalls, gateway)
+			if gateway == successfulGateway {
+				w.WriteHeader(http.StatusOK)
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+			}
 		}))
 		defer ts.Close()
 		u, err := url.Parse(ts.URL)
@@ -161,21 +167,24 @@ func TestDownloadDStorageFromGatewayListRetries(t *testing.T) {
 	}
 	dStorage := NewDStorageDownload()
 
-	gatewayCallCount = 0
-	_, err := dStorage.DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID")
-	require.Error(t, err)
-	require.Equal(t, 4, gatewayCallCount)
+	var runTest = func(s int, errExpected bool, expectedCalls []int) {
+		successfulGateway = s
+		gatewayCalls = []int{}
+		_, err := dStorage.DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID")
+		if errExpected {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+		}
+		require.Equal(t, expectedCalls, gatewayCalls)
+	}
 
-	gatewayCallCount = 0
-	_, err = dStorage.DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID")
-	require.Error(t, err)
-	require.Equal(t, 0, gatewayCallCount)
-
-	gatewayCallCount = 0
-	dStorage.gatewaysAttempted = []string{config.ImportIPFSGatewayURLs[0].String(), config.ImportIPFSGatewayURLs[2].String()}
-	_, err = dStorage.DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID")
-	require.Error(t, err)
-	require.Equal(t, 2, gatewayCallCount)
+	runTest(1, false, []int{0, 1})
+	runTest(1, false, []int{2, 3, 0, 1})
+	runTest(2, false, []int{2})
+	runTest(0, false, []int{3, 0})
+	// no successes, set successful index out of bounds
+	runTest(gatewayCount, true, []int{1, 2, 3, 0})
 }
 
 func TestItExtractsGatewayDStorageType(t *testing.T) {
