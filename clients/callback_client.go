@@ -27,13 +27,13 @@ func SendRecordingEventCallback(event *RecordingEvent) {
 }
 
 type TranscodeStatusClient interface {
-	SendTranscodeStatus(tsm TranscodeStatusMessage)
+	SendTranscodeStatus(tsm TranscodeStatusMessage) error
 }
 
-type TranscodeStatusFunc func(tsm TranscodeStatusMessage)
+type TranscodeStatusFunc func(tsm TranscodeStatusMessage) error
 
-func (f TranscodeStatusFunc) SendTranscodeStatus(tsm TranscodeStatusMessage) {
-	f(tsm)
+func (f TranscodeStatusFunc) SendTranscodeStatus(tsm TranscodeStatusMessage) error {
+	return f(tsm)
 }
 
 type PeriodicCallbackClient struct {
@@ -89,24 +89,42 @@ func recoverer(f func()) {
 // Sends a Transcode Status message to the Client (initially just Studio)
 // The status strings will be useful for debugging where in the workflow we got to, but everything
 // in Studio will be driven off the overall "Completion Ratio".
-func (pcc *PeriodicCallbackClient) SendTranscodeStatus(tsm TranscodeStatusMessage) {
-	if tsm.URL != "" {
-		pcc.mapLock.Lock()
-		defer pcc.mapLock.Unlock()
+func (pcc *PeriodicCallbackClient) SendTranscodeStatus(tsm TranscodeStatusMessage) error {
+	if tsm.URL == "" {
+		return nil
+	}
+	pcc.updateTranscodeStatus(tsm)
 
-		previousMessage, ok := pcc.requestIDToLatestMessage[tsm.RequestID]
-		previousCompletion := OverallCompletionRatio(previousMessage.Status, previousMessage.CompletionRatio)
-		newCompletion := OverallCompletionRatio(tsm.Status, tsm.CompletionRatio)
+	// Terminal callbacks are sent here in a sync manner
+	// Non-terminal callbacks are sent periodically, in an async manner
+	if tsm.IsTerminal() {
+		return pcc.sendCallback(tsm)
+	}
+	return nil
+}
 
-		// Don't update the current message with one that represents an earlier stage
-		if !ok || tsm.IsTerminal() || newCompletion >= previousCompletion {
-			pcc.requestIDToLatestMessage[tsm.RequestID] = tsm
-		}
+func (pcc *PeriodicCallbackClient) updateTranscodeStatus(tsm TranscodeStatusMessage) {
+	pcc.mapLock.Lock()
+	defer pcc.mapLock.Unlock()
+
+	previousMessage, ok := pcc.requestIDToLatestMessage[tsm.RequestID]
+	previousCompletion := OverallCompletionRatio(previousMessage.Status, previousMessage.CompletionRatio)
+	newCompletion := OverallCompletionRatio(tsm.Status, tsm.CompletionRatio)
+
+	// Don't update the current message with one that represents an earlier stage
+	if !ok || tsm.IsTerminal() || newCompletion >= previousCompletion {
+		pcc.requestIDToLatestMessage[tsm.RequestID] = tsm
 	}
 
 	log.Log(tsm.RequestID, "Updated transcode status",
 		"timestamp", tsm.Timestamp, "status", tsm.Status, "completion_ratio", tsm.CompletionRatio,
 		"error", tsm.Error)
+
+	// Error is a terminal state so remove the job from the list after sending the callback
+	if tsm.IsTerminal() {
+		log.Log(tsm.RequestID, "Removing job from active list")
+		delete(pcc.requestIDToLatestMessage, tsm.RequestID)
+	}
 }
 
 func (pcc *PeriodicCallbackClient) SendRecordingEvent(event *RecordingEvent) {
@@ -150,33 +168,33 @@ func (pcc *PeriodicCallbackClient) SendCallbacks() {
 			continue
 		}
 
-		// Do the JSON marshalling and HTTP call in a goroutine to avoid blocking the loop
-		go func(tsm TranscodeStatusMessage) {
-			j, err := json.Marshal(tsm)
-			if err != nil {
-				log.LogError(tsm.RequestID, "failed to marshal callback JSON", err)
-				return
-			}
-
-			r, err := http.NewRequest(http.MethodPost, tsm.URL, bytes.NewReader(j))
-			if err != nil {
-				log.LogError(tsm.RequestID, "failed to create callback HTTP request", err)
-				return
-			}
-
-			err = pcc.doWithRetries(r)
-			if err != nil {
-				log.LogError(tsm.RequestID, "failed to send callback", err)
-				return
-			}
-		}(tsm)
-
-		// Error is a terminal state so remove the job from the list after sending the callback
-		if tsm.IsTerminal() {
-			log.Log(tsm.RequestID, "Removing job from active list")
-			delete(pcc.requestIDToLatestMessage, tsm.RequestID)
+		// Send non-terminal callbacks here in an async manner
+		// Terminal callbacks are sent when the job is finished in the sync manner
+		if !tsm.IsTerminal() {
+			go pcc.sendCallback(tsm)
 		}
 	}
+}
+
+func (pcc *PeriodicCallbackClient) sendCallback(tsm TranscodeStatusMessage) error {
+	j, err := json.Marshal(tsm)
+	if err != nil {
+		log.LogError(tsm.RequestID, "failed to marshal callback JSON", err)
+		return err
+	}
+
+	r, err := http.NewRequest(http.MethodPost, tsm.URL, bytes.NewReader(j))
+	if err != nil {
+		log.LogError(tsm.RequestID, "failed to create callback HTTP request", err)
+		return err
+	}
+
+	err = pcc.doWithRetries(r)
+	if err != nil {
+		log.LogError(tsm.RequestID, "failed to send callback", err)
+		return err
+	}
+	return nil
 }
 
 func (pcc *PeriodicCallbackClient) doWithRetries(r *http.Request) error {

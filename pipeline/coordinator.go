@@ -193,7 +193,7 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 		strategy = StrategyCatalystFfmpegDominance
 	}
 	if statusClient == nil {
-		statusClient = clients.TranscodeStatusFunc(func(tsm clients.TranscodeStatusMessage) {})
+		statusClient = clients.TranscodeStatusFunc(func(tsm clients.TranscodeStatusMessage) error { return nil })
 	}
 	if pipeFfmpeg == nil {
 		pipeFfmpeg = &ffmpeg{SourceOutputUrl: sourceOutputUrl}
@@ -428,10 +428,14 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 		tsm = clients.NewTranscodeStatusCompleted(job.CallbackURL, job.RequestID, out.Result.InputVideo, out.Result.Outputs)
 		job.state = "completed"
 	}
-	job.statusClient.SendTranscodeStatus(tsm)
+	err2 := job.statusClient.SendTranscodeStatus(tsm)
+	if err2 != nil {
+		log.LogError(tsm.RequestID, "failed sending finalize callback, job state set to 'failed'", err2)
+		job.state = "failed"
+	}
 
 	// Automatically delete jobs after an error or result
-	success := err == nil
+	success := err == nil && err2 == nil
 	c.Jobs.Remove(job.StreamName)
 
 	log.Log(job.RequestID, "Finished job and deleted from job cache", "success", success)
