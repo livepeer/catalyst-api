@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"crypto/rsa"
 	"database/sql"
 	"fmt"
 	"net/url"
@@ -156,10 +157,10 @@ type Coordinator struct {
 	Jobs                 *cache.Cache[*JobInfo]
 	MetricsDB            *sql.DB
 	InputCopy            clients.InputCopier
-	VodDecryptPrivateKey string
+	VodDecryptPrivateKey *rsa.PrivateKey
 }
 
-func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB, VodDecryptPrivateKey string) (*Coordinator, error) {
+func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB, VodDecryptPrivateKey *rsa.PrivateKey) (*Coordinator, error) {
 
 	if !strategy.IsValid() {
 		return nil, fmt.Errorf("invalid strategy: %s", strategy)

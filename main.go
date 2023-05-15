@@ -18,6 +18,7 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/crypto"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 
 	//"github.com/livepeer/catalyst-api/middleware"
@@ -144,9 +145,15 @@ func main() {
 		glog.Info("Postgres metrics connection string was not set, postgres metrics are disabled.")
 	}
 
+	vodDecryptPrivateKey, err := crypto.LoadPrivateKey(cli.VodDecryptPrivateKey)
+
+	if err != nil {
+		glog.Fatalf("Error loading vod decrypt private key: %v", err)
+	}
+
 	// Start the "co-ordinator" that determines whether to send jobs to the Catalyst transcoding pipeline
 	// or an external one
-	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB, cli.VodDecryptPrivateKey)
+	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB, vodDecryptPrivateKey)
 	if err != nil {
 		glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 	}

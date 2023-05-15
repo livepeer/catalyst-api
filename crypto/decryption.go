@@ -65,10 +65,6 @@ func DecryptAESCBCWithIV(reader io.ReadCloser, privateKey *rsa.PrivateKey, encry
 		glog.Errorf("Error decrypting key: %v", err)
 	}
 
-	if err != nil {
-		return nil, fmt.Errorf("error decoding base16 key: %w", err)
-	}
-
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("error creating cipher: %w", err)
