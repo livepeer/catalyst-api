@@ -242,16 +242,12 @@ func isDirectUpload(inputFile *url.URL) bool {
 		(inputFile.Scheme == "https" || inputFile.Scheme == "http")
 }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
-	dStorage := NewDStorageDownload()
-=======
+	return CopyFileWithDecryption(ctx, sourceURL, destOSBaseURL, filename, requestID, nil)
+}
+
 func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string, decrypter func(io.ReadCloser) (io.ReadCloser, error)) (writtenBytes int64, err error) {
->>>>>>> f02e377 (if encrypted, already copied)
-=======
-func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
->>>>>>> f9c55d4 (copyfile)
+	dStorage := NewDStorageDownload()
 	err = backoff.Retry(func() error {
 		// currently this timeout is only used for http downloads in the getFileHTTP function when it calls http.NewRequestWithContext
 		ctx, cancel := context.WithTimeout(ctx, MaxCopyFileDuration)
@@ -265,6 +261,13 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 			return fmt.Errorf("download error: %w", err)
 		}
 		defer c.Close()
+
+		if decrypter != nil {
+			c, err = decrypter(c)
+			if err != nil {
+				return fmt.Errorf("decryption error: %w", err)
+			}
+		}
 
 		content := io.TeeReader(c, &byteAccWriter)
 
