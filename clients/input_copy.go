@@ -243,11 +243,15 @@ func isDirectUpload(inputFile *url.URL) bool {
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
 	dStorage := NewDStorageDownload()
 =======
 func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string, decrypter func(io.ReadCloser) (io.ReadCloser, error)) (writtenBytes int64, err error) {
 >>>>>>> f02e377 (if encrypted, already copied)
+=======
+func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
+>>>>>>> f9c55d4 (copyfile)
 	err = backoff.Retry(func() error {
 		// currently this timeout is only used for http downloads in the getFileHTTP function when it calls http.NewRequestWithContext
 		ctx, cancel := context.WithTimeout(ctx, MaxCopyFileDuration)
@@ -261,14 +265,6 @@ func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filen
 			return fmt.Errorf("download error: %w", err)
 		}
 		defer c.Close()
-
-		// If a decrypter function is provided, use it to decrypt the content
-		if decrypter != nil {
-			c, err = decrypter(c)
-			if err != nil {
-				return fmt.Errorf("decryption error: %w", err)
-			}
-		}
 
 		content := io.TeeReader(c, &byteAccWriter)
 
