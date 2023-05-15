@@ -27,8 +27,9 @@ func DownloadRenditionManifest(requestID, sourceManifestOSURL string) (m3u8.Medi
 	var playlist m3u8.Playlist
 	var playlistType m3u8.ListType
 
+	dStorage := NewDStorageDownload()
 	err := backoff.Retry(func() error {
-		rc, err := getFile(context.Background(), requestID, sourceManifestOSURL)
+		rc, err := getFile(context.Background(), requestID, sourceManifestOSURL, dStorage)
 		if err != nil {
 			return fmt.Errorf("error downloading manifest: %s", err)
 		}

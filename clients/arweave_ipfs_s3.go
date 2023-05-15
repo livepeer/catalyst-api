@@ -17,23 +17,15 @@ import (
 const SCHEME_IPFS = "ipfs"
 const SCHEME_ARWEAVE = "ar"
 
-func CopyDStorageToS3(url, s3URL string, requestID string) error {
-	return backoff.Retry(func() error {
-		content, err := DownloadDStorageFromGatewayList(url, requestID)
-		if err != nil {
-			return err
-		}
-
-		err = UploadToOSURL(s3URL, "", content, MaxCopyFileDuration)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}, DStorageRetryBackoff())
+type DStorageDownload struct {
+	gatewaysListPosition int
 }
 
-func DownloadDStorageFromGatewayList(u string, requestID string) (io.ReadCloser, error) {
+func NewDStorageDownload() *DStorageDownload {
+	return &DStorageDownload{}
+}
+
+func (d *DStorageDownload) DownloadDStorageFromGatewayList(u, requestID string) (io.ReadCloser, error) {
 	var err error
 	var gateways []*url.URL
 	dStorageURL, err := url.Parse(u)
@@ -69,7 +61,12 @@ func DownloadDStorageFromGatewayList(u string, requestID string) (io.ReadCloser,
 		}
 	}
 
-	for _, gateway := range gateways {
+	defer func() { d.gatewaysListPosition++ }()
+	length := len(gateways)
+	until := d.gatewaysListPosition + length
+	for i := d.gatewaysListPosition; i < until; i++ {
+		d.gatewaysListPosition = i % length
+		gateway := gateways[d.gatewaysListPosition]
 		opContent := downloadDStorageResourceFromSingleGateway(gateway, resourceID, requestID)
 		if opContent != nil {
 			return opContent, nil

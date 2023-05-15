@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/go-tools/drivers"
 	"github.com/stretchr/testify/require"
@@ -47,7 +48,7 @@ func TestItCanCopyAnArweaveOrIPFSHTTPFileToS3(t *testing.T) {
 	outputFile := filepath.Join(outputDir, "filename.txt")
 
 	// Do the copy
-	err = CopyDStorageToS3("ar://jL-YU1yUcZ5aWPku6dcjwLnoS-E0qs2QPzVXIA7Hfz0", outputFile, "reqID")
+	err = copyDStorageToS3("ar://jL-YU1yUcZ5aWPku6dcjwLnoS-E0qs2QPzVXIA7Hfz0", outputFile, "reqID")
 	require.NoError(t, err)
 
 	// Check that the file has the contents we'd expect
@@ -75,7 +76,7 @@ func TestItHandlesPinataGatewayTokenAsQueryString(t *testing.T) {
 
 	outputFile := filepath.Join(outputDir, "filename.txt")
 
-	err = CopyDStorageToS3("ipfs://"+cid, outputFile, "reqID")
+	err = copyDStorageToS3("ipfs://"+cid, outputFile, "reqID")
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(outputFile)
@@ -122,7 +123,7 @@ func TestItTriesWithMultipleGateways(t *testing.T) {
 
 	outputFile := filepath.Join(outputDir, "filename.txt")
 
-	err = CopyDStorageToS3("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", outputFile, "reqID")
+	err = copyDStorageToS3("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", outputFile, "reqID")
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(outputFile)
@@ -143,6 +144,47 @@ func TestItTriesWithMultipleGateways(t *testing.T) {
 	for i, log := range expectedSequence {
 		require.Equal(t, log, testResult.gatewayCallLog[i])
 	}
+}
+
+func TestDownloadDStorageFromGatewayListLooping(t *testing.T) {
+	var gatewayCalls []int
+	var successfulGateway int
+	gatewayCount := 4
+	for i := 0; i < gatewayCount; i++ {
+		gateway := i
+		var ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gatewayCalls = append(gatewayCalls, gateway)
+			if gateway == successfulGateway {
+				w.WriteHeader(http.StatusOK)
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+		}))
+		defer ts.Close()
+		u, err := url.Parse(ts.URL)
+		require.NoError(t, err)
+		config.ImportIPFSGatewayURLs = append(config.ImportIPFSGatewayURLs, u)
+	}
+	dStorage := NewDStorageDownload()
+
+	var runTest = func(s int, errExpected bool, expectedCalls []int) {
+		successfulGateway = s
+		gatewayCalls = []int{}
+		_, err := dStorage.DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID")
+		if errExpected {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+		}
+		require.Equal(t, expectedCalls, gatewayCalls)
+	}
+
+	runTest(1, false, []int{0, 1})
+	runTest(1, false, []int{2, 3, 0, 1})
+	runTest(2, false, []int{2})
+	runTest(0, false, []int{3, 0})
+	// no successes, set successful index out of bounds
+	runTest(gatewayCount, true, []int{1, 2, 3, 0})
 }
 
 func TestItExtractsGatewayDStorageType(t *testing.T) {
@@ -193,7 +235,7 @@ func TestItHandlesGatewayURLsAsSource(t *testing.T) {
 
 	outputFile := filepath.Join(outputDir, "filename.txt")
 
-	err = CopyDStorageToS3(ts.URL+"/ipfs/"+resourceId+"?queryString=value", outputFile, "reqID")
+	err = copyDStorageToS3(ts.URL+"/ipfs/"+resourceId+"?queryString=value", outputFile, "reqID")
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(outputFile)
@@ -241,8 +283,24 @@ func Test_IPFSResourceIDParsing(t *testing.T) {
 			require.NoError(t, err)
 			config.ImportIPFSGatewayURLs = []*url.URL{gateway}
 
-			err = CopyDStorageToS3(tt.url, "memory://foo", "reqID")
+			err = copyDStorageToS3(tt.url, "memory://foo", "reqID")
 			require.NoError(t, err)
 		})
 	}
+}
+
+func copyDStorageToS3(url, s3URL string, requestID string) error {
+	return backoff.Retry(func() error {
+		content, err := NewDStorageDownload().DownloadDStorageFromGatewayList(url, requestID)
+		if err != nil {
+			return err
+		}
+
+		err = UploadToOSURL(s3URL, "", content, MaxCopyFileDuration)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}, DStorageRetryBackoff())
 }
