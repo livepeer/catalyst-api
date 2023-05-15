@@ -102,7 +102,7 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encrypte
 		}
 	}
 
-	if !isDirectUpload(inputFile) {
+	if !isDirectUpload(inputFile) || decryptedFile == nil {
 		var size int64
 		log.Log(requestID, "Copying input file to S3", "source", inputFile.String(), "dest", osTransferURL.String())
 		size, err = CopyFile(context.Background(), sourceOutputURL.String(), osTransferURL.String(), "", requestID)
@@ -242,8 +242,12 @@ func isDirectUpload(inputFile *url.URL) bool {
 		(inputFile.Scheme == "https" || inputFile.Scheme == "http")
 }
 
+<<<<<<< HEAD
 func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
 	dStorage := NewDStorageDownload()
+=======
+func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string, decrypter func(io.ReadCloser) (io.ReadCloser, error)) (writtenBytes int64, err error) {
+>>>>>>> f02e377 (if encrypted, already copied)
 	err = backoff.Retry(func() error {
 		// currently this timeout is only used for http downloads in the getFileHTTP function when it calls http.NewRequestWithContext
 		ctx, cancel := context.WithTimeout(ctx, MaxCopyFileDuration)
@@ -257,6 +261,14 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 			return fmt.Errorf("download error: %w", err)
 		}
 		defer c.Close()
+
+		// If a decrypter function is provided, use it to decrypt the content
+		if decrypter != nil {
+			c, err = decrypter(c)
+			if err != nil {
+				return fmt.Errorf("decryption error: %w", err)
+			}
+		}
 
 		content := io.TeeReader(c, &byteAccWriter)
 
