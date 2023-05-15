@@ -45,7 +45,6 @@ type Decryptor struct {
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
 func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encryptedKey string, VodDecryptPrivateKey *rsa.PrivateKey) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
 	var sourceOutputURL *url.URL
-	var decryptedFile io.Reader
 
 	if isDirectUpload(inputFile) {
 		log.Log(requestID, "Direct upload detected", "source", inputFile.String())
