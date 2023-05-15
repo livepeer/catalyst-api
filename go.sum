@@ -490,8 +490,8 @@ github.com/libp2p/go-msgio v0.2.0 h1:W6shmB+FeynDrUVl2dgFQvzfBZcXiyqY4VmpQLu9FqU
 github.com/libp2p/go-nat v0.1.0 h1:MfVsH6DLcpa04Xr+p8hmVRG4juse0s3J8HyNWYHffXg=
 github.com/libp2p/go-netroute v0.2.0 h1:0FpsbsvuSnAhXFnCY0VLFbJOzaK0VnP0r1QT/o4nWRE=
 github.com/libp2p/go-openssl v0.1.0 h1:LBkKEcUv6vtZIQLVTegAil8jbNpJErQ9AnT+bWV+Ooo=
-github.com/livepeer/go-api-client v0.4.6 h1:Eo9mq5k9gnu8fgclbT7ibQdTgBV7a/NDIBIuYXHMzV0=
-github.com/livepeer/go-api-client v0.4.6/go.mod h1:Jdb+RI7JyzEZOHd1GUuKofwFDKMO/btTa80SdpUpYQw=
+github.com/livepeer/go-api-client v0.4.7 h1:pJd0Ba7TtDJDUEOiPBx9KmLm+fIB8GRbAurd3lsZUVY=
+github.com/livepeer/go-api-client v0.4.7/go.mod h1:Jdb+RI7JyzEZOHd1GUuKofwFDKMO/btTa80SdpUpYQw=
 github.com/livepeer/go-tools v0.2.12 h1:JsonAT9UXGLnwlBG97Nfd+/SC0E/FOfKFs++ud+eCrc=
 github.com/livepeer/go-tools v0.2.12/go.mod h1:/aZ+20XYLdeebFA3CrQTkHUf7DmiGBzh6Bs8JkbelUA=
 github.com/livepeer/joy4 v0.1.1 h1:Tz7gVcmvpG/nfUKHU+XJn6Qke/k32mTWMiH9qB0bhnM=
@@ -606,8 +606,8 @@ github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FI
 github.com/patrickmn/go-cache v2.1.0+incompatible h1:HRMgzkcYKYpi3C8ajMPV8OFXaaRUnok+kx1WdO15EQc=
 github.com/patrickmn/go-cache v2.1.0+incompatible/go.mod h1:3Qf8kWWT7OJRJbdiICTKqZju1ZixQ/KpMGzzAfe6+WQ=
 github.com/pelletier/go-toml v1.2.0/go.mod h1:5z9KED0ma1S8pY6P1sdut58dfprrGBbd/94hg7ilaic=
-github.com/peterbourgon/ff/v3 v3.3.0 h1:PaKe7GW8orVFh8Unb5jNHS+JZBwWUMa2se0HM6/BI24=
-github.com/peterbourgon/ff/v3 v3.3.0/go.mod h1:zjJVUhx+twciwfDl0zBcFzl4dW8axCRyXE/eKY9RztQ=
+github.com/peterbourgon/ff/v3 v3.3.1 h1:XSWvXxeNdgeppLNGGJEAOiXRdX2YMF/LuZfdnqQ1SNc=
+github.com/peterbourgon/ff/v3 v3.3.1/go.mod h1:zjJVUhx+twciwfDl0zBcFzl4dW8axCRyXE/eKY9RztQ=
 github.com/philhofer/fwd v1.1.2-0.20210722190033-5c56ac6d0bb9 h1:6ob53CVz+ja2i7easAStApZJlh7sxyq3Cm7g1Di6iqA=
 github.com/philhofer/fwd v1.1.2-0.20210722190033-5c56ac6d0bb9/go.mod h1:gk3iGcWd9+svBvR0sR+KPcfE+RNWozjowpeBVG3ZVNU=
 github.com/pierrec/lz4 v2.6.1+incompatible h1:9UY3+iC23yxF0UfGaYrGplQ+79Rg+h/q9FV9ix19jjM=

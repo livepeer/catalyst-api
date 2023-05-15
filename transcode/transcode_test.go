@@ -116,7 +116,8 @@ func TestItCanTranscode(t *testing.T) {
 			CallbackURL:       callbackServer.URL,
 			SourceManifestURL: manifestFile.Name(),
 			ReportProgress: func(stage clients.TranscodeStatus, completionRatio float64) {
-				statusClient.SendTranscodeStatus(clients.NewTranscodeStatusProgress(callbackServer.URL, "", stage, completionRatio))
+				err := statusClient.SendTranscodeStatus(clients.NewTranscodeStatusProgress(callbackServer.URL, "", stage, completionRatio))
+				require.NoError(t, err)
 			},
 			HlsTargetURL: topLevelDir,
 		},

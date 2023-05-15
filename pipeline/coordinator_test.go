@@ -554,12 +554,13 @@ func allFailingHandler(t *testing.T) Handler {
 
 func callbacksRecorder() (clients.TranscodeStatusClient, <-chan clients.TranscodeStatusMessage) {
 	callbacks := make(chan clients.TranscodeStatusMessage, 10)
-	handler := func(msg clients.TranscodeStatusMessage) {
+	handler := func(msg clients.TranscodeStatusMessage) error {
 		// background jobs send updates without a callback URL, which are ignored by
 		// the callbacks client. Only record the real ones here.
 		if msg.URL != "" {
 			callbacks <- msg
 		}
+		return nil
 	}
 	return clients.TranscodeStatusFunc(handler), callbacks
 }

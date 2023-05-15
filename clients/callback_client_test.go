@@ -48,7 +48,8 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 	client := NewPeriodicCallbackClient(100*time.Hour, map[string]string{"Foo": "bar"})
 
 	// Send the status in, but it shouldn't get sent yet because we haven't started the client
-	client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusCompleted, 1))
+	err := client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusCompleted, 1))
+	require.NoError(t, err)
 
 	// Trigger the callback client to send any pending callbacks
 	client.SendCallbacks()
@@ -81,7 +82,8 @@ func TestItSendsPeriodicHeartbeats(t *testing.T) {
 
 	// Send the callback and confirm the number of times we retried
 	client := NewPeriodicCallbackClient(100*time.Millisecond, map[string]string{}).Start()
-	client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusCompleted, 1))
+	err := client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusCompleted, 1))
+	require.NoError(t, err)
 
 	time.Sleep(400 * time.Millisecond)
 
@@ -109,7 +111,8 @@ func TestTranscodeStatusErrorNotifcation(t *testing.T) {
 
 	// Send the callback and confirm the number of times we retried
 	client := NewPeriodicCallbackClient(100*time.Millisecond, map[string]string{}).Start()
-	client.SendTranscodeStatus(NewTranscodeStatusError(svr.URL, "example-request-id", "something went wrong", false))
+	err := client.SendTranscodeStatus(NewTranscodeStatusError(svr.URL, "example-request-id", "something went wrong", false))
+	require.NoError(t, err)
 
 	time.Sleep(200 * time.Millisecond)
 
@@ -148,8 +151,10 @@ func TestItDoesntSendOutOfOrderUpdates(t *testing.T) {
 
 	// Send the callback and confirm the number of times we retried
 	client := NewPeriodicCallbackClient(100*time.Millisecond, map[string]string{}).Start()
-	client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusTranscoding, 1))
-	client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusPreparing, 1))
+	err := client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusTranscoding, 1))
+	require.NoError(t, err)
+	err = client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusPreparing, 1))
+	require.NoError(t, err)
 	time.Sleep(400 * time.Millisecond)
 
 	// Sanity check that the client has sent multiple callbacks in this timeframe
