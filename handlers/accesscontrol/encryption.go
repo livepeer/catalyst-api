@@ -35,6 +35,10 @@ func (ec *EncryptionHandlersCollection) PublicKeyHandler() httprouter.Handle {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		w.Write(res)
+		_, err = w.Write(res)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	}
 }

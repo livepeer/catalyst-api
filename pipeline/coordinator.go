@@ -69,10 +69,15 @@ type UploadJobPayload struct {
 	PipelineStrategy      Strategy
 	TargetSegmentSizeSecs int64
 	GenerateMP4           bool
+	Encryption            *EncryptionPayload
 	InputFileInfo         video.InputVideo
 	SignedSourceURL       string
 	InFallbackMode        bool
 	LivepeerSupported     bool
+}
+
+type EncryptionPayload struct {
+	EncryptedKey string
 }
 
 // UploadJobResult is the object returned by the successful execution of an
