@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"path"
 	"strings"
 	"time"
@@ -39,72 +38,80 @@ type InputCopy struct {
 
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
 func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encryptedKey string, vodEncryptPrivateKey string) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
-	// Create a temporary local file to write to
-	localSourceFile, err := os.CreateTemp(os.TempDir(), LocalSourceFilePattern)
-	if err != nil {
-		glog.Errorf("failed to create local file on vod upload: %w", err)
-		return
-	}
-	defer func() {
-		localSourceFile.Close()
-		os.Remove(localSourceFile.Name()) // Clean up the file as soon as we're done
-	}()
-
-	timeout, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	defer cancel()
-	if _, err = CopyFile(timeout, inputFile.String(), localSourceFile.Name(), "", requestID); err != nil {
-		glog.Errorf("failed to copy file (%s) locally for segmenting: %w", inputFile, err)
-		return
-	}
-
 	var sourceOutputURL *url.URL
+	var decryptedFile io.Reader
+
 	if isDirectUpload(inputFile) {
 		log.Log(requestID, "Direct upload detected", "source", inputFile.String())
 		signedURL = inputFile.String()
 		osTransferURL = inputFile
 	} else {
-		if sourceOutputURL, err = url.Parse(s.SourceOutputUrl); err != nil {
+		var (
+			size            int64
+			sourceOutputUrl *url.URL
+		)
+		sourceOutputUrl, err = url.Parse(s.SourceOutputUrl)
+		if err != nil {
 			err = fmt.Errorf("cannot create sourceOutputUrl: %w", err)
 			return
 		}
-		osTransferURL = sourceOutputURL.ResolveReference(&url.URL{Path: path.Join(requestID, "transfer", path.Base(inputFile.Path))})
+		osTransferURL = sourceOutputUrl.JoinPath(requestID, "transfer", path.Base(inputFile.Path))
+
+		size, err = CopyAllInputFiles(requestID, inputFile, osTransferURL)
+		if err != nil {
+			err = fmt.Errorf("failed to copy file(s): %w", err)
+			return
+		}
+		log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", osTransferURL.String())
+
+		signedURL, err = SignURL(osTransferURL)
+		if err != nil {
+			return
+		}
 	}
 
 	if encryptedKey != "" {
+		c, e := getFile(context.Background(), requestID, inputFile.String())
+
+		if e != nil {
+			glog.Errorf("error getting file: %w", err)
+			return
+		}
+
 		var decryptionKey *rsa.PrivateKey
 		if decryptionKey, err = crypto.LoadPrivateKey(vodEncryptPrivateKey); err != nil {
 			glog.Errorf("error loading private key: %w", err)
 			return
 		}
 
-		var decryptedSourceFile *os.File
-		if decryptedSourceFile, err = os.CreateTemp(os.TempDir(), LocalSourceFilePattern); err != nil {
-			glog.Errorf("error creating temp file: %w", err)
-			return
-		}
-		defer func() {
-			decryptedSourceFile.Close()
-			os.Remove(decryptedSourceFile.Name())
-		}()
-
-		var reader io.Reader
-		if reader, err = crypto.DecryptAESCBC(localSourceFile.Name(), decryptionKey, encryptedKey); err != nil {
+		if decryptedFile, err = crypto.DecryptAESCBC(c, decryptionKey, encryptedKey); err != nil {
 			glog.Errorf("error decrypting file: %w", err)
 			return
 		}
+	}
 
-		if _, err = io.Copy(decryptedSourceFile, reader); err != nil {
-			glog.Errorf("error copying decrypted file: %w", err)
+	if decryptedFile != nil {
+		var size int64
+		decryptedFileUrl := osTransferURL.String()
+
+		log.Log(requestID, "Copying decrypted file to S3", "source", inputFile.String(), "dest", decryptedFileUrl)
+		size, err = CopyReaderFile(context.Background(), decryptedFile, decryptedFileUrl, "", requestID)
+		if err != nil {
+			err = fmt.Errorf("failed to copy file(s): %w", err)
 			return
 		}
+		log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", decryptedFileUrl)
 
-		localSourceFile = decryptedSourceFile
+		signedURL, err = SignURL(osTransferURL)
+		if err != nil {
+			return
+		}
 	}
 
 	if !isDirectUpload(inputFile) {
 		var size int64
 		log.Log(requestID, "Copying input file to S3", "source", inputFile.String(), "dest", osTransferURL.String())
-		size, err = CopyFile(context.Background(), localSourceFile.Name(), osTransferURL.String(), "", requestID)
+		size, err = CopyFile(context.Background(), sourceOutputURL.String(), osTransferURL.String(), "", requestID)
 		if err != nil {
 			err = fmt.Errorf("failed to copy file(s): %w", err)
 			return
@@ -118,7 +125,7 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encrypte
 	}
 
 	log.Log(requestID, "starting probe", "source", inputFile.String(), "dest", osTransferURL.String())
-	inputVideoProbe, err = s.Probe.ProbeFile(localSourceFile.Name())
+	inputVideoProbe, err = s.Probe.ProbeFile(sourceOutputURL.String())
 	if err != nil {
 		log.Log(requestID, "probe failed", "err", err, "source", inputFile.String(), "dest", osTransferURL.String())
 		err = fmt.Errorf("error probing MP4 input file from S3: %w", err)

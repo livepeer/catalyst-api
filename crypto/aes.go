@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"os"
 
 	"github.com/d1str0/pkcs7"
 	"github.com/golang/glog"
@@ -42,20 +41,14 @@ func LoadPrivateKey(privateKeyBase64 string) (*rsa.PrivateKey, error) {
 // chaining mode and PKCS#7 padding. The provided key must be encoded in base16,
 // and the first block of the input is the IV. The output is a pipe reader that
 // can be used to stream the decrypted file.
-func DecryptAESCBC(filePath string, privateKey *rsa.PrivateKey, encryptedKeyFile string) (io.ReadCloser, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("error opening file: %w", err)
-	}
-
-	reader := ioutil.NopCloser(bufio.NewReader(file))
+func DecryptAESCBC(reader io.Reader, privateKey *rsa.PrivateKey, encryptedKeyFile string) (io.ReadCloser, error) {
 
 	iv := make([]byte, aes.BlockSize)
 	if _, err := io.ReadFull(reader, iv); err != nil {
 		return nil, fmt.Errorf("error reading iv from input: %w", err)
 	}
 
-	return DecryptAESCBCWithIV(reader, privateKey, encryptedKeyFile, iv)
+	return DecryptAESCBCWithIV(ioutil.NopCloser(reader), privateKey, encryptedKeyFile, iv)
 }
 
 func DecryptAESCBCWithIV(reader io.ReadCloser, privateKey *rsa.PrivateKey, encryptedKeyB64 string, iv []byte) (io.ReadCloser, error) {
