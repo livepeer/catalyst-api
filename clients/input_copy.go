@@ -36,6 +36,12 @@ type InputCopy struct {
 	SourceOutputUrl string
 }
 
+type Decryptor struct {
+	reader       io.ReadCloser
+	decryptKey   rsa.PrivateKey
+	encryptedKey string
+}
+
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
 func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encryptedKey string, VodDecryptPrivateKey *rsa.PrivateKey) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
 	var sourceOutputURL *url.URL
@@ -71,6 +77,7 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encrypte
 	}
 
 	if encryptedKey != "" {
+		var size int64
 		c, e := getFile(context.Background(), requestID, inputFile.String())
 
 		if e != nil {
@@ -78,23 +85,19 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encrypte
 			return
 		}
 
-		if decryptedFile, err = crypto.DecryptAESCBC(c, VodDecryptPrivateKey, encryptedKey); err != nil {
-			glog.Errorf("error decrypting file: %w", err)
-			return
+		decryptor := Decryptor{
+			reader:       c,
+			decryptKey:   *VodDecryptPrivateKey,
+			encryptedKey: encryptedKey,
 		}
-	}
 
-	if decryptedFile != nil {
-		var size int64
-		decryptedFileUrl := osTransferURL.String()
-
-		log.Log(requestID, "Copying decrypted file to S3", "source", inputFile.String(), "dest", decryptedFileUrl)
-		size, err = CopyReaderFile(context.Background(), decryptedFile, decryptedFileUrl, "", requestID)
+		log.Log(requestID, "Copying decrypted file to S3", "source", inputFile.String(), "dest", osTransferURL)
+		size, err = CopyFileWithDecryption(context.Background(), inputFile.String(), osTransferURL.String(), "", requestID, &decryptor)
 		if err != nil {
 			err = fmt.Errorf("failed to copy file(s): %w", err)
 			return
 		}
-		log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", decryptedFileUrl)
+		log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", osTransferURL)
 
 		signedURL, err = SignURL(osTransferURL)
 		if err != nil {
@@ -102,7 +105,7 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encrypte
 		}
 	}
 
-	if !isDirectUpload(inputFile) || decryptedFile == nil {
+	if !isDirectUpload(inputFile) || encryptedKey == "" {
 		var size int64
 		log.Log(requestID, "Copying input file to S3", "source", inputFile.String(), "dest", osTransferURL.String())
 		size, err = CopyFile(context.Background(), sourceOutputURL.String(), osTransferURL.String(), "", requestID)
@@ -242,11 +245,7 @@ func isDirectUpload(inputFile *url.URL) bool {
 		(inputFile.Scheme == "https" || inputFile.Scheme == "http")
 }
 
-func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
-	return CopyFileWithDecryption(ctx, sourceURL, destOSBaseURL, filename, requestID, nil)
-}
-
-func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string, decrypter func(io.ReadCloser) (io.ReadCloser, error)) (writtenBytes int64, err error) {
+func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string, decryptor *Decryptor) (writtenBytes int64, err error) {
 	dStorage := NewDStorageDownload()
 	err = backoff.Retry(func() error {
 		// currently this timeout is only used for http downloads in the getFileHTTP function when it calls http.NewRequestWithContext
@@ -262,11 +261,14 @@ func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filen
 		}
 		defer c.Close()
 
-		if decrypter != nil {
-			c, err = decrypter(c)
+		if decryptor != nil {
+			decryptedFile, err := crypto.DecryptAESCBC(decryptor.reader, &decryptor.decryptKey, decryptor.encryptedKey)
 			if err != nil {
-				return fmt.Errorf("decryption error: %w", err)
+				glog.Errorf("error decrypting file: %w", err)
+				return err
 			}
+			c = io.NopCloser(decryptedFile)
+			defer c.Close()
 		}
 
 		content := io.TeeReader(c, &byteAccWriter)
@@ -278,6 +280,10 @@ func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filen
 		return err
 	}, UploadRetryBackoff())
 	return
+}
+
+func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
+	return CopyFileWithDecryption(ctx, sourceURL, destOSBaseURL, filename, requestID, nil)
 }
 
 func getFile(ctx context.Context, requestID, url string, dStorage *DStorageDownload) (io.ReadCloser, error) {
