@@ -18,7 +18,7 @@ require (
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/lib/pq v1.10.9
 	github.com/livepeer/go-api-client v0.4.7
-	github.com/livepeer/go-livepeer v0.5.38
+	github.com/livepeer/go-livepeer v0.5.39-0.20230501191111-1ef36d7f50df
 	github.com/livepeer/go-tools v0.2.12
 	github.com/livepeer/joy4 v0.1.2-0.20191121080656-b2fea45cbded
 	github.com/livepeer/livepeer-data v0.7.1
@@ -117,7 +117,7 @@ require (
 	github.com/ipld/go-codec-dagpb v1.5.0 // indirect
 	github.com/ipld/go-ipld-prime v0.19.0 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
-	github.com/jaypipes/ghw v0.9.0 // indirect
+	github.com/jaypipes/ghw v0.10.0 // indirect
 	github.com/jaypipes/pcidb v1.0.0 // indirect
 	github.com/jbenet/goprocess v0.1.4 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
@@ -126,7 +126,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
-	github.com/livepeer/lpms v0.0.0-20230125115958-32cd1538cc04 // indirect
+	github.com/livepeer/lpms v0.0.0-20230501190552-391c04dfb33b // indirect
 	github.com/lufia/plan9stats v0.0.0-20220913051719-115f729f3c8c // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.17 // indirect
@@ -185,7 +185,7 @@ require (
 	go.opentelemetry.io/otel v1.12.0 // indirect
 	go.opentelemetry.io/otel/trace v1.12.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
-	go.uber.org/goleak v1.2.1 // indirect
+	go.uber.org/goleak v1.2.2-0.20230213210001-751da596f6f7 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.5.0 // indirect
