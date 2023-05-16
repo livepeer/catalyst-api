@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/golang/glog"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/crypto"
@@ -36,20 +35,15 @@ type InputCopy struct {
 	SourceOutputUrl string
 }
 
-type DecryptionKeys struct {
-	decryptKey   rsa.PrivateKey
-	encryptedKey string
-}
-
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
 func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encryptedKey string, VodDecryptPrivateKey *rsa.PrivateKey) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
 
-	var decryptor *DecryptionKeys
+	var decryptor *crypto.DecryptionKeys
 
 	if encryptedKey != "" {
-		decryptor = &DecryptionKeys{
-			decryptKey:   *VodDecryptPrivateKey,
-			encryptedKey: encryptedKey,
+		decryptor = &crypto.DecryptionKeys{
+			DecryptKey:   VodDecryptPrivateKey,
+			EncryptedKey: encryptedKey,
 		}
 	}
 
@@ -155,7 +149,7 @@ func getSegmentTransferLocation(srcManifestUrl, dstTransferUrl *url.URL, srcSegm
 
 // CopyAllInputFiles will copy the m3u8 manifest and all ts segments for HLS input whereas
 // it will copy just the single video file for MP4/MOV input
-func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, decryptor *DecryptionKeys) (size int64, err error) {
+func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, decryptor *crypto.DecryptionKeys) (size int64, err error) {
 	fileList := make(map[string]string)
 	if isHLSInput(srcInputUrl) {
 		// Download the m3u8 manifest using the input url
@@ -208,7 +202,7 @@ func isDirectUpload(inputFile *url.URL) bool {
 		(inputFile.Scheme == "https" || inputFile.Scheme == "http")
 }
 
-func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string, decryptor *DecryptionKeys) (writtenBytes int64, err error) {
+func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string, decryptor *crypto.DecryptionKeys) (writtenBytes int64, err error) {
 	dStorage := NewDStorageDownload()
 	err = backoff.Retry(func() error {
 		// currently this timeout is only used for http downloads in the getFileHTTP function when it calls http.NewRequestWithContext
@@ -222,17 +216,15 @@ func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filen
 		c, err := getFile(ctx, requestID, sourceURL, dStorage)
 
 		if err != nil {
-			glog.Errorf("error getting file: %w", err)
-			return err
+			return fmt.Errorf("download error: %w", err)
 		}
 
 		defer c.Close()
 
 		if decryptor != nil {
-			decryptedFile, err := crypto.DecryptAESCBC(c, &decryptor.decryptKey, decryptor.encryptedKey)
+			decryptedFile, err := crypto.DecryptAESCBC(c, decryptor.DecryptKey, decryptor.EncryptedKey)
 			if err != nil {
-				glog.Errorf("error decrypting file: %w", err)
-				return err
+				return fmt.Errorf("error decrypting file: %w", err)
 			}
 			c = io.NopCloser(decryptedFile)
 		}

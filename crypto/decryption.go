@@ -18,6 +18,11 @@ import (
 	"github.com/golang/glog"
 )
 
+type DecryptionKeys struct {
+	DecryptKey   *rsa.PrivateKey
+	EncryptedKey string
+}
+
 func LoadPrivateKey(privateKeyBase64 string) (*rsa.PrivateKey, error) {
 	privateKey, err := base64.StdEncoding.DecodeString(privateKeyBase64)
 	if err != nil {
