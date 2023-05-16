@@ -17,6 +17,7 @@ import (
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/crypto"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
@@ -246,13 +247,16 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 			return nil, fmt.Errorf("error parsing source as url: %w", err)
 		}
 
-		encryptedKey := ""
+		var decryptor *crypto.DecryptionKeys
 
 		if p.Encryption != nil {
-			encryptedKey = p.Encryption.EncryptedKey
+			decryptor = &crypto.DecryptionKeys{
+				DecryptKey:   c.VodDecryptPrivateKey,
+				EncryptedKey: p.Encryption.EncryptedKey,
+			}
 		}
 
-		inputVideoProbe, signedNewSourceURL, newSourceURL, err := c.InputCopy.CopyInputToS3(si.RequestID, sourceURL, encryptedKey, c.VodDecryptPrivateKey)
+		inputVideoProbe, signedNewSourceURL, newSourceURL, err := c.InputCopy.CopyInputToS3(si.RequestID, sourceURL, decryptor)
 		if err != nil {
 			return nil, fmt.Errorf("error copying input to storage: %w", err)
 		}

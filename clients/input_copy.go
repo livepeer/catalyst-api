@@ -26,7 +26,7 @@ const PresignDuration = 24 * time.Hour
 const LocalSourceFilePattern = "sourcevideo*"
 
 type InputCopier interface {
-	CopyInputToS3(requestID string, inputFile *url.URL, encryptedKey string, VodDecryptPrivateKey *rsa.PrivateKey) (video.InputVideo, string, *url.URL, error)
+	CopyInputToS3(requestID string, inputFile *url.URL, decryptor *crypto.DecryptionKeys) (video.InputVideo, string, *url.URL, error)
 }
 
 type InputCopy struct {
@@ -36,16 +36,7 @@ type InputCopy struct {
 }
 
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
-func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encryptedKey string, VodDecryptPrivateKey *rsa.PrivateKey) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
-
-	var decryptor *crypto.DecryptionKeys
-
-	if encryptedKey != "" {
-		decryptor = &crypto.DecryptionKeys{
-			DecryptKey:   VodDecryptPrivateKey,
-			EncryptedKey: encryptedKey,
-		}
-	}
+func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, decryptor *crypto.DecryptionKeys) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
 
 	if isDirectUpload(inputFile) && decryptor == nil {
 		log.Log(requestID, "Direct upload detected", "source", inputFile.String())
