@@ -2,7 +2,6 @@ package clients
 
 import (
 	"context"
-	"crypto/rsa"
 	"fmt"
 	"io"
 	"net/http"
@@ -284,6 +283,6 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 
 type StubInputCopy struct{}
 
-func (s *StubInputCopy) CopyInputToS3(requestID string, inputFile *url.URL, encryptedKey string, VodDecryptPrivateKey *rsa.PrivateKey) (video.InputVideo, string, *url.URL, error) {
+func (s *StubInputCopy) CopyInputToS3(requestID string, inputFile *url.URL, decryptor *crypto.DecryptionKeys) (video.InputVideo, string, *url.URL, error) {
 	return video.InputVideo{}, "", &url.URL{}, nil
 }
