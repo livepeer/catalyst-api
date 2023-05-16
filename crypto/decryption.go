@@ -42,6 +42,19 @@ func LoadPrivateKey(privateKeyBase64 string) (*rsa.PrivateKey, error) {
 	return priv, nil
 }
 
+func ValidatePublicKey(pubkey string, privkey rsa.PrivateKey) (bool, error) {
+	publicKey, err := x509.ParsePKCS1PublicKey([]byte(pubkey))
+	if err != nil {
+		glog.Fatalf("Error parsing vod decrypt public key: %v", err)
+		return false, err
+	}
+	if !publicKey.Equal(privkey.Public()) {
+		glog.Fatalf("Public key does not match private key")
+		return false, err
+	}
+	return true, nil
+}
+
 // Decrypts a file encrypted with AES (key length depends on input) in CBC block
 // chaining mode and PKCS#7 padding. The provided key must be encoded in base16,
 // and the first block of the input is the IV. The output is a pipe reader that

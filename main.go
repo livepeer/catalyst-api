@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -145,10 +146,17 @@ func main() {
 		glog.Info("Postgres metrics connection string was not set, postgres metrics are disabled.")
 	}
 
-	vodDecryptPrivateKey, err := crypto.LoadPrivateKey(cli.VodDecryptPrivateKey)
+	var vodDecryptPrivateKey *rsa.PrivateKey
 
-	if err != nil {
-		glog.Fatalf("Error loading vod decrypt private key: %v", err)
+	if cli.VodDecryptPrivateKey != "" && cli.VodDecryptPublicKey != "" {
+		vodDecryptPrivateKey, err = crypto.LoadPrivateKey(cli.VodDecryptPrivateKey)
+		if err != nil {
+			glog.Fatalf("Error loading vod decrypt private key: %v", err)
+		}
+		isValidKeyPair, err := crypto.ValidatePublicKey(cli.VodDecryptPublicKey, *vodDecryptPrivateKey)
+		if !isValidKeyPair || err != nil {
+			glog.Fatalf("Invalid vod decrypt key pair")
+		}
 	}
 
 	// Start the "co-ordinator" that determines whether to send jobs to the Catalyst transcoding pipeline
