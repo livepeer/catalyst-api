@@ -153,7 +153,7 @@ func main() {
 		if err != nil {
 			glog.Fatalf("Error loading vod decrypt private key: %v", err)
 		}
-		isValidKeyPair, err := crypto.ValidatePublicKey(cli.VodDecryptPublicKey, *vodDecryptPrivateKey)
+		isValidKeyPair, err := crypto.ValidateKeyPair(cli.VodDecryptPublicKey, *vodDecryptPrivateKey)
 		if !isValidKeyPair || err != nil {
 			glog.Fatalf("Invalid vod decrypt key pair")
 		}
