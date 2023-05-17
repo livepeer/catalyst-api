@@ -87,6 +87,23 @@ func TestSetMistUtilLoadServers(t *testing.T) {
 	})
 }
 
+func TestSetMistUtilLoadLocalServer(t *testing.T) {
+	bal, mul := start(t)
+	defer mul.Close()
+	bal.mistAddr = "http://127.0.0.1:4242"
+	bal.config.NodeName = "example.com"
+	bal.config.MistLoadBalancerTemplate = "https://%s:1234"
+
+	bal.changeLoadBalancerServers(context.Background(), "example.com", "add")
+	keys := toSortedKeys(t, mul.BalancedHosts)
+	require.Len(t, keys, 1)
+	require.Equal(t, keys[0], "http://127.0.0.1:4242")
+
+	bal.changeLoadBalancerServers(context.Background(), "example.com", "del")
+	keys = toSortedKeys(t, mul.BalancedHosts)
+	require.Len(t, keys, 0)
+}
+
 type mockMistUtilLoad struct {
 	HttpCalls     int
 	BalancedHosts map[string]string
