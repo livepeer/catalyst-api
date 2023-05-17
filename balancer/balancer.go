@@ -135,14 +135,14 @@ func (b *BalancerImpl) UpdateMembers(ctx context.Context, members []cluster.Memb
 func (b *BalancerImpl) changeLoadBalancerServers(ctx context.Context, server, action string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, mistUtilLoadSingleRequestTimeout)
 	defer cancel()
-	var serverTmpl string
+	var serverURL string
 	if server == b.config.NodeName {
 		// Special case — make sure the balancer is aware this one is localhost
-		serverTmpl = mistLocalAddress
+		serverURL = mistLocalAddress
 	} else {
-		serverTmpl = b.formatNodeAddress(server)
+		serverURL = b.formatNodeAddress(server)
 	}
-	actionURL := b.endpoint + "?" + action + "server=" + url.QueryEscape(serverTmpl)
+	actionURL := b.endpoint + "?" + action + "server=" + url.QueryEscape(serverURL)
 	req, err := http.NewRequest("POST", actionURL, nil)
 	req = req.WithContext(ctx)
 	if err != nil {
