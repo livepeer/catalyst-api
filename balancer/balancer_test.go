@@ -17,9 +17,7 @@ func start(t *testing.T) (*BalancerImpl, *mockMistUtilLoad) {
 	mul := newMockMistUtilLoad(t)
 
 	b := &BalancerImpl{
-		config: &Config{
-			MistLoadBalancerTemplate: "http://%s:4242",
-		},
+		config:   &Config{},
 		cmd:      nil,
 		endpoint: mul.Server.URL,
 	}
@@ -43,18 +41,50 @@ func TestGetMistUtilLoadServers(t *testing.T) {
 	requireKeysEqual(t, servers, mul.BalancedHosts)
 }
 
+// Test that our local server gets converted to our node name on the way out of MistUtilLoad
 func TestConvertLocalFromMist(t *testing.T) {
 	bal, mul := start(t)
 	defer mul.Close()
 	bal.mistAddr = "http://127.0.0.1:4242"
 	bal.config.NodeName = "example.com"
+	bal.config.MistLoadBalancerTemplate = "https://%s:1234"
 	mul.BalancedHosts = map[string]string{}
 	mul.BalancedHosts[bal.mistAddr] = "Online"
 	servers, err := bal.getMistLoadBalancerServers(context.Background())
 	require.NoError(t, err)
 	require.Len(t, servers, 1)
-	_, ok := servers["http://example.com:4242"]
+	_, ok := servers["https://example.com:1234"]
 	require.True(t, ok, "incorrect response from getMistLoadBalancerServers: %v", servers)
+}
+
+func TestSetMistUtilLoadServers(t *testing.T) {
+	bal, mul := start(t)
+	defer mul.Close()
+	bal.config.MistLoadBalancerTemplate = "https://%s:4321"
+	hosts := []string{
+		"a.example.com",
+		"b.example.com",
+		"c.example.com",
+		"d.example.com",
+	}
+	for _, host := range hosts {
+		bal.changeLoadBalancerServers(context.Background(), host, "add")
+	}
+	keys := toSortedKeys(t, mul.BalancedHosts)
+	require.Equal(t, keys, []string{
+		"https://a.example.com:4321",
+		"https://b.example.com:4321",
+		"https://c.example.com:4321",
+		"https://d.example.com:4321",
+	})
+
+	bal.changeLoadBalancerServers(context.Background(), "c.example.com", "del")
+	keys = toSortedKeys(t, mul.BalancedHosts)
+	require.Equal(t, keys, []string{
+		"https://a.example.com:4321",
+		"https://b.example.com:4321",
+		"https://d.example.com:4321",
+	})
 }
 
 type mockMistUtilLoad struct {
@@ -67,6 +97,7 @@ func newMockMistUtilLoad(t *testing.T) *mockMistUtilLoad {
 	mul := &mockMistUtilLoad{}
 	ts := httptest.NewServer(mul.Handle(t))
 	mul.Server = ts
+	mul.BalancedHosts = map[string]string{}
 	return mul
 }
 
@@ -75,11 +106,13 @@ func (mul *mockMistUtilLoad) Handle(t *testing.T) http.HandlerFunc {
 		queryVals := r.URL.Query()
 		if len(queryVals) > 1 {
 			require.Fail(t, "Got more than one query parameter!")
+			return
 		}
 		if len(queryVals) == 0 {
 			// Default balancer implementation
 			panic("unimplemented")
 		}
+
 		// Listing servers - ?lstservers=1
 		if vals, ok := queryVals["lstservers"]; ok {
 			require.Len(t, vals, 1)
@@ -87,6 +120,22 @@ func (mul *mockMistUtilLoad) Handle(t *testing.T) http.HandlerFunc {
 			b, err := json.Marshal(mul.BalancedHosts)
 			require.NoError(t, err)
 			w.Write(b)
+			return
+		}
+
+		// Adding servers - ?addserver=server
+		if vals, ok := queryVals["addserver"]; ok {
+			require.Len(t, vals, 1)
+			host := vals[0]
+			mul.BalancedHosts[host] = "Online"
+			return
+		}
+
+		// Deleting servers - ?delserver=server
+		if vals, ok := queryVals["delserver"]; ok {
+			require.Len(t, vals, 1)
+			host := vals[0]
+			delete(mul.BalancedHosts, host)
 			return
 		}
 		require.Fail(t, fmt.Sprintf("unimplemented mock query parameter: %s", r.URL.RawQuery))
