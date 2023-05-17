@@ -12,7 +12,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
-	"io/ioutil"
 
 	"github.com/d1str0/pkcs7"
 	"github.com/golang/glog"
@@ -66,7 +65,7 @@ func DecryptAESCBC(reader io.Reader, privateKey *rsa.PrivateKey, encryptedKeyFil
 		return nil, fmt.Errorf("error reading iv from input: %w", err)
 	}
 
-	return DecryptAESCBCWithIV(ioutil.NopCloser(reader), privateKey, encryptedKeyFile, iv)
+	return DecryptAESCBCWithIV(io.NopCloser(reader), privateKey, encryptedKeyFile, iv)
 }
 
 func DecryptAESCBCWithIV(reader io.ReadCloser, privateKey *rsa.PrivateKey, encryptedKeyB64 string, iv []byte) (io.ReadCloser, error) {
