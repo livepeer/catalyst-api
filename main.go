@@ -159,6 +159,9 @@ func main() {
 		Args:                     cli.BalancerArgs,
 		MistUtilLoadPort:         uint32(cli.MistLoadBalancerPort),
 		MistLoadBalancerTemplate: cli.MistLoadBalancerTemplate,
+		MistHost:                 cli.MistHost,
+		MistPort:                 cli.MistPort,
+		NodeName:                 cli.NodeName,
 	})
 
 	c := cluster.NewCluster(&cli)
