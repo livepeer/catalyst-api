@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"sort"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -16,8 +18,16 @@ import (
 func start(t *testing.T) (*BalancerImpl, *mockMistUtilLoad) {
 	mul := newMockMistUtilLoad(t)
 
+	u, err := url.Parse(mul.Server.URL)
+	require.NoError(t, err)
+	port, err := strconv.Atoi(u.Port())
+	require.NoError(t, err)
+
 	b := &BalancerImpl{
-		config:   &Config{},
+		config: &Config{
+			MistHost: u.Hostname(),
+			MistPort: port,
+		},
 		cmd:      nil,
 		endpoint: mul.Server.URL,
 	}
@@ -45,11 +55,12 @@ func TestGetMistUtilLoadServers(t *testing.T) {
 func TestConvertLocalFromMist(t *testing.T) {
 	bal, mul := start(t)
 	defer mul.Close()
-	bal.mistAddr = "http://127.0.0.1:4242"
+	bal.config.MistHost = "127.0.0.1"
+	bal.config.MistPort = 4242
 	bal.config.NodeName = "example.com"
 	bal.config.MistLoadBalancerTemplate = "https://%s:1234"
 	mul.BalancedHosts = map[string]string{}
-	mul.BalancedHosts[bal.mistAddr] = "Online"
+	mul.BalancedHosts[bal.mistAddr()] = "Online"
 	servers, err := bal.getMistLoadBalancerServers(context.Background())
 	require.NoError(t, err)
 	require.Len(t, servers, 1)
@@ -92,7 +103,8 @@ func TestSetMistUtilLoadServers(t *testing.T) {
 func TestSetMistUtilLoadLocalServer(t *testing.T) {
 	bal, mul := start(t)
 	defer mul.Close()
-	bal.mistAddr = "http://127.0.0.1:4242"
+	bal.config.MistHost = "127.0.0.1"
+	bal.config.MistPort = 4242
 	bal.config.NodeName = "example.com"
 	bal.config.MistLoadBalancerTemplate = "https://%s:1234"
 
@@ -106,6 +118,43 @@ func TestSetMistUtilLoadLocalServer(t *testing.T) {
 	require.NoError(t, err)
 	keys = toSortedKeys(t, mul.BalancedHosts)
 	require.Len(t, keys, 0)
+}
+
+func TestBalancing(t *testing.T) {
+	bal, mul := start(t)
+	defer mul.Close()
+
+	mul.BalancedHosts = map[string]string{
+		"http://one.example.com:4242": "Online",
+	}
+
+	node, err := bal.QueryMistForClosestNodeSource(context.Background(), "fakeid", "0", "0", "prefix", false)
+	require.NoError(t, err)
+	require.Equal(t, node, "one.example.com")
+
+	source, err := bal.QueryMistForClosestNodeSource(context.Background(), "fakeid", "0", "0", "prefix", true)
+	require.NoError(t, err)
+	require.Equal(t, source, "dtsc://one.example.com")
+}
+
+func TestBalancingLocalNode(t *testing.T) {
+	bal, mul := start(t)
+	defer mul.Close()
+	bal.config.MistHost = "127.0.0.1"
+	bal.config.MistPort = 4242
+	bal.config.NodeName = "example.com"
+
+	mul.BalancedHosts = map[string]string{
+		"http://127.0.0.1:4242": "Online",
+	}
+
+	node, err := bal.QueryMistForClosestNodeSource(context.Background(), "fakeid", "0", "0", "prefix", false)
+	require.NoError(t, err)
+	require.Equal(t, node, "example.com")
+
+	source, err := bal.QueryMistForClosestNodeSource(context.Background(), "fakeid", "0", "0", "prefix", true)
+	require.NoError(t, err)
+	require.Equal(t, source, "dtsc://example.com")
 }
 
 type mockMistUtilLoad struct {
@@ -129,9 +178,35 @@ func (mul *mockMistUtilLoad) Handle(t *testing.T) http.HandlerFunc {
 			require.Fail(t, "Got more than one query parameter!")
 			return
 		}
+
+		// Default balancer implementation
 		if len(queryVals) == 0 {
-			// Default balancer implementation
-			panic("unimplemented")
+			for node := range mul.BalancedHosts {
+				u, err := url.Parse(node)
+				require.NoError(t, err)
+				_, err = w.Write([]byte(u.Hostname()))
+				require.NoError(t, err)
+				return
+			}
+			_, err := w.Write([]byte("FULL"))
+			require.NoError(t, err)
+			return
+		}
+
+		// Listing servers - ?source=streamname
+		if vals, ok := queryVals["source"]; ok {
+			require.Len(t, vals, 1)
+			for node := range mul.BalancedHosts {
+				u, err := url.Parse(node)
+				require.NoError(t, err)
+				resp := fmt.Sprintf("dtsc://%s", u.Hostname())
+				_, err = w.Write([]byte(resp))
+				require.NoError(t, err)
+				return
+			}
+			_, err := w.Write([]byte("FULL"))
+			require.NoError(t, err)
+			return
 		}
 
 		// Listing servers - ?lstservers=1

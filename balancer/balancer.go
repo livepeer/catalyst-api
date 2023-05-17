@@ -44,7 +44,6 @@ type BalancerImpl struct {
 	endpoint string
 	// Blocks until initial startup
 	startupOnce sync.Once
-	mistAddr    string
 }
 
 // create a new load balancer instance
@@ -58,7 +57,6 @@ func NewBalancer(config *Config) Balancer {
 		config:   config,
 		cmd:      nil,
 		endpoint: fmt.Sprintf("http://127.0.0.1:%d", config.MistUtilLoadPort),
-		mistAddr: fmt.Sprintf("http://%s:%d", config.MistHost, config.MistPort),
 	}
 }
 
@@ -141,7 +139,7 @@ func (b *BalancerImpl) changeLoadBalancerServers(ctx context.Context, server, ac
 	var serverURL string
 	if server == b.config.NodeName {
 		// Special case — make sure the balancer is aware this one is localhost
-		serverURL = b.mistAddr
+		serverURL = b.mistAddr()
 	} else {
 		serverURL = b.formatNodeAddress(server)
 	}
@@ -217,7 +215,7 @@ func (b *BalancerImpl) getMistLoadBalancerServers(ctx context.Context) (map[stri
 	output := make(map[string]struct{}, len(mistResponse))
 
 	for k := range mistResponse {
-		if k == b.mistAddr {
+		if k == b.mistAddr() {
 			// Special case — recognize 127.0.0.1 and transform it to our node address
 			myAddr := b.formatNodeAddress(b.config.NodeName)
 			output[myAddr] = struct{}{}
@@ -323,9 +321,9 @@ func (b *BalancerImpl) QueryMistForClosestNodeSource(ctx context.Context, playba
 	var murl string
 	enc := url.QueryEscape(fmt.Sprintf("%s%s", prefix, playbackID))
 	if source {
-		murl = fmt.Sprintf("http://localhost:%d/?source=%s", b.config.MistUtilLoadPort, enc)
+		murl = fmt.Sprintf("%s/?source=%s", b.endpoint, enc)
 	} else {
-		murl = fmt.Sprintf("http://localhost:%d/%s", b.config.MistUtilLoadPort, enc)
+		murl = fmt.Sprintf("%s/%s", b.endpoint, enc)
 	}
 	glog.V(8).Infof("MistUtilLoad started request=%s", murl)
 	req, err := http.NewRequest("GET", murl, nil)
@@ -354,8 +352,30 @@ func (b *BalancerImpl) QueryMistForClosestNodeSource(ctx context.Context, playba
 		return "", fmt.Errorf("GET request '%s' failed while reading response body", murl)
 	}
 	glog.V(8).Infof("MistUtilLoad responded request=%s response=%s", murl, body)
-	if string(body) == "FULL" {
+	str := string(body)
+	if str == "FULL" {
 		return "", fmt.Errorf("GET request '%s' returned 'FULL'", murl)
 	}
-	return string(body), nil
+
+	// Special case: rewrite our local node to our public node url
+	if !source {
+		if str == b.config.MistHost {
+			str = b.config.NodeName
+		}
+	} else {
+		u, err := url.Parse(str)
+		if err != nil {
+			return "", err
+		}
+		if u.Hostname() == b.config.MistHost {
+			u.Host = b.config.NodeName
+		}
+		str = u.String()
+	}
+
+	return str, nil
+}
+
+func (b *BalancerImpl) mistAddr() string {
+	return fmt.Sprintf("http://%s:%d", b.config.MistHost, b.config.MistPort)
 }
