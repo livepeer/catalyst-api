@@ -42,7 +42,14 @@ func LoadPrivateKey(privateKeyBase64 string) (*rsa.PrivateKey, error) {
 }
 
 func ValidatePublicKey(pubkey string, privkey rsa.PrivateKey) (bool, error) {
-	publicKey, err := x509.ParsePKCS1PublicKey([]byte(pubkey))
+	block, _ := pem.Decode([]byte(pubkey))
+	if block == nil {
+		glog.Fatalf("failed to parse PEM block containing the public key")
+		err := fmt.Errorf("failed to parse PEM block containing the public key")
+		return false, err
+	}
+
+	publicKey, err := x509.ParsePKCS1PublicKey(block.Bytes)
 	if err != nil {
 		glog.Fatalf("Error parsing vod decrypt public key: %v", err)
 		return false, err
