@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/crypto"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 
 	//"github.com/livepeer/catalyst-api/middleware"
@@ -82,6 +84,8 @@ func main() {
 	fs.StringVar(&cli.MistLoadBalancerTemplate, "mist-load-balancer-template", "http://%s:4242", "template for specifying the host that should be queried for Prometheus stat output for this node")
 	config.CommaSliceFlag(fs, &cli.RetryJoin, "retry-join", []string{}, "An agent to join with. This flag be specified multiple times. Does not exit on failure like -join, used to retry until success.")
 	fs.StringVar(&cli.EncryptKey, "encrypt", "", "Key for encrypting network traffic within Serf. Must be a base64-encoded 32-byte key.")
+	fs.StringVar(&cli.VodDecryptPublicKey, "catalyst-public-key", "", "Public key of the catalyst node for encryption")
+	fs.StringVar(&cli.VodDecryptPrivateKey, "catalyst-private-key", "", "Private key of the catalyst node for encryption")
 	fs.StringVar(&cli.GateURL, "gate-url", "http://localhost:3004/api/access-control/gate", "Address to contact playback gating API for access control verification")
 
 	// special parameters
@@ -142,9 +146,22 @@ func main() {
 		glog.Info("Postgres metrics connection string was not set, postgres metrics are disabled.")
 	}
 
+	var vodDecryptPrivateKey *rsa.PrivateKey
+
+	if cli.VodDecryptPrivateKey != "" && cli.VodDecryptPublicKey != "" {
+		vodDecryptPrivateKey, err = crypto.LoadPrivateKey(cli.VodDecryptPrivateKey)
+		if err != nil {
+			glog.Fatalf("Error loading vod decrypt private key: %v", err)
+		}
+		isValidKeyPair, err := crypto.ValidatePublicKey(cli.VodDecryptPublicKey, *vodDecryptPrivateKey)
+		if !isValidKeyPair || err != nil {
+			glog.Fatalf("Invalid vod decrypt key pair")
+		}
+	}
+
 	// Start the "co-ordinator" that determines whether to send jobs to the Catalyst transcoding pipeline
 	// or an external one
-	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB)
+	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB, vodDecryptPrivateKey)
 	if err != nil {
 		glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 	}

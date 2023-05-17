@@ -65,6 +65,7 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
 	ffmpegSegmentingHandlers := &ffmpeg.HandlersCollection{VODEngine: vodEngine}
 	accessControlHandlers := accesscontrol.NewAccessControlHandlersCollection(cli)
+	encryptionHandlers := accesscontrol.NewEncryptionHandlersCollection(cli)
 	adminHandlers := &admin.AdminHandlersCollection{Cluster: c}
 
 	// Simple endpoint for healthchecks
@@ -98,6 +99,9 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 			),
 		),
 	)
+
+	// Public GET handler to retrieve the public key for vod encryption
+	router.GET("/api/pubkey", withLogging(encryptionHandlers.PublicKeyHandler()))
 
 	// Endpoint to receive segments and manifests that ffmpeg produces
 	router.PUT("/api/ffmpeg/:id/:filename", withLogging(ffmpegSegmentingHandlers.NewFile()))

@@ -41,6 +41,7 @@ type UploadVODRequest struct {
 	OutputLocations []UploadVODRequestOutputLocation `json:"output_locations,omitempty"`
 	AccessToken     string                           `json:"accessToken"`
 	TranscodeAPIUrl string                           `json:"transcodeAPIUrl"`
+	Encryption      *pipeline.EncryptionPayload      `json:"encryption,omitempty"`
 
 	// Forwarded to transcoding stage:
 	TargetSegmentSizeSecs int64                  `json:"target_segment_size_secs"`
@@ -181,6 +182,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		Profiles:              uploadVODRequest.Profiles,
 		PipelineStrategy:      uploadVODRequest.PipelineStrategy,
 		TargetSegmentSizeSecs: uploadVODRequest.TargetSegmentSizeSecs,
+		Encryption:            uploadVODRequest.Encryption,
 	})
 
 	respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})

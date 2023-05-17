@@ -13,6 +13,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/crypto"
 	xerrors "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/video"
@@ -21,9 +22,10 @@ import (
 
 const MaxCopyFileDuration = 2 * time.Hour
 const PresignDuration = 24 * time.Hour
+const LocalSourceFilePattern = "sourcevideo*"
 
 type InputCopier interface {
-	CopyInputToS3(requestID string, inputFile *url.URL) (video.InputVideo, string, *url.URL, error)
+	CopyInputToS3(requestID string, inputFile *url.URL, decryptor *crypto.DecryptionKeys) (video.InputVideo, string, *url.URL, error)
 }
 
 type InputCopy struct {
@@ -33,8 +35,9 @@ type InputCopy struct {
 }
 
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
-func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
-	if isDirectUpload(inputFile) {
+func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, decryptor *crypto.DecryptionKeys) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
+
+	if isDirectUpload(inputFile) && decryptor == nil {
 		log.Log(requestID, "Direct upload detected", "source", inputFile.String())
 		signedURL = inputFile.String()
 		osTransferURL = inputFile
@@ -50,7 +53,7 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (inputVi
 		}
 		osTransferURL = sourceOutputUrl.JoinPath(requestID, "transfer", path.Base(inputFile.Path))
 
-		size, err = CopyAllInputFiles(requestID, inputFile, osTransferURL)
+		size, err = CopyAllInputFiles(requestID, inputFile, osTransferURL, decryptor)
 		if err != nil {
 			err = fmt.Errorf("failed to copy file(s): %w", err)
 			return
@@ -136,7 +139,7 @@ func getSegmentTransferLocation(srcManifestUrl, dstTransferUrl *url.URL, srcSegm
 
 // CopyAllInputFiles will copy the m3u8 manifest and all ts segments for HLS input whereas
 // it will copy just the single video file for MP4/MOV input
-func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL) (size int64, err error) {
+func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, decryptor *crypto.DecryptionKeys) (size int64, err error) {
 	fileList := make(map[string]string)
 	if isHLSInput(srcInputUrl) {
 		// Download the m3u8 manifest using the input url
@@ -167,7 +170,9 @@ func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL) (si
 	var byteCount int64
 	for inFile, outFile := range fileList {
 		log.Log(requestID, "Copying input file to S3", "source", inFile, "dest", outFile)
-		size, err = CopyFile(context.Background(), inFile, outFile, "", requestID)
+
+		size, err = CopyFileWithDecryption(context.Background(), inFile, outFile, "", requestID, decryptor)
+
 		if err != nil {
 			err = fmt.Errorf("error copying input file to S3: %w", err)
 			return size, err
@@ -187,7 +192,7 @@ func isDirectUpload(inputFile *url.URL) bool {
 		(inputFile.Scheme == "https" || inputFile.Scheme == "http")
 }
 
-func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
+func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string, decryptor *crypto.DecryptionKeys) (writtenBytes int64, err error) {
 	dStorage := NewDStorageDownload()
 	err = backoff.Retry(func() error {
 		// currently this timeout is only used for http downloads in the getFileHTTP function when it calls http.NewRequestWithContext
@@ -197,11 +202,22 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 		byteAccWriter := ByteAccumulatorWriter{count: 0}
 		defer func() { writtenBytes = byteAccWriter.count }()
 
+		var c io.ReadCloser
 		c, err := getFile(ctx, requestID, sourceURL, dStorage)
+
 		if err != nil {
 			return fmt.Errorf("download error: %w", err)
 		}
+
 		defer c.Close()
+
+		if decryptor != nil {
+			decryptedFile, err := crypto.DecryptAESCBC(c, decryptor.DecryptKey, decryptor.EncryptedKey)
+			if err != nil {
+				return fmt.Errorf("error decrypting file: %w", err)
+			}
+			c = io.NopCloser(decryptedFile)
+		}
 
 		content := io.TeeReader(c, &byteAccWriter)
 
@@ -212,6 +228,10 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 		return err
 	}, UploadRetryBackoff())
 	return
+}
+
+func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string) (writtenBytes int64, err error) {
+	return CopyFileWithDecryption(ctx, sourceURL, destOSBaseURL, filename, requestID, nil)
 }
 
 func getFile(ctx context.Context, requestID, url string, dStorage *DStorageDownload) (io.ReadCloser, error) {
@@ -263,6 +283,6 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 
 type StubInputCopy struct{}
 
-func (s *StubInputCopy) CopyInputToS3(requestID string, inputFile *url.URL) (video.InputVideo, string, *url.URL, error) {
+func (s *StubInputCopy) CopyInputToS3(requestID string, inputFile *url.URL, decryptor *crypto.DecryptionKeys) (video.InputVideo, string, *url.URL, error) {
 	return video.InputVideo{}, "", &url.URL{}, nil
 }
