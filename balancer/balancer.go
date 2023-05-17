@@ -21,6 +21,7 @@ import (
 
 var mistUtilLoadSingleRequestTimeout = 15 * time.Second
 var mistUtilLoadLoopTimeout = 2 * time.Minute
+var mistLocalAddress = "http://127.0.0.1:4242"
 
 type Balancer interface {
 	Start(ctx context.Context) error
@@ -33,6 +34,7 @@ type Config struct {
 	Args                     []string
 	MistUtilLoadPort         uint32
 	MistLoadBalancerTemplate string
+	NodeName                 string
 }
 
 type BalancerImpl struct {
@@ -133,7 +135,13 @@ func (b *BalancerImpl) UpdateMembers(ctx context.Context, members []cluster.Memb
 func (b *BalancerImpl) changeLoadBalancerServers(ctx context.Context, server, action string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, mistUtilLoadSingleRequestTimeout)
 	defer cancel()
-	serverTmpl := fmt.Sprintf(b.config.MistLoadBalancerTemplate, server)
+	var serverTmpl string
+	if server == b.config.NodeName {
+		// Special case — make sure the balancer is aware this one is localhost
+		serverTmpl = mistLocalAddress
+	} else {
+		serverTmpl = b.formatNodeAddress(server)
+	}
 	actionURL := b.endpoint + "?" + action + "server=" + url.QueryEscape(serverTmpl)
 	req, err := http.NewRequest("POST", actionURL, nil)
 	req = req.WithContext(ctx)
@@ -166,7 +174,7 @@ func (b *BalancerImpl) changeLoadBalancerServers(ctx context.Context, server, ac
 	return bytes, nil
 }
 
-func (b *BalancerImpl) getMistLoadBalancerServers(ctx context.Context) (map[string]interface{}, error) {
+func (b *BalancerImpl) getMistLoadBalancerServers(ctx context.Context) (map[string]bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, mistUtilLoadSingleRequestTimeout)
 	defer cancel()
 	url := b.endpoint + "?lstservers=1"
@@ -196,14 +204,32 @@ func (b *BalancerImpl) getMistLoadBalancerServers(ctx context.Context) (map[stri
 		return nil, err
 	}
 
-	var mistResponse map[string]interface{}
+	var mistResponse map[string]any
 
 	err = json.Unmarshal([]byte(string(bytes)), &mistResponse)
 	if err != nil {
 		return nil, err
 	}
 
-	return mistResponse, nil
+	output := make(map[string]bool, len(mistResponse))
+
+	for k, _ := range mistResponse {
+		if k == mistLocalAddress {
+			// Special case — recognize 127.0.0.1 and transform it to our node address
+			myAddr := b.formatNodeAddress(b.config.NodeName)
+			output[myAddr] = true
+		} else {
+			output[k] = true
+		}
+	}
+
+	return output, nil
+}
+
+// format a server address for consumption by MistUtilLoad
+// commonly this means catalyst-0.example.com --> https://catalyst-0.example.com:443
+func (b *BalancerImpl) formatNodeAddress(server string) string {
+	return fmt.Sprintf(b.config.MistLoadBalancerTemplate, server)
 }
 
 func (b *BalancerImpl) execBalancer(ctx context.Context, balancerArgs []string) error {
