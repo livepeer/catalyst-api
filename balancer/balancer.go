@@ -174,7 +174,7 @@ func (b *BalancerImpl) changeLoadBalancerServers(ctx context.Context, server, ac
 	return bytes, nil
 }
 
-func (b *BalancerImpl) getMistLoadBalancerServers(ctx context.Context) (map[string]bool, error) {
+func (b *BalancerImpl) getMistLoadBalancerServers(ctx context.Context) (map[string]struct{}, error) {
 	ctx, cancel := context.WithTimeout(ctx, mistUtilLoadSingleRequestTimeout)
 	defer cancel()
 	url := b.endpoint + "?lstservers=1"
@@ -211,15 +211,15 @@ func (b *BalancerImpl) getMistLoadBalancerServers(ctx context.Context) (map[stri
 		return nil, err
 	}
 
-	output := make(map[string]bool, len(mistResponse))
+	output := make(map[string]struct{}, len(mistResponse))
 
 	for k := range mistResponse {
 		if k == mistLocalAddress {
 			// Special case — recognize 127.0.0.1 and transform it to our node address
 			myAddr := b.formatNodeAddress(b.config.NodeName)
-			output[myAddr] = true
+			output[myAddr] = struct{}{}
 		} else {
-			output[k] = true
+			output[k] = struct{}{}
 		}
 	}
 
