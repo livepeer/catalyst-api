@@ -47,7 +47,7 @@ func ValidateKeyPair(pub string, privkey rsa.PrivateKey) (bool, error) {
 		glog.Fatalf("Error decoding base64 encoded key: %v", err)
 		return false, err
 	}
-	block, _ := pem.Decode([]byte(pubkey))
+	block, _ := pem.Decode(pubkey)
 	if block == nil {
 		glog.Fatalf("failed to parse PEM block containing the public key")
 		err := fmt.Errorf("failed to parse PEM block containing the public key")
