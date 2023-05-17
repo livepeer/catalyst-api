@@ -21,7 +21,6 @@ import (
 
 var mistUtilLoadSingleRequestTimeout = 15 * time.Second
 var mistUtilLoadLoopTimeout = 2 * time.Minute
-var mistLocalAddress = "http://127.0.0.1:4242"
 
 type Balancer interface {
 	Start(ctx context.Context) error
@@ -35,6 +34,8 @@ type Config struct {
 	MistUtilLoadPort         uint32
 	MistLoadBalancerTemplate string
 	NodeName                 string
+	MistPort                 int
+	MistHost                 string
 }
 
 type BalancerImpl struct {
@@ -43,6 +44,7 @@ type BalancerImpl struct {
 	endpoint string
 	// Blocks until initial startup
 	startupOnce sync.Once
+	mistAddr    string
 }
 
 // create a new load balancer instance
@@ -56,6 +58,7 @@ func NewBalancer(config *Config) Balancer {
 		config:   config,
 		cmd:      nil,
 		endpoint: fmt.Sprintf("http://127.0.0.1:%d", config.MistUtilLoadPort),
+		mistAddr: fmt.Sprintf("http://%s:%d", config.MistHost, config.MistPort),
 	}
 }
 
@@ -138,7 +141,7 @@ func (b *BalancerImpl) changeLoadBalancerServers(ctx context.Context, server, ac
 	var serverURL string
 	if server == b.config.NodeName {
 		// Special case — make sure the balancer is aware this one is localhost
-		serverURL = mistLocalAddress
+		serverURL = b.mistAddr
 	} else {
 		serverURL = b.formatNodeAddress(server)
 	}
@@ -214,7 +217,7 @@ func (b *BalancerImpl) getMistLoadBalancerServers(ctx context.Context) (map[stri
 	output := make(map[string]struct{}, len(mistResponse))
 
 	for k := range mistResponse {
-		if k == mistLocalAddress {
+		if k == b.mistAddr {
 			// Special case — recognize 127.0.0.1 and transform it to our node address
 			myAddr := b.formatNodeAddress(b.config.NodeName)
 			output[myAddr] = struct{}{}
