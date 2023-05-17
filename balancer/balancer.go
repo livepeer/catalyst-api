@@ -213,7 +213,7 @@ func (b *BalancerImpl) getMistLoadBalancerServers(ctx context.Context) (map[stri
 
 	output := make(map[string]bool, len(mistResponse))
 
-	for k, _ := range mistResponse {
+	for k := range mistResponse {
 		if k == mistLocalAddress {
 			// Special case — recognize 127.0.0.1 and transform it to our node address
 			myAddr := b.formatNodeAddress(b.config.NodeName)
