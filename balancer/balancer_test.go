@@ -68,7 +68,8 @@ func TestSetMistUtilLoadServers(t *testing.T) {
 		"d.example.com",
 	}
 	for _, host := range hosts {
-		bal.changeLoadBalancerServers(context.Background(), host, "add")
+		_, err := bal.changeLoadBalancerServers(context.Background(), host, "add")
+		require.NoError(t, err)
 	}
 	keys := toSortedKeys(t, mul.BalancedHosts)
 	require.Equal(t, keys, []string{
@@ -78,7 +79,8 @@ func TestSetMistUtilLoadServers(t *testing.T) {
 		"https://d.example.com:4321",
 	})
 
-	bal.changeLoadBalancerServers(context.Background(), "c.example.com", "del")
+	_, err := bal.changeLoadBalancerServers(context.Background(), "c.example.com", "del")
+	require.NoError(t, err)
 	keys = toSortedKeys(t, mul.BalancedHosts)
 	require.Equal(t, keys, []string{
 		"https://a.example.com:4321",
@@ -94,12 +96,14 @@ func TestSetMistUtilLoadLocalServer(t *testing.T) {
 	bal.config.NodeName = "example.com"
 	bal.config.MistLoadBalancerTemplate = "https://%s:1234"
 
-	bal.changeLoadBalancerServers(context.Background(), "example.com", "add")
+	_, err := bal.changeLoadBalancerServers(context.Background(), "example.com", "add")
+	require.NoError(t, err)
 	keys := toSortedKeys(t, mul.BalancedHosts)
 	require.Len(t, keys, 1)
 	require.Equal(t, keys[0], "http://127.0.0.1:4242")
 
-	bal.changeLoadBalancerServers(context.Background(), "example.com", "del")
+	_, err = bal.changeLoadBalancerServers(context.Background(), "example.com", "del")
+	require.NoError(t, err)
 	keys = toSortedKeys(t, mul.BalancedHosts)
 	require.Len(t, keys, 0)
 }
@@ -136,7 +140,8 @@ func (mul *mockMistUtilLoad) Handle(t *testing.T) http.HandlerFunc {
 			require.Equal(t, vals[0], "1")
 			b, err := json.Marshal(mul.BalancedHosts)
 			require.NoError(t, err)
-			w.Write(b)
+			_, err = w.Write(b)
+			require.NoError(t, err)
 			return
 		}
 
