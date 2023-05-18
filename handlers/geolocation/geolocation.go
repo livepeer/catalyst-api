@@ -100,7 +100,7 @@ func (c *GeolocationHandlersCollection) StreamSourceHandler() httprouter.Handle 
 
 		latStr := fmt.Sprintf("%f", lat)
 		lonStr := fmt.Sprintf("%f", lon)
-		dtscURL, err := c.Balancer.QueryMistForClosestNodeSource(context.Background(), streamName, latStr, lonStr, "", true)
+		dtscURL, err := c.Balancer.MistUtilLoadSource(context.Background(), streamName, latStr, lonStr)
 		if err != nil {
 			glog.Errorf("error querying mist for STREAM_SOURCE: %s", err)
 			w.Write([]byte("push://")) // nolint:errcheck
