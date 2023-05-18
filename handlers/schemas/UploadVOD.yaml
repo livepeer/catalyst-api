@@ -16,6 +16,14 @@ properties:
     type: "string"
   target_segment_size_secs:
     type: "integer"
+  encryption:
+    type: "object"
+    properties:
+      encrypted_key: 
+        type: "string"
+    required: 
+      - "encrypted_key"
+    additionalProperties: false
   pipeline_strategy:
     type: string
     description:
@@ -105,13 +113,6 @@ properties:
       - "width"
       -  "height"
       - "bitrate"
-  encryption:
-    type: "object"
-    properties:
-      encrypted_key: "string"
-    required: 
-      - "encrypted_key"
-    additionalProperties: false
 required:
   - "url"
   - "callback_url"
