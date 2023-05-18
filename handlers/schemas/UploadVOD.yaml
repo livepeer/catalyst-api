@@ -112,7 +112,6 @@ properties:
     required: 
       - "encrypted_key"
     additionalProperties: false
-
 required:
   - "url"
   - "callback_url"
