@@ -79,7 +79,7 @@ type UploadJobPayload struct {
 }
 
 type EncryptionPayload struct {
-	EncryptedKey string
+	EncryptedKey string `json:"encrypted_key"`
 }
 
 // UploadJobResult is the object returned by the successful execution of an
