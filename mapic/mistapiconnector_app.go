@@ -409,7 +409,11 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 	glog.V(model.VVERBOSE).Infof("Requested stream key is '%s'", streamKey)
 	// ask API
 	stream, err := mc.lapi.GetStreamByKey(streamKey)
-	if err != nil || stream == nil {
+	if errors.Is(err, api.ErrNotExists) {
+		glog.Errorf("Stream not found for push rewrite streamKey=%s err=%v", streamKey, err)
+		w.Write([]byte(""))
+		return false
+	} else if err != nil || stream == nil {
 		glog.Errorf("Error getting stream info from Livepeer API streamKey=%s err=%v", streamKey, err)
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("false"))
@@ -427,8 +431,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 			}
 			mc.mapi.DeleteStreams(streamKey)
 		}
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("false"))
+		w.Write([]byte(""))
 		return false
 	}
 
