@@ -252,7 +252,7 @@ func (b *BalancerImpl) execBalancer(ctx context.Context, balancerArgs []string) 
 }
 
 func (b *BalancerImpl) queryMistForClosestNode(ctx context.Context, playbackID, lat, lon, prefix string) (string, error) {
-	streamName := fmt.Sprintf("%s+%s", playbackID, prefix)
+	streamName := fmt.Sprintf("%s+%s", prefix, playbackID)
 	// First, check to see if any server has this stream
 	err1 := b.MistUtilLoadStreamStats(ctx, streamName)
 	// Then, check the best playback server

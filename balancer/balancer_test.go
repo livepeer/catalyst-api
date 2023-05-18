@@ -175,6 +175,31 @@ func TestStreamStats(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestGetBestNode(t *testing.T) {
+	bal, mul := start(t)
+	defer mul.Close()
+
+	mul.BalancedHosts = map[string]string{
+		"http://one.example.com:4242": "Online",
+		"http://two.example.com:4242": "Online",
+	}
+	mul.StreamsLive = map[string][]string{"http://two.example.com:4242": {"prefix+fakeid"}}
+
+	redirectPrefixes := []string{"firstprefix", "prefix", "thirdprefix"}
+
+	// Test success case
+	node, streamName, err := bal.GetBestNode(context.Background(), redirectPrefixes, "fakeid", "0", "0", redirectPrefixes[0])
+	require.NoError(t, err)
+	require.Equal(t, streamName, "prefix+fakeid")
+	require.Contains(t, []string{"one.example.com", "two.example.com"}, node)
+
+	// Test returning stream as 404 handler
+	node, streamName, err = bal.GetBestNode(context.Background(), redirectPrefixes, "notlive", "0", "0", redirectPrefixes[0])
+	require.NoError(t, err)
+	require.Equal(t, streamName, "firstprefix+notlive")
+	require.Contains(t, []string{"one.example.com", "two.example.com"}, node)
+}
+
 type mockMistUtilLoad struct {
 	HttpCalls     int
 	BalancedHosts map[string]string
