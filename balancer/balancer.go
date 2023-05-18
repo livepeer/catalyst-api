@@ -26,7 +26,9 @@ type Balancer interface {
 	Start(ctx context.Context) error
 	UpdateMembers(ctx context.Context, members []cluster.Member) error
 	GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error)
-	QueryMistForClosestNodeSource(ctx context.Context, playbackID, lat, lon, prefix string, source bool) (string, error)
+	MistUtilLoadBalance(ctx context.Context, stream, lat, lon string) (string, error)
+	MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error)
+	MistUtilLoadStreamStats(ctx context.Context, stream string) error
 }
 
 type Config struct {
@@ -250,19 +252,20 @@ func (b *BalancerImpl) execBalancer(ctx context.Context, balancerArgs []string) 
 }
 
 func (b *BalancerImpl) queryMistForClosestNode(ctx context.Context, playbackID, lat, lon, prefix string) (string, error) {
+	streamName := fmt.Sprintf("%s+%s", prefix, playbackID)
 	// First, check to see if any server has this stream
-	_, err1 := b.QueryMistForClosestNodeSource(ctx, playbackID, lat, lon, prefix, true)
+	err1 := b.MistUtilLoadStreamStats(ctx, streamName)
 	// Then, check the best playback server
-	node, err2 := b.QueryMistForClosestNodeSource(ctx, playbackID, lat, lon, prefix, false)
+	node, err2 := b.MistUtilLoadBalance(ctx, streamName, lat, lon)
 	// If we can't get a playback server, error
 	if err2 != nil {
 		return "", err2
 	}
-	// If we didn't find the stream but we did find a node, return it with the error for 404s
+	// If we didn't find the stream but we did find a node, return it as the 404 handler
 	if err1 != nil {
 		return node, err1
 	}
-	// Good path, we found the stream and a playback nodew!
+	// Good path, we found the stream and a playback node!
 	return node, nil
 }
 
@@ -312,19 +315,50 @@ func (b *BalancerImpl) GetBestNode(ctx context.Context, redirectPrefixes []strin
 	return "", "", err
 }
 
-func (b *BalancerImpl) QueryMistForClosestNodeSource(ctx context.Context, playbackID, lat, lon, prefix string, source bool) (string, error) {
+// make a balancing request to MistUtilLoad, returns a server suitable for playback
+func (b *BalancerImpl) MistUtilLoadBalance(ctx context.Context, stream, lat, lon string) (string, error) {
+	str, err := b.mistUtilLoadRequest(ctx, "/", stream, lat, lon)
+	if err != nil {
+		return "", err
+	}
+	// Special case: rewrite our local node to our public node url
+	if str == b.config.MistHost {
+		str = b.config.NodeName
+	}
+	return str, nil
+}
+
+// make a source request to MistUtilLoad, returns the DTSC url of the origin server
+func (b *BalancerImpl) MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error) {
+	str, err := b.mistUtilLoadRequest(ctx, "?source=", stream, lat, lon)
+	if err != nil {
+		return "", err
+	}
+	// Special case: rewrite our local node to our public node url
+	u, err := url.Parse(str)
+	if err != nil {
+		return "", err
+	}
+	if u.Hostname() == b.config.MistHost {
+		u.Host = b.config.NodeName
+		str = u.String()
+	}
+	return str, nil
+}
+
+// make a streamStats request to MistUtilLoad; response is opaque but a
+// successful call means the stream is active somewhere in the world
+func (b *BalancerImpl) MistUtilLoadStreamStats(ctx context.Context, stream string) error {
+	_, err := b.mistUtilLoadRequest(ctx, "?streamstats=", stream, "0", "0")
+	return err
+}
+
+// Internal method to make a request to MistUtilLoad
+func (b *BalancerImpl) mistUtilLoadRequest(ctx context.Context, route, stream, lat, lon string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, mistUtilLoadSingleRequestTimeout)
 	defer cancel()
-	if prefix != "" {
-		prefix += "+"
-	}
-	var murl string
-	enc := url.QueryEscape(fmt.Sprintf("%s%s", prefix, playbackID))
-	if source {
-		murl = fmt.Sprintf("%s/?source=%s", b.endpoint, enc)
-	} else {
-		murl = fmt.Sprintf("%s/%s", b.endpoint, enc)
-	}
+	enc := url.QueryEscape(stream)
+	murl := fmt.Sprintf("%s%s%s", b.endpoint, route, enc)
 	glog.V(8).Infof("MistUtilLoad started request=%s", murl)
 	req, err := http.NewRequest("GET", murl, nil)
 	if err != nil {
@@ -353,24 +387,8 @@ func (b *BalancerImpl) QueryMistForClosestNodeSource(ctx context.Context, playba
 	}
 	glog.V(8).Infof("MistUtilLoad responded request=%s response=%s", murl, body)
 	str := string(body)
-	if str == "FULL" {
-		return "", fmt.Errorf("GET request '%s' returned 'FULL'", murl)
-	}
-
-	// Special case: rewrite our local node to our public node url
-	if !source {
-		if str == b.config.MistHost {
-			str = b.config.NodeName
-		}
-	} else {
-		u, err := url.Parse(str)
-		if err != nil {
-			return "", err
-		}
-		if u.Hostname() == b.config.MistHost {
-			u.Host = b.config.NodeName
-		}
-		str = u.String()
+	if str == "FULL" || str == "null" {
+		return "", fmt.Errorf("GET request '%s' returned '%s'", murl, str)
 	}
 
 	return str, nil

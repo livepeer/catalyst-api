@@ -4,6 +4,7 @@ package balancer
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/livepeer/catalyst-api/cluster"
 )
@@ -34,4 +35,16 @@ func (b *BalancerStub) GetBestNode(ctx context.Context, redirectPrefixes []strin
 
 func (b *BalancerStub) QueryMistForClosestNodeSource(ctx context.Context, playbackID, lat, lon, prefix string, source bool) (string, error) {
 	return "dtsc://localhost", nil
+}
+
+func (b *BalancerStub) MistUtilLoadBalance(ctx context.Context, stream, lat, lon string) (string, error) {
+	return "127.0.0.1", nil
+}
+
+func (b *BalancerStub) MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error) {
+	return "dtsc://127.0.0.1", nil
+}
+
+func (b *BalancerStub) MistUtilLoadStreamStats(ctx context.Context, stream string) error {
+	return fmt.Errorf("not implemented")
 }

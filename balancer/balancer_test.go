@@ -127,12 +127,13 @@ func TestBalancing(t *testing.T) {
 	mul.BalancedHosts = map[string]string{
 		"http://one.example.com:4242": "Online",
 	}
+	mul.StreamsLive = map[string][]string{"http://one.example.com:4242": {"prefix+fakeid"}}
 
-	node, err := bal.QueryMistForClosestNodeSource(context.Background(), "fakeid", "0", "0", "prefix", false)
+	node, err := bal.MistUtilLoadBalance(context.Background(), "prefix+fakeid", "0", "0")
 	require.NoError(t, err)
 	require.Equal(t, node, "one.example.com")
 
-	source, err := bal.QueryMistForClosestNodeSource(context.Background(), "fakeid", "0", "0", "prefix", true)
+	source, err := bal.MistUtilLoadSource(context.Background(), "prefix+fakeid", "0", "0")
 	require.NoError(t, err)
 	require.Equal(t, source, "dtsc://one.example.com")
 }
@@ -148,19 +149,62 @@ func TestBalancingLocalNode(t *testing.T) {
 		"http://127.0.0.1:4242": "Online",
 	}
 
-	node, err := bal.QueryMistForClosestNodeSource(context.Background(), "fakeid", "0", "0", "prefix", false)
+	node, err := bal.MistUtilLoadBalance(context.Background(), "prefix+fakeid", "0", "0")
 	require.NoError(t, err)
 	require.Equal(t, node, "example.com")
 
-	source, err := bal.QueryMistForClosestNodeSource(context.Background(), "fakeid", "0", "0", "prefix", true)
+	// Should reject local node source request to avoid loops
+	_, err = bal.MistUtilLoadSource(context.Background(), "prefix+fakeid", "0", "0")
+	require.Error(t, err)
+}
+
+func TestStreamStats(t *testing.T) {
+	bal, mul := start(t)
+	defer mul.Close()
+
+	mul.BalancedHosts = map[string]string{
+		"http://one.example.com:4242": "Online",
+		"http://two.example.com:4242": "Online",
+	}
+	mul.StreamsLive = map[string][]string{"http://one.example.com:4242": {"prefix+fakeid"}}
+
+	err := bal.MistUtilLoadStreamStats(context.Background(), "prefix+fakeid")
 	require.NoError(t, err)
-	require.Equal(t, source, "dtsc://example.com")
+
+	err = bal.MistUtilLoadStreamStats(context.Background(), "prefix+notlive")
+	require.Error(t, err)
+}
+
+func TestGetBestNode(t *testing.T) {
+	bal, mul := start(t)
+	defer mul.Close()
+
+	mul.BalancedHosts = map[string]string{
+		"http://one.example.com:4242": "Online",
+		"http://two.example.com:4242": "Online",
+	}
+	mul.StreamsLive = map[string][]string{"http://two.example.com:4242": {"prefix+fakeid"}}
+
+	redirectPrefixes := []string{"firstprefix", "prefix", "thirdprefix"}
+
+	// Test success case
+	node, streamName, err := bal.GetBestNode(context.Background(), redirectPrefixes, "fakeid", "0", "0", redirectPrefixes[0])
+	require.NoError(t, err)
+	require.Equal(t, streamName, "prefix+fakeid")
+	require.Contains(t, []string{"one.example.com", "two.example.com"}, node)
+
+	// Test returning stream as 404 handler
+	node, streamName, err = bal.GetBestNode(context.Background(), redirectPrefixes, "notlive", "0", "0", redirectPrefixes[0])
+	require.NoError(t, err)
+	require.Equal(t, streamName, "firstprefix+notlive")
+	require.Contains(t, []string{"one.example.com", "two.example.com"}, node)
 }
 
 type mockMistUtilLoad struct {
 	HttpCalls     int
 	BalancedHosts map[string]string
 	Server        *httptest.Server
+	StreamsLive   map[string][]string
 }
 
 func newMockMistUtilLoad(t *testing.T) *mockMistUtilLoad {
@@ -193,18 +237,55 @@ func (mul *mockMistUtilLoad) Handle(t *testing.T) http.HandlerFunc {
 			return
 		}
 
-		// Listing servers - ?source=streamname
+		// Finding the source node for a stream - ?source=streamname
 		if vals, ok := queryVals["source"]; ok {
 			require.Len(t, vals, 1)
+			stream := vals[0]
 			for node := range mul.BalancedHosts {
 				u, err := url.Parse(node)
 				require.NoError(t, err)
+				if u.Hostname() == "127.0.0.1" {
+					// Simulate Mist's loop-avoidance behavior
+					continue
+				}
+				streams, ok := mul.StreamsLive[node]
+				if !ok {
+					continue
+				}
+				found := false
+				for _, s := range streams {
+					if s == stream {
+						found = true
+					}
+				}
+				if !found {
+					continue
+				}
 				resp := fmt.Sprintf("dtsc://%s", u.Hostname())
 				_, err = w.Write([]byte(resp))
 				require.NoError(t, err)
 				return
 			}
 			_, err := w.Write([]byte("FULL"))
+			require.NoError(t, err)
+			return
+		}
+
+		// Evaluating stream stats
+		if vals, ok := queryVals["streamstats"]; ok {
+			require.Len(t, vals, 1)
+			stream := vals[0]
+			for node := range mul.BalancedHosts {
+				for _, s := range mul.StreamsLive[node] {
+					if s == stream {
+						_, err := w.Write([]byte("{}"))
+						require.NoError(t, err)
+						return
+					}
+				}
+			}
+
+			_, err := w.Write([]byte("null"))
 			require.NoError(t, err)
 			return
 		}
