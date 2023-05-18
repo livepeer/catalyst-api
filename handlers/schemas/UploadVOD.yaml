@@ -105,6 +105,13 @@ properties:
       - "width"
       -  "height"
       - "bitrate"
+  encryption:
+    type: "object"
+    properties:
+      encryptedKey: string
+    required: ["encryptedKey"]
+    additionalProperties: false
+
 required:
   - "url"
   - "callback_url"
