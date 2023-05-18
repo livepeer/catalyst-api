@@ -108,7 +108,7 @@ properties:
   encryption:
     type: "object"
     properties:
-      encrypted_key: string
+      encrypted_key: "string"
     required: 
       - "encrypted_key"
     additionalProperties: false
