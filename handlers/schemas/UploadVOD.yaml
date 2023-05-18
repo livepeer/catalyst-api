@@ -109,7 +109,8 @@ properties:
     type: "object"
     properties:
       encryptedKey: string
-    required: ["encryptedKey"]
+    required: 
+      - "encryptedKey"
     additionalProperties: false
 
 required:
