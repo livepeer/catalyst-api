@@ -110,7 +110,7 @@ properties:
     properties:
       encryptedKey: string
     required: 
-      - "encryptedKey"
+      - "encrypted_key"
     additionalProperties: false
 
 required:
