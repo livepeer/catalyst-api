@@ -181,6 +181,7 @@ func newExponentialBackOffExecutor() *backoff.ExponentialBackOff {
 	backOff := backoff.NewExponentialBackOff()
 	backOff.InitialInterval = 200 * time.Millisecond
 	backOff.MaxInterval = maxRetryInterval
+	backOff.MaxElapsedTime = 0 // don't impose a timeout as part of the retries
 
 	return backOff
 }
