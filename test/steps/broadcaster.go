@@ -135,8 +135,10 @@ func (s *StepContext) TranscodedSegmentsWrittenToDiskWithinSeconds(numSegmentsEx
 	masterManifestPath := filepath.Join(s.TranscodedOutputDir, "index.m3u8")
 	var err error
 	for t := 0; t < secs*2; t++ {
-		if _, err = os.Stat(masterManifestPath); err == nil {
-			break
+		if contents, err := os.ReadFile(masterManifestPath); err == nil {
+			if !strings.Contains(string(contents), "/source/") { // ignore fast TTR source playback manifest
+				break
+			}
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
