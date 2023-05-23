@@ -41,7 +41,7 @@ log "Starting..." 0
 #Check for input semaphores without data
 for S in $SEMS ; do
   STRM=${S:20}
-  if containsElement "$STRM" "$ACTS" ; then
+  if containsElement $STRM $ACTS ; then
     log "Yes: ${STRM} (${S})" 0
   else
     log "SEM_INPUT: ${S}" 1
@@ -53,7 +53,7 @@ done
 #Check for pull semaphores without data
 for S in $PULS ; do
   STRM=${S:21}
-  if containsElement "$STRM" "$DTPL" ; then
+  if containsElement $STRM $DTPL ; then
     log "Yes: ${STRM} (${S})" 0
   else
     log "SEM_PULL: ${S}" 1
@@ -66,7 +66,7 @@ done
 for P in $PAGS; do
   FILE=${P%@*} #Remove everything after the '@'
   STRM=${FILE:16} #Strip the beginning
-  if containsElement "$STRM" "$ACTS" ; then
+  if containsElement $STRM $ACTS ; then
     log "Yes: ${STRM} (${P})" 0
   else
     if (( $# != 0 )); then
@@ -80,7 +80,7 @@ done
 #Check for state pages without buffer
 for P in $STAT ; do
   STRM=${P:17} #Strip the beginning
-  if containsElement "$STRM" "$ACTS" ; then
+  if containsElement $STRM $ACTS ; then
     log "Yes: ${STRM} (${P})" 0
   else
     log "STATE: ${P}" 1
