@@ -169,7 +169,7 @@ type OutputVideoFile struct {
 }
 
 func PopulateOutput(probe Prober, outputURL string, videoFile OutputVideoFile) (OutputVideoFile, error) {
-	outputVideoProbe, err := runProbe(probe, outputURL)
+	outputVideoProbe, err := probe.ProbeFile(outputURL)
 	if err != nil {
 		return OutputVideoFile{}, fmt.Errorf("error probing output file from S3: %w", err)
 	}

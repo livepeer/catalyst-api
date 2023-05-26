@@ -20,7 +20,22 @@ type Prober interface {
 
 type Probe struct{}
 
-func (p Probe) ProbeFile(url string, ffProbeOptions ...string) (iv InputVideo, err error) {
+func (p Probe) ProbeFile(url string, ffProbeOptions ...string) (InputVideo, error) {
+	iv, err := p.runProbe(url, ffProbeOptions...)
+	if err == nil {
+		return iv, nil
+	}
+
+	// ignore these probing errors if found and re-run with fatal loglevel to obtain the probe data
+	errMsg := strings.ToLower(err.Error())
+	if strings.Contains(errMsg, "parametric stereo signaled to be not-present but was found in the bitstream") ||
+		strings.Contains(errMsg, "non-existing pps 0 referenced") {
+		return p.runProbe(url, "-loglevel", "fatal")
+	}
+	return InputVideo{}, err
+}
+
+func (p Probe) runProbe(url string, ffProbeOptions ...string) (iv InputVideo, err error) {
 	if len(ffProbeOptions) == 0 {
 		ffProbeOptions = []string{"-loglevel", "error"}
 	}
