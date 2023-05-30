@@ -14,6 +14,11 @@ import (
 
 var unsupportedVideoCodecList = []string{"mjpeg", "jpeg", "png"}
 
+var ignoreErrMessages = []string{
+	"parametric stereo signaled to be not-present but was found in the bitstream",
+	"non-existing pps 0 referenced",
+}
+
 type Prober interface {
 	ProbeFile(url string, ffProbeOptions ...string) (InputVideo, error)
 }
@@ -28,9 +33,10 @@ func (p Probe) ProbeFile(url string, ffProbeOptions ...string) (InputVideo, erro
 
 	// ignore these probing errors if found and re-run with fatal loglevel to obtain the probe data
 	errMsg := strings.ToLower(err.Error())
-	if strings.Contains(errMsg, "parametric stereo signaled to be not-present but was found in the bitstream") ||
-		strings.Contains(errMsg, "non-existing pps 0 referenced") {
-		return p.runProbe(url, "-loglevel", "fatal")
+	for _, ignoreMsg := range ignoreErrMessages {
+		if strings.Contains(errMsg, ignoreMsg) {
+			return p.runProbe(url, "-loglevel", "fatal")
+		}
 	}
 	return InputVideo{}, err
 }
