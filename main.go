@@ -38,6 +38,8 @@ func main() {
 	fs := flag.NewFlagSet("catalyst-api", flag.ExitOnError)
 	cli := config.Cli{}
 
+	version := fs.Bool("version", false, "print application version")
+
 	// listen addresses
 	config.AddrFlag(fs, &cli.HTTPAddress, "http-addr", "0.0.0.0:8989", "Address to bind for external-facing Catalyst HTTP handling")
 	config.AddrFlag(fs, &cli.HTTPInternalAddress, "http-internal-addr", "127.0.0.1:7979", "Address to bind for internal privileged HTTP commands")
@@ -109,6 +111,12 @@ func main() {
 	if err != nil {
 		glog.Fatal(err)
 	}
+
+	if *version {
+		fmt.Printf("catalyst-api version: %s", config.Version)
+		return
+	}
+
 	if *verbosity != "" {
 		err = vFlag.Value.Set(*verbosity)
 		if err != nil {
