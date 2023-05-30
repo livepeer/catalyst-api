@@ -121,3 +121,10 @@ func TestProbe_VP9(t *testing.T) {
 	_, err = Probe{}.ProbeFile("./fixtures/webm_vp9.webm")
 	require.NoError(t, err)
 }
+
+func TestProbe_IgnoreSomeErrors(t *testing.T) {
+	_, err := Probe{}.ProbeFile("./fixtures/parametric-stereo-error.mp4")
+	require.NoError(t, err)
+	_, err = Probe{}.ProbeFile("./fixtures/non-existing-pps.ts")
+	require.NoError(t, err)
+}

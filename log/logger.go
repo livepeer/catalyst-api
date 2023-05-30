@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-kit/log"
 	kitlog "github.com/go-kit/log"
 	"github.com/patrickmn/go-cache"
 )
@@ -59,7 +58,7 @@ func getLogger(requestID string) kitlog.Logger {
 }
 
 func newLogger() kitlog.Logger {
-	newLogger := kitlog.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+	newLogger := kitlog.NewLogfmtLogger(kitlog.NewSyncWriter(os.Stderr))
 	return kitlog.With(newLogger, "ts", kitlog.DefaultTimestampUTC)
 }
 
