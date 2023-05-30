@@ -248,7 +248,11 @@ func (b *BalancerImpl) execBalancer(ctx context.Context, balancerArgs []string) 
 		return err
 	}
 
-	return b.cmd.Wait()
+	err = b.cmd.Wait()
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("MistUtilLoad exited cleanly")
 }
 
 func (b *BalancerImpl) queryMistForClosestNode(ctx context.Context, playbackID, lat, lon, prefix string) (string, error) {
