@@ -17,6 +17,7 @@ import (
 	"github.com/livepeer/catalyst-api/handlers/admin"
 	"github.com/livepeer/catalyst-api/handlers/ffmpeg"
 	"github.com/livepeer/catalyst-api/handlers/geolocation"
+	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/log"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/middleware"
@@ -68,6 +69,7 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	accessControlHandlers := accesscontrol.NewAccessControlHandlersCollection(cli)
 	encryptionHandlers := accesscontrol.NewEncryptionHandlersCollection(cli)
 	adminHandlers := &admin.AdminHandlersCollection{Cluster: c, Machine: machine}
+	mistCallbackHandlers := &misttriggers.MistCallbackHandlersCollection{}
 
 	// Simple endpoint for healthchecks
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
@@ -103,6 +105,9 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 
 	// Public GET handler to retrieve the public key for vod encryption
 	router.GET("/api/pubkey", withLogging(encryptionHandlers.PublicKeyHandler()))
+
+	// Endpoint to receive "Triggers" (callbacks) from Mist
+	router.POST("/api/mist/trigger", withLogging(mistCallbackHandlers.Trigger()))
 
 	// Endpoint to receive segments and manifests that ffmpeg produces
 	router.PUT("/api/ffmpeg/:id/:filename", withLogging(ffmpegSegmentingHandlers.NewFile()))
