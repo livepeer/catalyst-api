@@ -23,7 +23,7 @@ require (
 	github.com/livepeer/m3u8 v0.11.1
 	github.com/minio/madmin-go v1.7.5
 	github.com/peterbourgon/ff/v3 v3.3.1
-	github.com/pquerna/cachecontrol v0.1.0
+	github.com/pquerna/cachecontrol v0.2.0
 	github.com/prometheus/client_golang v1.15.1
 	github.com/stretchr/testify v1.8.4
 	github.com/u2takey/ffmpeg-go v0.4.1
