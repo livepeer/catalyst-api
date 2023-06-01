@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 )
@@ -15,7 +16,9 @@ const (
 	TRIGGER_PUSH_OUT_START = "PUSH_OUT_START"
 )
 
-type MistCallbackHandlersCollection struct{}
+type MistCallbackHandlersCollection struct {
+	StreamHealthClient clients.StreamHealthClient
+}
 
 // Trigger dispatches request to mapped method according to trigger name
 // Only single trigger callback is allowed on Mist.

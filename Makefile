@@ -35,7 +35,7 @@ run:
 
 .PHONY: generate
 generate:
-	go install github.com/golang/mock/mockgen@v1.6.0
+	# go install github.com/golang/mock/mockgen@v1.6.0 || echo "Couldn't install mockgen, proceeding anyway"
 	go generate ./...
 
 .PHONY: test

@@ -1,37 +1,15 @@
 package misttriggers
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/golang/glog"
-	"github.com/hashicorp/go-retryablehttp"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 )
-
-var hookClient *http.Client
-
-func init() {
-	client := retryablehttp.NewClient()
-	client.RetryMax = 2                   // Attempte request a maximum of this+1 times
-	client.RetryWaitMin = 1 * time.Second // Wait at least this long between retries
-	client.RetryWaitMax = 5 * time.Second // Wait at most this long between retries (exponential backoff)
-	client.HTTPClient = &http.Client{
-		Timeout: 5 * time.Second, // Give up on requests that take more than this long
-	}
-
-	hookClient = client.StandardClient()
-}
-
-// This was originally written as catalalyst-api code, since that's where it's
-// supposed to go. Currently, catalyst-api has no connection with Mist anymore
-// though, so it's easier to plug this into mist-api-connector instead for now.
-// TODO: Move this to catalyst-api when its got the Mist plumbing back.
 
 // This trigger is run whenever the live buffer state of a stream changes. It is
 // not ran for VoD streams. This trigger is stream-specific and non-blocking.
@@ -44,7 +22,7 @@ func init() {
 // {JSON object with stream details, only when state is not EMPTY}
 //
 // Read the Mist documentation for more details on each of the stream states.
-func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) error {
+func (d *MistCallbackHandlersCollection) TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) error {
 	sessionID := req.Header.Get("X-UUID")
 
 	body, err := ParseStreamBufferPayload(lines)
@@ -52,6 +30,7 @@ func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) err
 		glog.Infof("Error parsing STREAM_BUFFER payload error=%q payload=%q", err, strings.Join(lines, "\n"))
 		return err
 	}
+	body.SessionID = sessionID
 
 	rawBody, _ := json.Marshal(body)
 	if cli.StreamHealthHookURL == "" {
@@ -60,9 +39,9 @@ func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) err
 	}
 	glog.Infof("Got STREAM_BUFFER trigger sessionId=%q payload=%s", sessionID, rawBody)
 
-	streamHealth := StreamHealthPayload{
+	streamHealth := clients.StreamHealthPayload{
 		StreamName: body.StreamName,
-		SessionID:  sessionID,
+		SessionID:  body.SessionID,
 		IsActive:   body.State != "EMPTY",
 		IsHealthy:  body.State == "FULL" || body.State == "RECOVER",
 	}
@@ -74,7 +53,7 @@ func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) err
 		streamHealth.Extra = details.Extra
 	}
 
-	err = PostStreamHealthPayload(cli.StreamHealthHookURL, cli.APIToken, streamHealth)
+	err = d.StreamHealthClient.PostStreamHealthPayload(streamHealth)
 	if err != nil {
 		glog.Infof("Error pushing STREAM_HEALTH payload error=%q payload=%s", err, rawBody)
 		return err
@@ -83,64 +62,7 @@ func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) err
 	return nil
 }
 
-type StreamHealthPayload struct {
-	StreamName string `json:"stream_name"`
-	SessionID  string `json:"session_id"`
-	IsActive   bool   `json:"is_active"`
-
-	IsHealthy   bool     `json:"is_healthy"`
-	Issues      string   `json:"issues,omitempty"`
-	HumanIssues []string `json:"human_issues,omitempty"`
-
-	Tracks map[string]TrackDetails `json:"tracks,omitempty"`
-	Extra  map[string]any          `json:"extra,omitempty"`
-}
-
-func PostStreamHealthPayload(url, apiToken string, payload StreamHealthPayload) error {
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("error marshalling stream health payload: %w", err)
-	}
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("error creating stream health request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiToken)
-
-	resp, err := hookClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("error pushing stream health to hook: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("error reading stream health hook response: %w", err)
-		}
-		glog.Warningf("Error pushing stream health to hook status=%d body=%q", resp.StatusCode, respBody)
-	}
-
-	return nil
-}
-
-type StreamBufferPayload struct {
-	StreamName string
-	State      string
-	Details    *MistStreamDetails
-}
-
-type TrackDetails struct {
-	Codec  string         `json:"codec"`
-	Kbits  int            `json:"kbits"`
-	Keys   map[string]any `json:"keys"`
-	Fpks   int            `json:"fpks,omitempty"`
-	Height int            `json:"height,omitempty"`
-	Width  int            `json:"width,omitempty"`
-}
-
-func ParseStreamBufferPayload(lines []string) (*StreamBufferPayload, error) {
+func ParseStreamBufferPayload(lines []string) (*clients.StreamBufferPayload, error) {
 	if len(lines) < 2 || len(lines) > 3 {
 		return nil, fmt.Errorf("invalid payload: expected 2 or 3 lines but got %d", len(lines))
 	}
@@ -157,25 +79,18 @@ func ParseStreamBufferPayload(lines []string) (*StreamBufferPayload, error) {
 		return nil, fmt.Errorf("error parsing stream details JSON: %w", err)
 	}
 
-	return &StreamBufferPayload{
+	return &clients.StreamBufferPayload{
 		StreamName: streamName,
 		State:      streamState,
 		Details:    streamDetails,
 	}, nil
 }
 
-type MistStreamDetails struct {
-	Tracks      map[string]TrackDetails
-	Issues      string
-	HumanIssues []string
-	Extra       map[string]any
-}
-
 // Mists sends the track detail objects in the same JSON object as other
 // non-object fields (string and array issues and numeric metrics). So we need
 // to parse them separately and do a couple of JSON juggling here.
 // e.g. {track-id-1: {...}, issues: "a string", human_issues: ["a", "b"], "jitter": 32}
-func ParseMistStreamDetails(streamState string, data []byte) (*MistStreamDetails, error) {
+func ParseMistStreamDetails(streamState string, data []byte) (*clients.MistStreamDetails, error) {
 	if streamState == "EMPTY" {
 		return nil, nil
 	}
@@ -213,10 +128,10 @@ func ParseMistStreamDetails(streamState string, data []byte) (*MistStreamDetails
 		return nil, fmt.Errorf("error marshalling stream details tracks: %w", err)
 	}
 
-	var tracks map[string]TrackDetails
+	var tracks map[string]clients.TrackDetails
 	if err = json.Unmarshal(tracksJSON, &tracks); err != nil {
 		return nil, fmt.Errorf("error parsing stream details tracks: %w", err)
 	}
 
-	return &MistStreamDetails{tracks, issues.Issues, issues.HumanIssues, extra}, nil
+	return &clients.MistStreamDetails{tracks, issues.Issues, issues.HumanIssues, extra}, nil
 }

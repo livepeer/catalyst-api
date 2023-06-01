@@ -10,6 +10,7 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/balancer"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers"
@@ -26,8 +27,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, machine *state.Machine) error {
-	router := NewCatalystAPIRouterInternal(cli, vodEngine, mapic, bal, c, machine)
+func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, streamHealth clients.StreamHealthClient, machine *state.Machine) error {
+	router := NewCatalystAPIRouterInternal(cli, vodEngine, mapic, bal, c, streamHealth, machine)
 	server := http.Server{Addr: cli.HTTPInternalAddress, Handler: router}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -53,7 +54,7 @@ func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipe
 	return server.Shutdown(ctx)
 }
 
-func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, machine *state.Machine) *httprouter.Router {
+func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, streamHealth clients.StreamHealthClient, machine *state.Machine) *httprouter.Router {
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
 	withAuth := middleware.IsAuthorized

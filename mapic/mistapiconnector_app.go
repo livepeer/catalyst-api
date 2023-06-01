@@ -20,7 +20,6 @@ import (
 	"github.com/livepeer/catalyst-api/mapic/apis/mist"
 	mistapi "github.com/livepeer/catalyst-api/mapic/apis/mist"
 	"github.com/livepeer/catalyst-api/mapic/metrics"
-	"github.com/livepeer/catalyst-api/mapic/misttriggers"
 	"github.com/livepeer/catalyst-api/mapic/model"
 	"github.com/livepeer/catalyst-api/mapic/utils"
 	"github.com/livepeer/go-api-client"
@@ -266,16 +265,6 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("yes"))
-	return true
-}
-
-func (mc *mac) triggerStreamBuffer(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
-	err := misttriggers.TriggerStreamBuffer(mc.config, r, lines)
-	if err != nil {
-		glog.Errorf("Error handling stream buffer trigger error=%q", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return false
-	}
 	return true
 }
 
@@ -686,8 +675,6 @@ func (mc *mac) HandleDefaultStreamTrigger() httprouter.Handle {
 			doLogRequestEnd = mc.triggerLiveBandwidth(w, r)
 		case "CONN_CLOSE":
 			doLogRequestEnd = mc.triggerConnClose(w, r, lines, bs)
-		case "STREAM_BUFFER":
-			doLogRequestEnd = mc.triggerStreamBuffer(w, r, lines, bs)
 		case "PUSH_REWRITE":
 			doLogRequestEnd = mc.triggerPushRewrite(w, r, lines, bs)
 		case "LIVE_TRACK_LIST":

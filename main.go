@@ -200,6 +200,8 @@ func main() {
 		Schemas:             []*events.Schema{&v0.Schema},
 	})
 
+	streamHealth := clients.NewStreamHealthClient(&cli)
+
 	// Initialize state machine
 	machine := state.NewMachine()
 
@@ -215,7 +217,7 @@ func main() {
 	})
 
 	group.Go(func() error {
-		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, machine)
+		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, streamHealth, machine)
 	})
 
 	if cli.ShouldMapic() {
