@@ -6,18 +6,19 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/config"
-	"github.com/livepeer/catalyst-api/crypto"
 )
 
 type EncryptionHandlersCollection struct {
-	publicKey string
-	nodeName  string
+	publicKey     string
+	spkiPublicKey string
+	nodeName      string
 }
 
-func NewEncryptionHandlersCollection(cli config.Cli) *EncryptionHandlersCollection {
+func NewEncryptionHandlersCollection(cli config.Cli, spkiPublicKey string) *EncryptionHandlersCollection {
 	return &EncryptionHandlersCollection{
-		publicKey: cli.VodDecryptPublicKey,
-		nodeName:  cli.NodeName,
+		publicKey:     cli.VodDecryptPublicKey,
+		spkiPublicKey: spkiPublicKey,
+		nodeName:      cli.NodeName,
 	}
 }
 
@@ -26,16 +27,9 @@ func (ec *EncryptionHandlersCollection) PublicKeyHandler() httprouter.Handle {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		spkiPublicKey, err := crypto.ConvertToSpki(ec.publicKey)
-
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
 		responseData := map[string]string{
 			"public_key":      ec.publicKey,
-			"spki_public_key": spkiPublicKey,
+			"spki_public_key": ec.spkiPublicKey,
 			"node_name":       ec.nodeName,
 		}
 

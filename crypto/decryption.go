@@ -206,11 +206,15 @@ func ConvertToSpki(pemB64PublicKey string) (string, error) {
 
 	pubPEMStr := string(pubPEM)
 
-	// Remove header and footer
-	spkiPubKeyBase64 := strings.Join(strings.Split(pubPEMStr, "\n")[1:len(strings.Split(pubPEMStr, "\n"))-2], "")
+	// Split the PEM string into lines, remove the first and last line,
+	// then join the remaining lines back together.
+	// This effectively removes the "-----BEGIN PUBLIC KEY-----" and
+	// "-----END PUBLIC KEY-----" header and footer.
+	splitPEM := strings.Split(pubPEMStr, "\n")
+	pubPEMStrBody := strings.Join(splitPEM[1:len(splitPEM)-2], "")
 
 	// Encode to base64
-	spkiPubKeyBase64 = base64.StdEncoding.EncodeToString([]byte(spkiPubKeyBase64))
+	spkiPubKeyBase64 := base64.StdEncoding.EncodeToString([]byte(pubPEMStrBody))
 
 	return spkiPubKeyBase64, nil
 }
