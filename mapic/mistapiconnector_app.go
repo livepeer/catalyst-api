@@ -468,8 +468,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 		} else if !ok {
 			glog.Infof("Stream id=%s streamKey=%s playbackId=%s forbidden by webhook, rejecting", stream.ID, stream.StreamKey, stream.PlaybackID)
 			mc.removeInfo(stream.PlaybackID)
-			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte("false"))
+			w.Write([]byte(""))
 			return true
 		}
 	} else {
