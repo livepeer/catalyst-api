@@ -12,6 +12,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/d1str0/pkcs7"
 	"github.com/golang/glog"
@@ -169,4 +170,47 @@ func decryptReaderTo(readerRaw io.Reader, writer io.Writer, decrypter cipher.Blo
 	}
 
 	return nil
+}
+
+func ConvertToSpki(pemB64PublicKey string) (string, error) {
+	// Decode from base64
+	pemPublicKey, err := base64.StdEncoding.DecodeString(pemB64PublicKey)
+
+	if err != nil {
+		glog.Errorf("Error decoding base64 encoded key: %v", err)
+		return "", err
+	}
+
+	block, _ := pem.Decode([]byte(pemPublicKey))
+	if block == nil {
+		err := fmt.Errorf("failed to parse PEM block containing the public key")
+		return "", err
+	}
+
+	pub, err := x509.ParsePKCS1PublicKey(block.Bytes)
+	if err != nil {
+		glog.Errorf("failed to parse RSA public key: %v", err)
+		return "", err
+	}
+
+	pubBytes, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		glog.Errorf("failed to marshal RSA public key: %v", err)
+		return "", err
+	}
+
+	pubPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: pubBytes,
+	})
+
+	pubPEMStr := string(pubPEM)
+
+	// Remove header and footer
+	spkiPubKeyBase64 := strings.Join(strings.Split(pubPEMStr, "\n")[1:len(strings.Split(pubPEMStr, "\n"))-2], "")
+
+	// Encode to base64
+	spkiPubKeyBase64 = base64.StdEncoding.EncodeToString([]byte(spkiPubKeyBase64))
+
+	return spkiPubKeyBase64, nil
 }
