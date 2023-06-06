@@ -12,6 +12,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/d1str0/pkcs7"
 	"github.com/golang/glog"
@@ -169,4 +170,51 @@ func decryptReaderTo(readerRaw io.Reader, writer io.Writer, decrypter cipher.Blo
 	}
 
 	return nil
+}
+
+func ConvertToSpki(pemB64PublicKey string) (string, error) {
+	// Decode from base64
+	pemPublicKey, err := base64.StdEncoding.DecodeString(pemB64PublicKey)
+
+	if err != nil {
+		glog.Errorf("Error decoding base64 encoded key: %v", err)
+		return "", err
+	}
+
+	block, _ := pem.Decode([]byte(pemPublicKey))
+	if block == nil {
+		err := fmt.Errorf("failed to parse PEM block containing the public key")
+		return "", err
+	}
+
+	pub, err := x509.ParsePKCS1PublicKey(block.Bytes)
+	if err != nil {
+		glog.Errorf("failed to parse RSA public key: %v", err)
+		return "", err
+	}
+
+	pubBytes, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		glog.Errorf("failed to marshal RSA public key: %v", err)
+		return "", err
+	}
+
+	pubPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: pubBytes,
+	})
+
+	pubPEMStr := string(pubPEM)
+
+	// Split the PEM string into lines, remove the first and last line,
+	// then join the remaining lines back together.
+	// This effectively removes the "-----BEGIN PUBLIC KEY-----" and
+	// "-----END PUBLIC KEY-----" header and footer.
+	splitPEM := strings.Split(pubPEMStr, "\n")
+	pubPEMStrBody := strings.Join(splitPEM[1:len(splitPEM)-2], "")
+
+	// Encode to base64
+	spkiPubKeyBase64 := base64.StdEncoding.EncodeToString([]byte(pubPEMStrBody))
+
+	return spkiPubKeyBase64, nil
 }
