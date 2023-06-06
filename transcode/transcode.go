@@ -237,7 +237,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				}
 			}
 
-			mp4Out, err = video.PopulateOutput(video.Probe{}, probeURL, mp4Out)
+			mp4Out, err = video.PopulateOutput(transcodeRequest.RequestID, video.Probe{}, probeURL, mp4Out)
 			if err != nil {
 				return outputs, segmentsCount, err
 			}

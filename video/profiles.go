@@ -167,8 +167,8 @@ type OutputVideoFile struct {
 	Bitrate   int64  `json:"bitrate,omitempty"`
 }
 
-func PopulateOutput(probe Prober, outputURL string, videoFile OutputVideoFile) (OutputVideoFile, error) {
-	outputVideoProbe, err := probe.ProbeFile(outputURL)
+func PopulateOutput(requestID string, probe Prober, outputURL string, videoFile OutputVideoFile) (OutputVideoFile, error) {
+	outputVideoProbe, err := probe.ProbeFile(requestID, outputURL)
 	if err != nil {
 		return OutputVideoFile{}, fmt.Errorf("error probing output file from S3: %w", err)
 	}

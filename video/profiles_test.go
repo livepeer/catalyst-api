@@ -132,7 +132,7 @@ func TestGetPlaybackProfiles(t *testing.T) {
 }
 
 func TestPopulateOutput(t *testing.T) {
-	out, err := PopulateOutput(Probe{}, "fixtures/parametric-stereo-error.mp4", OutputVideoFile{})
+	out, err := PopulateOutput("requestID", Probe{}, "fixtures/parametric-stereo-error.mp4", OutputVideoFile{})
 	require.NoError(t, err)
 	require.Equal(t, OutputVideoFile{
 		SizeBytes: 275075,
