@@ -219,7 +219,7 @@ func (mc *MediaConvert) outputVideoFiles(mcArgs TranscodeJobArgs, ourOutputBaseD
 			if err != nil {
 				return nil, fmt.Errorf("error creating s3 url: %w", err)
 			}
-			videoFile, err = video.PopulateOutput(mc.probe, presignedOutputFileURL, videoFile)
+			videoFile, err = video.PopulateOutput(mcArgs.RequestID, mc.probe, presignedOutputFileURL, videoFile)
 			if err != nil {
 				return nil, err
 			}

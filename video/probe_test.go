@@ -72,7 +72,7 @@ func TestDefaultBitrate(t *testing.T) {
 func TestProbe(t *testing.T) {
 	require := require.New(t)
 	probe := Probe{}
-	iv, err := probe.ProbeFile("../clients/fixtures/mediaconvert_payloads/sample.mp4")
+	iv, err := probe.ProbeFile("requestID", "../clients/fixtures/mediaconvert_payloads/sample.mp4")
 	require.NoError(err)
 
 	expectedInput := InputVideo{
@@ -105,7 +105,7 @@ func TestProbe(t *testing.T) {
 
 func TestProbe_VideoRotation(t *testing.T) {
 	probe := Probe{}
-	iv, err := probe.ProbeFile("./fixtures/bbb-180rotated.mov")
+	iv, err := probe.ProbeFile("requestID", "./fixtures/bbb-180rotated.mov")
 	require.NoError(t, err)
 	track, err := iv.GetTrack("video")
 	require.NoError(t, err)
@@ -114,17 +114,17 @@ func TestProbe_VideoRotation(t *testing.T) {
 
 func TestProbe_VP9(t *testing.T) {
 	// We don't support VP9 in an MP4 container so should reject
-	_, err := Probe{}.ProbeFile("./fixtures/mp4_vp9.mp4")
+	_, err := Probe{}.ProbeFile("requestID", "./fixtures/mp4_vp9.mp4")
 	require.ErrorContains(t, err, "VP9 in an MP4 container is not supported")
 
 	// But in a webm container is fine
-	_, err = Probe{}.ProbeFile("./fixtures/webm_vp9.webm")
+	_, err = Probe{}.ProbeFile("requestID", "./fixtures/webm_vp9.webm")
 	require.NoError(t, err)
 }
 
 func TestProbe_IgnoreSomeErrors(t *testing.T) {
-	_, err := Probe{}.ProbeFile("./fixtures/parametric-stereo-error.mp4")
+	_, err := Probe{}.ProbeFile("requestID", "./fixtures/parametric-stereo-error.mp4")
 	require.NoError(t, err)
-	_, err = Probe{}.ProbeFile("./fixtures/non-existing-pps.ts")
+	_, err = Probe{}.ProbeFile("requestID", "./fixtures/non-existing-pps.ts")
 	require.NoError(t, err)
 }

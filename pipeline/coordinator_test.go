@@ -600,7 +600,7 @@ type stubFFprobe struct {
 	Err      error
 }
 
-func (f stubFFprobe) ProbeFile(_ string, _ ...string) (video.InputVideo, error) {
+func (f stubFFprobe) ProbeFile(_, _ string, _ ...string) (video.InputVideo, error) {
 	if f.Err != nil {
 		return video.InputVideo{}, f.Err
 	}
