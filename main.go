@@ -21,8 +21,7 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/crypto"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
-
-	//"github.com/livepeer/catalyst-api/middleware"
+	"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/catalyst-api/pipeline"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
 	"github.com/peterbourgon/ff/v3"
@@ -56,6 +55,7 @@ func main() {
 	fs.StringVar(&cli.MetricsDBConnectionString, "metrics-db-connection-string", "", "Connection string to use for the metrics Postgres DB. Takes the form: host=X port=X user=X password=X dbname=X")
 	config.URLSliceVarFlag(fs, &cli.ImportIPFSGatewayURLs, "import-ipfs-gateway-urls", "https://vod-import-gtw.mypinata.cloud/ipfs/?pinataGatewayToken={{secrets.LP_PINATA_GATEWAY_TOKEN}},https://w3s.link/ipfs/,https://ipfs.io/ipfs/,https://cloudflare-ipfs.com/ipfs/", "Comma delimited ordered list of IPFS gateways (includes /ipfs/ suffix) to import assets from")
 	config.URLSliceVarFlag(fs, &cli.ImportArweaveGatewayURLs, "import-arweave-gateway-urls", "https://arweave.net/", "Comma delimited ordered list of arweave gateways")
+	fs.BoolVar(&cli.MistCleanup, "run-mist-cleanup", true, "Run mist cleanup script")
 
 	// mist-api-connector parameters
 	fs.IntVar(&cli.MistPort, "mist-port", 4242, "Port to connect to Mist")
@@ -172,6 +172,18 @@ func main() {
 	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB, vodDecryptPrivateKey)
 	if err != nil {
 		glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
+	}
+
+	if cli.ShouldMistCleanup() {
+		// Start cron style apps to run periodically
+		app := "mist-cleanup.sh"
+		// schedule mist-cleanup every 2hrs with a timeout of 15min
+		mistCleanup, err := middleware.NewShell(2*60*60*time.Second, 15*60*time.Second, app)
+		if err != nil {
+			glog.Info("Failed to shell out:", app, err)
+		}
+		mistCleanupTick := mistCleanup.RunBg()
+		defer mistCleanupTick.Stop()
 	}
 
 	var mapic mistapiconnector.IMac

@@ -30,6 +30,7 @@ type Cli struct {
 	MistBaseStreamName        string
 	MistLoadBalancerPort      int
 	MistLoadBalancerTemplate  string
+	MistCleanup               bool
 	AMQPURL                   string
 	OwnRegion                 string
 	APIToken                  string
@@ -77,6 +78,11 @@ func (cli *Cli) EncryptBytes() ([]byte, error) {
 // Should we enable mapic?
 func (cli *Cli) ShouldMapic() bool {
 	return cli.APIServer != ""
+}
+
+// Should we enable mist-cleanup script to run periodically and delete leaky shm?
+func (cli *Cli) ShouldMistCleanup() bool {
+	return cli.MistCleanup
 }
 
 // Handle some legacy environment variables for zero-downtime catalyst-node migration

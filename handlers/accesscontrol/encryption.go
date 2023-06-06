@@ -9,14 +9,16 @@ import (
 )
 
 type EncryptionHandlersCollection struct {
-	publicKey string
-	nodeName  string
+	publicKey     string
+	spkiPublicKey string
+	nodeName      string
 }
 
-func NewEncryptionHandlersCollection(cli config.Cli) *EncryptionHandlersCollection {
+func NewEncryptionHandlersCollection(cli config.Cli, spkiPublicKey string) *EncryptionHandlersCollection {
 	return &EncryptionHandlersCollection{
-		publicKey: cli.VodDecryptPublicKey,
-		nodeName:  cli.NodeName,
+		publicKey:     cli.VodDecryptPublicKey,
+		spkiPublicKey: spkiPublicKey,
+		nodeName:      cli.NodeName,
 	}
 }
 
@@ -26,8 +28,9 @@ func (ec *EncryptionHandlersCollection) PublicKeyHandler() httprouter.Handle {
 		w.WriteHeader(http.StatusOK)
 
 		responseData := map[string]string{
-			"public_key": ec.publicKey,
-			"node_name":  ec.nodeName,
+			"public_key":      ec.publicKey,
+			"spki_public_key": ec.spkiPublicKey,
+			"node_name":       ec.nodeName,
 		}
 
 		res, err := json.Marshal(responseData)

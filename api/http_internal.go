@@ -12,6 +12,7 @@ import (
 	"github.com/livepeer/catalyst-api/balancer"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/crypto"
 	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/handlers/accesscontrol"
 	"github.com/livepeer/catalyst-api/handlers/admin"
@@ -62,10 +63,13 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 		Balancer: bal,
 		Cluster:  c,
 	}
+
+	spkiPublicKey, _ := crypto.ConvertToSpki(cli.VodDecryptPublicKey)
+
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
 	ffmpegSegmentingHandlers := &ffmpeg.HandlersCollection{VODEngine: vodEngine}
 	accessControlHandlers := accesscontrol.NewAccessControlHandlersCollection(cli)
-	encryptionHandlers := accesscontrol.NewEncryptionHandlersCollection(cli)
+	encryptionHandlers := accesscontrol.NewEncryptionHandlersCollection(cli, spkiPublicKey)
 	adminHandlers := &admin.AdminHandlersCollection{Cluster: c}
 
 	// Simple endpoint for healthchecks
