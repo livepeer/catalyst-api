@@ -94,6 +94,49 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, fmt.Errorf("error generating source segment URLs: %s", err)
 	}
 
+
+	// check last segment, if ffprobe fails, then modify sourceManifest to remove that segment. 
+	fmt.Printf("XXX: full list of segments: %+v", sourceSegmentURLs) 
+	lastSegment := sourceSegmentURLs[len(sourceSegmentURLs) - 1]
+	fmt.Println("XXX", "last segment", lastSegment.URL, lastSegment.DurationMillis)
+
+	lastSegmentURL, err := clients.SignURL(lastSegment.URL)
+	if err != nil {
+		return outputs, segmentsCount, fmt.Errorf("failed to create signed url for last segment %s: %w", lastSegment.URL, err)
+	}
+	p := video.Probe{}
+	lastSegmentProbe, err := p.ProbeFile(transcodeRequest.RequestID, lastSegmentURL)
+	_, err = lastSegmentProbe.GetTrack(video.TrackTypeVideo)
+        if err != nil {
+		fmt.Println("XXX", "ruh roh: no video track in last segment")
+        }
+
+	var lastEntry int
+	for i, entry := range sourceManifest.Segments {
+//		fmt.Println("XXX: before: segment URI: ",transcodeRequest.RequestID, entry.URI)
+		if entry == nil {
+			lastEntry = i
+			break
+		}
+  	}
+	fmt.Println("XXX: lastEntry", transcodeRequest.RequestID, lastEntry)
+/*
+	for e, entry := range sourceManifest.Segments {
+		fmt.Println("XXX: after: segment URI: ", transcodeRequest.RequestID, e, entry.URI)
+		if entry == nil {
+			break
+		}
+        }
+*/
+
+//	fmt.Println("XXX: length: ", len(sourceManifest.Segments))
+	sourceManifest.Segments[lastEntry - 1] = nil 
+//	sourceManifest.Segments = sourceManifest.Segments[:len(sourceManifest.Segments)-1]
+//	fmt.Println("XXX: length: ", len(sourceManifest.Segments))
+	sourceSegmentURLs = sourceSegmentURLs[:len(sourceSegmentURLs)-1]
+	fmt.Printf("XXX: modifeid full list of segments: %+v", sourceSegmentURLs) 
+
+
 	// Use RequestID as part of manifestID when talking to the Broadcaster
 	manifestID := "manifest-" + transcodeRequest.RequestID
 	// transcodedStats hold actual info from transcoded results within requested constraints (this usually differs from requested profiles)
