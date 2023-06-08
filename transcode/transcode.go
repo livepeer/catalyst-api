@@ -93,6 +93,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("error generating source segment URLs: %s", err)
 	}
+	log.Log(transcodeRequest.RequestID, "Fetched Source Segments URLs", "num_urls", len(sourceSegmentURLs))
 
 	// Use RequestID as part of manifestID when talking to the Broadcaster
 	manifestID := "manifest-" + transcodeRequest.RequestID
