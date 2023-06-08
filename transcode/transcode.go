@@ -94,48 +94,33 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, fmt.Errorf("error generating source segment URLs: %s", err)
 	}
 
-
-	// check last segment, if ffprobe fails, then modify sourceManifest to remove that segment. 
-	fmt.Printf("XXX: full list of segments: %+v", sourceSegmentURLs) 
-	lastSegment := sourceSegmentURLs[len(sourceSegmentURLs) - 1]
-	fmt.Println("XXX", "last segment", lastSegment.URL, lastSegment.DurationMillis)
-
+	// The last segment in an HLS manifest may contain an audio-only track - this is common
+	// during a livestream recording where the video stream can end sooner with a trailing audio stream
+	// which results in a segment at the end that just contains audio. This segment should *not* be
+	// submitted to the T.
+	lastSegment := sourceSegmentURLs[len(sourceSegmentURLs)-1]
 	lastSegmentURL, err := clients.SignURL(lastSegment.URL)
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("failed to create signed url for last segment %s: %w", lastSegment.URL, err)
 	}
 	p := video.Probe{}
-	lastSegmentProbe, err := p.ProbeFile(transcodeRequest.RequestID, lastSegmentURL)
+	// ProbeFile will return err for various reasons so we use the subsequent GetTrack method to check for video tracks
+	lastSegmentProbe, _ := p.ProbeFile(transcodeRequest.RequestID, lastSegmentURL)
+	// GetTrack will return an err if TrackTypeVideo was not found
 	_, err = lastSegmentProbe.GetTrack(video.TrackTypeVideo)
-        if err != nil {
-		fmt.Println("XXX", "ruh roh: no video track in last segment")
-        }
-
-	var lastEntry int
-	for i, entry := range sourceManifest.Segments {
-//		fmt.Println("XXX: before: segment URI: ",transcodeRequest.RequestID, entry.URI)
-		if entry == nil {
-			lastEntry = i
-			break
+	if err != nil {
+		var lastSegmentIdx int
+		for i, entry := range sourceManifest.Segments {
+			if entry == nil {
+				lastSegmentIdx = i - 1
+				break
+			}
 		}
-  	}
-	fmt.Println("XXX: lastEntry", transcodeRequest.RequestID, lastEntry)
-/*
-	for e, entry := range sourceManifest.Segments {
-		fmt.Println("XXX: after: segment URI: ", transcodeRequest.RequestID, e, entry.URI)
-		if entry == nil {
-			break
-		}
-        }
-*/
-
-//	fmt.Println("XXX: length: ", len(sourceManifest.Segments))
-	sourceManifest.Segments[lastEntry - 1] = nil 
-//	sourceManifest.Segments = sourceManifest.Segments[:len(sourceManifest.Segments)-1]
-//	fmt.Println("XXX: length: ", len(sourceManifest.Segments))
-	sourceSegmentURLs = sourceSegmentURLs[:len(sourceSegmentURLs)-1]
-	fmt.Printf("XXX: modifeid full list of segments: %+v", sourceSegmentURLs) 
-
+		log.Log(transcodeRequest.RequestID, "last segment in manifest contains an audio-only track", "skipped-segment", lastSegmentIdx)
+		// remove the last segment from both the manifest and list of segment URLs
+		sourceManifest.Segments[lastSegmentIdx] = nil
+		sourceSegmentURLs = sourceSegmentURLs[:len(sourceSegmentURLs)-1]
+	}
 
 	// Use RequestID as part of manifestID when talking to the Broadcaster
 	manifestID := "manifest-" + transcodeRequest.RequestID
