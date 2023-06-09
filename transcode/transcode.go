@@ -95,6 +95,34 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 	log.Log(transcodeRequest.RequestID, "Fetched Source Segments URLs", "num_urls", len(sourceSegmentURLs))
 
+	// The last segment in an HLS manifest may contain an audio-only track - this is common
+	// during a livestream recording where the video stream can end sooner with a trailing audio stream
+	// which results in a segment at the end that just contains audio. This segment should *not* be
+	// submitted to the T.
+	lastSegment := sourceSegmentURLs[len(sourceSegmentURLs)-1]
+	lastSegmentURL, err := clients.SignURL(lastSegment.URL)
+	if err != nil {
+		return outputs, segmentsCount, fmt.Errorf("failed to create signed url for last segment %s: %w", lastSegment.URL, err)
+	}
+	p := video.Probe{}
+	// ProbeFile will return err for various reasons so we use the subsequent GetTrack method to check for video tracks
+	lastSegmentProbe, _ := p.ProbeFile(transcodeRequest.RequestID, lastSegmentURL)
+	// GetTrack will return an err if TrackTypeVideo was not found
+	_, err = lastSegmentProbe.GetTrack(video.TrackTypeVideo)
+	if err != nil {
+		var lastSegmentIdx int
+		for i, entry := range sourceManifest.Segments {
+			if entry == nil {
+				lastSegmentIdx = i - 1
+				break
+			}
+		}
+		log.Log(transcodeRequest.RequestID, "last segment in manifest contains an audio-only track", "skipped-segment", lastSegmentIdx)
+		// remove the last segment from both the manifest and list of segment URLs
+		sourceManifest.Segments[lastSegmentIdx] = nil
+		sourceSegmentURLs = sourceSegmentURLs[:len(sourceSegmentURLs)-1]
+	}
+
 	// Use RequestID as part of manifestID when talking to the Broadcaster
 	manifestID := "manifest-" + transcodeRequest.RequestID
 	// transcodedStats hold actual info from transcoded results within requested constraints (this usually differs from requested profiles)
