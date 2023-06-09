@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/livepeer/catalyst-api/log"
 	"gopkg.in/vansante/go-ffprobe.v2"
 )
 
@@ -20,12 +21,12 @@ var ignoreErrMessages = []string{
 }
 
 type Prober interface {
-	ProbeFile(url string, ffProbeOptions ...string) (InputVideo, error)
+	ProbeFile(requestID, url string, ffProbeOptions ...string) (InputVideo, error)
 }
 
 type Probe struct{}
 
-func (p Probe) ProbeFile(url string, ffProbeOptions ...string) (InputVideo, error) {
+func (p Probe) ProbeFile(requestID string, url string, ffProbeOptions ...string) (InputVideo, error) {
 	iv, err := p.runProbe(url, ffProbeOptions...)
 	if err == nil {
 		return iv, nil
@@ -35,6 +36,7 @@ func (p Probe) ProbeFile(url string, ffProbeOptions ...string) (InputVideo, erro
 	errMsg := strings.ToLower(err.Error())
 	for _, ignoreMsg := range ignoreErrMessages {
 		if strings.Contains(errMsg, ignoreMsg) {
+			log.Log(requestID, "ignoring probe error", "err", err)
 			return p.runProbe(url, "-loglevel", "fatal")
 		}
 	}

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
-	"time"
 )
 
 // Prefixes used in Mist stream names to let us determine whether a given "stream" in Mist is being used
@@ -24,11 +23,10 @@ func SegmentingStreamName(requestID string) string {
 
 func RandomTrailer(length int) string {
 	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	res := make([]byte, length)
 	for i := 0; i < length; i++ {
-		res[i] = charset[r.Intn(length)]
+		res[i] = charset[rand.Intn(len(charset))]
 	}
 	return string(res)
 }

@@ -127,10 +127,10 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		firstSeg := sourceSegments[0]
 		lastSeg := sourceSegments[job.sourceSegments-1]
 
-		if err := probeSourceSegment(firstSeg, transcodeRequest.SourceManifestURL); err != nil {
+		if err := probeSourceSegment(transcodeRequest.RequestID, firstSeg, transcodeRequest.SourceManifestURL); err != nil {
 			return nil, err
 		}
-		if err := probeSourceSegment(lastSeg, transcodeRequest.SourceManifestURL); err != nil {
+		if err := probeSourceSegment(transcodeRequest.RequestID, lastSeg, transcodeRequest.SourceManifestURL); err != nil {
 			return nil, err
 		}
 	}
@@ -150,7 +150,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		}}, nil
 }
 
-func probeSourceSegment(seg *m3u8.MediaSegment, sourceManifestURL string) error {
+func probeSourceSegment(requestID string, seg *m3u8.MediaSegment, sourceManifestURL string) error {
 	u, err := clients.ManifestURLToSegmentURL(sourceManifestURL, seg.URI)
 	if err != nil {
 		return fmt.Errorf("error checking source segments: %w", err)
@@ -159,7 +159,7 @@ func probeSourceSegment(seg *m3u8.MediaSegment, sourceManifestURL string) error 
 	if err != nil {
 		return fmt.Errorf("failed to create signed url for %s: %w", u, err)
 	}
-	_, err = video.Probe{}.ProbeFile(probeURL)
+	_, err = video.Probe{}.ProbeFile(requestID, probeURL)
 	if err != nil {
 		return fmt.Errorf("probe failed for segment %s: %w", u, err)
 	}
