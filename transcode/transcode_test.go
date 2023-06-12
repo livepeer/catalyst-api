@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -30,6 +31,8 @@ const exampleMediaManifest = `#EXTM3U
 0.ts
 #EXTINF:5.3340000000,
 5000.ts
+#EXTINF:6.0000000000,
+10000.ts
 #EXT-X-ENDLIST`
 
 type StubBroadcasterClient struct {
@@ -63,12 +66,31 @@ func TestItCanTranscode(t *testing.T) {
 	segment1, err := os.Create(dir + "/5000.ts")
 	require.NoError(t, err)
 
+	segment2, err := os.Create(dir + "/10000.ts")
+	require.NoError(t, err)
+
+	totalSegments := 0
+	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !info.IsDir() && strings.HasSuffix(info.Name(), ".ts") {
+			totalSegments++
+		}
+
+		return nil
+	})
+	require.NoError(t, err)
+
 	// Write some data to it
 	_, err = manifestFile.WriteString(exampleMediaManifest)
 	require.NoError(t, err)
 	_, err = segment0.WriteString("segment data")
 	require.NoError(t, err)
 	_, err = segment1.WriteString("lots of segment data")
+	require.NoError(t, err)
+	_, err = segment2.WriteString("and all your base are belong to us")
 	require.NoError(t, err)
 
 	// Set up a server to receive callbacks and store them in an array for future verification
@@ -149,7 +171,9 @@ low-bitrate/index.m3u8
 
 	require.NoError(t, err)
 	require.Greater(t, len(masterManifestBytes), 0)
-	require.Equal(t, segmentsCount, 2)
+	// One segment at end should be dropped to simulate an audio-only track in last segment
+	// which should not be sent to B to transcode
+	require.Equal(t, totalSegments-1, segmentsCount)
 	require.Equal(t, expectedMasterManifest, string(masterManifestBytes))
 
 	// Start the callback client, to let it run for one iteration
