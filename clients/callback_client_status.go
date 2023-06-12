@@ -87,6 +87,8 @@ type TranscodeStatusMessage struct {
 	Type       string              `json:"type,omitempty"`
 	InputVideo video.InputVideo    `json:"video_spec,omitempty"`
 	Outputs    []video.OutputVideo `json:"outputs,omitempty"`
+
+	SourcePlayback *video.OutputVideo `json:"source_playback,omitempty"`
 }
 
 // This method will accept the completion ratio of the current stage and will translate that into the overall ratio
