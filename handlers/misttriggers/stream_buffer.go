@@ -11,7 +11,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/hashicorp/go-retryablehttp"
-	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/errors"
 )
 
 var hookClient *http.Client
@@ -28,11 +28,6 @@ func init() {
 	hookClient = client.StandardClient()
 }
 
-// This was originally written as catalalyst-api code, since that's where it's
-// supposed to go. Currently, catalyst-api has no connection with Mist anymore
-// though, so it's easier to plug this into mist-api-connector instead for now.
-// TODO: Move this to catalyst-api when its got the Mist plumbing back.
-
 // This trigger is run whenever the live buffer state of a stream changes. It is
 // not ran for VoD streams. This trigger is stream-specific and non-blocking.
 //
@@ -44,19 +39,20 @@ func init() {
 // {JSON object with stream details, only when state is not EMPTY}
 //
 // Read the Mist documentation for more details on each of the stream states.
-func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) error {
+func (d *MistCallbackHandlersCollection) TriggerStreamBuffer(w http.ResponseWriter, req *http.Request, payload []byte) {
 	sessionID := req.Header.Get("X-UUID")
 
-	body, err := ParseStreamBufferPayload(lines)
+	body, err := ParseStreamBufferPayload(payload)
 	if err != nil {
-		glog.Infof("Error parsing STREAM_BUFFER payload error=%q payload=%q", err, strings.Join(lines, "\n"))
-		return err
+		glog.Infof("Error parsing STREAM_BUFFER payload error=%q payload=%q", err, string(payload))
+		errors.WriteHTTPBadRequest(w, "Error parsing PUSH_END payload", err)
+		return
 	}
 
 	rawBody, _ := json.Marshal(body)
-	if cli.StreamHealthHookURL == "" {
+	if d.cli.StreamHealthHookURL == "" {
 		glog.Infof("Stream health hook URL not set, skipping trigger sessionId=%q payload=%s", sessionID, rawBody)
-		return nil
+		return
 	}
 	glog.Infof("Got STREAM_BUFFER trigger sessionId=%q payload=%s", sessionID, rawBody)
 
@@ -74,13 +70,12 @@ func TriggerStreamBuffer(cli *config.Cli, req *http.Request, lines []string) err
 		streamHealth.Extra = details.Extra
 	}
 
-	err = PostStreamHealthPayload(cli.StreamHealthHookURL, cli.APIToken, streamHealth)
+	err = d.PostStreamHealthPayload(streamHealth)
 	if err != nil {
 		glog.Infof("Error pushing STREAM_HEALTH payload error=%q payload=%s", err, rawBody)
-		return err
+		errors.WriteHTTPInternalServerError(w, "Error pushing STREAM_HEALTH payload", err)
+		return
 	}
-
-	return nil
 }
 
 type StreamHealthPayload struct {
@@ -96,17 +91,17 @@ type StreamHealthPayload struct {
 	Extra  map[string]any          `json:"extra,omitempty"`
 }
 
-func PostStreamHealthPayload(url, apiToken string, payload StreamHealthPayload) error {
+func (d *MistCallbackHandlersCollection) PostStreamHealthPayload(payload StreamHealthPayload) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("error marshalling stream health payload: %w", err)
 	}
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	req, err := http.NewRequest("POST", d.cli.StreamHealthHookURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("error creating stream health request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiToken)
+	req.Header.Set("Authorization", "Bearer "+d.cli.APIToken)
 
 	resp, err := hookClient.Do(req)
 	if err != nil {
@@ -140,7 +135,8 @@ type TrackDetails struct {
 	Width  int            `json:"width,omitempty"`
 }
 
-func ParseStreamBufferPayload(lines []string) (*StreamBufferPayload, error) {
+func ParseStreamBufferPayload(payload []byte) (*StreamBufferPayload, error) {
+	lines := strings.Split(strings.TrimSuffix(string(payload), "\n"), "\n")
 	if len(lines) < 2 || len(lines) > 3 {
 		return nil, fmt.Errorf("invalid payload: expected 2 or 3 lines but got %d", len(lines))
 	}
