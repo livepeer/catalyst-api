@@ -174,6 +174,7 @@ func sendSourcePlayback(job *JobInfo) {
 		return
 	}
 
+	// source playback won't currently work for token gating so we're excluding the private buckets here
 	for _, blocked := range sourcePlaybackBucketBlocklist {
 		if segmentingBucket == blocked {
 			log.Log(job.RequestID, "source playback not available, not main bucket")

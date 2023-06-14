@@ -34,6 +34,7 @@ Scenario: Submit a video asset to stream as VOD with the FFMPEG / Livepeer pipel
     And receive a response within "3" seconds
     Then I get an HTTP response with code "200"
     And I receive a Request ID in the response body
+    And the source playback manifest is written to storage within "5" seconds
     And my "successful" vod request metrics get recorded
     And "4" source segments are written to storage within "5" seconds
     And the source manifest is written to storage within "3" seconds and contains "4" segments

@@ -162,3 +162,17 @@ func (s *StepContext) TranscodedSegmentsWrittenToDiskWithinSeconds(numSegmentsEx
 
 	return nil
 }
+
+func (s *StepContext) SourcePlaybackManifestWrittenToDisk(secs int) error {
+	masterManifestPath := filepath.Join(s.TranscodedOutputDir, "index.m3u8")
+	var err error
+	for t := 0; t < secs*20; t++ {
+		if contents, err := os.ReadFile(masterManifestPath); err == nil {
+			if strings.Contains(string(contents), "/source/") {
+				break
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return err
+}
