@@ -61,7 +61,7 @@ func main() {
 	config.URLSliceVarFlag(fs, &cli.ImportIPFSGatewayURLs, "import-ipfs-gateway-urls", "https://vod-import-gtw.mypinata.cloud/ipfs/?pinataGatewayToken={{secrets.LP_PINATA_GATEWAY_TOKEN}},https://w3s.link/ipfs/,https://ipfs.io/ipfs/,https://cloudflare-ipfs.com/ipfs/", "Comma delimited ordered list of IPFS gateways (includes /ipfs/ suffix) to import assets from")
 	config.URLSliceVarFlag(fs, &cli.ImportArweaveGatewayURLs, "import-arweave-gateway-urls", "https://arweave.net/", "Comma delimited ordered list of arweave gateways")
 	fs.BoolVar(&cli.MistCleanup, "run-mist-cleanup", true, "Run mist cleanup script")
-	fs.StringVar(&cli.EthKeystorePath, "eth-keystore-path", node.DefaultDataDir(), "Path to ETH keystore directory or keyfile")
+	fs.StringVar(&cli.EthKeystorePath, "eth-keystore-path", node.DefaultDataDir()+"/keystore", "Path to ETH keystore directory or keyfile")
 	fs.StringVar(&cli.EthKeystorePassword, "eth-keystore-password", "", "Password for existing Eth account address or path to file")
 	fs.StringVar(&cli.EthAccountAddr, "eth-account-addr", "", "Existing Eth account address. For use when multiple ETH accounts exist in the keystore directory")
 
