@@ -1,28 +1,30 @@
 package misttriggers
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	streamBufferPayloadFull = []string{
-		"stream1", "FULL", `{"track1":{"codec":"h264","kbits":1000,"keys":{"B":"1"},"fpks":30,"height":720,"width":1280},"jitter":420}`,
-	}
-	streamBufferPayloadIssues = []string{
-		"stream1", "RECOVER", `{"track1":{"codec":"h264","kbits":1000,"keys":{"B":"1"},"fpks":30,"height":720,"width":1280},"issues":"The aqueous linear entity, in a manner pertaining to its metaphorical state of existence, appears to be experiencing an ostensibly suboptimal condition that is reminiscent of an individual's disposition when subjected to an unfavorable meteorological phenomenon","human_issues":["Stream is feeling under the weather"]}`,
-	}
-	streamBufferPayloadInvalid = []string{
-		"stream1", "FULL", `{"track1":{},"notatrack":{"codec":2}}`,
-	}
-	streamBufferPayloadEmpty = []string{"stream1", "EMPTY"}
-)
+var streamBufferPayloadFull = []byte(`stream1
+FULL
+{"track1":{"codec":"h264","kbits":1000,"keys":{"B":"1"},"fpks":30,"height":720,"width":1280},"jitter":420}`)
+
+var streamBufferPayloadIssues = []byte(`stream1
+RECOVER
+{"track1":{"codec":"h264","kbits":1000,"keys":{"B":"1"},"fpks":30,"height":720,"width":1280},"issues":"The aqueous linear entity, in a manner pertaining to its metaphorical state of existence, appears to be experiencing an ostensibly suboptimal condition that is reminiscent of an individual's disposition when subjected to an unfavorable meteorological phenomenon","human_issues":["Stream is feeling under the weather"]}`)
+
+var streamBufferPayloadInvalid = []byte(`stream1
+FULL
+{"track1":{},"notatrack":{"codec":2}}`)
+
+var streamBufferPayloadEmpty = []byte(`stream1
+EMPTY`)
 
 func TestItCanParseAValidStreamBufferPayload(t *testing.T) {
 	p, err := ParseStreamBufferPayload(streamBufferPayloadFull)
@@ -72,7 +74,11 @@ func TestPostStreamHealthPayloadFailsWithInvalidURL(t *testing.T) {
 		Issues:     "",
 	}
 
-	err := PostStreamHealthPayload("http://invalid.url", "apiToken", streamHealthPayload)
+	d := MistCallbackHandlersCollection{cli: &config.Cli{
+		APIToken:            "apiToken",
+		StreamHealthHookURL: "http://invalid.url",
+	}}
+	err := d.PostStreamHealthPayload(streamHealthPayload)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "error pushing stream health to hook")
 }
@@ -95,7 +101,12 @@ func TestPostStreamHealthPayloadWithTestServer(t *testing.T) {
 		Issues:     "No issues",
 	}
 
-	err := PostStreamHealthPayload(server.URL, "apiToken", streamHealthPayload)
+	d := MistCallbackHandlersCollection{cli: &config.Cli{
+		APIToken:            "apiToken",
+		StreamHealthHookURL: server.URL,
+	}}
+
+	err := d.PostStreamHealthPayload(streamHealthPayload)
 	require.NoError(t, err)
 	require.Equal(t, 1, callCount)
 }
@@ -121,18 +132,21 @@ func TestTriggerStreamBufferE2E(t *testing.T) {
 	defer server.Close()
 
 	// Prepare the request and payload
-	payload := strings.NewReader(strings.Join(streamBufferPayloadIssues, "\n"))
+	payload := bytes.NewReader(streamBufferPayloadIssues)
 	req, err := http.NewRequest("GET", "http://example.com", payload)
 	require.NoError(t, err)
 	req.Header.Set("X-UUID", "session1")
 
 	// Call the TriggerStreamBuffer function
-	cli := &config.Cli{
+	d := MistCallbackHandlersCollection{cli: &config.Cli{
 		StreamHealthHookURL: server.URL,
 		APIToken:            "apiToken",
-	}
-	err = TriggerStreamBuffer(cli, req, streamBufferPayloadIssues)
-	require.NoError(t, err)
+	}}
+	rr := httptest.NewRecorder()
+	d.TriggerStreamBuffer(rr, req, streamBufferPayloadIssues)
+
+	require.Equal(t, rr.Code, 200)
+	require.Len(t, rr.Body.Bytes(), 0)
 
 	// Check the payload received by the test server
 	require.Equal(t, receivedAuthHeader, "Bearer apiToken")

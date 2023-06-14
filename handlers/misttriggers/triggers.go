@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 )
@@ -13,9 +14,16 @@ import (
 const (
 	TRIGGER_PUSH_END       = "PUSH_END"
 	TRIGGER_PUSH_OUT_START = "PUSH_OUT_START"
+	TRIGGER_STREAM_BUFFER  = "STREAM_BUFFER"
 )
 
-type MistCallbackHandlersCollection struct{}
+type MistCallbackHandlersCollection struct {
+	cli *config.Cli
+}
+
+func NewMistCallbackHandlersCollection(cli config.Cli) *MistCallbackHandlersCollection {
+	return &MistCallbackHandlersCollection{cli: &cli}
+}
 
 // Trigger dispatches request to mapped method according to trigger name
 // Only single trigger callback is allowed on Mist.
@@ -41,6 +49,8 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 			d.TriggerPushOutStart(w, req, payload)
 		case TRIGGER_PUSH_END:
 			d.TriggerPushEnd(w, req, payload)
+		case TRIGGER_STREAM_BUFFER:
+			d.TriggerStreamBuffer(w, req, payload)
 		default:
 			errors.WriteHTTPBadRequest(w, "Unsupported X-Trigger", fmt.Errorf("unknown trigger '%s'", triggerName))
 			return
