@@ -16,14 +16,13 @@ import (
 	"github.com/livepeer/go-tools/drivers"
 )
 
-const KeyParam = "accessKey"
-
 type Request struct {
-	RequestID  string
-	PlaybackID string
-	File       string
-	AccessKey  string
-	Range      string
+	RequestID       string
+	PlaybackID      string
+	File            string
+	GatingParam     string
+	GatingParamName string
+	Range           string
 }
 
 type Response struct {
@@ -52,8 +51,8 @@ func Handle(req Request) (*Response, error) {
 	// don't close the body for non-manifest files where we return above as we simply proxying the body back
 	defer f.Body.Close()
 
-	if req.AccessKey == "" {
-		return nil, fmt.Errorf("invalid request: %w", caterrs.EmptyAccessKeyError)
+	if req.GatingParam == "" {
+		return nil, fmt.Errorf("invalid request: %w", caterrs.EmptyGatingParamError)
 	}
 
 	p, listType, err := m3u8.DecodeFrom(f.Body, true)
@@ -67,7 +66,7 @@ func Handle(req Request) (*Response, error) {
 			if variant == nil {
 				break
 			}
-			variant.URI, err = appendAccessKey(variant.URI, req.AccessKey)
+			variant.URI, err = appendAccessKey(variant.URI, req.GatingParam, req.GatingParamName)
 			if err != nil {
 				return nil, err
 			}
@@ -78,7 +77,7 @@ func Handle(req Request) (*Response, error) {
 			if segment == nil {
 				break
 			}
-			segment.URI, err = appendAccessKey(segment.URI, req.AccessKey)
+			segment.URI, err = appendAccessKey(segment.URI, req.GatingParam, req.GatingParamName)
 			if err != nil {
 				return nil, err
 			}
@@ -94,13 +93,13 @@ func Handle(req Request) (*Response, error) {
 	}, nil
 }
 
-func appendAccessKey(uri, accessKey string) (string, error) {
+func appendAccessKey(uri, gatingParam, gatingParamName string) (string, error) {
 	variantURI, err := url.Parse(uri)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse variant uri: %w", err)
 	}
 	queryParams := variantURI.Query()
-	queryParams.Add(KeyParam, accessKey)
+	queryParams.Add(gatingParamName, gatingParam)
 	variantURI.RawQuery = queryParams.Encode()
 	return variantURI.String(), nil
 }
@@ -110,7 +109,8 @@ func osFetch(playbackID, file, byteRange string) (*drivers.FileInfoReader, error
 	f, err := clients.GetOSURL(osURL.String(), byteRange)
 	if err != nil {
 		var awsErr awserr.Error
-		if errors.As(err, &awsErr) && awsErr.Code() == s3.ErrCodeNoSuchKey {
+		if errors.As(err, &awsErr) && awsErr.Code() == s3.ErrCodeNoSuchKey ||
+			strings.Contains(err.Error(), "no such file") {
 			return nil, fmt.Errorf("invalid request: %w %v", caterrs.ObjectNotFoundError, err)
 		}
 		return nil, fmt.Errorf("failed to get file for playback: %w", err)

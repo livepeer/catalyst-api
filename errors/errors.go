@@ -77,7 +77,7 @@ func IsUnretriable(err error) bool {
 }
 
 var (
-	EmptyAccessKeyError = errors.New("EmptyAccessKeyError")
-	ObjectNotFoundError = errors.New("ObjectNotFoundError")
-	UnauthorisedError   = errors.New("UnauthorisedError")
+	EmptyGatingParamError = errors.New("EmptyGatingParamError")
+	ObjectNotFoundError   = errors.New("ObjectNotFoundError")
+	UnauthorisedError     = errors.New("UnauthorisedError")
 )
