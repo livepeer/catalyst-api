@@ -381,11 +381,16 @@ func (mc *mac) triggerDefaultStream(w http.ResponseWriter, r *http.Request, line
 }
 
 func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
+	// Helper function to reject with an empty response body in a way that works around transfer-encoding Mist bugs
+	reject := func() bool {
+		flusher := w.(http.Flusher)
+		flusher.Flush()
+		return false
+	}
 	if len(lines) != 3 {
 		glog.Errorf("Expected 3 lines, got %d, request \n%s", len(lines), rawRequest)
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("false"))
-		return false
+		return reject()
 	}
 	// glog.V(model.INSANE).Infof("Parsed request (%d):\n%+v", len(lines), lines)
 	pu, err := url.Parse(lines[0])
@@ -394,16 +399,14 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 	if err != nil {
 		glog.Errorf("Error parsing url=%s err=%v", lines[0], err)
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("false"))
-		return false
+		return reject()
 	}
 	if pu.Scheme == "rtmp" {
 		pp := strings.Split(pu.Path, "/")
 		if len(pp) != 3 {
 			glog.Errorf("Push rewrite URL wrongly formatted - should be in format rtmp://mist.host/live/streamKey")
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("false"))
-			return false
+			return reject()
 		}
 	}
 	glog.V(model.VVERBOSE).Infof("Requested stream key is '%s'", streamKey)
@@ -411,13 +414,10 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 	stream, err := mc.lapi.GetStreamByKey(streamKey)
 	if errors.Is(err, api.ErrNotExists) {
 		glog.Errorf("Stream not found for push rewrite streamKey=%s err=%v", streamKey, err)
-		w.Write([]byte(""))
-		return false
+		return reject()
 	} else if err != nil || stream == nil {
 		glog.Errorf("Error getting stream info from Livepeer API streamKey=%s err=%v", streamKey, err)
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("false"))
-		return false
+		return reject()
 	}
 	glog.V(model.VERBOSE).Infof("For stream %s got info %+v", streamKey, stream)
 
@@ -431,8 +431,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 			}
 			mc.mapi.DeleteStreams(streamKey)
 		}
-		w.Write([]byte(""))
-		return false
+		return reject()
 	}
 
 	if stream.PlaybackID != "" {
@@ -464,12 +463,12 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 		}
 		ok, err := mc.lapi.SetActive(stream.ID, true, info.startedAt)
 		if err != nil {
-			glog.Error(err)
+			glog.Errorf("Error calling SetActive err=%s", err)
+			return reject()
 		} else if !ok {
 			glog.Infof("Stream id=%s streamKey=%s playbackId=%s forbidden by webhook, rejecting", stream.ID, stream.StreamKey, stream.PlaybackID)
 			mc.removeInfo(stream.PlaybackID)
-			w.Write([]byte(""))
-			return true
+			return reject()
 		}
 	} else {
 		glog.Errorf("Shouldn't happen streamID=%s", stream.ID)
@@ -479,9 +478,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 		err = mc.createMistStream(streamKey, stream, false)
 		if err != nil {
 			glog.Errorf("Error creating stream on the Mist server: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("false"))
-			return true
+			return reject()
 		}
 	}
 	go mc.emitStreamStateEvent(stream, data.StreamState{Active: true})
