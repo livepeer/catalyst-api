@@ -3,18 +3,20 @@ package pipeline
 import (
 	"context"
 	"fmt"
-	"github.com/grafov/m3u8"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/transcode"
 	"github.com/livepeer/catalyst-api/video"
+	"github.com/livepeer/go-tools/drivers"
 )
 
 const LocalSourceFilePattern = "sourcevideo*"
@@ -59,6 +61,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	} else {
 		job.SegmentingTargetURL = job.SourceFile
 	}
+	sendSourcePlayback(job)
 	job.ReportProgress(clients.TranscodeStatusPreparingCompleted, 1)
 
 	// Transcode Beginning
@@ -148,6 +151,64 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 			InputVideo: inputInfo,
 			Outputs:    outputs,
 		}}, nil
+}
+
+var sourcePlaybackBucketBlocklist = []string{"lp-us-catalyst-vod-pvt-monster", "lp-us-catalyst-vod-pvt-com"}
+
+func sendSourcePlayback(job *JobInfo) {
+	segmentingTargetURL, err := url.Parse(job.SegmentingTargetURL)
+	if err != nil {
+		log.LogError(job.RequestID, "unable to parse url for source playback", err)
+		return
+	}
+
+	segmentingPath := strings.Split(segmentingTargetURL.Path, "/")
+	if len(segmentingPath) < 3 || segmentingPath[1] == "" {
+		log.Log(job.RequestID, "unable to find bucket for source playback", "segmentingTargetURL", segmentingTargetURL)
+		return
+	}
+	// assume bucket is second element in slice (first element should be an empty string as the path has a leading slash)
+	segmentingBucket := segmentingPath[1]
+	if job.HlsTargetURL == nil || !strings.Contains(job.HlsTargetURL.String(), "/"+segmentingBucket+"/") {
+		log.Log(job.RequestID, "source playback not available, not a studio job", "segmentingTargetURL", segmentingTargetURL)
+		return
+	}
+
+	// source playback won't currently work for token gating so we're excluding the private buckets here
+	for _, blocked := range sourcePlaybackBucketBlocklist {
+		if segmentingBucket == blocked {
+			log.Log(job.RequestID, "source playback not available, not main bucket")
+			return
+		}
+	}
+
+	sourceMaster := m3u8.NewMasterPlaylist()
+	videoTrack, err := job.InputFileInfo.GetTrack(video.TrackTypeVideo)
+	if err != nil {
+		log.LogError(job.RequestID, "unable to find a video track for source playback", err)
+		return
+	}
+	sourceMaster.Append("/"+path.Join(segmentingPath[2:]...), &m3u8.MediaPlaylist{}, m3u8.VariantParams{
+		Bandwidth:  uint32(videoTrack.Bitrate),
+		Resolution: fmt.Sprintf("%dx%d", videoTrack.Width, videoTrack.Height),
+		Name:       fmt.Sprintf("%dp", videoTrack.Height),
+	})
+	err = clients.UploadToOSURLFields(job.HlsTargetURL.String(), "index.m3u8", sourceMaster.Encode(), 10*time.Minute, &drivers.FileProperties{CacheControl: "max-age=60"})
+	if err != nil {
+		log.LogError(job.RequestID, "failed to write source playback playlist", err)
+		return
+	}
+
+	sourcePlaylist := job.HlsTargetURL.JoinPath("index.m3u8").String()
+	sourceOutput := video.OutputVideo{
+		Manifest: sourcePlaylist,
+	}
+	tsm := clients.NewTranscodeStatusSourcePlayback(job.CallbackURL, job.RequestID, clients.TranscodeStatusPreparingCompleted, 1, &sourceOutput)
+	err = job.statusClient.SendTranscodeStatus(tsm)
+	if err != nil {
+		log.LogError(job.RequestID, "failed to send status message for source playback", err)
+		return
+	}
 }
 
 func probeSourceSegment(requestID string, seg *m3u8.MediaSegment, sourceManifestURL string) error {

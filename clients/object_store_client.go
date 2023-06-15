@@ -62,6 +62,10 @@ func GetOSURL(osURL, byteRange string) (*drivers.FileInfoReader, error) {
 }
 
 func UploadToOSURL(osURL, filename string, data io.Reader, timeout time.Duration) error {
+	return UploadToOSURLFields(osURL, filename, data, timeout, nil)
+}
+
+func UploadToOSURLFields(osURL, filename string, data io.Reader, timeout time.Duration, fields *drivers.FileProperties) error {
 	storageDriver, err := drivers.ParseOSURL(osURL, true)
 	if err != nil {
 		return fmt.Errorf("failed to parse OS URL %q: %s", log.RedactURL(osURL), err)
@@ -76,7 +80,8 @@ func UploadToOSURL(osURL, filename string, data io.Reader, timeout time.Duration
 	} else {
 		url = info.S3Info.Host
 	}
-	_, err = sess.SaveData(context.Background(), filename, data, nil, timeout)
+
+	_, err = sess.SaveData(context.Background(), filename, data, fields, timeout)
 
 	if err != nil {
 		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(url, "write").Inc()

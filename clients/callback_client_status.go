@@ -93,12 +93,17 @@ type TranscodeStatusMessage struct {
 
 // This method will accept the completion ratio of the current stage and will translate that into the overall ratio
 func NewTranscodeStatusProgress(url, requestID string, status TranscodeStatus, currentStageCompletionRatio float64) TranscodeStatusMessage {
+	return NewTranscodeStatusSourcePlayback(url, requestID, status, currentStageCompletionRatio, nil)
+}
+
+func NewTranscodeStatusSourcePlayback(url, requestID string, status TranscodeStatus, currentStageCompletionRatio float64, sourcePlayback *video.OutputVideo) TranscodeStatusMessage {
 	return TranscodeStatusMessage{
 		URL:             url,
 		RequestID:       requestID,
 		CompletionRatio: OverallCompletionRatio(status, currentStageCompletionRatio),
 		Status:          status,
 		Timestamp:       config.Clock.GetTimestampUTC(),
+		SourcePlayback:  sourcePlayback,
 	}
 }
 

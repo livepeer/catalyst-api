@@ -101,6 +101,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the gate API call was valid$`, stepContext.CheckGateAPICallValid)
 	ctx.Step(`^the Broadcaster receives "(\d+)" segments for transcoding within "(\d+)" seconds$`, stepContext.BroadcasterReceivesSegmentsWithinSeconds)
 	ctx.Step(`^"(\d+)" transcoded segments and manifests have been written to disk for profiles "([^"]*)" within "(\d+)" seconds$`, stepContext.TranscodedSegmentsWrittenToDiskWithinSeconds)
+	ctx.Step(`^the source playback manifest is written to storage within "(\d+)" seconds$`, stepContext.SourcePlaybackManifestWrittenToDisk)
 	ctx.Step(`^I receive a "([^"]*)" callback within "(\d+)" seconds$`, stepContext.CheckCallback)
 
 	ctx.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {

@@ -97,7 +97,7 @@ func (pcc *PeriodicCallbackClient) SendTranscodeStatus(tsm TranscodeStatusMessag
 
 	// Terminal callbacks are sent here in a sync manner
 	// Non-terminal callbacks are sent periodically, in an async manner
-	if tsm.IsTerminal() {
+	if tsm.IsTerminal() || tsm.SourcePlayback != nil {
 		return pcc.sendCallback(tsm)
 	}
 	return nil
