@@ -19,7 +19,7 @@ require (
 	github.com/livepeer/go-api-client v0.4.7
 	github.com/livepeer/go-tools v0.3.1
 	github.com/livepeer/joy4 v0.1.1
-	github.com/livepeer/livepeer-data v0.7.1
+	github.com/livepeer/livepeer-data v0.7.2
 	github.com/livepeer/m3u8 v0.11.1
 	github.com/minio/madmin-go v1.7.5
 	github.com/peterbourgon/ff/v3 v3.3.1
