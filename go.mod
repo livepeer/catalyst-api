@@ -5,7 +5,7 @@ go 1.20
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/DATA-DOG/go-sqlmock v1.5.0
-	github.com/aws/aws-sdk-go v1.44.273
+	github.com/aws/aws-sdk-go v1.44.285
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cucumber/godog v0.12.5
 	github.com/d1str0/pkcs7 v0.0.0-20200424205038-d65c16a5759a
@@ -19,18 +19,18 @@ require (
 	github.com/livepeer/go-api-client v0.4.7
 	github.com/livepeer/go-tools v0.3.1
 	github.com/livepeer/joy4 v0.1.1
-	github.com/livepeer/livepeer-data v0.7.1
+	github.com/livepeer/livepeer-data v0.7.2
 	github.com/livepeer/m3u8 v0.11.1
 	github.com/minio/madmin-go v1.7.5
 	github.com/peterbourgon/ff/v3 v3.3.1
-	github.com/pquerna/cachecontrol v0.1.0
+	github.com/pquerna/cachecontrol v0.2.0
 	github.com/prometheus/client_golang v1.15.1
 	github.com/stretchr/testify v1.8.4
 	github.com/u2takey/ffmpeg-go v0.4.1
 	github.com/xeipuuv/gojsonschema v1.2.0
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.2.0
-	golang.org/x/text v0.9.0
+	golang.org/x/text v0.10.0
 	gopkg.in/vansante/go-ffprobe.v2 v2.1.2-0.20230412093356-81f7fcbea828
 	sigs.k8s.io/yaml v1.3.0
 )
@@ -170,7 +170,7 @@ require (
 	github.com/go-kit/log v0.2.1
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/grafov/m3u8 v0.12.0
-	github.com/hashicorp/go-retryablehttp v0.7.2
+	github.com/hashicorp/go-retryablehttp v0.7.4
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect
