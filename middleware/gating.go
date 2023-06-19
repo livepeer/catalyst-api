@@ -28,17 +28,18 @@ func (h *GatingHandler) GatingCheck(next httprouter.Handle) httprouter.Handle {
 		requestID := requests.GetRequestId(req)
 
 		playbackID := params.ByName("playbackID")
-		key := req.URL.Query().Get(playback.KeyParam)
+		accessKey := req.URL.Query().Get("accessKey")
+		jwt := req.URL.Query().Get("jwt")
 
 		playbackAccessControlAllowed, err := h.AccessControl.IsAuthorized(playbackID, req.URL)
 		if err != nil {
-			log.LogError(requestID, "unable to get playback access control info", err, "playbackID", playbackID, playback.KeyParam, key)
+			log.LogError(requestID, "unable to get playback access control info", err, "playbackID", playbackID, "accessKey", accessKey, "jwt", jwt)
 			catErrs.WriteHTTPInternalServerError(w, "error authorizing playback request", nil)
 			return
 		}
 
 		if !playbackAccessControlAllowed {
-			log.Log(requestID, "playback access control denied", "playbackID", playbackID, playback.KeyParam, key)
+			log.Log(requestID, "playback access control denied", "playbackID", playbackID, "accessKey", accessKey, "jwt", jwt)
 			deny(params.ByName("file"), w)
 			return
 		}

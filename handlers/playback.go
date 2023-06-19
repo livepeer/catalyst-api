@@ -23,12 +23,20 @@ func PlaybackHandler() httprouter.Handle {
 			return
 		}
 
+		gatingParamName := "accessKey"
+		gatingParam := req.URL.Query().Get(gatingParamName)
+		if gatingParam == "" {
+			gatingParamName = "jwt"
+			gatingParam = req.URL.Query().Get(gatingParamName)
+		}
+
 		playbackReq := playback.Request{
-			RequestID:  requestID,
-			PlaybackID: params.ByName("playbackID"),
-			File:       params.ByName("file"),
-			AccessKey:  req.URL.Query().Get(playback.KeyParam),
-			Range:      req.Header.Get("range"),
+			RequestID:       requestID,
+			PlaybackID:      params.ByName("playbackID"),
+			File:            params.ByName("file"),
+			GatingParam:     gatingParam,
+			GatingParamName: gatingParamName,
+			Range:           req.Header.Get("range"),
 		}
 		response, err := playback.Handle(playbackReq)
 		if err != nil {
@@ -65,8 +73,8 @@ func PlaybackHandler() httprouter.Handle {
 func handleError(err error, req *http.Request, requestID string, w http.ResponseWriter) {
 	log.LogError(requestID, "error in playback handler", err, "url", req.URL)
 	switch {
-	case errors.Is(err, catErrs.EmptyAccessKeyError):
-		catErrs.WriteHTTPBadRequest(w, playback.KeyParam+" param empty", nil)
+	case errors.Is(err, catErrs.EmptyGatingParamError):
+		catErrs.WriteHTTPBadRequest(w, "gating param empty", nil)
 	case errors.Is(err, catErrs.ObjectNotFoundError):
 		catErrs.WriteHTTPNotFound(w, "not found", nil)
 	case errors.Is(err, catErrs.UnauthorisedError):
