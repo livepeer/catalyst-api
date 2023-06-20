@@ -61,6 +61,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	} else {
 		job.SegmentingTargetURL = job.SourceFile
 	}
+	job.SegmentingDone = time.Now()
 	sendSourcePlayback(job)
 	job.ReportProgress(clients.TranscodeStatusPreparingCompleted, 1)
 
@@ -144,6 +145,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		return nil, fmt.Errorf("transcoding failed: %w", err)
 	}
 
+	job.TranscodingDone = time.Now()
 	job.transcodedSegments = transcodedSegments
 
 	return &HandlerOutput{
@@ -209,6 +211,7 @@ func sendSourcePlayback(job *JobInfo) {
 		log.LogError(job.RequestID, "failed to send status message for source playback", err)
 		return
 	}
+	job.SourcePlaybackDone = time.Now()
 }
 
 func probeSourceSegment(requestID string, seg *m3u8.MediaSegment, sourceManifestURL string) error {

@@ -50,6 +50,7 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	if err != nil {
 		return nil, fmt.Errorf("external transcoder error: %w", err)
 	}
+	job.TranscodingDone = time.Now()
 
 	return &HandlerOutput{
 		Result: &UploadJobResult{

@@ -118,6 +118,11 @@ type JobInfo struct {
 	startTime    time.Time
 	result       chan bool
 
+	SourcePlaybackDone time.Time
+	DownloadDone       time.Time
+	SegmentingDone     time.Time
+	TranscodingDone    time.Time
+
 	sourceBytes        int64
 	sourceSegments     int
 	sourceDurationMs   int64
@@ -260,6 +265,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		if err != nil {
 			return nil, fmt.Errorf("error copying input to storage: %w", err)
 		}
+
 		p.SourceFile = newSourceURL.String()   // OS URL used by mist
 		p.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert
 		p.InputFileInfo = inputVideoProbe
@@ -401,6 +407,7 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		sourceChannels:        audioTrack.Channels,
 		sourceSampleRate:      audioTrack.SampleRate,
 		sourceSampleBits:      audioTrack.SampleBits,
+		DownloadDone:          time.Now(),
 	}
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 
@@ -534,8 +541,12 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
                             "source_duration",
                             "source_url",
                             "target_url",
-                            "in_fallback_mode"
-                            ) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`
+                            "in_fallback_mode",
+                            "source_playback_at",
+                            "download_done_at",
+                            "segmenting_done_at",
+                            "transcoding_done_at"
+                            ) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`
 	_, err := c.MetricsDB.Exec(
 		insertDynStmt,
 		time.Now().Unix(),
@@ -556,6 +567,10 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
 		log.RedactURL(job.SourceFile),
 		targetURL,
 		job.InFallbackMode,
+		job.SourcePlaybackDone.Unix(),
+		job.DownloadDone.Unix(),
+		job.SegmentingDone.Unix(),
+		job.TranscodingDone.Unix(),
 	)
 	if err != nil {
 		log.LogError(job.RequestID, "error writing postgres metrics", err)
