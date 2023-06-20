@@ -188,7 +188,6 @@ func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, dec
 
 func isDirectUpload(inputFile *url.URL) bool {
 	return strings.HasSuffix(inputFile.Host, "storage.googleapis.com") &&
-		strings.HasPrefix(inputFile.Path, "/directUpload") &&
 		(inputFile.Scheme == "https" || inputFile.Scheme == "http")
 }
 
