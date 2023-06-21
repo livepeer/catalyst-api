@@ -196,7 +196,7 @@ func UploadRetryBackoff() backoff.BackOff {
 }
 
 func SignURL(u *url.URL) (string, error) {
-	if u.Scheme == "" || u.Scheme == "file" { // not compatible with presigning
+	if u.Scheme == "" || u.Scheme == "file" || u.Scheme == "http" || u.Scheme == "https" { // not an OS url
 		return u.String(), nil
 	}
 	driver, err := drivers.ParseOSURL(u.String(), true)
