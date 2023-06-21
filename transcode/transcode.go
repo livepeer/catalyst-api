@@ -3,6 +3,7 @@ package transcode
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -325,7 +326,9 @@ func transcodeSegment(
 
 	var tr clients.TranscodeResult
 	err := backoff.Retry(func() error {
-		rc, err := clients.DownloadOSURL(segment.Input.URL.String())
+		ctx, cancel := context.WithTimeout(context.Background(), clients.MaxCopyFileDuration)
+		defer cancel()
+		rc, err := clients.GetFile(ctx, transcodeRequest.RequestID, segment.Input.URL.String(), nil)
 		if err != nil {
 			return fmt.Errorf("failed to download source segment %q: %s", segment.Input, err)
 		}

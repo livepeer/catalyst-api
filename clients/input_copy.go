@@ -36,9 +36,8 @@ type InputCopy struct {
 
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
 func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, decryptor *crypto.DecryptionKeys) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
-
 	if isDirectUpload(inputFile) && decryptor == nil {
-		log.Log(requestID, "Direct upload detected", "source", inputFile.String())
+		log.Log(requestID, "Direct upload detected")
 		signedURL = inputFile.String()
 		osTransferURL = inputFile
 	} else {
@@ -202,7 +201,7 @@ func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filen
 		defer func() { writtenBytes = byteAccWriter.count }()
 
 		var c io.ReadCloser
-		c, err := getFile(ctx, requestID, sourceURL, dStorage)
+		c, err := GetFile(ctx, requestID, sourceURL, dStorage)
 
 		if err != nil {
 			return fmt.Errorf("download error: %w", err)
@@ -233,11 +232,11 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 	return CopyFileWithDecryption(ctx, sourceURL, destOSBaseURL, filename, requestID, nil)
 }
 
-func getFile(ctx context.Context, requestID, url string, dStorage *DStorageDownload) (io.ReadCloser, error) {
+func GetFile(ctx context.Context, requestID, url string, dStorage *DStorageDownload) (io.ReadCloser, error) {
 	_, err := drivers.ParseOSURL(url, true)
 	if err == nil {
 		return DownloadOSURL(url)
-	} else if IsDStorageResource(url) {
+	} else if IsDStorageResource(url) && dStorage != nil {
 		return dStorage.DownloadDStorageFromGatewayList(url, requestID)
 	} else {
 		return getFileHTTP(ctx, url)
