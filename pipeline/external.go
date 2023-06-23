@@ -3,7 +3,6 @@ package pipeline
 import (
 	"context"
 	"fmt"
-	"math"
 	"net/url"
 	"time"
 
@@ -19,8 +18,6 @@ func (m *external) Name() string {
 }
 
 func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
-	job.sourceBytes = job.InputFileInfo.SizeBytes
-	job.sourceDurationMs = int64(math.Round(job.InputFileInfo.Duration) * 1000)
 	sourceFileUrl, err := url.Parse(job.SignedSourceURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid source file URL: %w", err)
