@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -50,6 +51,7 @@ func (s *StepContext) CreatePostRequestInternal(endpoint, payload string) error 
 }
 
 func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
+	// Copy our source MP4 to somewhere we can ingest it from
 	sourceFile, err := os.CreateTemp(os.TempDir(), "source*.mp4")
 	if err != nil {
 		return fmt.Errorf("failed to create a source file: %s", err)
@@ -60,6 +62,25 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
 	}
 	if _, err = sourceFile.Write(sourceBytes); err != nil {
 		return fmt.Errorf("failed to write to source file: %s", err)
+	}
+
+	// Copy our source manifest and segments to somewhere we can ingest them from
+	sourceManifestDir, err := os.MkdirTemp(os.TempDir(), "sourcemanifest-*")
+	if err != nil {
+		return fmt.Errorf("failed to create a source manifest directory: %s", err)
+	}
+	for _, filename := range []string{"tiny.m3u8", "seg-0.ts", "seg-1.ts", "seg-2.ts"} {
+		sourceBytes, err := os.ReadFile(filepath.Join("fixtures", filename))
+		if err != nil {
+			return fmt.Errorf("failed to read example source file %q: %s", filename, err)
+		}
+		sourceFile, err := os.Create(filepath.Join(sourceManifestDir, filename))
+		if err != nil {
+			return fmt.Errorf("failed to create a new source file: %s", err)
+		}
+		if _, err = sourceFile.Write(sourceBytes); err != nil {
+			return fmt.Errorf("failed to write to source file %q: %s", filename, err)
+		}
 	}
 
 	destinationDir, err := os.MkdirTemp(os.TempDir(), "transcoded*")
@@ -80,6 +101,23 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
 		req.URL = "file://" + sourceFile.Name()
 		req.PipelineStrategy = "catalyst_ffmpeg"
 		req.TargetSegmentSizeSecs = 9
+		req.OutputLocations = []OutputLocation{
+			{
+				Type: "object_store",
+				URL:  "file://" + destinationDir,
+				Outputs: Output{
+					HLS: "enabled",
+				},
+			},
+		}
+		if payload, err = req.ToJSON(); err != nil {
+			return fmt.Errorf("failed to build upload request JSON: %s", err)
+		}
+	}
+	if payload == "a valid ffmpeg upload vod request with a source manifest" {
+		req := DefaultUploadRequest
+		req.URL = "file://" + filepath.Join(sourceManifestDir, "tiny.m3u8")
+		req.PipelineStrategy = "catalyst_ffmpeg"
 		req.OutputLocations = []OutputLocation{
 			{
 				Type: "object_store",
