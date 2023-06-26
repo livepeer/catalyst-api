@@ -329,6 +329,18 @@ func checkLivepeerCompatible(requestID string, strategy Strategy, iv video.Input
 			log.Log(requestID, "video rotation not supported by Livepeer pipeline", "rotation", track.Rotation)
 			return livepeerNotSupported(strategy)
 		}
+		if track.Type == video.TrackTypeVideo && track.DisplayAspectRatio != "" {
+			aspectRatioParts := strings.Split(track.DisplayAspectRatio, ":")
+			if len(aspectRatioParts) == 2 {
+				w, err := strconv.ParseFloat(aspectRatioParts[0], 64)
+				h, err2 := strconv.ParseFloat(aspectRatioParts[1], 64)
+				if err == nil && err2 == nil &&
+					w/h != float64(track.Width)/float64(track.Height) {
+					log.Log(requestID, "display aspect ratio doesn't match resolution, not supported by Livepeer pipeline", "display_aspect_ratio", track.DisplayAspectRatio, "width", track.Width, "height", track.Height)
+					return livepeerNotSupported(strategy)
+				}
+			}
+		}
 	}
 	return true, strategy
 }
