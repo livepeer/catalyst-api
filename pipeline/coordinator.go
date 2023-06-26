@@ -4,6 +4,7 @@ import (
 	"crypto/rsa"
 	"database/sql"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path"
@@ -407,6 +408,8 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		sourceChannels:        audioTrack.Channels,
 		sourceSampleRate:      audioTrack.SampleRate,
 		sourceSampleBits:      audioTrack.SampleBits,
+		sourceBytes:           p.InputFileInfo.SizeBytes,
+		sourceDurationMs:      int64(math.Round(p.InputFileInfo.Duration) * 1000),
 		DownloadDone:          time.Now(),
 	}
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
