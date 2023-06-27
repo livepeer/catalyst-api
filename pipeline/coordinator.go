@@ -329,17 +329,8 @@ func checkLivepeerCompatible(requestID string, strategy Strategy, iv video.Input
 			log.Log(requestID, "video rotation not supported by Livepeer pipeline", "rotation", track.Rotation)
 			return livepeerNotSupported(strategy)
 		}
-		if track.Type == video.TrackTypeVideo && track.DisplayAspectRatio != "" {
-			aspectRatioParts := strings.Split(track.DisplayAspectRatio, ":")
-			if len(aspectRatioParts) == 2 {
-				w, err := strconv.ParseFloat(aspectRatioParts[0], 64)
-				h, err2 := strconv.ParseFloat(aspectRatioParts[1], 64)
-				if err == nil && err2 == nil &&
-					w/h != float64(track.Width)/float64(track.Height) {
-					log.Log(requestID, "display aspect ratio doesn't match resolution, not supported by Livepeer pipeline", "display_aspect_ratio", track.DisplayAspectRatio, "width", track.Width, "height", track.Height)
-					return livepeerNotSupported(strategy)
-				}
-			}
+		if !checkDisplayAspectRatio(track, requestID) {
+			return livepeerNotSupported(strategy)
 		}
 	}
 	return true, strategy
@@ -351,6 +342,36 @@ func livepeerNotSupported(strategy Strategy) (bool, Strategy) {
 		return false, strategy
 	}
 	return false, StrategyExternalDominance
+}
+
+func checkDisplayAspectRatio(track video.InputTrack, requestID string) bool {
+	if track.Type != video.TrackTypeVideo || track.DisplayAspectRatio == "" {
+		return true
+	}
+	aspectRatioParts := strings.Split(track.DisplayAspectRatio, ":")
+	if len(aspectRatioParts) != 2 {
+		return true
+	}
+	w, err := strconv.ParseFloat(aspectRatioParts[0], 64)
+	h, err2 := strconv.ParseFloat(aspectRatioParts[1], 64)
+	if err != nil || err2 != nil {
+		log.Log(requestID, "failed to parse floats when checking display aspect ratio", "err", err, "err2", err2)
+		return true
+	}
+	if h == 0 || track.Height == 0 {
+		log.Log(requestID, "height was zero when checking display aspect ratio", "ratioHeight", h, "trackHeight", track.Height)
+		return true
+	}
+	dar := w / h
+	resRatio := float64(track.Width) / float64(track.Height)
+
+	// calculate the difference between the aspect ratio and the real ratio of the resolution, allow up to 20%
+	diff := dar - resRatio
+	if (diff / dar) < 0.2 {
+		return true
+	}
+	log.Log(requestID, "display aspect ratio doesn't match resolution, not supported by Livepeer pipeline", "display_aspect_ratio", track.DisplayAspectRatio, "width", track.Width, "height", track.Height)
+	return false
 }
 
 // Starts a single upload job with specified pipeline Handler. If the job is

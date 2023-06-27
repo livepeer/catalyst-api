@@ -773,6 +773,27 @@ func Test_checkMistCompatible(t *testing.T) {
 			want:          StrategyExternalDominance,
 			wantSupported: false,
 		},
+		{
+			name: "compatible with ffmpeg - display aspect ratio only slightly mismatched",
+			args: args{
+				strategy: StrategyFallbackExternal,
+				iv: video.InputVideo{
+					Tracks: []video.InputTrack{
+						{
+							Codec: "h264",
+							Type:  video.TrackTypeVideo,
+							VideoTrack: video.VideoTrack{
+								Width:              16,
+								Height:             10,
+								DisplayAspectRatio: "16:9",
+							},
+						},
+					},
+				},
+			},
+			want:          StrategyFallbackExternal,
+			wantSupported: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
