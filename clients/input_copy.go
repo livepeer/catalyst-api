@@ -95,6 +95,9 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, decrypto
 
 func getSignedURL(osTransferURL *url.URL) (string, error) {
 	// check if plain https is accessible, if not then the bucket must be private and we need to generate a signed url
+	// in most cases signed urls work fine as input but in the edge case where we have to fall back to mediaconvert
+	// for an hls input (for recordings) the signed url will fail because mediaconvert tries to append the same
+	// signing queryparams from the manifest url for the segment requests
 	httpURL := *osTransferURL
 	httpURL.User = nil
 	httpURL.Scheme = "https"
