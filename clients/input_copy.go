@@ -59,7 +59,7 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, decrypto
 		}
 		log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", osTransferURL.String())
 
-		signedURL, err = SignURL(osTransferURL)
+		signedURL, err = getSignedURL(osTransferURL)
 		if err != nil {
 			return
 		}
@@ -91,6 +91,24 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, decrypto
 	log.Log(requestID, "probed video track:", "container", inputVideoProbe.Format, "codec", videoTrack.Codec, "bitrate", videoTrack.Bitrate, "duration", videoTrack.DurationSec, "w", videoTrack.Width, "h", videoTrack.Height, "pix-format", videoTrack.PixelFormat, "FPS", videoTrack.FPS)
 	log.Log(requestID, "probed audio track", "codec", audioTrack.Codec, "bitrate", audioTrack.Bitrate, "duration", audioTrack.DurationSec, "channels", audioTrack.Channels)
 	return
+}
+
+func getSignedURL(osTransferURL *url.URL) (string, error) {
+	// check if plain https is accessible, if not then the bucket must be private and we need to generate a signed url
+	// in most cases signed urls work fine as input but in the edge case where we have to fall back to mediaconvert
+	// for an hls input (for recordings) the signed url will fail because mediaconvert tries to append the same
+	// signing queryparams from the manifest url for the segment requests
+	httpURL := *osTransferURL
+	httpURL.User = nil
+	httpURL.Scheme = "https"
+	signedURL := httpURL.String()
+
+	resp, err := http.Head(signedURL)
+	if err == nil && resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusBadRequest {
+		return signedURL, nil
+	}
+
+	return SignURL(osTransferURL)
 }
 
 func isHLSInput(inputFile *url.URL) bool {
@@ -187,6 +205,7 @@ func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, dec
 
 func isDirectUpload(inputFile *url.URL) bool {
 	return strings.HasSuffix(inputFile.Host, "storage.googleapis.com") &&
+		strings.HasPrefix(inputFile.Path, "/directUpload") &&
 		(inputFile.Scheme == "https" || inputFile.Scheme == "http")
 }
 
