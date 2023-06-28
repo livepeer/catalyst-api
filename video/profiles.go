@@ -36,11 +36,12 @@ func (i InputVideo) GetTrack(trackType string) (InputTrack, error) {
 }
 
 type VideoTrack struct {
-	Width       int64   `json:"width,omitempty"`
-	Height      int64   `json:"height,omitempty"`
-	PixelFormat string  `json:"pixel_format,omitempty"`
-	FPS         float64 `json:"fps,omitempty"`
-	Rotation    int64   `json:"rotation,omitempty"`
+	Width              int64   `json:"width,omitempty"`
+	Height             int64   `json:"height,omitempty"`
+	PixelFormat        string  `json:"pixel_format,omitempty"`
+	FPS                float64 `json:"fps,omitempty"`
+	Rotation           int64   `json:"rotation,omitempty"`
+	DisplayAspectRatio string  `json:"display_aspect_ratio,omitempty"`
 }
 
 type AudioTrack struct {
