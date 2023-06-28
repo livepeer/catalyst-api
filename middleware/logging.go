@@ -34,6 +34,11 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.wroteHeader = true
 }
 
+func (rw *responseWriter) Flush() {
+	flusher := rw.ResponseWriter.(http.Flusher)
+	flusher.Flush()
+}
+
 func LogAndMetrics(metric *prometheus.SummaryVec) func(httprouter.Handle) httprouter.Handle {
 	return logRequest(metric)
 }
