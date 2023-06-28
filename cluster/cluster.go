@@ -98,6 +98,7 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	serfConfig.EventCh = c.serfCh
 	serfConfig.ProtocolVersion = 5
 	serfConfig.UserEventSizeLimit = 9216
+	serfConfig.SnapshotPath = "/snapshot/SERF_SNAPSHOT"
 
 	c.serf, err = serf.Create(serfConfig)
 	if err != nil {

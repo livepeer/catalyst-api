@@ -497,10 +497,6 @@ func (mc *mac) triggerLiveTrackList(w http.ResponseWriter, r *http.Request, line
 				info.multistreamStarted = true
 			}
 			info.mu.Unlock()
-
-			if shouldStart {
-				mc.startMultistream(lines[0], playbackID, info)
-			}
 		}
 	}()
 	return true
@@ -804,41 +800,41 @@ func (mc *mac) SetupTriggers(ownURI string) error {
 	return err
 }
 
-func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *streamInfo) {
-	for i := range info.stream.Multistream.Targets {
-		go func(targetRef api.MultistreamTargetRef) {
-			glog.Infof("==> starting multistream %s", targetRef.ID)
-			target, pushURL, err := mc.getPushUrl(info.stream, &targetRef)
-			if err != nil {
-				glog.Errorf("Error building multistream target push URL. targetId=%s stream=%s err=%v",
-					targetRef.ID, wildcardPlaybackID, err)
-				return
-			} else if target.Disabled {
-				glog.Infof("Ignoring disabled multistream target. targetId=%s stream=%s",
-					targetRef.ID, wildcardPlaybackID)
-				return
-			}
+// func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *streamInfo) {
+// 	for i := range info.stream.Multistream.Targets {
+// 		go func(targetRef api.MultistreamTargetRef) {
+// 			glog.Infof("==> starting multistream %s", targetRef.ID)
+// 			target, pushURL, err := mc.getPushUrl(info.stream, &targetRef)
+// 			if err != nil {
+// 				glog.Errorf("Error building multistream target push URL. targetId=%s stream=%s err=%v",
+// 					targetRef.ID, wildcardPlaybackID, err)
+// 				return
+// 			} else if target.Disabled {
+// 				glog.Infof("Ignoring disabled multistream target. targetId=%s stream=%s",
+// 					targetRef.ID, wildcardPlaybackID)
+// 				return
+// 			}
 
-			info.mu.Lock()
-			info.pushStatus[pushURL] = &pushStatus{
-				target:  target,
-				profile: targetRef.Profile,
-				metrics: &data.MultistreamMetrics{},
-			}
-			info.mu.Unlock()
+// 			info.mu.Lock()
+// 			info.pushStatus[pushURL] = &pushStatus{
+// 				target:  target,
+// 				profile: targetRef.Profile,
+// 				metrics: &data.MultistreamMetrics{},
+// 			}
+// 			info.mu.Unlock()
 
-			err = mc.mapi.StartPush(wildcardPlaybackID, pushURL)
-			if err != nil {
-				glog.Errorf("Error starting multistream to target. targetId=%s stream=%s err=%v", targetRef.ID, wildcardPlaybackID, err)
-				info.mu.Lock()
-				delete(info.pushStatus, pushURL)
-				info.mu.Unlock()
-				return
-			}
-			glog.Infof("Started multistream to target. targetId=%s stream=%s url=%s", wildcardPlaybackID, targetRef.ID, pushURL)
-		}(info.stream.Multistream.Targets[i])
-	}
-}
+// 			err = mc.mapi.StartPush(wildcardPlaybackID, pushURL)
+// 			if err != nil {
+// 				glog.Errorf("Error starting multistream to target. targetId=%s stream=%s err=%v", targetRef.ID, wildcardPlaybackID, err)
+// 				info.mu.Lock()
+// 				delete(info.pushStatus, pushURL)
+// 				info.mu.Unlock()
+// 				return
+// 			}
+// 			glog.Infof("Started multistream to target. targetId=%s stream=%s url=%s", wildcardPlaybackID, targetRef.ID, pushURL)
+// 		}(info.stream.Multistream.Targets[i])
+// 	}
+// }
 
 func (mc *mac) getPushUrl(stream *api.Stream, targetRef *api.MultistreamTargetRef) (*api.MultistreamTarget, string, error) {
 	target, err := mc.lapi.GetMultistreamTarget(targetRef.ID)

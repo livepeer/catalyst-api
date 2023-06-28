@@ -51,7 +51,12 @@ func (d *MistCallbackHandlersCollection) TriggerStreamBuffer(ctx context.Context
 	}
 
 	rawBody, _ := json.Marshal(body)
+<<<<<<< HEAD
 	go d.broker.TriggerStreamBuffer(ctx, body)
+||||||| parent of 9ba4c36 (mapic: multistreaming wip)
+=======
+	glog.Infof("STREAM BUFFER!!!! payload=%s", string(strings.ReplaceAll(string(payload), "\n", "\\n")))
+>>>>>>> 9ba4c36 (mapic: multistreaming wip)
 	if d.cli.StreamHealthHookURL == "" {
 		glog.Infof("Stream health hook URL not set, skipping trigger sessionId=%q payload=%s", sessionID, rawBody)
 		return

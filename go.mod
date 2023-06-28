@@ -18,7 +18,7 @@ require (
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/lib/pq v1.10.9
 	github.com/livepeer/go-api-client v0.4.7
-	github.com/livepeer/go-livepeer v0.5.38
+	github.com/livepeer/go-livepeer v0.5.39-0.20230501191111-1ef36d7f50df
 	github.com/livepeer/go-tools v0.3.1
 	github.com/livepeer/joy4 v0.1.2-0.20191121080656-b2fea45cbded
 	github.com/livepeer/livepeer-data v0.7.2
