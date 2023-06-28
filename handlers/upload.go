@@ -23,8 +23,9 @@ import (
 )
 
 type UploadVODRequestOutputLocationOutputs struct {
-	HLS string `json:"hls"`
-	MP4 string `json:"mp4"`
+	HLS       string `json:"hls"`
+	MP4       string `json:"mp4"`
+	SourceMp4 bool   `json:"source_mp4"`
 }
 
 type UploadVODRequestOutputLocation struct {
@@ -90,6 +91,15 @@ func (r UploadVODRequest) getTargetMp4Output() (UploadVODRequestOutputLocation, 
 		}
 	}
 	return UploadVODRequestOutputLocation{}, false
+}
+
+func (r UploadVODRequest) getSourceCopyEnabled() bool {
+	for _, o := range r.OutputLocations {
+		if o.Outputs.SourceMp4 {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
@@ -183,6 +193,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		PipelineStrategy:      uploadVODRequest.PipelineStrategy,
 		TargetSegmentSizeSecs: uploadVODRequest.TargetSegmentSizeSecs,
 		Encryption:            uploadVODRequest.Encryption,
+		SourceCopy:            uploadVODRequest.getSourceCopyEnabled(),
 	})
 
 	respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})

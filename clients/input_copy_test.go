@@ -74,7 +74,7 @@ func Test_isHLSInput(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			inputURL, err := url.Parse(tt.inputFile)
 			require.NoError(t, err)
-			require.Equal(t, tt.want, isHLSInput(inputURL))
+			require.Equal(t, tt.want, IsHLSInput(inputURL))
 		})
 	}
 }

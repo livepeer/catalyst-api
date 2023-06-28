@@ -25,44 +25,30 @@ const PresignDuration = 24 * time.Hour
 const LocalSourceFilePattern = "sourcevideo*"
 
 type InputCopier interface {
-	CopyInputToS3(requestID string, inputFile *url.URL, decryptor *crypto.DecryptionKeys) (video.InputVideo, string, *url.URL, error)
+	CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL, decryptor *crypto.DecryptionKeys) (video.InputVideo, string, error)
 }
 
 type InputCopy struct {
-	S3              S3
-	Probe           video.Prober
-	SourceOutputUrl string
+	S3    S3
+	Probe video.Prober
 }
 
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
-func (s *InputCopy) CopyInputToS3(requestID string, inputFile *url.URL, decryptor *crypto.DecryptionKeys) (inputVideoProbe video.InputVideo, signedURL string, osTransferURL *url.URL, err error) {
-	if isDirectUpload(inputFile) && decryptor == nil {
-		log.Log(requestID, "Direct upload detected")
-		signedURL = inputFile.String()
-		osTransferURL = inputFile
-	} else {
-		var (
-			size            int64
-			sourceOutputUrl *url.URL
-		)
-		sourceOutputUrl, err = url.Parse(s.SourceOutputUrl)
-		if err != nil {
-			err = fmt.Errorf("cannot create sourceOutputUrl: %w", err)
-			return
-		}
-		osTransferURL = sourceOutputUrl.JoinPath(requestID, "transfer", path.Base(inputFile.Path))
+func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL, decryptor *crypto.DecryptionKeys) (inputVideoProbe video.InputVideo, signedURL string, err error) {
+	var (
+		size int64
+	)
 
-		size, err = CopyAllInputFiles(requestID, inputFile, osTransferURL, decryptor)
-		if err != nil {
-			err = fmt.Errorf("failed to copy file(s): %w", err)
-			return
-		}
-		log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", osTransferURL.String())
+	size, err = CopyAllInputFiles(requestID, inputFile, osTransferURL, decryptor)
+	if err != nil {
+		err = fmt.Errorf("failed to copy file(s): %w", err)
+		return
+	}
+	log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", osTransferURL.String())
 
-		signedURL, err = getSignedURL(osTransferURL)
-		if err != nil {
-			return
-		}
+	signedURL, err = getSignedURL(osTransferURL)
+	if err != nil {
+		return
 	}
 
 	log.Log(requestID, "starting probe", "source", inputFile.String(), "dest", osTransferURL.String())
@@ -111,7 +97,7 @@ func getSignedURL(osTransferURL *url.URL) (string, error) {
 	return SignURL(osTransferURL)
 }
 
-func isHLSInput(inputFile *url.URL) bool {
+func IsHLSInput(inputFile *url.URL) bool {
 	ext := strings.LastIndex(inputFile.Path, ".")
 	if ext == -1 {
 		return false
@@ -158,7 +144,7 @@ func getSegmentTransferLocation(srcManifestUrl, dstTransferUrl *url.URL, srcSegm
 // it will copy just the single video file for MP4/MOV input
 func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, decryptor *crypto.DecryptionKeys) (size int64, err error) {
 	fileList := make(map[string]string)
-	if isHLSInput(srcInputUrl) {
+	if IsHLSInput(srcInputUrl) {
 		// Download the m3u8 manifest using the input url
 		playlist, err := DownloadRenditionManifest(requestID, srcInputUrl.String())
 		if err != nil {
@@ -300,6 +286,6 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 
 type StubInputCopy struct{}
 
-func (s *StubInputCopy) CopyInputToS3(requestID string, inputFile *url.URL, decryptor *crypto.DecryptionKeys) (video.InputVideo, string, *url.URL, error) {
-	return video.InputVideo{}, "", &url.URL{}, nil
+func (s *StubInputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL, decryptor *crypto.DecryptionKeys) (video.InputVideo, string, error) {
+	return video.InputVideo{}, "", nil
 }

@@ -58,7 +58,7 @@ func init() {
 }
 
 func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo video.InputVideo) ([]video.OutputVideo, int, error) {
-	log.AddContext(transcodeRequest.RequestID, "source", transcodeRequest.SourceFile, "source_manifest", transcodeRequest.SourceManifestURL, "stream_name", streamName)
+	log.AddContext(transcodeRequest.RequestID, "source_manifest", transcodeRequest.SourceManifestURL, "stream_name", streamName)
 	log.Log(transcodeRequest.RequestID, "RunTranscodeProcess (v2) Beginning")
 
 	var segmentsCount = 0

@@ -77,6 +77,7 @@ type UploadJobPayload struct {
 	SignedSourceURL       string
 	InFallbackMode        bool
 	LivepeerSupported     bool
+	SourceCopy            bool
 }
 
 type EncryptionPayload struct {
@@ -165,10 +166,10 @@ type Coordinator struct {
 	MetricsDB            *sql.DB
 	InputCopy            clients.InputCopier
 	VodDecryptPrivateKey *rsa.PrivateKey
+	SourceOutputURL      *url.URL
 }
 
 func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB, VodDecryptPrivateKey *rsa.PrivateKey) (*Coordinator, error) {
-
 	if !strategy.IsValid() {
 		return nil, fmt.Errorf("invalid strategy: %s", strategy)
 	}
@@ -184,6 +185,10 @@ func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string,
 	if strategy != StrategyCatalystFfmpegDominance && extTranscoder == nil {
 		return nil, fmt.Errorf("external transcoder is required for strategy: %v", strategy)
 	}
+	sourceOutput, err := url.Parse(sourceOutputURL)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
+	}
 
 	return &Coordinator{
 		strategy:     strategy,
@@ -193,10 +198,10 @@ func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string,
 		Jobs:         cache.New[*JobInfo](),
 		MetricsDB:    metricsDB,
 		InputCopy: &clients.InputCopy{
-			Probe:           video.Probe{},
-			SourceOutputUrl: sourceOutputURL,
+			Probe: video.Probe{},
 		},
 		VodDecryptPrivateKey: VodDecryptPrivateKey,
+		SourceOutputURL:      sourceOutput,
 	}, nil
 }
 
@@ -226,6 +231,7 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 		InputCopy: &clients.InputCopy{
 			Probe: video.Probe{},
 		},
+		SourceOutputURL: &url.URL{},
 	}
 }
 
@@ -248,7 +254,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 
 	c.runHandlerAsync(si, func() (*HandlerOutput, error) {
-		sourceURL, err := url.Parse(si.SourceFile)
+		sourceURL, err := url.Parse(p.SourceFile)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing source as url: %w", err)
 		}
@@ -262,12 +268,18 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 			}
 		}
 
-		inputVideoProbe, signedNewSourceURL, newSourceURL, err := c.InputCopy.CopyInputToS3(si.RequestID, sourceURL, decryptor)
+		osTransferURL := c.SourceOutputURL.JoinPath(p.RequestID, "transfer", path.Base(sourceURL.Path))
+		if !clients.IsHLSInput(sourceURL) && p.SourceCopy {
+			log.Log(p.RequestID, "source copy enabled")
+			osTransferURL = p.HlsTargetURL.JoinPath("video")
+		}
+
+		inputVideoProbe, signedNewSourceURL, err := c.InputCopy.CopyInputToS3(p.RequestID, sourceURL, osTransferURL, decryptor)
 		if err != nil {
 			return nil, fmt.Errorf("error copying input to storage: %w", err)
 		}
 
-		p.SourceFile = newSourceURL.String()   // OS URL used by mist
+		p.SourceFile = osTransferURL.String()  // OS URL used by mist
 		p.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert
 		p.InputFileInfo = inputVideoProbe
 		p.GenerateMP4 = func(mp4TargetUrl *url.URL, mp4OnlyShort bool, duration float64) bool {
@@ -277,8 +289,8 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 			return false
 		}(p.Mp4TargetURL, p.Mp4OnlyShort, p.InputFileInfo.Duration)
 
-		log.AddContext(si.RequestID, "new_source_url", newSourceURL)
-		log.AddContext(si.RequestID, "signed_url", signedNewSourceURL)
+		log.AddContext(p.RequestID, "new_source_url", p.SourceFile)
+		log.AddContext(p.RequestID, "signed_url", p.SignedSourceURL)
 
 		c.startUploadJob(p)
 		return nil, nil
