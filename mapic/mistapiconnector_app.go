@@ -244,7 +244,7 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 	// TODO FIXME this was a quick hack to unbreak TSSRT and could break at any time.
 	// The right way to solve this is to "Use the STREAM_BUFFER trigger and look for
 	// the EMPTY state field in the payload."
-	if (protocol == "RTMP" && len(lines[3]) > 0) || (protocol == "TSSRT" && len(lines[1]) > 0) {
+	if (protocol == "WebRTC" || protocol == "RTMP" && len(lines[3]) > 0) || (protocol == "TSSRT" && len(lines[1]) > 0) {
 		playbackID := strings.TrimPrefix(lines[0], streamPlaybackPrefix)
 		if mc.baseStreamName != "" && strings.Contains(playbackID, "+") {
 			playbackID = strings.Split(playbackID, "+")[1]
