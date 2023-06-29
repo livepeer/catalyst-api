@@ -12,6 +12,20 @@ import (
 // to respond to Mist trigger events without putting all of the application
 // logic into the trigger handling code itself.
 
+// There are three different cases to account for on Mist triggers; and
+// accordingly the TriggerXXX functions have three different signatures:
+// 1. Purely informative, like STREAM_BUFFER. This can't be rejected back
+//    to Mist, so no error signature necessary. All of the callbacks can
+//    be fired in parallel.
+// 2. Allow/deny, like USER_NEW. We either let the new viewer come in
+//    or we kick them out, but there's no return value other than that.
+//    These handlers can be called in parallel too, but any one of them
+//    returning an error will cause an (immediate) trigger rejection.
+// 3. Triggers with response values, like PUSH_REWRITE. These functions need
+//    to return both an error (for rejections) and a string (for responses).
+//    They can't be called in parallel; there really should only be one
+//    handler for these sorts of triggers.
+
 type Broker interface {
 	OnStreamBuffer(func(context.Context, *StreamBufferPayload) error)
 
