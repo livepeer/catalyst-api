@@ -41,7 +41,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 				}
 				newURL.Scheme = protocol(r)
 				newURL.Host = nodeHost
-				http.Redirect(w, r, newURL.String(), http.StatusTemporaryRedirect)
+				http.Redirect(w, r, newURL.String(), http.StatusFound)
 				glog.V(6).Infof("NodeHost redirect host=%s nodeHost=%s from=%s to=%s", host, nodeHost, r.URL, newURL)
 				return
 			}
@@ -72,7 +72,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			return
 		}
 		glog.V(6).Infof("generated redirect url=%s", rURL)
-		http.Redirect(w, r, rURL, http.StatusTemporaryRedirect)
+		http.Redirect(w, r, rURL, http.StatusFound)
 	}
 }
 
