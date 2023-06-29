@@ -35,7 +35,7 @@ func NewMistCallbackHandlersCollection(cli config.Cli, b TriggerBroker) *MistCal
 // Only single trigger callback is allowed on Mist.
 // All created streams and our handlers (segmenting, transcoding, et.) must share this endpoint.
 // If handler logic grows more complicated we may consider adding dispatch mechanism here.
-func (d *MistCallbackHandlersCollection) Trigger(ctx context.Context) httprouter.Handle {
+func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 		payload, err := io.ReadAll(req.Body)
 		if err != nil {
@@ -49,6 +49,8 @@ func (d *MistCallbackHandlersCollection) Trigger(ctx context.Context) httprouter
 			"trigger_name", triggerName,
 			"payload", log.RedactLogs(string(payload), "\n"),
 		)
+
+		ctx := context.Background()
 
 		switch triggerName {
 		case TRIGGER_PUSH_OUT_START:

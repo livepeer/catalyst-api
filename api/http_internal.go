@@ -27,7 +27,7 @@ import (
 )
 
 func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker) error {
-	router := NewCatalystAPIRouterInternal(ctx, cli, vodEngine, mapic, bal, c, broker)
+	router := NewCatalystAPIRouterInternal(cli, vodEngine, mapic, bal, c, broker)
 	server := http.Server{Addr: cli.HTTPInternalAddress, Handler: router}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -53,7 +53,7 @@ func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipe
 	return server.Shutdown(ctx)
 }
 
-func NewCatalystAPIRouterInternal(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker) *httprouter.Router {
+func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker) *httprouter.Router {
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
 	withAuth := middleware.IsAuthorized
@@ -110,7 +110,7 @@ func NewCatalystAPIRouterInternal(ctx context.Context, cli config.Cli, vodEngine
 	router.GET("/api/pubkey", withLogging(encryptionHandlers.PublicKeyHandler()))
 
 	// Endpoint to receive "Triggers" (callbacks) from Mist
-	router.POST("/api/mist/trigger", withLogging(mistCallbackHandlers.Trigger(ctx)))
+	router.POST("/api/mist/trigger", withLogging(mistCallbackHandlers.Trigger()))
 
 	// Endpoint to receive segments and manifests that ffmpeg produces
 	router.PUT("/api/ffmpeg/:id/:filename", withLogging(ffmpegSegmentingHandlers.NewFile()))
