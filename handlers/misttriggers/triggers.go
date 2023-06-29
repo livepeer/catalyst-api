@@ -1,6 +1,7 @@
 package misttriggers
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,18 +19,23 @@ const (
 )
 
 type MistCallbackHandlersCollection struct {
-	cli *config.Cli
+	cli    *config.Cli
+	broker Broker
 }
 
-func NewMistCallbackHandlersCollection(cli config.Cli) *MistCallbackHandlersCollection {
-	return &MistCallbackHandlersCollection{cli: &cli}
+type TriggerPayload interface {
+	StreamBuffer | PushEndPayload
+}
+
+func NewMistCallbackHandlersCollection(cli config.Cli, b Broker) *MistCallbackHandlersCollection {
+	return &MistCallbackHandlersCollection{cli: &cli, broker: b}
 }
 
 // Trigger dispatches request to mapped method according to trigger name
 // Only single trigger callback is allowed on Mist.
 // All created streams and our handlers (segmenting, transcoding, et.) must share this endpoint.
 // If handler logic grows more complicated we may consider adding dispatch mechanism here.
-func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
+func (d *MistCallbackHandlersCollection) Trigger(ctx context.Context) httprouter.Handle {
 	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 		payload, err := io.ReadAll(req.Body)
 		if err != nil {
@@ -46,11 +52,11 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 
 		switch triggerName {
 		case TRIGGER_PUSH_OUT_START:
-			d.TriggerPushOutStart(w, req, payload)
+			d.TriggerPushOutStart(ctx, w, req, payload)
 		case TRIGGER_PUSH_END:
-			d.TriggerPushEnd(w, req, payload)
+			d.TriggerPushEnd(ctx, w, req, payload)
 		case TRIGGER_STREAM_BUFFER:
-			d.TriggerStreamBuffer(w, req, payload)
+			d.TriggerStreamBuffer(ctx, w, req, payload)
 		default:
 			errors.WriteHTTPBadRequest(w, "Unsupported X-Trigger", fmt.Errorf("unknown trigger '%s'", triggerName))
 			return

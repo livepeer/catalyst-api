@@ -2,6 +2,7 @@ package misttriggers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -39,7 +40,7 @@ func init() {
 // {JSON object with stream details, only when state is not EMPTY}
 //
 // Read the Mist documentation for more details on each of the stream states.
-func (d *MistCallbackHandlersCollection) TriggerStreamBuffer(w http.ResponseWriter, req *http.Request, payload []byte) {
+func (d *MistCallbackHandlersCollection) TriggerStreamBuffer(ctx context.Context, w http.ResponseWriter, req *http.Request, payload []byte) {
 	sessionID := req.Header.Get("X-UUID")
 
 	body, err := ParseStreamBufferPayload(payload)
@@ -50,6 +51,7 @@ func (d *MistCallbackHandlersCollection) TriggerStreamBuffer(w http.ResponseWrit
 	}
 
 	rawBody, _ := json.Marshal(body)
+	go d.broker.TriggerStreamBuffer(ctx, body)
 	if d.cli.StreamHealthHookURL == "" {
 		glog.Infof("Stream health hook URL not set, skipping trigger sessionId=%q payload=%s", sessionID, rawBody)
 		return
@@ -120,7 +122,7 @@ func (d *MistCallbackHandlersCollection) PostStreamHealthPayload(payload StreamH
 	return nil
 }
 
-type StreamBufferPayload struct {
+type StreamBuffer struct {
 	StreamName string
 	State      string
 	Details    *MistStreamDetails
@@ -135,7 +137,7 @@ type TrackDetails struct {
 	Width  int            `json:"width,omitempty"`
 }
 
-func ParseStreamBufferPayload(payload []byte) (*StreamBufferPayload, error) {
+func ParseStreamBufferPayload(payload []byte) (*StreamBuffer, error) {
 	lines := strings.Split(strings.TrimSuffix(string(payload), "\n"), "\n")
 	if len(lines) < 2 || len(lines) > 3 {
 		return nil, fmt.Errorf("invalid payload: expected 2 or 3 lines but got %d", len(lines))
@@ -153,7 +155,7 @@ func ParseStreamBufferPayload(payload []byte) (*StreamBufferPayload, error) {
 		return nil, fmt.Errorf("error parsing stream details JSON: %w", err)
 	}
 
-	return &StreamBufferPayload{
+	return &StreamBuffer{
 		StreamName: streamName,
 		State:      streamState,
 		Details:    streamDetails,

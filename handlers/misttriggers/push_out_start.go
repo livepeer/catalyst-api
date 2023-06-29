@@ -1,6 +1,7 @@
 package misttriggers
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -15,7 +16,7 @@ import (
 //
 // stream name (string)
 // push target URI (string)
-func (d *MistCallbackHandlersCollection) TriggerPushOutStart(w http.ResponseWriter, req *http.Request, payload []byte) {
+func (d *MistCallbackHandlersCollection) TriggerPushOutStart(ctx context.Context, w http.ResponseWriter, req *http.Request, payload []byte) {
 	lines := strings.Split(strings.TrimSuffix(string(payload), "\n"), "\n")
 	if len(lines) != 2 {
 		errors.WriteHTTPBadRequest(w, "Bad request payload", fmt.Errorf("unknown payload '%s'", string(payload)))
