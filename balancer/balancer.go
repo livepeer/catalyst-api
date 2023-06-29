@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"regexp"
 	"sync"
 	"time"
 
@@ -307,10 +308,20 @@ func (b *BalancerImpl) GetBestNode(ctx context.Context, redirectPrefixes []strin
 		return nodeAddr, fullPlaybackID, nil
 	}
 
+	return fallbackNode(fallbackAddr, fallbackPrefix, playbackID, redirectPrefixes[0], err)
+}
+
+func fallbackNode(fallbackAddr, fallbackPrefix, playbackID, defaultPrefix string, err error) (string, string, error) {
+	// Check for `playbackID`s matching the pattern `....-....-.....-....`
+	r := regexp.MustCompile(`^(?:\w{4}-){3}\w{4}$`)
+	if r.MatchString(playbackID) {
+		return fallbackAddr, playbackID, nil
+	}
+
 	// bad path: nobody has the stream, but we did find a server which can handle the 404 for us.
 	if fallbackAddr != "" {
 		if fallbackPrefix == "" {
-			fallbackPrefix = redirectPrefixes[0]
+			fallbackPrefix = defaultPrefix
 		}
 		return fallbackAddr, fallbackPrefix + "+" + playbackID, nil
 	}
