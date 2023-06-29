@@ -235,8 +235,9 @@ func (mc *mac) triggerLiveBandwidth(w http.ResponseWriter, r *http.Request) bool
 	return false
 }
 
-func (mc *mac) handleStreamBuffer(ctx context.Context, payload *misttriggers.StreamBuffer) error {
-	if payload.State != "EMPTY" {
+func (mc *mac) handleStreamBuffer(ctx context.Context, payload *misttriggers.StreamBufferPayload) error {
+	// We only care about connections ending
+	if !payload.IsEmpty() {
 		return nil
 	}
 

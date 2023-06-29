@@ -12,9 +12,9 @@ import (
 // logic into the trigger handling code itself.
 
 type Broker interface {
-	OnStreamBuffer(func(context.Context, *StreamBuffer) error)
+	OnStreamBuffer(func(context.Context, *StreamBufferPayload) error)
 
-	TriggerStreamBuffer(context.Context, *StreamBuffer) error
+	TriggerStreamBuffer(context.Context, *StreamBufferPayload) error
 }
 
 func NewBroker() Broker {
@@ -22,14 +22,14 @@ func NewBroker() Broker {
 }
 
 type broker struct {
-	streamBufferFuncs funcGroup[StreamBuffer]
+	streamBufferFuncs funcGroup[StreamBufferPayload]
 }
 
-func (b *broker) OnStreamBuffer(cb func(context.Context, *StreamBuffer) error) {
+func (b *broker) OnStreamBuffer(cb func(context.Context, *StreamBufferPayload) error) {
 	b.streamBufferFuncs.Register(cb)
 }
 
-func (b *broker) TriggerStreamBuffer(ctx context.Context, payload *StreamBuffer) error {
+func (b *broker) TriggerStreamBuffer(ctx context.Context, payload *StreamBufferPayload) error {
 	return b.streamBufferFuncs.Trigger(ctx, payload)
 }
 

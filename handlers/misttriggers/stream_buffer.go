@@ -61,8 +61,8 @@ func (d *MistCallbackHandlersCollection) TriggerStreamBuffer(ctx context.Context
 	streamHealth := StreamHealthPayload{
 		StreamName: body.StreamName,
 		SessionID:  sessionID,
-		IsActive:   body.State != "EMPTY",
-		IsHealthy:  body.State == "FULL" || body.State == "RECOVER",
+		IsActive:   !body.IsEmpty(),
+		IsHealthy:  body.IsFull() || body.IsRecover(),
 	}
 	if details := body.Details; details != nil {
 		streamHealth.IsHealthy = streamHealth.IsHealthy && details.Issues == ""
@@ -122,10 +122,22 @@ func (d *MistCallbackHandlersCollection) PostStreamHealthPayload(payload StreamH
 	return nil
 }
 
-type StreamBuffer struct {
+type StreamBufferPayload struct {
 	StreamName string
 	State      string
 	Details    *MistStreamDetails
+}
+
+func (s *StreamBufferPayload) IsEmpty() bool {
+	return s.State == "EMPTY"
+}
+
+func (s *StreamBufferPayload) IsFull() bool {
+	return s.State == "FULL"
+}
+
+func (s *StreamBufferPayload) IsRecover() bool {
+	return s.State == "RECOVER"
 }
 
 type TrackDetails struct {
@@ -137,7 +149,7 @@ type TrackDetails struct {
 	Width  int            `json:"width,omitempty"`
 }
 
-func ParseStreamBufferPayload(payload []byte) (*StreamBuffer, error) {
+func ParseStreamBufferPayload(payload []byte) (*StreamBufferPayload, error) {
 	lines := strings.Split(strings.TrimSuffix(string(payload), "\n"), "\n")
 	if len(lines) < 2 || len(lines) > 3 {
 		return nil, fmt.Errorf("invalid payload: expected 2 or 3 lines but got %d", len(lines))
@@ -155,7 +167,7 @@ func ParseStreamBufferPayload(payload []byte) (*StreamBuffer, error) {
 		return nil, fmt.Errorf("error parsing stream details JSON: %w", err)
 	}
 
-	return &StreamBuffer{
+	return &StreamBufferPayload{
 		StreamName: streamName,
 		State:      streamState,
 		Details:    streamDetails,

@@ -24,7 +24,7 @@ type MistCallbackHandlersCollection struct {
 }
 
 type TriggerPayload interface {
-	StreamBuffer | PushEndPayload
+	StreamBufferPayload | PushEndPayload
 }
 
 func NewMistCallbackHandlersCollection(cli config.Cli, b Broker) *MistCallbackHandlersCollection {
