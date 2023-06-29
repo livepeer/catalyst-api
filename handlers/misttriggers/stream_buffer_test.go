@@ -2,6 +2,7 @@ package misttriggers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -138,12 +139,15 @@ func TestTriggerStreamBufferE2E(t *testing.T) {
 	req.Header.Set("X-UUID", "session1")
 
 	// Call the TriggerStreamBuffer function
-	d := MistCallbackHandlersCollection{cli: &config.Cli{
-		StreamHealthHookURL: server.URL,
-		APIToken:            "apiToken",
-	}}
+	d := MistCallbackHandlersCollection{
+		cli: &config.Cli{
+			StreamHealthHookURL: server.URL,
+			APIToken:            "apiToken",
+		},
+		broker: NewTriggerBroker(),
+	}
 	rr := httptest.NewRecorder()
-	d.TriggerStreamBuffer(rr, req, streamBufferPayloadIssues)
+	d.TriggerStreamBuffer(context.Background(), rr, req, streamBufferPayloadIssues)
 
 	require.Equal(t, rr.Code, 200)
 	require.Len(t, rr.Body.Bytes(), 0)

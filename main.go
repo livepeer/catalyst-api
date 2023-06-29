@@ -20,6 +20,7 @@ import (
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/crypto"
+	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/catalyst-api/pipeline"
@@ -186,9 +187,11 @@ func main() {
 		defer mistCleanupTick.Stop()
 	}
 
+	broker := misttriggers.NewTriggerBroker()
+
 	var mapic mistapiconnector.IMac
 	if cli.ShouldMapic() {
-		mapic = mistapiconnector.NewMapic(&cli)
+		mapic = mistapiconnector.NewMapic(&cli, broker)
 	}
 
 	// Start balancer
@@ -215,7 +218,7 @@ func main() {
 	})
 
 	group.Go(func() error {
-		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c)
+		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker)
 	})
 
 	if cli.ShouldMapic() {

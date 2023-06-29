@@ -1,6 +1,7 @@
 package misttriggers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -42,7 +43,7 @@ func ParsePushEndPayload(payload string) (PushEndPayload, error) {
 //	target URI, afterwards, as actually used (string)
 //	last 10 log messages (JSON array string)
 //	most recent push status (JSON object string)
-func (d *MistCallbackHandlersCollection) TriggerPushEnd(w http.ResponseWriter, req *http.Request, payload []byte) {
+func (d *MistCallbackHandlersCollection) TriggerPushEnd(ctx context.Context, w http.ResponseWriter, req *http.Request, payload []byte) {
 	_, err := ParsePushEndPayload(string(payload))
 	if err != nil {
 		errors.WriteHTTPBadRequest(w, "Error parsing PUSH_END payload", err)
