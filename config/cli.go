@@ -39,7 +39,6 @@ type Cli struct {
 	PrivateBucketURL          *url.URL
 	ExternalTranscoder        string
 	VodPipelineStrategy       string
-	RecordingCallback         string
 	MetricsDBConnectionString string
 	ImportIPFSGatewayURLs     []*url.URL
 	ImportArweaveGatewayURLs  []*url.URL

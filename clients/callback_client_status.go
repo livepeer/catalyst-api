@@ -60,15 +60,6 @@ func (ts *TranscodeStatus) UnmarshalJSON(b []byte) error {
 
 // The various status messages we can send
 
-type RecordingEvent struct {
-	Event       string `json:"event"`
-	StreamName  string `json:"stream_name"`
-	RecordingId string `json:"recording_id"`
-	Hostname    string `json:"host_name"`
-	Timestamp   int64  `json:"timestamp"`
-	Success     *bool  `json:"success,omitempty"`
-}
-
 type TranscodeStatusMessage struct {
 	// Internal fields, not included in the message we send
 	URL string `json:"-"`
