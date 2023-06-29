@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/golang/glog"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -14,7 +15,7 @@ import (
 type Broker interface {
 	OnStreamBuffer(func(context.Context, *StreamBufferPayload) error)
 
-	TriggerStreamBuffer(context.Context, *StreamBufferPayload) error
+	TriggerStreamBuffer(context.Context, *StreamBufferPayload)
 }
 
 func NewBroker() Broker {
@@ -29,8 +30,11 @@ func (b *broker) OnStreamBuffer(cb func(context.Context, *StreamBufferPayload) e
 	b.streamBufferFuncs.Register(cb)
 }
 
-func (b *broker) TriggerStreamBuffer(ctx context.Context, payload *StreamBufferPayload) error {
-	return b.streamBufferFuncs.Trigger(ctx, payload)
+func (b *broker) TriggerStreamBuffer(ctx context.Context, payload *StreamBufferPayload) {
+	err := b.streamBufferFuncs.Trigger(ctx, payload)
+	if err != nil {
+		glog.Errorf("error handling STREAM_BUFFER trigger: %s", err)
+	}
 }
 
 // a funcGroup represents a collection of callback functions such that we can register new
