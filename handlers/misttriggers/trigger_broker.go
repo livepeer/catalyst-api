@@ -21,30 +21,32 @@ import (
 //    or we kick them out, but there's no return value other than that.
 //    These handlers can be called in parallel too, but any one of them
 //    returning an error will cause an (immediate) trigger rejection.
+//    TODO: VID-121
 // 3. Triggers with response values, like PUSH_REWRITE. These functions need
 //    to return both an error (for rejections) and a string (for responses).
 //    They can't be called in parallel; there really should only be one
 //    handler for these sorts of triggers.
+//    TODO: VID-120
 
-type Broker interface {
+type TriggerBroker interface {
 	OnStreamBuffer(func(context.Context, *StreamBufferPayload) error)
 
 	TriggerStreamBuffer(context.Context, *StreamBufferPayload)
 }
 
-func NewBroker() Broker {
-	return &broker{}
+func NewTriggerBroker() TriggerBroker {
+	return &triggerBroker{}
 }
 
-type broker struct {
+type triggerBroker struct {
 	streamBufferFuncs funcGroup[StreamBufferPayload]
 }
 
-func (b *broker) OnStreamBuffer(cb func(context.Context, *StreamBufferPayload) error) {
+func (b *triggerBroker) OnStreamBuffer(cb func(context.Context, *StreamBufferPayload) error) {
 	b.streamBufferFuncs.Register(cb)
 }
 
-func (b *broker) TriggerStreamBuffer(ctx context.Context, payload *StreamBufferPayload) {
+func (b *triggerBroker) TriggerStreamBuffer(ctx context.Context, payload *StreamBufferPayload) {
 	err := b.streamBufferFuncs.Trigger(ctx, payload)
 	if err != nil {
 		glog.Errorf("error handling STREAM_BUFFER trigger: %s", err)
@@ -68,13 +70,11 @@ func (g *funcGroup[T]) Trigger(ctx context.Context, payload *T) error {
 	g.mutex.RLock()
 	defer g.mutex.RUnlock()
 	group, ctx := errgroup.WithContext(ctx)
-	// ...yuck. Is there a better way?
 	for _, cb := range g.funcs {
-		func(cb func(context.Context, *T) error) {
-			group.Go(func() error {
-				return cb(ctx, payload)
-			})
-		}(cb)
+		cb := cb
+		group.Go(func() error {
+			return cb(ctx, payload)
+		})
 	}
 	return group.Wait()
 }

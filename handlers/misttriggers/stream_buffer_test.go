@@ -144,7 +144,7 @@ func TestTriggerStreamBufferE2E(t *testing.T) {
 			StreamHealthHookURL: server.URL,
 			APIToken:            "apiToken",
 		},
-		broker: NewBroker(),
+		broker: NewTriggerBroker(),
 	}
 	rr := httptest.NewRecorder()
 	d.TriggerStreamBuffer(context.Background(), rr, req, streamBufferPayloadIssues)

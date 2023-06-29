@@ -187,7 +187,7 @@ func main() {
 		defer mistCleanupTick.Stop()
 	}
 
-	broker := misttriggers.NewBroker()
+	broker := misttriggers.NewTriggerBroker()
 
 	var mapic mistapiconnector.IMac
 	if cli.ShouldMapic() {

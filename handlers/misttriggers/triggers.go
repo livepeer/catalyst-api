@@ -20,14 +20,14 @@ const (
 
 type MistCallbackHandlersCollection struct {
 	cli    *config.Cli
-	broker Broker
+	broker TriggerBroker
 }
 
 type TriggerPayload interface {
 	StreamBufferPayload | PushEndPayload
 }
 
-func NewMistCallbackHandlersCollection(cli config.Cli, b Broker) *MistCallbackHandlersCollection {
+func NewMistCallbackHandlersCollection(cli config.Cli, b TriggerBroker) *MistCallbackHandlersCollection {
 	return &MistCallbackHandlersCollection{cli: &cli, broker: b}
 }
 

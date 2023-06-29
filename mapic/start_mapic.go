@@ -7,7 +7,7 @@ import (
 	"github.com/livepeer/catalyst-api/mapic/model"
 )
 
-func NewMapic(cli *config.Cli, broker misttriggers.Broker) IMac {
+func NewMapic(cli *config.Cli, broker misttriggers.TriggerBroker) IMac {
 	mc := &mac{
 		config:                    cli,
 		nodeID:                    cli.NodeName,

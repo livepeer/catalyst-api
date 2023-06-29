@@ -128,7 +128,7 @@ type (
 		mistStreamSource          string
 		mistHardcodedBroadcasters string
 		config                    *config.Cli
-		broker                    misttriggers.Broker
+		broker                    misttriggers.TriggerBroker
 	}
 )
 
