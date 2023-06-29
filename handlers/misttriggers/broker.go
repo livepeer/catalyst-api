@@ -33,6 +33,8 @@ func (b *broker) TriggerStreamBuffer(ctx context.Context, payload *StreamBufferP
 	return b.streamBufferFuncs.Trigger(ctx, payload)
 }
 
+// a funcGroup represents a collection of callback functions such that we can register new
+// callbacks in a thread-safe manner.
 type funcGroup[T TriggerPayload] struct {
 	mutex sync.RWMutex
 	funcs []func(context.Context, *T) error
