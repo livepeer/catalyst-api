@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/livepeer/catalyst-api/errors"
 )
@@ -17,8 +16,8 @@ type PushEndPayload struct {
 	PushStatus        string
 }
 
-func ParsePushEndPayload(payload string) (PushEndPayload, error) {
-	lines := strings.Split(strings.TrimSuffix(payload, "\n"), "\n")
+func ParsePushEndPayload(payload MistTriggerBody) (PushEndPayload, error) {
+	lines := payload.Lines()
 	if len(lines) != 6 {
 		return PushEndPayload{}, fmt.Errorf("expected 6 lines in PUSH_END payload but got %d. Payload: %s", len(lines), payload)
 	}
@@ -43,8 +42,8 @@ func ParsePushEndPayload(payload string) (PushEndPayload, error) {
 //	target URI, afterwards, as actually used (string)
 //	last 10 log messages (JSON array string)
 //	most recent push status (JSON object string)
-func (d *MistCallbackHandlersCollection) TriggerPushEnd(ctx context.Context, w http.ResponseWriter, req *http.Request, payload []byte) {
-	_, err := ParsePushEndPayload(string(payload))
+func (d *MistCallbackHandlersCollection) TriggerPushEnd(ctx context.Context, w http.ResponseWriter, req *http.Request, payload MistTriggerBody) {
+	_, err := ParsePushEndPayload(payload)
 	if err != nil {
 		errors.WriteHTTPBadRequest(w, "Error parsing PUSH_END payload", err)
 		return

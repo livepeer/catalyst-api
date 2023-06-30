@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/config"
@@ -51,17 +52,29 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 		)
 
 		ctx := context.Background()
+		body := MistTriggerBody(payload)
 
 		switch triggerName {
 		case TRIGGER_PUSH_OUT_START:
-			d.TriggerPushOutStart(ctx, w, req, payload)
+			d.TriggerPushOutStart(ctx, w, req, body)
 		case TRIGGER_PUSH_END:
-			d.TriggerPushEnd(ctx, w, req, payload)
+			d.TriggerPushEnd(ctx, w, req, body)
 		case TRIGGER_STREAM_BUFFER:
-			d.TriggerStreamBuffer(ctx, w, req, payload)
+			d.TriggerStreamBuffer(ctx, w, req, body)
 		default:
 			errors.WriteHTTPBadRequest(w, "Unsupported X-Trigger", fmt.Errorf("unknown trigger '%s'", triggerName))
 			return
 		}
 	}
+}
+
+type MistTriggerBody string
+
+func (b MistTriggerBody) Lines() []string {
+	trimmed := strings.TrimSpace(string(b))
+	lines := strings.Split(trimmed, "\n")
+	for i := range lines {
+		lines[i] = strings.TrimSpace(lines[i])
+	}
+	return lines
 }
