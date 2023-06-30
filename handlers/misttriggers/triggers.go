@@ -1,6 +1,7 @@
 package misttriggers
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,11 +19,16 @@ const (
 )
 
 type MistCallbackHandlersCollection struct {
-	cli *config.Cli
+	cli    *config.Cli
+	broker TriggerBroker
 }
 
-func NewMistCallbackHandlersCollection(cli config.Cli) *MistCallbackHandlersCollection {
-	return &MistCallbackHandlersCollection{cli: &cli}
+type TriggerPayload interface {
+	StreamBufferPayload | PushEndPayload
+}
+
+func NewMistCallbackHandlersCollection(cli config.Cli, b TriggerBroker) *MistCallbackHandlersCollection {
+	return &MistCallbackHandlersCollection{cli: &cli, broker: b}
 }
 
 // Trigger dispatches request to mapped method according to trigger name
@@ -44,13 +50,15 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 			"payload", log.RedactLogs(string(payload), "\n"),
 		)
 
+		ctx := context.Background()
+
 		switch triggerName {
 		case TRIGGER_PUSH_OUT_START:
-			d.TriggerPushOutStart(w, req, payload)
+			d.TriggerPushOutStart(ctx, w, req, payload)
 		case TRIGGER_PUSH_END:
-			d.TriggerPushEnd(w, req, payload)
+			d.TriggerPushEnd(ctx, w, req, payload)
 		case TRIGGER_STREAM_BUFFER:
-			d.TriggerStreamBuffer(w, req, payload)
+			d.TriggerStreamBuffer(ctx, w, req, payload)
 		default:
 			errors.WriteHTTPBadRequest(w, "Unsupported X-Trigger", fmt.Errorf("unknown trigger '%s'", triggerName))
 			return

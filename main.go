@@ -20,6 +20,7 @@ import (
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/crypto"
+	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/catalyst-api/pipeline"
@@ -51,7 +52,6 @@ func main() {
 	config.URLVarFlag(fs, &cli.PrivateBucketURL, "private-bucket", "", "URL for the private media bucket")
 	fs.StringVar(&cli.ExternalTranscoder, "external-transcoder", "", "URL for the external transcoder to be used by the pipeline coordinator. Only 1 implementation today for AWS MediaConvert which should be in the format: mediaconvert://key-id:key-secret@endpoint-host?region=aws-region&role=iam-role&s3_aux_bucket=s3://bucket")
 	fs.StringVar(&cli.VodPipelineStrategy, "vod-pipeline-strategy", string(pipeline.StrategyCatalystFfmpegDominance), "Which strategy to use for the VOD pipeline")
-	fs.StringVar(&cli.RecordingCallback, "recording", "http://recording.livepeer.com/recording/status", "Callback URL for recording start&stop events")
 	fs.StringVar(&cli.MetricsDBConnectionString, "metrics-db-connection-string", "", "Connection string to use for the metrics Postgres DB. Takes the form: host=X port=X user=X password=X dbname=X")
 	config.URLSliceVarFlag(fs, &cli.ImportIPFSGatewayURLs, "import-ipfs-gateway-urls", "https://vod-import-gtw.mypinata.cloud/ipfs/?pinataGatewayToken={{secrets.LP_PINATA_GATEWAY_TOKEN}},https://w3s.link/ipfs/,https://ipfs.io/ipfs/,https://cloudflare-ipfs.com/ipfs/", "Comma delimited ordered list of IPFS gateways (includes /ipfs/ suffix) to import assets from")
 	config.URLSliceVarFlag(fs, &cli.ImportArweaveGatewayURLs, "import-arweave-gateway-urls", "https://arweave.net/", "Comma delimited ordered list of arweave gateways")
@@ -132,7 +132,6 @@ func main() {
 	// TODO: I don't love the global variables for these
 	config.ImportIPFSGatewayURLs = cli.ImportIPFSGatewayURLs
 	config.ImportArweaveGatewayURLs = cli.ImportArweaveGatewayURLs
-	config.RecordingCallback = cli.RecordingCallback
 	config.PrivateBucketURL = cli.PrivateBucketURL
 	config.HTTPInternalAddress = cli.HTTPInternalAddress
 
@@ -186,9 +185,11 @@ func main() {
 		defer mistCleanupTick.Stop()
 	}
 
+	broker := misttriggers.NewTriggerBroker()
+
 	var mapic mistapiconnector.IMac
 	if cli.ShouldMapic() {
-		mapic = mistapiconnector.NewMapic(&cli)
+		mapic = mistapiconnector.NewMapic(&cli, broker)
 	}
 
 	// Start balancer
@@ -215,7 +216,7 @@ func main() {
 	})
 
 	group.Go(func() error {
-		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c)
+		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker)
 	})
 
 	if cli.ShouldMapic() {

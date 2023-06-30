@@ -26,8 +26,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster) error {
-	router := NewCatalystAPIRouterInternal(cli, vodEngine, mapic, bal, c)
+func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker) error {
+	router := NewCatalystAPIRouterInternal(cli, vodEngine, mapic, bal, c, broker)
 	server := http.Server{Addr: cli.HTTPInternalAddress, Handler: router}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -53,7 +53,7 @@ func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipe
 	return server.Shutdown(ctx)
 }
 
-func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster) *httprouter.Router {
+func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker) *httprouter.Router {
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
 	withAuth := middleware.IsAuthorized
@@ -72,7 +72,7 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	accessControlHandlers := accesscontrol.NewAccessControlHandlersCollection(cli)
 	encryptionHandlers := accesscontrol.NewEncryptionHandlersCollection(cli, spkiPublicKey)
 	adminHandlers := &admin.AdminHandlersCollection{Cluster: c}
-	mistCallbackHandlers := misttriggers.NewMistCallbackHandlersCollection(cli)
+	mistCallbackHandlers := misttriggers.NewMistCallbackHandlersCollection(cli, broker)
 
 	// Simple endpoint for healthchecks
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))

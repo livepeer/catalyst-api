@@ -2,6 +2,7 @@ package misttriggers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -39,7 +40,7 @@ func init() {
 // {JSON object with stream details, only when state is not EMPTY}
 //
 // Read the Mist documentation for more details on each of the stream states.
-func (d *MistCallbackHandlersCollection) TriggerStreamBuffer(w http.ResponseWriter, req *http.Request, payload []byte) {
+func (d *MistCallbackHandlersCollection) TriggerStreamBuffer(ctx context.Context, w http.ResponseWriter, req *http.Request, payload []byte) {
 	sessionID := req.Header.Get("X-UUID")
 
 	body, err := ParseStreamBufferPayload(payload)
@@ -50,6 +51,7 @@ func (d *MistCallbackHandlersCollection) TriggerStreamBuffer(w http.ResponseWrit
 	}
 
 	rawBody, _ := json.Marshal(body)
+	go d.broker.TriggerStreamBuffer(ctx, body)
 	if d.cli.StreamHealthHookURL == "" {
 		glog.Infof("Stream health hook URL not set, skipping trigger sessionId=%q payload=%s", sessionID, rawBody)
 		return
@@ -59,8 +61,8 @@ func (d *MistCallbackHandlersCollection) TriggerStreamBuffer(w http.ResponseWrit
 	streamHealth := StreamHealthPayload{
 		StreamName: body.StreamName,
 		SessionID:  sessionID,
-		IsActive:   body.State != "EMPTY",
-		IsHealthy:  body.State == "FULL" || body.State == "RECOVER",
+		IsActive:   !body.IsEmpty(),
+		IsHealthy:  body.IsFull() || body.IsRecover(),
 	}
 	if details := body.Details; details != nil {
 		streamHealth.IsHealthy = streamHealth.IsHealthy && details.Issues == ""
@@ -124,6 +126,18 @@ type StreamBufferPayload struct {
 	StreamName string
 	State      string
 	Details    *MistStreamDetails
+}
+
+func (s *StreamBufferPayload) IsEmpty() bool {
+	return s.State == "EMPTY"
+}
+
+func (s *StreamBufferPayload) IsFull() bool {
+	return s.State == "FULL"
+}
+
+func (s *StreamBufferPayload) IsRecover() bool {
+	return s.State == "RECOVER"
 }
 
 type TrackDetails struct {
