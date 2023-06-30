@@ -45,7 +45,7 @@ func (d *MistCallbackHandlersCollection) TriggerStreamBuffer(ctx context.Context
 	body, err := ParseStreamBufferPayload(payload)
 	if err != nil {
 		glog.Infof("Error parsing STREAM_BUFFER payload error=%q payload=%q", err, string(payload))
-		errors.WriteHTTPBadRequest(w, "Error parsing PUSH_END payload", err)
+		errors.WriteHTTPBadRequest(w, "Error parsing STREAM_BUFFER payload", err)
 		return
 	}
 
