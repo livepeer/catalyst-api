@@ -639,27 +639,7 @@ func (mc *mac) addTrigger(triggers mist.TriggersMap, name, ownURI, def, params s
 }
 
 func (mc *mac) SetupTriggers(ownURI string) error {
-	triggers, err := mc.mapi.GetTriggers()
-	if err != nil {
-		glog.Error(err)
-		return err
-	}
-	if triggers == nil {
-		triggers = make(mist.TriggersMap)
-	}
-	added := mc.addTrigger(triggers, "PUSH_REWRITE", ownURI, "000reallylongnonexistenstreamnamethatreallyshouldntexist000", "", true)
-	// DEFAULT_STREAM needed when using Mist's load balancing
-	// added = mc.addTrigger(triggers, "DEFAULT_STREAM", ownURI, "false", "", true) || added
-	if mc.checkBandwidth {
-		added = mc.addTrigger(triggers, "LIVE_BANDWIDTH", ownURI, "false", "100000", true) || added
-	}
-	added = mc.addTrigger(triggers, "STREAM_BUFFER", ownURI, "", "", false) || added
-	added = mc.addTrigger(triggers, "LIVE_TRACK_LIST", ownURI, "", "", false) || added
-	added = mc.addTrigger(triggers, "PUSH_OUT_START", ownURI, "", "", false) || added
-	added = mc.addTrigger(triggers, "PUSH_END", ownURI, "", "", false) || added
-	if added {
-		err = mc.mapi.SetTriggers(triggers)
-	}
+	var err error
 	// setup base stream if needed
 	if mc.baseStreamName != "" {
 		apiURL := mc.lapi.GetServer() + "/api/stream/" + mc.baseStreamName
