@@ -84,9 +84,10 @@ func TestProbe(t *testing.T) {
 				Codec:   "h264",
 				Bitrate: 1234521,
 				VideoTrack: VideoTrack{
-					Width:  576,
-					Height: 1024,
-					FPS:    30,
+					Width:       576,
+					Height:      1024,
+					FPS:         30,
+					PixelFormat: "yuv420p",
 				},
 			},
 			{
@@ -94,7 +95,8 @@ func TestProbe(t *testing.T) {
 				Codec:   "aac",
 				Bitrate: 128248,
 				AudioTrack: AudioTrack{
-					Channels: 2,
+					Channels:   2,
+					SampleRate: 44100,
 				},
 			},
 		},
