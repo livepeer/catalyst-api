@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
 
 	"github.com/livepeer/catalyst-api/errors"
 )
@@ -16,8 +15,8 @@ import (
 //
 // stream name (string)
 // push target URI (string)
-func (d *MistCallbackHandlersCollection) TriggerPushOutStart(ctx context.Context, w http.ResponseWriter, req *http.Request, payload []byte) {
-	lines := strings.Split(strings.TrimSuffix(string(payload), "\n"), "\n")
+func (d *MistCallbackHandlersCollection) TriggerPushOutStart(ctx context.Context, w http.ResponseWriter, req *http.Request, payload MistTriggerBody) {
+	lines := payload.Lines()
 	if len(lines) != 2 {
 		errors.WriteHTTPBadRequest(w, "Bad request payload", fmt.Errorf("unknown payload '%s'", string(payload)))
 		return

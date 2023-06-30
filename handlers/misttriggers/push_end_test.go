@@ -13,7 +13,7 @@ func TestItErrorsOnBadPushEndPayload(t *testing.T) {
 }
 
 func TestItCanParseAValidPushEndPayload(t *testing.T) {
-	var payload = "1\n2\n3\n4\n5\n6"
+	var payload = MistTriggerBody("1\n2\n3\n4\n5\n6")
 	p, err := ParsePushEndPayload(payload)
 	require.NoError(t, err)
 	require.Equal(t, p.StreamName, "2")

@@ -12,20 +12,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var streamBufferPayloadFull = []byte(`stream1
-FULL
-{"track1":{"codec":"h264","kbits":1000,"keys":{"B":"1"},"fpks":30,"height":720,"width":1280},"jitter":420}`)
+var streamBufferPayloadFull = MistTriggerBody(`
+	stream1
+	FULL
+	{"track1":{"codec":"h264","kbits":1000,"keys":{"B":"1"},"fpks":30,"height":720,"width":1280},"jitter":420}`)
 
-var streamBufferPayloadIssues = []byte(`stream1
-RECOVER
-{"track1":{"codec":"h264","kbits":1000,"keys":{"B":"1"},"fpks":30,"height":720,"width":1280},"issues":"The aqueous linear entity, in a manner pertaining to its metaphorical state of existence, appears to be experiencing an ostensibly suboptimal condition that is reminiscent of an individual's disposition when subjected to an unfavorable meteorological phenomenon","human_issues":["Stream is feeling under the weather"]}`)
+var streamBufferPayloadIssues = MistTriggerBody(`
+	stream1
+	RECOVER
+	{"track1":{"codec":"h264","kbits":1000,"keys":{"B":"1"},"fpks":30,"height":720,"width":1280},"issues":"The aqueous linear entity, in a manner pertaining to its metaphorical state of existence, appears to be experiencing an ostensibly suboptimal condition that is reminiscent of an individual's disposition when subjected to an unfavorable meteorological phenomenon","human_issues":["Stream is feeling under the weather"]}
+`)
 
-var streamBufferPayloadInvalid = []byte(`stream1
-FULL
-{"track1":{},"notatrack":{"codec":2}}`)
+var streamBufferPayloadInvalid = MistTriggerBody(`
+	stream1
+	FULL
+	{"track1":{},"notatrack":{"codec":2}}
+`)
 
-var streamBufferPayloadEmpty = []byte(`stream1
-EMPTY`)
+var streamBufferPayloadEmpty = MistTriggerBody(`
+	stream1
+	EMPTY
+`)
 
 func TestItCanParseAValidStreamBufferPayload(t *testing.T) {
 	p, err := ParseStreamBufferPayload(streamBufferPayloadFull)
@@ -133,7 +140,7 @@ func TestTriggerStreamBufferE2E(t *testing.T) {
 	defer server.Close()
 
 	// Prepare the request and payload
-	payload := bytes.NewReader(streamBufferPayloadIssues)
+	payload := bytes.NewReader([]byte(streamBufferPayloadIssues))
 	req, err := http.NewRequest("GET", "http://example.com", payload)
 	require.NoError(t, err)
 	req.Header.Set("X-UUID", "session1")
