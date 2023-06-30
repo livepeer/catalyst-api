@@ -30,8 +30,14 @@ import (
 
 type TriggerBroker interface {
 	OnStreamBuffer(func(context.Context, *StreamBufferPayload) error)
-
 	TriggerStreamBuffer(context.Context, *StreamBufferPayload)
+
+	OnPushRewrite(func(context.Context, *PushRewritePayload) (string, error))
+	TriggerPushRewrite(context.Context, *PushRewritePayload) (string, error)
+}
+
+type TriggerPayload interface {
+	StreamBufferPayload | PushEndPayload | PushRewritePayload
 }
 
 func NewTriggerBroker() TriggerBroker {
@@ -40,41 +46,74 @@ func NewTriggerBroker() TriggerBroker {
 
 type triggerBroker struct {
 	streamBufferFuncs funcGroup[StreamBufferPayload]
+	pushRewriteFuncs  funcGroup[PushRewritePayload]
 }
 
 func (b *triggerBroker) OnStreamBuffer(cb func(context.Context, *StreamBufferPayload) error) {
-	b.streamBufferFuncs.Register(cb)
+	b.streamBufferFuncs.RegisterNoResponse(cb)
 }
 
 func (b *triggerBroker) TriggerStreamBuffer(ctx context.Context, payload *StreamBufferPayload) {
-	err := b.streamBufferFuncs.Trigger(ctx, payload)
+	_, err := b.streamBufferFuncs.Trigger(ctx, payload)
 	if err != nil {
 		glog.Errorf("error handling STREAM_BUFFER trigger: %s", err)
 	}
+}
+
+func (b *triggerBroker) OnPushRewrite(cb func(context.Context, *PushRewritePayload) (string, error)) {
+	b.pushRewriteFuncs.Register(cb)
+}
+
+func (b *triggerBroker) TriggerPushRewrite(ctx context.Context, payload *PushRewritePayload) (string, error) {
+	return b.pushRewriteFuncs.Trigger(ctx, payload)
 }
 
 // a funcGroup represents a collection of callback functions such that we can register new
 // callbacks in a thread-safe manner.
 type funcGroup[T TriggerPayload] struct {
 	mutex sync.RWMutex
-	funcs []func(context.Context, *T) error
+	funcs []func(context.Context, *T) (string, error)
 }
 
-func (g *funcGroup[T]) Register(cb func(context.Context, *T) error) {
+// add a function that expects a string response from MIst
+func (g *funcGroup[T]) Register(cb func(context.Context, *T) (string, error)) {
 	g.mutex.Lock()
 	defer g.mutex.Unlock()
 	g.funcs = append(g.funcs, cb)
 }
 
-func (g *funcGroup[T]) Trigger(ctx context.Context, payload *T) error {
+// add a function that won't send a string response to Mist
+func (g *funcGroup[T]) RegisterNoResponse(cb func(context.Context, *T) error) {
+	wrapped := func(ctx context.Context, payload *T) (string, error) {
+		err := cb(ctx, payload)
+		return "", err
+	}
+	g.Register(wrapped)
+}
+
+func (g *funcGroup[T]) Trigger(ctx context.Context, payload *T) (string, error) {
 	g.mutex.RLock()
 	defer g.mutex.RUnlock()
 	group, ctx := errgroup.WithContext(ctx)
-	for _, cb := range g.funcs {
+	ret := ""
+	for i, cb := range g.funcs {
+		i := i
 		cb := cb
 		group.Go(func() error {
-			return cb(ctx, payload)
+			str, err := cb(ctx, payload)
+			if err != nil {
+				return err
+			}
+			// Only keep the first return value (see point 3 above)
+			if i == 0 {
+				ret = str
+			}
+			return nil
 		})
 	}
-	return group.Wait()
+	err := group.Wait()
+	if err != nil {
+		return "", err
+	}
+	return ret, err
 }
