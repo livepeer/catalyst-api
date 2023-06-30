@@ -17,15 +17,6 @@ import (
 
 const MAX_TIME_WITHOUT_UPDATE = 30 * time.Minute
 
-// The default client is only used for the recording event. This is to avoid
-// misusing the singleton client to send transcode status updates, which should
-// be sent through the JobInfo.ReportStatus function instead.
-var recordingCallbackClient = NewPeriodicCallbackClient(15*time.Second, map[string]string{})
-
-func SendRecordingEventCallback(event *RecordingEvent) {
-	recordingCallbackClient.SendRecordingEvent(event)
-}
-
 type TranscodeStatusClient interface {
 	SendTranscodeStatus(tsm TranscodeStatusMessage) error
 }
@@ -125,28 +116,6 @@ func (pcc *PeriodicCallbackClient) updateTranscodeStatus(tsm TranscodeStatusMess
 		log.Log(tsm.RequestID, "Removing job from active list")
 		delete(pcc.requestIDToLatestMessage, tsm.RequestID)
 	}
-}
-
-func (pcc *PeriodicCallbackClient) SendRecordingEvent(event *RecordingEvent) {
-	go func() {
-		j, err := json.Marshal(event)
-		if err != nil {
-			log.LogNoRequestID("failed to marshal recording event callback JSON", "err", err)
-			return
-		}
-
-		r, err := http.NewRequest(http.MethodPost, config.RecordingCallback, bytes.NewReader(j))
-		if err != nil {
-			log.LogNoRequestID("failed to create recording event callback request", "err", err)
-			return
-		}
-
-		err = pcc.doWithRetries(r)
-		if err != nil {
-			log.LogNoRequestID("failed to send recording event callback", "err", err)
-			return
-		}
-	}()
 }
 
 // Loop over all active jobs, sending a (non-blocking) HTTP callback for each
