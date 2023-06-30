@@ -28,8 +28,12 @@ type MistClient struct {
 	ApiUrl          string
 	HttpReqUrl      string
 	TriggerCallback string
-	SourceOutputUrl string
 	configMu        sync.Mutex
+}
+
+func NewMistAPIClient(user, password, host string, port int) MistAPIClient {
+	mist := &MistClient{ApiUrl: fmt.Sprintf("http://%s:%d", host, port)}
+	return mist
 }
 
 type MistStreamInfoTrack struct {
@@ -112,7 +116,7 @@ func (mc *MistClient) DeleteStream(streamName string) error {
 // 3. Add a new trigger (or update the existing one)
 // 4. Override the triggers
 // 5. Release the lock
-func (mc *MistClient) AddTrigger(streamNames []string, triggerName string) error {
+func (mc *MistClient) AddTrigger(streamNames []string, triggerName string, sync bool) error {
 	mc.configMu.Lock()
 	defer mc.configMu.Unlock()
 
@@ -120,9 +124,9 @@ func (mc *MistClient) AddTrigger(streamNames []string, triggerName string) error
 	if err != nil {
 		return err
 	}
-	c := commandAddTrigger(streamNames, triggerName, mc.TriggerCallback, triggers)
+	c := commandAddTrigger(streamNames, triggerName, mc.TriggerCallback, triggers, sync)
 	resp, err := mc.sendCommand(c)
-	return validateAddTrigger(streamNames, triggerName, resp, err)
+	return validateAddTrigger(streamNames, triggerName, resp, err, sync)
 }
 
 // DeleteTrigger deletes triggers with the name `triggerName` for the stream `streamName`.
@@ -312,26 +316,26 @@ type Config struct {
 	Triggers map[string][]ConfigTrigger `json:"triggers,omitempty"`
 }
 
-func commandAddTrigger(streamNames []string, triggerName, handlerUrl string, currentTriggers Triggers) MistConfig {
-	newTrigger := ConfigTrigger{
+func commandAddTrigger(streamNames []string, triggerName, handlerUrl string, currentTriggers Triggers, sync bool) MistConfig {
+	newTrigger := &ConfigTrigger{
 		Handler: handlerUrl,
 		Streams: streamNames,
-		Sync:    false,
+		Sync:    sync,
 	}
-	return commandUpdateTrigger(streamNames, triggerName, currentTriggers, newTrigger)
+	return commandUpdateTrigger(streamNames, triggerName, currentTriggers, newTrigger, sync)
 }
 
 func commandDeleteTrigger(streamNames []string, triggerName string, currentTriggers Triggers) MistConfig {
-	return commandUpdateTrigger(streamNames, triggerName, currentTriggers, ConfigTrigger{})
+	return commandUpdateTrigger(streamNames, triggerName, currentTriggers, nil, false)
 }
 
-func commandUpdateTrigger(streamNames []string, triggerName string, currentTriggers Triggers, replaceTrigger ConfigTrigger) MistConfig {
+func commandUpdateTrigger(streamNames []string, triggerName string, currentTriggers Triggers, replaceTrigger *ConfigTrigger, sync bool) MistConfig {
 	triggersMap := currentTriggers
 
 	triggers := triggersMap[triggerName]
 	triggers = deleteAllTriggersFor(triggers, streamNames)
-	if len(replaceTrigger.Streams) != 0 {
-		triggers = append(triggers, replaceTrigger)
+	if replaceTrigger != nil {
+		triggers = append(triggers, *replaceTrigger)
 	}
 
 	triggersMap[triggerName] = triggers
@@ -393,7 +397,7 @@ func validateNukeStream(resp string, err error) error {
 	return validateAuth(resp, err)
 }
 
-func validateAddTrigger(streamNames []string, triggerName, resp string, err error) error {
+func validateAddTrigger(streamNames []string, triggerName, resp string, err error, sync bool) error {
 	if err != validateAuth(resp, err) {
 		return err
 	}
@@ -411,7 +415,7 @@ func validateAddTrigger(streamNames []string, triggerName, resp string, err erro
 		return fmt.Errorf("adding trigger failed, no trigger '%s' in response", triggerName)
 	}
 	for _, t := range ts {
-		if sameStringSlice(t.Streams, streamNames) {
+		if sameStringSlice(t.Streams, streamNames) && t.Sync == sync {
 			return nil
 		}
 	}
