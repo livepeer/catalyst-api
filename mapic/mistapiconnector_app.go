@@ -138,6 +138,7 @@ func (mc *mac) Start(ctx context.Context) error {
 	mc.cancel = cancel
 
 	mc.broker.OnStreamBuffer(mc.handleStreamBuffer)
+	mc.broker.OnPushRewrite(mc.handlePushRewrite)
 
 	lapi, _ := api.NewAPIClientGeolocated(api.ClientOptions{
 		Server:      mc.config.APIServer,
@@ -260,33 +261,15 @@ func (mc *mac) handleStreamBuffer(ctx context.Context, payload *misttriggers.Str
 	return nil
 }
 
-func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
-	// Helper function to reject with an empty response body in a way that works around transfer-encoding Mist bugs
-	reject := func() bool {
-		flusher := w.(http.Flusher)
-		flusher.Flush()
-		return false
-	}
-	if len(lines) != 3 {
-		glog.Errorf("Expected 3 lines, got %d, request \n%s", len(lines), rawRequest)
-		w.WriteHeader(http.StatusBadRequest)
-		return reject()
-	}
+func (mc *mac) handlePushRewrite(ctx context.Context, payload *misttriggers.PushRewritePayload) (string, error) {
 	// glog.V(model.INSANE).Infof("Parsed request (%d):\n%+v", len(lines), lines)
-	pu, err := url.Parse(lines[0])
-	streamKey := lines[2]
+	streamKey := payload.StreamName
 	var responseName string
-	if err != nil {
-		glog.Errorf("Error parsing url=%s err=%v", lines[0], err)
-		w.WriteHeader(http.StatusBadRequest)
-		return reject()
-	}
-	if pu.Scheme == "rtmp" {
-		pp := strings.Split(pu.Path, "/")
+	if payload.URL.Scheme == "rtmp" {
+		pp := strings.Split(payload.URL.Path, "/")
 		if len(pp) != 3 {
-			glog.Errorf("Push rewrite URL wrongly formatted - should be in format rtmp://mist.host/live/streamKey")
-			w.WriteHeader(http.StatusBadRequest)
-			return reject()
+			glog.Errorf("Push rewrite URL wrongly formatted - should be in format rtmp://mist.host/live/streamKey payload=%s", payload)
+			return "", nil
 		}
 	}
 	glog.V(model.VVERBOSE).Infof("Requested stream key is '%s'", streamKey)
@@ -294,10 +277,9 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 	stream, err := mc.lapi.GetStreamByKey(streamKey)
 	if errors.Is(err, api.ErrNotExists) {
 		glog.Errorf("Stream not found for push rewrite streamKey=%s err=%v", streamKey, err)
-		return reject()
+		return "", nil
 	} else if err != nil || stream == nil {
-		glog.Errorf("Error getting stream info from Livepeer API streamKey=%s err=%v", streamKey, err)
-		return reject()
+		return "", fmt.Errorf("Error getting stream info from Livepeer API streamKey=%s err=%v", streamKey, err)
 	}
 	glog.V(model.VERBOSE).Infof("For stream %s got info %+v", streamKey, stream)
 
@@ -311,7 +293,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 			}
 			mc.mapi.DeleteStreams(streamKey)
 		}
-		return reject()
+		return "", nil
 	}
 
 	if stream.PlaybackID != "" {
@@ -343,12 +325,11 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 		}
 		ok, err := mc.lapi.SetActive(stream.ID, true, info.startedAt)
 		if err != nil {
-			glog.Errorf("Error calling SetActive err=%s", err)
-			return reject()
+			return "", fmt.Errorf("Error calling SetActive err=%s", err)
 		} else if !ok {
 			glog.Infof("Stream id=%s streamKey=%s playbackId=%s forbidden by webhook, rejecting", stream.ID, stream.StreamKey, stream.PlaybackID)
 			mc.removeInfo(stream.PlaybackID)
-			return reject()
+			return "", nil
 		}
 	} else {
 		glog.Errorf("Shouldn't happen streamID=%s", stream.ID)
@@ -357,15 +338,13 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 	if mc.baseStreamName == "" {
 		err = mc.createMistStream(streamKey, stream, false)
 		if err != nil {
-			glog.Errorf("Error creating stream on the Mist server: %v", err)
-			return reject()
+			return "", fmt.Errorf("Error creating stream on the Mist server: %v", err)
 		}
 	}
 	go mc.emitStreamStateEvent(stream, data.StreamState{Active: true})
-	w.Write([]byte(responseName))
 	metrics.StartStream()
 	glog.Infof("Responded with '%s'", responseName)
-	return true
+	return responseName, nil
 }
 
 func (mc *mac) triggerLiveTrackList(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
@@ -561,8 +540,6 @@ func (mc *mac) HandleDefaultStreamTrigger() httprouter.Handle {
 		switch trigger {
 		case "LIVE_BANDWIDTH":
 			doLogRequestEnd = mc.triggerLiveBandwidth(w, r)
-		case "PUSH_REWRITE":
-			doLogRequestEnd = mc.triggerPushRewrite(w, r, lines, bs)
 		case "LIVE_TRACK_LIST":
 			doLogRequestEnd = mc.triggerLiveTrackList(w, r, lines, bs)
 		case "PUSH_OUT_START":
