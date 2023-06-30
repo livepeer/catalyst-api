@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -40,7 +39,7 @@ func init() {
 // {JSON object with stream details, only when state is not EMPTY}
 //
 // Read the Mist documentation for more details on each of the stream states.
-func (d *MistCallbackHandlersCollection) TriggerStreamBuffer(ctx context.Context, w http.ResponseWriter, req *http.Request, payload []byte) {
+func (d *MistCallbackHandlersCollection) TriggerStreamBuffer(ctx context.Context, w http.ResponseWriter, req *http.Request, payload MistTriggerBody) {
 	sessionID := req.Header.Get("X-UUID")
 
 	body, err := ParseStreamBufferPayload(payload)
@@ -149,8 +148,8 @@ type TrackDetails struct {
 	Width  int            `json:"width,omitempty"`
 }
 
-func ParseStreamBufferPayload(payload []byte) (*StreamBufferPayload, error) {
-	lines := strings.Split(strings.TrimSuffix(string(payload), "\n"), "\n")
+func ParseStreamBufferPayload(payload MistTriggerBody) (*StreamBufferPayload, error) {
+	lines := payload.Lines()
 	if len(lines) < 2 || len(lines) > 3 {
 		return nil, fmt.Errorf("invalid payload: expected 2 or 3 lines but got %d", len(lines))
 	}
