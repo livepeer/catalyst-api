@@ -52,5 +52,5 @@ func (d *MistCallbackHandlersCollection) TriggerPushRewrite(ctx context.Context,
 	// Flushing necessary here for Mist to handle an empty response body
 	flusher := w.(http.Flusher)
 	flusher.Flush()
-	w.Write([]byte(resp))
+	w.Write([]byte(resp)) // nolint:errcheck
 }
