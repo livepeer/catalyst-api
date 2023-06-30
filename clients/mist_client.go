@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"reflect"
+	"sort"
 	"sync"
 
 	"github.com/livepeer/catalyst-api/metrics"
@@ -17,8 +19,8 @@ type MistAPIClient interface {
 	AddStream(streamName, sourceUrl string) error
 	PushStart(streamName, targetURL string) error
 	DeleteStream(streamName string) error
-	AddTrigger(streamName, triggerName string) error
-	DeleteTrigger(streamName, triggerName string) error
+	AddTrigger(streamName []string, triggerName string, sync bool) error
+	DeleteTrigger(streamName []string, triggerName string) error
 	GetStreamInfo(streamName string) (MistStreamInfo, error)
 }
 
@@ -110,7 +112,7 @@ func (mc *MistClient) DeleteStream(streamName string) error {
 // 3. Add a new trigger (or update the existing one)
 // 4. Override the triggers
 // 5. Release the lock
-func (mc *MistClient) AddTrigger(streamName, triggerName string) error {
+func (mc *MistClient) AddTrigger(streamNames []string, triggerName string) error {
 	mc.configMu.Lock()
 	defer mc.configMu.Unlock()
 
@@ -118,9 +120,9 @@ func (mc *MistClient) AddTrigger(streamName, triggerName string) error {
 	if err != nil {
 		return err
 	}
-	c := commandAddTrigger(streamName, triggerName, mc.TriggerCallback, triggers)
+	c := commandAddTrigger(streamNames, triggerName, mc.TriggerCallback, triggers)
 	resp, err := mc.sendCommand(c)
-	return validateAddTrigger(streamName, triggerName, resp, err)
+	return validateAddTrigger(streamNames, triggerName, resp, err)
 }
 
 // DeleteTrigger deletes triggers with the name `triggerName` for the stream `streamName`.
@@ -130,7 +132,7 @@ func (mc *MistClient) AddTrigger(streamName, triggerName string) error {
 // 3. Add a new trigger (or update the existing one)
 // 4. Override the triggers
 // 5. Release the lock
-func (mc *MistClient) DeleteTrigger(streamName, triggerName string) error {
+func (mc *MistClient) DeleteTrigger(streamNames []string, triggerName string) error {
 	mc.configMu.Lock()
 	defer mc.configMu.Unlock()
 
@@ -138,9 +140,9 @@ func (mc *MistClient) DeleteTrigger(streamName, triggerName string) error {
 	if err != nil {
 		return err
 	}
-	c := commandDeleteTrigger(streamName, triggerName, triggers)
+	c := commandDeleteTrigger(streamNames, triggerName, triggers)
 	resp, err := mc.sendCommand(c)
-	return validateDeleteTrigger(streamName, triggerName, resp, err)
+	return validateDeleteTrigger(streamNames, triggerName, resp, err)
 }
 
 func (mc *MistClient) getCurrentTriggers() (Triggers, error) {
@@ -310,24 +312,24 @@ type Config struct {
 	Triggers map[string][]ConfigTrigger `json:"triggers,omitempty"`
 }
 
-func commandAddTrigger(streamName, triggerName, handlerUrl string, currentTriggers Triggers) MistConfig {
+func commandAddTrigger(streamNames []string, triggerName, handlerUrl string, currentTriggers Triggers) MistConfig {
 	newTrigger := ConfigTrigger{
 		Handler: handlerUrl,
-		Streams: []string{streamName},
+		Streams: streamNames,
 		Sync:    false,
 	}
-	return commandUpdateTrigger(streamName, triggerName, currentTriggers, newTrigger)
+	return commandUpdateTrigger(streamNames, triggerName, currentTriggers, newTrigger)
 }
 
-func commandDeleteTrigger(streamName, triggerName string, currentTriggers Triggers) MistConfig {
-	return commandUpdateTrigger(streamName, triggerName, currentTriggers, ConfigTrigger{})
+func commandDeleteTrigger(streamNames []string, triggerName string, currentTriggers Triggers) MistConfig {
+	return commandUpdateTrigger(streamNames, triggerName, currentTriggers, ConfigTrigger{})
 }
 
-func commandUpdateTrigger(streamName, triggerName string, currentTriggers Triggers, replaceTrigger ConfigTrigger) MistConfig {
+func commandUpdateTrigger(streamNames []string, triggerName string, currentTriggers Triggers, replaceTrigger ConfigTrigger) MistConfig {
 	triggersMap := currentTriggers
 
 	triggers := triggersMap[triggerName]
-	triggers = deleteAllTriggersFor(triggers, streamName)
+	triggers = deleteAllTriggersFor(triggers, streamNames)
 	if len(replaceTrigger.Streams) != 0 {
 		triggers = append(triggers, replaceTrigger)
 	}
@@ -336,21 +338,22 @@ func commandUpdateTrigger(streamName, triggerName string, currentTriggers Trigge
 	return MistConfig{Config{Triggers: triggersMap}}
 }
 
-func deleteAllTriggersFor(triggers []ConfigTrigger, streamName string) []ConfigTrigger {
+func deleteAllTriggersFor(triggers []ConfigTrigger, streamNames []string) []ConfigTrigger {
 	var res []ConfigTrigger
 	for _, t := range triggers {
-		f := false
-		for _, s := range t.Streams {
-			if s == streamName {
-				f = true
-				break
-			}
-		}
-		if !f {
+		if !sameStringSlice(streamNames, t.Streams) {
 			res = append(res, t)
 		}
 	}
 	return res
+}
+
+func sameStringSlice(s1, s2 []string) bool {
+	s1 = append([]string{}, s1...)
+	s2 = append([]string{}, s2...)
+	sort.Strings(s1)
+	sort.Strings(s2)
+	return reflect.DeepEqual(s1, s2)
 }
 
 func commandGetTriggers() MistConfig {
@@ -390,7 +393,7 @@ func validateNukeStream(resp string, err error) error {
 	return validateAuth(resp, err)
 }
 
-func validateAddTrigger(streamName, triggerName, resp string, err error) error {
+func validateAddTrigger(streamNames []string, triggerName, resp string, err error) error {
 	if err != validateAuth(resp, err) {
 		return err
 	}
@@ -408,16 +411,14 @@ func validateAddTrigger(streamName, triggerName, resp string, err error) error {
 		return fmt.Errorf("adding trigger failed, no trigger '%s' in response", triggerName)
 	}
 	for _, t := range ts {
-		for _, s := range t.Streams {
-			if s == streamName {
-				return nil
-			}
+		if sameStringSlice(t.Streams, streamNames) {
+			return nil
 		}
 	}
-	return fmt.Errorf("adding trigger failed, no stream '%s' found in trigger '%s'", streamName, triggerName)
+	return fmt.Errorf("adding trigger failed, no stream '%v' found in trigger '%s'", streamNames, triggerName)
 }
 
-func validateDeleteTrigger(streamName, triggerName, resp string, err error) error {
+func validateDeleteTrigger(streamNames []string, triggerName, resp string, err error) error {
 	if err := validateAuth(resp, err); err != nil {
 		return err
 	}
@@ -435,10 +436,8 @@ func validateDeleteTrigger(streamName, triggerName, resp string, err error) erro
 		return nil
 	}
 	for _, t := range ts {
-		for _, s := range t.Streams {
-			if s == streamName {
-				return fmt.Errorf("deleting trigger failed, stream '%s' found in trigger '%s'", streamName, triggerName)
-			}
+		if sameStringSlice(t.Streams, streamNames) {
+			return fmt.Errorf("deleting trigger failed, stream '%v' found in trigger '%s'", streamNames, triggerName)
 		}
 	}
 	return nil
