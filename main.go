@@ -68,7 +68,7 @@ func main() {
 	fs.StringVar(&cli.MistHardcodedBroadcasters, "mist-hardcoded-broadcasters", "", "Hardcoded broadcasters for use by MistProcLivepeer")
 	config.InvertedBoolFlag(fs, &cli.MistScrapeMetrics, "mist-scrape-metrics", true, "Scrape statistics from MistServer and publish to RabbitMQ")
 	fs.StringVar(&cli.MistSendAudio, "send-audio", "record", "when should we send audio?  {always|never|record}")
-	fs.StringVar(&cli.MistBaseStreamName, "mist-base-stream-name", "", "Base stream name to be used in wildcard-based routing scheme")
+	fs.StringVar(&cli.MistBaseStreamName, "mist-base-stream-name", "video", "Base stream name to be used in wildcard-based routing scheme")
 	fs.StringVar(&cli.APIServer, "api-server", "", "Livepeer API server to use")
 	fs.StringVar(&cli.AMQPURL, "amqp-url", "", "RabbitMQ url")
 	fs.StringVar(&cli.OwnRegion, "own-region", "", "Identifier of the region where the service is running, used for mapping external data back to current region")
@@ -191,6 +191,16 @@ func main() {
 	var mapic mistapiconnector.IMac
 	if cli.ShouldMapic() {
 		mapic = mistapiconnector.NewMapic(&cli, broker)
+	}
+
+	var mist clients.MistAPIClient
+	if cli.ShouldMist() {
+		ownURL := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
+		mist = clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort, ownURL)
+		err := broker.SetupMistTriggers(mist)
+		if err != nil {
+			glog.Fatalf("error setting up mist triggers: %s", err)
+		}
 	}
 
 	// Start balancer

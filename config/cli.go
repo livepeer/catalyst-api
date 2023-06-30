@@ -80,6 +80,11 @@ func (cli *Cli) ShouldMapic() bool {
 	return cli.APIServer != ""
 }
 
+// Should we attempt communication with Mist?
+func (cli *Cli) ShouldMist() bool {
+	return cli.MistPort != 0 && cli.MistHost != ""
+}
+
 // Should we enable mist-cleanup script to run periodically and delete leaky shm?
 func (cli *Cli) ShouldMistCleanup() bool {
 	return cli.MistCleanup

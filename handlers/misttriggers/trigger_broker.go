@@ -2,9 +2,11 @@ package misttriggers
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/catalyst-api/clients"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -34,6 +36,7 @@ type TriggerBroker interface {
 
 	OnPushRewrite(func(context.Context, *PushRewritePayload) (string, error))
 	TriggerPushRewrite(context.Context, *PushRewritePayload) (string, error)
+	SetupMistTriggers(clients.MistAPIClient) error
 }
 
 type TriggerPayload interface {
@@ -47,6 +50,23 @@ func NewTriggerBroker() TriggerBroker {
 type triggerBroker struct {
 	streamBufferFuncs funcGroup[StreamBufferPayload]
 	pushRewriteFuncs  funcGroup[PushRewritePayload]
+}
+
+var triggers = map[string]bool{
+	TRIGGER_PUSH_END:       false,
+	TRIGGER_PUSH_OUT_START: false,
+	TRIGGER_PUSH_REWRITE:   true,
+	TRIGGER_STREAM_BUFFER:  false,
+}
+
+func (b *triggerBroker) SetupMistTriggers(mist clients.MistAPIClient) error {
+	for name, sync := range triggers {
+		err := mist.AddTrigger([]string{}, name, sync)
+		if err != nil {
+			return fmt.Errorf("error setting up mist trigger trigger=%s error=%w", err)
+		}
+	}
+	return nil
 }
 
 func (b *triggerBroker) OnStreamBuffer(cb func(context.Context, *StreamBufferPayload) error) {

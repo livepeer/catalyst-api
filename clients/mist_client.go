@@ -31,8 +31,11 @@ type MistClient struct {
 	configMu        sync.Mutex
 }
 
-func NewMistAPIClient(user, password, host string, port int) MistAPIClient {
-	mist := &MistClient{ApiUrl: fmt.Sprintf("http://%s:%d", host, port)}
+func NewMistAPIClient(user, password, host string, port int, ownURL string) MistAPIClient {
+	mist := &MistClient{
+		ApiUrl:          fmt.Sprintf("http://%s:%d", host, port),
+		TriggerCallback: ownURL,
+	}
 	return mist
 }
 
