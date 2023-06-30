@@ -22,7 +22,6 @@ import (
 	mistapi "github.com/livepeer/catalyst-api/mapic/apis/mist"
 	"github.com/livepeer/catalyst-api/mapic/metrics"
 	"github.com/livepeer/catalyst-api/mapic/model"
-	"github.com/livepeer/catalyst-api/mapic/utils"
 	"github.com/livepeer/go-api-client"
 	"github.com/livepeer/livepeer-data/pkg/data"
 	"github.com/livepeer/livepeer-data/pkg/event"
@@ -117,7 +116,6 @@ type (
 		lapi                      *api.Client
 		balancerHost              string
 		mu                        sync.RWMutex
-		createStreamLock          sync.Mutex
 		mistHot                   string
 		checkBandwidth            bool
 		baseStreamName            string
@@ -260,107 +258,6 @@ func (mc *mac) handleStreamBuffer(ctx context.Context, payload *misttriggers.Str
 	}
 
 	return nil
-}
-
-func (mc *mac) triggerDefaultStream(w http.ResponseWriter, r *http.Request, lines []string, trigger string) bool {
-	if mc.balancerHost == "" {
-		glog.V(model.VERBOSE).Infof("Request %s: (%d lines) responded with forbidden", trigger, len(lines))
-		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte("false"))
-		return false
-	}
-	if len(lines) == 5 {
-		protocol := lines[3] // HLS
-		uri := lines[4]      // /hls/h5rfoaiqoafbsq44/index.m3u8?stream=h5rfoaiqoafbsq44
-		if protocol == "HLS" {
-			urip := strings.Split(uri, "/")
-			if len(urip) > 2 {
-				glog.Infof("proto: %s uri parts: %+v", protocol, urip)
-				// urip[2] = streamPlaybackPrefix + urip[2]
-				playbackID := urip[2]
-				streamNameInMist := streamPlaybackPrefix + playbackID
-				// hold the creation lock until exit so that another trigger to
-				// RTMP_REWRITE can't create a Mist stream at the same time
-				mc.createStreamLock.Lock()
-				defer mc.createStreamLock.Unlock()
-
-				mc.mu.RLock()
-				info := mc.streamInfo[playbackID]
-				mc.mu.RUnlock()
-				if info != nil {
-					info.mu.Lock()
-					streamStopped := info.stopped
-					info.mu.Unlock()
-					if streamStopped {
-						mc.removeInfo(playbackID)
-					} else {
-						// that means that RTMP stream is currently gets streamed into our Mist node
-						// and so no changes needed to the Mist configuration
-						glog.Infof("Already in the playing map, returning %s", streamNameInMist)
-						w.WriteHeader(http.StatusOK)
-						w.Write([]byte(streamNameInMist))
-						return true
-					}
-				}
-
-				// check if such stream already exists in Mist's config
-				streams, activeStreams, err := mc.mapi.Streams()
-				if err != nil {
-					glog.Warningf("Error getting streams list from Mist: %v", err)
-					w.WriteHeader(http.StatusOK)
-					w.Write([]byte(streamNameInMist))
-					return true
-				}
-				if utils.StringsSliceContains(activeStreams, streamNameInMist) {
-					glog.Infof("Stream is in active map, returning %s", streamNameInMist)
-					w.WriteHeader(http.StatusOK)
-					w.Write([]byte(streamNameInMist))
-					return true
-				}
-				if mstream, has := streams[streamNameInMist]; has {
-					if len(mstream.Processes) == 0 {
-						// Stream exists and has transcoding turned off
-						glog.Infof("Requested stream '%s' already exists in Mist config, just returning it's name", streamNameInMist)
-						w.WriteHeader(http.StatusOK)
-						w.Write([]byte(streamNameInMist))
-						return true
-					}
-				}
-				// Looks like there is no RTMP stream on our Mist server, so probably it is on other
-				// (load balanced) server. So we need to create Mist's stream configuration without
-				// transcoding
-				stream, err := mc.lapi.GetStreamByPlaybackID(playbackID)
-				if err != nil || stream == nil {
-					glog.Errorf("Error getting stream info from Livepeer API err=%v", err)
-					w.WriteHeader(http.StatusNotFound)
-					w.Write([]byte("false"))
-					return true
-				}
-				glog.V(model.DEBUG).Infof("For stream %s got info %+v", playbackID, stream)
-				if stream.Deleted {
-					glog.Infof("Stream %s was deleted, so deleting Mist's stream configuration", playbackID)
-					go mc.mapi.DeleteStreams(streamNameInMist)
-					w.WriteHeader(http.StatusNotFound)
-					w.Write([]byte("false"))
-					return true
-				}
-				err = mc.createMistStream(streamNameInMist, stream, true)
-				if err != nil {
-					glog.Errorf("Error creating stream on the Mist server: %v", err)
-				}
-				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(streamNameInMist))
-				return true
-			}
-		}
-	}
-	// We should get this in two cases:
-	// 1. When in PUSH_REWRITE we got request for unknown stream and thus
-	//    haven't created new stream in Mist
-	// 2. When someone pulls HLS for stream that exists but is not active (no
-	//    RTMP stream coming in).
-	w.Write([]byte(""))
-	return true
 }
 
 func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
@@ -662,8 +559,6 @@ func (mc *mac) HandleDefaultStreamTrigger() httprouter.Handle {
 		}(started, trigger)
 
 		switch trigger {
-		case "DEFAULT_STREAM":
-			doLogRequestEnd = mc.triggerDefaultStream(w, r, lines, trigger)
 		case "LIVE_BANDWIDTH":
 			doLogRequestEnd = mc.triggerLiveBandwidth(w, r)
 		case "PUSH_REWRITE":
