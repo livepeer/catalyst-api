@@ -151,6 +151,28 @@ func TestCoordinatorCatalystDominance(t *testing.T) {
 	require.Zero(len(calls))
 }
 
+func TestCoordinatorSourceCopy(t *testing.T) {
+	require := require.New(t)
+
+	ffmpeg, calls := recordingHandler(nil)
+	external := allFailingHandler(t)
+	coord := NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, nil, ffmpeg, external, "")
+
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	job.SourceCopy = true
+	job.HlsTargetURL = coord.SourceOutputURL
+	coord.StartUploadJob(job)
+
+	j := requireReceive(t, calls, 1*time.Second)
+	require.Equal("123", j.RequestID)
+
+	time.Sleep(1 * time.Second)
+	require.Zero(len(calls))
+}
+
 func TestCoordinatorBackgroundJobsStrategies(t *testing.T) {
 	require := require.New(t)
 
