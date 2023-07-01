@@ -3,7 +3,6 @@ package mistapiconnector
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -72,26 +71,6 @@ type (
 		lastSeenBumpedAt   time.Time
 	}
 
-	trackListDesc struct {
-		Bps      int64  `json:"bps,omitempty"`
-		Channels int    `json:"channels,omitempty"`
-		Codec    string `json:"codec,omitempty"`
-		Firstms  int64  `json:"firstms,omitempty"`
-		Idx      int    `json:"idx,omitempty"`
-		Init     string `json:"init,omitempty"`
-		Jitter   int    `json:"jitter,omitempty"`
-		Lastms   int64  `json:"lastms,omitempty"`
-		Maxbps   int64  `json:"maxbps,omitempty"`
-		Rate     int    `json:"rate,omitempty"`
-		Size     int    `json:"size,omitempty"`
-		Trackid  int    `json:"trackid,omitempty"`
-		Type     string `json:"type,omitempty"`
-		Bframes  int    `json:"bframes,omitempty"`
-		Fpks     int64  `json:"fpks,omitempty"`
-		Width    int    `json:"width,omitempty"`
-		Height   int    `json:"height,omitempty"`
-	}
-
 	// MacOptions configuration object
 	MacOptions struct {
 		NodeID, MistHost string
@@ -106,8 +85,6 @@ type (
 		MistHardcodedBroadcasters string
 		NoMistScrapeMetrics       bool
 	}
-
-	trackList map[string]*trackListDesc
 
 	mac struct {
 		ctx                       context.Context
@@ -139,6 +116,7 @@ func (mc *mac) Start(ctx context.Context) error {
 
 	mc.broker.OnStreamBuffer(mc.handleStreamBuffer)
 	mc.broker.OnPushRewrite(mc.handlePushRewrite)
+	mc.broker.OnLiveTrackList(mc.handleLiveTrackList)
 
 	lapi, _ := api.NewAPIClientGeolocated(api.ClientOptions{
 		Server:      mc.config.APIServer,
@@ -226,12 +204,6 @@ func LivepeerProfiles2MistProfiles(lps []api.Profile) []mist.Profile {
 		res = append(res, mp)
 	}
 	return res
-}
-
-func (mc *mac) triggerLiveBandwidth(w http.ResponseWriter, r *http.Request) bool {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("yes"))
-	return false
 }
 
 func (mc *mac) handleStreamBuffer(ctx context.Context, payload *misttriggers.StreamBufferPayload) error {
@@ -347,22 +319,10 @@ func (mc *mac) handlePushRewrite(ctx context.Context, payload *misttriggers.Push
 	return responseName, nil
 }
 
-func (mc *mac) triggerLiveTrackList(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("yes"))
-	if len(lines) < 2 {
-		glog.Errorf("Expected 2 lines, got %d, request \n%s", len(lines), rawRequest)
-		return false
-	}
+func (mc *mac) handleLiveTrackList(ctx context.Context, payload *misttriggers.LiveTrackListPayload) error {
 	go func() {
-		var tl trackList
-		err := json.Unmarshal([]byte(lines[1]), &tl)
-		if err != nil {
-			glog.Errorf("Error unmurshalling json track list: %v", err)
-			return
-		}
-		videoTracksNum := tl.CountVideoTracks()
-		playbackID := mistStreamName2playbackID(lines[0])
+		videoTracksNum := payload.CountVideoTracks()
+		playbackID := mistStreamName2playbackID(payload.StreamName)
 		glog.Infof("for video %s got %d video tracks", playbackID, videoTracksNum)
 
 		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
@@ -375,11 +335,11 @@ func (mc *mac) triggerLiveTrackList(w http.ResponseWriter, r *http.Request, line
 			info.mu.Unlock()
 
 			if shouldStart {
-				mc.startMultistream(lines[0], playbackID, info)
+				mc.startMultistream(payload.StreamName, playbackID, info)
 			}
 		}
 	}()
-	return true
+	return nil
 }
 
 func (mc *mac) triggerPushOutStart(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
@@ -538,10 +498,6 @@ func (mc *mac) HandleDefaultStreamTrigger() httprouter.Handle {
 		}(started, trigger)
 
 		switch trigger {
-		case "LIVE_BANDWIDTH":
-			doLogRequestEnd = mc.triggerLiveBandwidth(w, r)
-		case "LIVE_TRACK_LIST":
-			doLogRequestEnd = mc.triggerLiveTrackList(w, r, lines, bs)
 		case "PUSH_OUT_START":
 			doLogRequestEnd = mc.triggerPushOutStart(w, r, lines, bs)
 		case "PUSH_END":
@@ -783,16 +739,6 @@ func (mc *mac) getStreamInfo(playbackID string) (*streamInfo, error) {
 	mc.mu.Unlock()
 
 	return info, nil
-}
-
-func (tl *trackList) CountVideoTracks() int {
-	res := 0
-	for _, td := range *tl {
-		if td.Type == "video" {
-			res++
-		}
-	}
-	return res
 }
 
 func mistStreamName2playbackID(msn string) string {

@@ -14,10 +14,11 @@ import (
 )
 
 const (
-	TRIGGER_PUSH_END       = "PUSH_END"
-	TRIGGER_PUSH_OUT_START = "PUSH_OUT_START"
-	TRIGGER_PUSH_REWRITE   = "PUSH_REWRITE"
-	TRIGGER_STREAM_BUFFER  = "STREAM_BUFFER"
+	TRIGGER_PUSH_END        = "PUSH_END"
+	TRIGGER_PUSH_OUT_START  = "PUSH_OUT_START"
+	TRIGGER_PUSH_REWRITE    = "PUSH_REWRITE"
+	TRIGGER_STREAM_BUFFER   = "STREAM_BUFFER"
+	TRIGGER_LIVE_TRACK_LIST = "LIVE_TRACK_LIST"
 )
 
 type MistCallbackHandlersCollection struct {
@@ -60,6 +61,8 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 			d.TriggerStreamBuffer(ctx, w, req, body)
 		case TRIGGER_PUSH_REWRITE:
 			d.TriggerPushRewrite(ctx, w, req, body)
+		case TRIGGER_LIVE_TRACK_LIST:
+			d.TriggerLiveTrackList(ctx, w, req, body)
 		default:
 			errors.WriteHTTPBadRequest(w, "Unsupported X-Trigger", fmt.Errorf("unknown trigger '%s'", triggerName))
 			return
