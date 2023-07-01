@@ -31,16 +31,20 @@ import (
 //    TODO: VID-120
 
 type TriggerBroker interface {
+	SetupMistTriggers(clients.MistAPIClient) error
+
 	OnStreamBuffer(func(context.Context, *StreamBufferPayload) error)
 	TriggerStreamBuffer(context.Context, *StreamBufferPayload)
 
 	OnPushRewrite(func(context.Context, *PushRewritePayload) (string, error))
 	TriggerPushRewrite(context.Context, *PushRewritePayload) (string, error)
-	SetupMistTriggers(clients.MistAPIClient) error
+
+	OnLiveTrackList(func(context.Context, *LiveTrackListPayload) error)
+	TriggerLiveTrackList(context.Context, *LiveTrackListPayload) error
 }
 
 type TriggerPayload interface {
-	StreamBufferPayload | PushEndPayload | PushRewritePayload
+	StreamBufferPayload | PushEndPayload | PushRewritePayload | LiveTrackListPayload
 }
 
 func NewTriggerBroker() TriggerBroker {
@@ -48,22 +52,24 @@ func NewTriggerBroker() TriggerBroker {
 }
 
 type triggerBroker struct {
-	streamBufferFuncs funcGroup[StreamBufferPayload]
-	pushRewriteFuncs  funcGroup[PushRewritePayload]
+	streamBufferFuncs  funcGroup[StreamBufferPayload]
+	pushRewriteFuncs   funcGroup[PushRewritePayload]
+	liveTrackListFuncs funcGroup[LiveTrackListPayload]
 }
 
 var triggers = map[string]bool{
-	TRIGGER_PUSH_END:       false,
-	TRIGGER_PUSH_OUT_START: false,
-	TRIGGER_PUSH_REWRITE:   true,
-	TRIGGER_STREAM_BUFFER:  false,
+	TRIGGER_PUSH_END:        false,
+	TRIGGER_PUSH_OUT_START:  false,
+	TRIGGER_PUSH_REWRITE:    true,
+	TRIGGER_STREAM_BUFFER:   false,
+	TRIGGER_LIVE_TRACK_LIST: false,
 }
 
 func (b *triggerBroker) SetupMistTriggers(mist clients.MistAPIClient) error {
 	for name, sync := range triggers {
 		err := mist.AddTrigger([]string{}, name, sync)
 		if err != nil {
-			return fmt.Errorf("error setting up mist trigger trigger=%s error=%w", err)
+			return fmt.Errorf("error setting up mist trigger trigger=%s error=%w", name, err)
 		}
 	}
 	return nil
@@ -86,6 +92,15 @@ func (b *triggerBroker) OnPushRewrite(cb func(context.Context, *PushRewritePaylo
 
 func (b *triggerBroker) TriggerPushRewrite(ctx context.Context, payload *PushRewritePayload) (string, error) {
 	return b.pushRewriteFuncs.Trigger(ctx, payload)
+}
+
+func (b *triggerBroker) OnLiveTrackList(cb func(context.Context, *LiveTrackListPayload) error) {
+	b.liveTrackListFuncs.RegisterNoResponse(cb)
+}
+
+func (b *triggerBroker) TriggerLiveTrackList(ctx context.Context, payload *LiveTrackListPayload) error {
+	_, err := b.liveTrackListFuncs.Trigger(ctx, payload)
+	return err
 }
 
 // a funcGroup represents a collection of callback functions such that we can register new
