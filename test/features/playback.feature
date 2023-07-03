@@ -2,7 +2,7 @@ Feature: Playback
 
   Background: The app is running
     Given the VOD API is running
-    Given Studio API server is running at "localhost:3000"
+    Given Studio API server is running at "localhost:13000"
 
   Scenario: Master playlist requests
     Given the gate API will allow playback

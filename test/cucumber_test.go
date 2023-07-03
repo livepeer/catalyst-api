@@ -48,7 +48,7 @@ func init() {
 
 func startApp() error {
 	sourceOutputDir = fmt.Sprintf("file://%s/%s/", os.TempDir(), "livepeer/source")
-	app = exec.Command("./app", "-private-bucket", "fixtures/playback-bucket", "-gate-url", "http://localhost:3000/api/access-control/gate", "-source-output", sourceOutputDir)
+	app = exec.Command("./app", "-private-bucket", "fixtures/playback-bucket", "-gate-url", "http://localhost:13000/api/access-control/gate", "-source-output", sourceOutputDir)
 	outfile, err := os.Create("logs/app.log")
 	if err != nil {
 		return err
