@@ -19,9 +19,11 @@ const (
 	MANIFEST_UPLOAD_TIMEOUT  = 5 * time.Minute
 )
 
-func DownloadRetryBackoff() backoff.BackOff {
+func DownloadRetryBackoffLong() backoff.BackOff {
 	return backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10)
 }
+
+var DownloadRetryBackoff = DownloadRetryBackoffLong
 
 func DownloadRenditionManifest(requestID, sourceManifestOSURL string) (m3u8.MediaPlaylist, error) {
 	var playlist m3u8.Playlist
