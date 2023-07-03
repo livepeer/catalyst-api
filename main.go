@@ -201,6 +201,8 @@ func main() {
 		if err != nil {
 			glog.Fatalf("error setting up mist triggers: %s", err)
 		}
+	} else {
+		glog.Info("No mist-host/mist-port provided; I'm not initalizing any stream triggers")
 	}
 
 	// Start balancer

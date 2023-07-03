@@ -59,8 +59,8 @@ func startApp() error {
 		"-gate-url=http://localhost:13000/api/access-control/gate",
 		"-source-output",
 		sourceOutputDir,
+		"-mist-host=",
 	)
-
 	outfile, err := os.Create("logs/app.log")
 	if err != nil {
 		return err
