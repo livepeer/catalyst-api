@@ -153,13 +153,13 @@ func TestRedirectHandler404(t *testing.T) {
 
 	requireReq(t, path).
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", getHLSURLs("http", closestNodeAddr)...)
 
 	requireReq(t, path).
 		withHeader("X-Forwarded-Proto", "https").
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", getHLSURLs("https", closestNodeAddr)...)
 }
 
@@ -170,13 +170,13 @@ func TestRedirectHandlerHLS_Correct(t *testing.T) {
 
 	requireReq(t, path).
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", getHLSURLs("http", closestNodeAddr)...)
 
 	requireReq(t, path).
 		withHeader("X-Forwarded-Proto", "https").
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", getHLSURLs("https", closestNodeAddr)...)
 }
 
@@ -192,26 +192,26 @@ func TestRedirectHandlerHLSVOD_Correct(t *testing.T) {
 
 	requireReq(t, pathHLS).
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", fmt.Sprintf("http://%s/hls/vod+%s/index.m3u8", closestNodeAddr, playbackID))
 
 	requireReq(t, pathHLS).
 		withHeader("X-Forwarded-Proto", "https").
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", fmt.Sprintf("https://%s/hls/vod+%s/index.m3u8", closestNodeAddr, playbackID))
 
 	pathJS := fmt.Sprintf("/json_vod+%s.js", playbackID)
 
 	requireReq(t, pathJS).
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", fmt.Sprintf("http://%s/json_vod+%s.js", closestNodeAddr, playbackID))
 
 	requireReq(t, pathJS).
 		withHeader("X-Forwarded-Proto", "https").
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", fmt.Sprintf("https://%s/json_vod+%s.js", closestNodeAddr, playbackID))
 }
 
@@ -224,7 +224,7 @@ func TestRedirectHandlerHLS_SegmentInPath(t *testing.T) {
 
 	requireReq(t, path).
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", getHLSURLsWithSeg("http", closestNodeAddr, seg, getParams)...)
 }
 
@@ -245,13 +245,13 @@ func TestRedirectHandlerJS_Correct(t *testing.T) {
 
 	requireReq(t, path).
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", getJSURLs("http", closestNodeAddr)...)
 
 	requireReq(t, path).
 		withHeader("X-Forwarded-Proto", "https").
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", getJSURLs("https", closestNodeAddr)...)
 }
 
@@ -262,13 +262,13 @@ func TestRedirectHandlerWebRTC_Correct(t *testing.T) {
 
 	requireReq(t, path).
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", getWebRTCURLs("http", closestNodeAddr)...)
 
 	requireReq(t, path).
 		withHeader("X-Forwarded-Proto", "https").
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", getWebRTCURLs("https", closestNodeAddr)...)
 }
 
@@ -284,18 +284,18 @@ func TestNodeHostRedirect(t *testing.T) {
 
 	requireReq(t, "http://wrong-host/any/path").
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", "http://right-host/any/path")
 
 	requireReq(t, "http://wrong-host/any/path?foo=bar").
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", "http://right-host/any/path?foo=bar")
 
 	requireReq(t, "http://wrong-host/any/path").
 		withHeader("X-Forwarded-Proto", "https").
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", "https://right-host/any/path")
 }
 
@@ -305,25 +305,25 @@ func TestNodeHostPortRedirect(t *testing.T) {
 
 	requireReq(t, "http://wrong-host/any/path").
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", "http://right-host:20443/any/path")
 
 	requireReq(t, "http://wrong-host:1234/any/path").
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", "http://right-host:20443/any/path")
 
 	requireReq(t, "http://wrong-host:7777/any/path").
 		withHeader("X-Forwarded-Proto", "https").
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", "https://right-host:20443/any/path")
 
 	n.Config.NodeHost = "right-host"
 	requireReq(t, "http://wrong-host:7777/any/path").
 		withHeader("X-Forwarded-Proto", "https").
 		result(n).
-		hasStatus(http.StatusFound).
+		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", "https://right-host/any/path")
 }
 
