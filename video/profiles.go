@@ -48,6 +48,7 @@ type AudioTrack struct {
 	Channels   int `json:"channels,omitempty"`
 	SampleRate int `json:"sample_rate,omitempty"`
 	SampleBits int `json:"sample_bits,omitempty"`
+	BitDepth   int `json:"bit_depth,omitempty"`
 }
 
 type InputTrack struct {

@@ -153,22 +153,36 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 					FPS:                fps,
 					Rotation:           rotation,
 					DisplayAspectRatio: videoStream.DisplayAspectRatio,
+					PixelFormat:        videoStream.PixFmt,
 				},
 			},
 		},
 		Duration:  duration,
 		SizeBytes: size,
 	}
-	iv = addAudioTrack(probeData, iv)
+	iv, err = addAudioTrack(probeData, iv)
+	if err != nil {
+		return InputVideo{}, err
+	}
 
 	return iv, nil
 }
 
-func addAudioTrack(probeData *ffprobe.ProbeData, iv InputVideo) InputVideo {
+func addAudioTrack(probeData *ffprobe.ProbeData, iv InputVideo) (InputVideo, error) {
 	audioTrack := probeData.FirstAudioStream()
 	if audioTrack == nil {
-		return iv
+		return iv, nil
 	}
+
+	sampleRate, err := strconv.Atoi(audioTrack.SampleRate)
+	if audioTrack.SampleRate != "" && err != nil {
+		return iv, fmt.Errorf("error parsing sample rate from track %d: %w", audioTrack.Index, err)
+	}
+	bitDepth, err := strconv.Atoi(audioTrack.BitsPerRawSample)
+	if audioTrack.BitsPerRawSample != "" && err != nil {
+		return iv, fmt.Errorf("error parsing bit depth (bits_per_raw_sample) from track %d: %w", audioTrack.Index, err)
+	}
+
 	bitrate, _ := strconv.ParseInt(audioTrack.BitRate, 10, 64)
 	iv.Tracks = append(iv.Tracks, InputTrack{
 		Type:    TrackTypeAudio,
@@ -177,10 +191,12 @@ func addAudioTrack(probeData *ffprobe.ProbeData, iv InputVideo) InputVideo {
 		AudioTrack: AudioTrack{
 			Channels:   audioTrack.Channels,
 			SampleBits: audioTrack.BitsPerSample,
+			SampleRate: sampleRate,
+			BitDepth:   bitDepth,
 		},
 	})
 
-	return iv
+	return iv, nil
 }
 
 // function taken from task-runner task/probe.go

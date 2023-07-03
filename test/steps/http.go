@@ -96,7 +96,7 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}
 	}
-	if payload == "a valid ffmpeg upload vod request with a custom segment size" {
+	if strings.HasPrefix(payload, "a valid ffmpeg upload vod request with a custom segment size") {
 		req := DefaultUploadRequest
 		req.URL = "file://" + sourceFile.Name()
 		req.PipelineStrategy = "catalyst_ffmpeg"
@@ -106,7 +106,8 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
 				Type: "object_store",
 				URL:  "file://" + destinationDir,
 				Outputs: Output{
-					HLS: "enabled",
+					HLS:       "enabled",
+					SourceMp4: strings.Contains(payload, "and source copying"),
 				},
 			},
 		}
@@ -114,7 +115,7 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}
 	}
-	if payload == "a valid ffmpeg upload vod request with a source manifest" {
+	if strings.HasPrefix(payload, "a valid ffmpeg upload vod request with a source manifest") {
 		req := DefaultUploadRequest
 		req.URL = "file://" + filepath.Join(sourceManifestDir, "tiny.m3u8")
 		req.PipelineStrategy = "catalyst_ffmpeg"
@@ -123,7 +124,8 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
 				Type: "object_store",
 				URL:  "file://" + destinationDir,
 				Outputs: Output{
-					HLS: "enabled",
+					HLS:       "enabled",
+					SourceMp4: strings.Contains(payload, "and source copying"),
 				},
 			},
 		}

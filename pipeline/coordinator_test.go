@@ -37,7 +37,7 @@ var (
 	}
 )
 
-func setupTransferDir(t *testing.T, coor *Coordinator) (inputFile *os.File, transferDir string, cleanup func()) {
+func setupTransferDir(t *testing.T, coor *Coordinator) (inputFile *os.File, transferURL *url.URL, cleanup func()) {
 	var err error
 	inputFile, err = os.CreateTemp(os.TempDir(), "user-input-*")
 	require.NoError(t, err)
@@ -50,7 +50,7 @@ func setupTransferDir(t *testing.T, coor *Coordinator) (inputFile *os.File, tran
 	require.NoError(t, movieFile.Close())
 
 	// use the random file name as the dir name for the transfer file
-	transferDir = path.Join(inputFile.Name()+"-dir", "transfer")
+	transferDir := path.Join(inputFile.Name()+"-dir", "transfer")
 	require.NoError(t, os.MkdirAll(transferDir, 0777))
 
 	cleanup = func() {
@@ -62,9 +62,11 @@ func setupTransferDir(t *testing.T, coor *Coordinator) (inputFile *os.File, tran
 	}
 
 	coor.InputCopy = &clients.InputCopy{
-		Probe:           video.Probe{},
-		SourceOutputUrl: transferDir,
+		Probe: video.Probe{},
 	}
+	transferURL, err = url.Parse(transferDir)
+	require.NoError(t, err)
+	coor.SourceOutputURL = transferURL
 	return
 }
 
@@ -140,6 +142,28 @@ func TestCoordinatorCatalystDominance(t *testing.T) {
 	defer cleanup()
 	job := testJob
 	job.SourceFile = "file://" + inputFile.Name()
+	coord.StartUploadJob(job)
+
+	j := requireReceive(t, calls, 1*time.Second)
+	require.Equal("123", j.RequestID)
+
+	time.Sleep(1 * time.Second)
+	require.Zero(len(calls))
+}
+
+func TestCoordinatorSourceCopy(t *testing.T) {
+	require := require.New(t)
+
+	ffmpeg, calls := recordingHandler(nil)
+	external := allFailingHandler(t)
+	coord := NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, nil, ffmpeg, external, "")
+
+	inputFile, _, cleanup := setupTransferDir(t, coord)
+	defer cleanup()
+	job := testJob
+	job.SourceFile = "file://" + inputFile.Name()
+	job.SourceCopy = true
+	job.HlsTargetURL = coord.SourceOutputURL
 	coord.StartUploadJob(job)
 
 	j := requireReceive(t, calls, 1*time.Second)
@@ -368,7 +392,7 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 	defer cleanup()
 	job := testJob
 	job.SourceFile = "file://" + inputFile.Name()
-	sourceFile := path.Join(transferDir, "123/transfer/"+filepath.Base(inputFile.Name()))
+	sourceFile := path.Join(transferDir.String(), "123/transfer/"+filepath.Base(inputFile.Name()))
 
 	dbMock.
 		ExpectExec("insert into \"vod_completed\".*").
@@ -466,8 +490,8 @@ func Test_ProbeErrors(t *testing.T) {
 					Size: tt.size,
 					Err:  tt.probeErr,
 				},
-				SourceOutputUrl: transferDir,
 			}
+			coord.SourceOutputURL = transferDir
 
 			job := testJob
 			job.SourceFile = "file://" + inputFile.Name()
@@ -503,7 +527,7 @@ func Test_InputCopiedToTransferLocation(t *testing.T) {
 	require.Equal(clients.TranscodeStatusCompleted, msg.Status)
 
 	// Check that the file was copied to the osTransferBucketURL folder
-	transferInput := path.Join(transferDir, "/123/transfer/"+filepath.Base(f.Name()))
+	transferInput := path.Join(transferDir.String(), "/123/transfer/"+filepath.Base(f.Name()))
 	require.Equal(transferInput, actualTransferInput)
 	content, err := os.Open(transferInput)
 	require.NoError(err)
