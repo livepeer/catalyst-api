@@ -98,6 +98,7 @@ jobs:
 
   upload:
     name: Upload artifacts to google bucket
+    if: ${{ github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name }}
     permissions:
       contents: "read"
       id-token: "write"
@@ -137,7 +138,7 @@ jobs:
         id: upload-archives
         uses: google-github-actions/upload-cloud-storage@v1
         with:
-          path: 'releases'
+          path: "releases"
           destination: "build.livepeer.live/${{ github.event.repository.name }}/${{ (github.ref_type == 'tag' && github.ref_name) || github.event.pull_request.head.sha || github.sha }}"
           parent: false
 
@@ -146,7 +147,7 @@ jobs:
         uses: google-github-actions/upload-cloud-storage@v1
         with:
           path: ${{ steps.branch-manifest.outputs.manifest-file }}
-          destination: 'build.livepeer.live/${{ github.event.repository.name }}/'
+          destination: "build.livepeer.live/${{ github.event.repository.name }}/"
           parent: false
 
       - name: Notify new build upload
