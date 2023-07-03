@@ -29,8 +29,8 @@ Feature: VOD Streaming
     Then I get an HTTP response with code "400"
     And my "failed" vod request metrics get recorded
 
-Scenario: Submit a video asset for ingestion with the FFMPEG / Livepeer pipeline
-    When I submit to the internal "/api/vod" endpoint with "a valid ffmpeg upload vod request with a custom segment size"
+  Scenario Outline: Submit a video asset for ingestion with the FFMPEG / Livepeer pipeline
+    When I submit to the internal "/api/vod" endpoint with "<payload>"
     And receive a response within "3" seconds
     Then I get an HTTP response with code "200"
     And I receive a Request ID in the response body
@@ -40,14 +40,26 @@ Scenario: Submit a video asset for ingestion with the FFMPEG / Livepeer pipeline
     And the source manifest is written to storage within "3" seconds and contains "4" segments
     And the Broadcaster receives "4" segments for transcoding within "10" seconds
     And "4" transcoded segments and manifests have been written to disk for profiles "270p0,low-bitrate" within "5" seconds
+    And a source copy <source_copy> been written to disk
     And I receive a "success" callback within "20" seconds
 
-Scenario: Submit an HLS manifest for ingestion with the FFMPEG / Livepeer pipeline
-    When I submit to the internal "/api/vod" endpoint with "a valid ffmpeg upload vod request with a source manifest"
+    Examples:
+      | payload                                                                         | source_copy |
+      | a valid ffmpeg upload vod request with a custom segment size                    | has not     |
+      | a valid ffmpeg upload vod request with a custom segment size and source copying | has         |
+
+  Scenario Outline: Submit an HLS manifest for ingestion with the FFMPEG / Livepeer pipeline
+    When I submit to the internal "/api/vod" endpoint with "<payload>"
     And receive a response within "3" seconds
     Then I get an HTTP response with code "200"
     And I receive a Request ID in the response body
     And my "successful" vod request metrics get recorded
     And the Broadcaster receives "3" segments for transcoding within "10" seconds
     And "3" transcoded segments and manifests have been written to disk for profiles "270p0,low-bitrate" within "5" seconds
+    And a source copy has not been written to disk
     And I receive a "success" callback within "20" seconds
+
+    Examples:
+      | payload                                                                     |
+      | a valid ffmpeg upload vod request with a source manifest                    |
+      | a valid ffmpeg upload vod request with a source manifest and source copying |

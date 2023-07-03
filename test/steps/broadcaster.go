@@ -3,6 +3,7 @@ package steps
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -160,6 +161,17 @@ func (s *StepContext) TranscodedSegmentsWrittenToDiskWithinSeconds(numSegmentsEx
 		}
 	}
 
+	return nil
+}
+
+func (s *StepContext) SourceCopyWrittenToDisk(hasBeenWritten string) error {
+	sourceCopyExpected := hasBeenWritten == "has"
+	_, err := os.Stat(filepath.Join(s.TranscodedOutputDir, "video"))
+	if err != nil && sourceCopyExpected {
+		return err
+	} else if err == nil && !sourceCopyExpected {
+		return errors.New("source copy should not have been written")
+	}
 	return nil
 }
 

@@ -103,6 +103,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^"(\d+)" transcoded segments and manifests have been written to disk for profiles "([^"]*)" within "(\d+)" seconds$`, stepContext.TranscodedSegmentsWrittenToDiskWithinSeconds)
 	ctx.Step(`^the source playback manifest is written to storage within "(\d+)" seconds$`, stepContext.SourcePlaybackManifestWrittenToDisk)
 	ctx.Step(`^I receive a "([^"]*)" callback within "(\d+)" seconds$`, stepContext.CheckCallback)
+	ctx.Step(`^a source copy (has|has not) been written to disk$`, stepContext.SourceCopyWrittenToDisk)
 
 	ctx.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
 		if app != nil && app.Process != nil {

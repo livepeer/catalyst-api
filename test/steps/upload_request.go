@@ -5,8 +5,9 @@ import (
 )
 
 type Output struct {
-	HLS string `json:"hls,omitempty"`
-	MP4 string `json:"mp4,omitempty"`
+	HLS       string `json:"hls,omitempty"`
+	MP4       string `json:"mp4,omitempty"`
+	SourceMp4 bool   `json:"source_mp4"`
 }
 
 type OutputLocation struct {
