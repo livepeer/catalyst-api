@@ -262,6 +262,43 @@ func (mc *mac) handleStreamBuffer(ctx context.Context, payload *misttriggers.Str
 	return nil
 }
 
+func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
+	if len(lines) < 3 {
+		glog.Errorf("Expected 3 lines, got %d, request \n%s", len(lines), rawRequest)
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("false"))
+		return false
+	}
+	protocol := lines[2]
+	// RTMP PUSH_END sends CONN_CLOSE too, but it has empty last line
+	// TSSRT PUSH_END also sends CONN_CLOSE, but it has an empty _second_ line.
+	// TODO FIXME this was a quick hack to unbreak TSSRT and could break at any time.
+	// The right way to solve this is to "Use the STREAM_BUFFER trigger and look for
+	// the EMPTY state field in the payload."
+	if (protocol == "RTMP" && len(lines[3]) > 0) || (protocol == "TSSRT" && len(lines[1]) > 0) {
+		playbackID := strings.TrimPrefix(lines[0], streamPlaybackPrefix)
+		if mc.baseStreamName != "" && strings.Contains(playbackID, "+") {
+			playbackID = strings.Split(playbackID, "+")[1]
+		}
+		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
+			glog.Infof("Setting stream's protocol=%s manifestID=%s playbackID=%s active status to false", protocol, info.id, playbackID)
+			_, err := mc.lapi.SetActive(info.id, false, info.startedAt)
+			if err != nil {
+				glog.Error(err)
+			}
+			mc.emitStreamStateEvent(info.stream, data.StreamState{Active: false})
+			info.mu.Lock()
+			info.stopped = true
+			info.mu.Unlock()
+			mc.removeInfoDelayed(playbackID, info.done)
+			metrics.StopStream(true)
+		}
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("yes"))
+	return true
+}
+
 func (mc *mac) triggerDefaultStream(w http.ResponseWriter, r *http.Request, lines []string, trigger string) bool {
 	if mc.balancerHost == "" {
 		glog.V(model.VERBOSE).Infof("Request %s: (%d lines) responded with forbidden", trigger, len(lines))
@@ -674,6 +711,8 @@ func (mc *mac) HandleDefaultStreamTrigger() httprouter.Handle {
 			doLogRequestEnd = mc.triggerPushOutStart(w, r, lines, bs)
 		case "PUSH_END":
 			doLogRequestEnd = mc.triggerPushEnd(w, r, lines, bs)
+		case "CONN_CLOSE":
+			doLogRequestEnd = mc.triggerConnClose(w, r, lines, bs)
 		default:
 			glog.Errorf("Got unsupported trigger: '%s'", trigger)
 			w.WriteHeader(http.StatusBadRequest)
