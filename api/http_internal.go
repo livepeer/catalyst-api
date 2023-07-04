@@ -78,9 +78,6 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 
 	if cli.ShouldMapic() {
-		// Endpoint to receive "Triggers" (callbacks) from Mist
-		router.POST("/mapic", withLogging(mapic.HandleDefaultStreamTrigger()))
-
 		// Hacky combined metrics handler. To be refactored away with mapic.
 		router.GET("/metrics", concatHandlers(promhttp.Handler(), mapic.MetricsHandler()))
 	} else {

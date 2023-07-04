@@ -2,32 +2,49 @@ package misttriggers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
+	"github.com/golang/glog"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/errors"
 )
 
 type PushEndPayload struct {
+	PushID            int
 	StreamName        string
 	Destination       string
 	ActualDestination string
 	Last10LogLines    string
-	PushStatus        string
+	PushStatus        *clients.MistPushStats
 }
 
-func ParsePushEndPayload(payload MistTriggerBody) (PushEndPayload, error) {
-	lines := payload.Lines()
+func ParsePushEndPayload(body MistTriggerBody) (PushEndPayload, error) {
+	lines := body.Lines()
 	if len(lines) != 6 {
-		return PushEndPayload{}, fmt.Errorf("expected 6 lines in PUSH_END payload but got %d. Payload: %s", len(lines), payload)
+		return PushEndPayload{}, fmt.Errorf("expected 6 lines in PUSH_END payload but got %d. Payload: %s", len(lines), body)
+	}
+
+	pushId, err := strconv.Atoi(lines[0])
+	if err != nil {
+		return PushEndPayload{}, fmt.Errorf("error converting pushId to number pushId=%s err=%w", lines[0], err)
+	}
+
+	stats := &clients.MistPushStats{}
+	err = json.Unmarshal([]byte(lines[5]), stats)
+	if err != nil {
+		return PushEndPayload{}, fmt.Errorf("error unmarhsaling PushStatus: %w", err)
 	}
 
 	return PushEndPayload{
+		PushID:            pushId,
 		StreamName:        lines[1],
 		Destination:       lines[2],
 		ActualDestination: lines[3],
 		Last10LogLines:    lines[4],
-		PushStatus:        lines[5],
+		PushStatus:        stats,
 	}, nil
 }
 
@@ -42,10 +59,16 @@ func ParsePushEndPayload(payload MistTriggerBody) (PushEndPayload, error) {
 //	target URI, afterwards, as actually used (string)
 //	last 10 log messages (JSON array string)
 //	most recent push status (JSON object string)
-func (d *MistCallbackHandlersCollection) TriggerPushEnd(ctx context.Context, w http.ResponseWriter, req *http.Request, payload MistTriggerBody) {
-	_, err := ParsePushEndPayload(payload)
+func (d *MistCallbackHandlersCollection) TriggerPushEnd(ctx context.Context, w http.ResponseWriter, req *http.Request, body MistTriggerBody) {
+	payload, err := ParsePushEndPayload(body)
 	if err != nil {
 		errors.WriteHTTPBadRequest(w, "Error parsing PUSH_END payload", err)
+		return
+	}
+	err = d.broker.TriggerPushEnd(ctx, &payload)
+	if err != nil {
+		glog.Infof("Error handling PUSH_END payload error=%q payload=%q", err, string(body))
+		errors.WriteHTTPInternalServerError(w, "Error handling PUSH_END payload", err)
 		return
 	}
 }

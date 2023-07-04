@@ -36,16 +36,16 @@ func ParsePushRewritePayload(payload MistTriggerBody) (PushRewritePayload, error
 	}, nil
 }
 
-func (d *MistCallbackHandlersCollection) TriggerPushRewrite(ctx context.Context, w http.ResponseWriter, req *http.Request, payload MistTriggerBody) {
-	body, err := ParsePushRewritePayload(payload)
+func (d *MistCallbackHandlersCollection) TriggerPushRewrite(ctx context.Context, w http.ResponseWriter, req *http.Request, body MistTriggerBody) {
+	payload, err := ParsePushRewritePayload(body)
 	if err != nil {
-		glog.Infof("Error parsing PUSH_REWRITE payload error=%q payload=%q", err, string(payload))
+		glog.Infof("Error parsing PUSH_REWRITE payload error=%q payload=%q", err, string(body))
 		errors.WriteHTTPBadRequest(w, "Error parsing PUSH_REWRITE payload", err)
 		return
 	}
-	resp, err := d.broker.TriggerPushRewrite(ctx, &body)
+	resp, err := d.broker.TriggerPushRewrite(ctx, &payload)
 	if err != nil {
-		glog.Infof("Error handling PUSH_REWRITE payload error=%q payload=%q", err, string(payload))
+		glog.Infof("Error handling PUSH_REWRITE payload error=%q payload=%q", err, string(body))
 		errors.WriteHTTPInternalServerError(w, "Error handling PUSH_REWRITE payload", err)
 		return
 	}

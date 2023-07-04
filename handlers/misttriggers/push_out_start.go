@@ -3,11 +3,28 @@ package misttriggers
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 
+	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/errors"
 )
+
+type PushOutStartPayload struct {
+	StreamName string
+	URL        string
+}
+
+func ParsePushOutStartPayload(body MistTriggerBody) (PushOutStartPayload, error) {
+	lines := body.Lines()
+	if len(lines) != 2 {
+		return PushOutStartPayload{}, fmt.Errorf("expected 2 lines in PUSH_OUT_START payload but lines=%d payload=%s", len(lines), body)
+	}
+
+	return PushOutStartPayload{
+		StreamName: lines[0],
+		URL:        lines[1],
+	}, nil
+}
 
 // TriggerPushOutStart responds to PUSH_OUT_START trigger
 // This trigger is run right before an outgoing push is started. This trigger is stream-specific and must be blocking.
@@ -15,16 +32,21 @@ import (
 //
 // stream name (string)
 // push target URI (string)
-func (d *MistCallbackHandlersCollection) TriggerPushOutStart(ctx context.Context, w http.ResponseWriter, req *http.Request, payload MistTriggerBody) {
-	lines := payload.Lines()
-	if len(lines) != 2 {
-		errors.WriteHTTPBadRequest(w, "Bad request payload", fmt.Errorf("unknown payload '%s'", string(payload)))
+func (d *MistCallbackHandlersCollection) TriggerPushOutStart(ctx context.Context, w http.ResponseWriter, req *http.Request, body MistTriggerBody) {
+	payload, err := ParsePushOutStartPayload(body)
+	if err != nil {
+		glog.Infof("Error parsing PUSH_OUT_START payload error=%q payload=%q", err, string(body))
+		errors.WriteHTTPBadRequest(w, "Error parsing PUSH_OUT_START payload", err)
 		return
 	}
-	// streamName := lines[0]
-	destination := lines[1]
-	var destinationToReturn = destination
-	if _, err := w.Write([]byte(destinationToReturn)); err != nil {
-		log.Printf("TriggerPushOutStart failed to send rewritten url: %v", err)
+	resp, err := d.broker.TriggerPushOutStart(ctx, &payload)
+	if err != nil {
+		glog.Infof("Error handling PUSH_OUT_START payload error=%q payload=%q", err, string(body))
+		errors.WriteHTTPInternalServerError(w, "Error handling PUSH_OUT_START payload", err)
+		return
 	}
+	// Flushing necessary here for Mist to handle an empty response body
+	flusher := w.(http.Flusher)
+	flusher.Flush()
+	w.Write([]byte(resp)) // nolint:errcheck
 }

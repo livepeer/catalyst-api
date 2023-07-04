@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/mapic/model"
 	"github.com/livepeer/catalyst-api/mapic/utils/uhttp"
 )
@@ -83,7 +84,7 @@ type (
 
 	MistStats struct {
 		StreamsStats map[string]*StreamStats `json:"stats_streams"`
-		PushList     []*Push                 `json:"push_list"`
+		PushList     []*clients.MistPush     `json:"push_list"`
 	}
 
 	Config struct {
@@ -152,21 +153,6 @@ type (
 	StreamStats struct {
 		Clients     int
 		MediaTimeMs int64
-	}
-
-	Push struct {
-		ID           int64
-		Stream       string
-		OriginalURI  string
-		EffectiveURI string
-		Stats        *PushStats
-	}
-
-	PushStats struct {
-		ActiveSeconds int64 `json:"active_seconds"`
-		Bytes         int64 `json:"bytes"`
-		MediaTime     int64 `json:"mediatime"`
-		Tracks        []int `json:"tracks"`
 	}
 
 	authorize struct {
@@ -604,36 +590,9 @@ func Presets2Profiles(presets []string) []Profile {
 
 func (s *StreamStats) UnmarshalJSON(data []byte) error {
 	var tmp StreamStats
-	if err := unmarshalJSONArray(data, &tmp.Clients, &tmp.MediaTimeMs); err != nil {
+	if err := clients.UnmarshalJSONArray(data, &tmp.Clients, &tmp.MediaTimeMs); err != nil {
 		return err
 	}
 	*s = tmp
-	return nil
-}
-
-func (p *Push) UnmarshalJSON(data []byte) error {
-	// this field is undocumented and shows up as null everytime.
-	var unknown json.RawMessage
-	var tmp Push
-	if err := unmarshalJSONArray(data, &tmp.ID, &tmp.Stream, &tmp.OriginalURI, &tmp.EffectiveURI, &unknown, &tmp.Stats); err != nil {
-		return err
-	}
-	*p = tmp
-	return nil
-}
-
-func unmarshalJSONArray(data []byte, values ...interface{}) error {
-	var valuesData []json.RawMessage
-	if err := json.Unmarshal(data, &valuesData); err != nil {
-		return err
-	}
-	if len(valuesData) > len(values) {
-		valuesData = valuesData[:len(values)]
-	}
-	for i, vd := range valuesData {
-		if err := json.Unmarshal(vd, values[i]); err != nil {
-			return err
-		}
-	}
 	return nil
 }

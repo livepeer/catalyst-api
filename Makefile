@@ -42,6 +42,11 @@ generate:
 test: generate
 	go test -race ./...
 
+.PHONY: test
+coverage: generate
+	go test ./... --covermode=atomic -coverprofile=coverage.out
+	go tool cover -func=coverage.out
+
 .PHONY: tidy
 tidy:
 	go mod tidy

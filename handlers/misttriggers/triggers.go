@@ -43,9 +43,14 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 		}
 
 		triggerName := req.Header.Get("X-Trigger")
+		mistVersion := req.Header.Get("X-Version")
+		if mistVersion == "" {
+			mistVersion = req.UserAgent()
+		}
 		log.LogNoRequestID(
 			"Received Mist Trigger",
 			"trigger_name", triggerName,
+			"mist_version", mistVersion,
 			"payload", log.RedactLogs(string(payload), "\n"),
 		)
 

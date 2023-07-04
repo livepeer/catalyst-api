@@ -90,6 +90,48 @@ type MistStreamInfo struct {
 	Error  string                 `json:"error,omitempty"`
 }
 
+type MistPush struct {
+	ID           int64
+	Stream       string
+	OriginalURI  string
+	EffectiveURI string
+	Stats        *MistPushStats
+}
+
+func (p *MistPush) UnmarshalJSON(data []byte) error {
+	// this field is undocumented and shows up as null everytime.
+	var unknown json.RawMessage
+	var tmp MistPush
+	if err := UnmarshalJSONArray(data, &tmp.ID, &tmp.Stream, &tmp.OriginalURI, &tmp.EffectiveURI, &unknown, &tmp.Stats); err != nil {
+		return err
+	}
+	*p = tmp
+	return nil
+}
+
+func UnmarshalJSONArray(data []byte, values ...interface{}) error {
+	var valuesData []json.RawMessage
+	if err := json.Unmarshal(data, &valuesData); err != nil {
+		return err
+	}
+	if len(valuesData) > len(values) {
+		valuesData = valuesData[:len(values)]
+	}
+	for i, vd := range valuesData {
+		if err := json.Unmarshal(vd, values[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type MistPushStats struct {
+	ActiveSeconds int64 `json:"active_seconds"`
+	Bytes         int64 `json:"bytes"`
+	MediaTime     int64 `json:"mediatime"`
+	Tracks        []int `json:"tracks"`
+}
+
 var mistRetryableClient = newRetryableClient(nil)
 
 func (mc *MistClient) AddStream(streamName, sourceUrl string) error {
