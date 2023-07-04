@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/video"
 	"github.com/stretchr/testify/require"
@@ -28,13 +30,21 @@ const validMediaManifest = `#EXTM3U
 5000.ts
 #EXT-X-ENDLIST`
 
+func DownloadRetryBackoffFailInstantly() backoff.BackOff {
+	return backoff.WithMaxRetries(backoff.NewConstantBackOff(0*time.Second), 0)
+}
+
 func TestDownloadRenditionManifestFailsWhenItCantFindTheManifest(t *testing.T) {
+	DownloadRetryBackoff = DownloadRetryBackoffFailInstantly
+	defer func() { DownloadRetryBackoff = DownloadRetryBackoffLong }()
 	_, err := DownloadRenditionManifest("blah", "/tmp/something/x.m3u8")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "error downloading manifest")
 }
 
 func TestDownloadRenditionManifestFailsWhenItCantParseTheManifest(t *testing.T) {
+	DownloadRetryBackoff = DownloadRetryBackoffFailInstantly
+	defer func() { DownloadRetryBackoff = DownloadRetryBackoffLong }()
 	manifestFile, err := os.CreateTemp(os.TempDir(), "manifest-*.m3u8")
 	require.NoError(t, err)
 	_, err = manifestFile.WriteString("This isn't a manifest!")
