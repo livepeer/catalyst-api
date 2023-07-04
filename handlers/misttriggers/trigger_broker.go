@@ -41,10 +41,17 @@ type TriggerBroker interface {
 
 	OnLiveTrackList(func(context.Context, *LiveTrackListPayload) error)
 	TriggerLiveTrackList(context.Context, *LiveTrackListPayload) error
+
+	// note: an empty string rejects the push. to proceed unchanged, return payload.PushTargetURL
+	OnPushOutStart(func(context.Context, *PushOutStartPayload) (string, error))
+	TriggerPushOutStart(context.Context, *PushOutStartPayload) (string, error)
+
+	OnPushEnd(func(context.Context, *PushEndPayload) error)
+	TriggerPushEnd(context.Context, *PushEndPayload) error
 }
 
 type TriggerPayload interface {
-	StreamBufferPayload | PushEndPayload | PushRewritePayload | LiveTrackListPayload
+	StreamBufferPayload | PushEndPayload | PushRewritePayload | LiveTrackListPayload | PushOutStartPayload
 }
 
 func NewTriggerBroker() TriggerBroker {
@@ -55,11 +62,13 @@ type triggerBroker struct {
 	streamBufferFuncs  funcGroup[StreamBufferPayload]
 	pushRewriteFuncs   funcGroup[PushRewritePayload]
 	liveTrackListFuncs funcGroup[LiveTrackListPayload]
+	pushOutStartFuncs  funcGroup[PushOutStartPayload]
+	pushEndFuncs       funcGroup[PushEndPayload]
 }
 
 var triggers = map[string]bool{
 	TRIGGER_PUSH_END:        false,
-	TRIGGER_PUSH_OUT_START:  false,
+	TRIGGER_PUSH_OUT_START:  true,
 	TRIGGER_PUSH_REWRITE:    true,
 	TRIGGER_STREAM_BUFFER:   false,
 	TRIGGER_LIVE_TRACK_LIST: false,
@@ -100,6 +109,23 @@ func (b *triggerBroker) OnLiveTrackList(cb func(context.Context, *LiveTrackListP
 
 func (b *triggerBroker) TriggerLiveTrackList(ctx context.Context, payload *LiveTrackListPayload) error {
 	_, err := b.liveTrackListFuncs.Trigger(ctx, payload)
+	return err
+}
+
+func (b *triggerBroker) OnPushOutStart(cb func(context.Context, *PushOutStartPayload) (string, error)) {
+	b.pushOutStartFuncs.Register(cb)
+}
+
+func (b *triggerBroker) TriggerPushOutStart(ctx context.Context, payload *PushOutStartPayload) (string, error) {
+	return b.pushOutStartFuncs.Trigger(ctx, payload)
+}
+
+func (b *triggerBroker) OnPushEnd(cb func(context.Context, *PushEndPayload) error) {
+	b.pushEndFuncs.RegisterNoResponse(cb)
+}
+
+func (b *triggerBroker) TriggerPushEnd(ctx context.Context, payload *PushEndPayload) error {
+	_, err := b.pushEndFuncs.Trigger(ctx, payload)
 	return err
 }
 

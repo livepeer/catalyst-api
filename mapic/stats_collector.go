@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/mapic/apis/mist"
 	census "github.com/livepeer/catalyst-api/mapic/metrics"
 	"github.com/livepeer/go-api-client"
@@ -176,7 +177,7 @@ func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *stream
 // metrics for our infrastrucutre and that's what we call them from here on.
 type streamMetrics struct {
 	stream *mist.StreamStats
-	pushes []*mist.Push
+	pushes []*clients.MistPush
 }
 
 func compileStreamMetrics(mistStats *mist.MistStats) map[string]*streamMetrics {

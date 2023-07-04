@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -14,7 +13,6 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/mapic/apis/mist"
@@ -43,8 +41,6 @@ const eventMultistreamDisconnected = "multistream.disconnected"
 type (
 	// IMac creates new Mist API Connector application
 	IMac interface {
-		SetupTriggers(ownURI string) error
-		HandleDefaultStreamTrigger() httprouter.Handle
 		Start(ctx context.Context) error
 		MetricsHandler() http.Handler
 	}
@@ -117,6 +113,8 @@ func (mc *mac) Start(ctx context.Context) error {
 	mc.broker.OnStreamBuffer(mc.handleStreamBuffer)
 	mc.broker.OnPushRewrite(mc.handlePushRewrite)
 	mc.broker.OnLiveTrackList(mc.handleLiveTrackList)
+	mc.broker.OnPushOutStart(mc.handlePushOutStart)
+	mc.broker.OnPushEnd(mc.handlePushEnd)
 
 	lapi, _ := api.NewAPIClientGeolocated(api.ClientOptions{
 		Server:      mc.config.APIServer,
@@ -128,9 +126,6 @@ func (mc *mac) Start(ctx context.Context) error {
 	ensureLoggedIn(mapi, mc.config.MistConnectTimeout)
 	mc.mapi = mapi
 
-	if err := mc.SetupTriggers(mc.config.OwnInternalURL() + "/mapic"); err != nil {
-		return err
-	}
 	if mc.balancerHost != "" && !strings.Contains(mc.balancerHost, ":") {
 		mc.balancerHost = mc.balancerHost + ":8042" // must set default port for Mist's Load Balancer
 	}
@@ -342,27 +337,21 @@ func (mc *mac) handleLiveTrackList(ctx context.Context, payload *misttriggers.Li
 	return nil
 }
 
-func (mc *mac) triggerPushOutStart(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("yes"))
-	if len(lines) < 2 {
-		glog.Errorf("Expected 2 lines, got %d, request \n%s", len(lines), rawRequest)
-		return false
-	}
+func (mc *mac) handlePushOutStart(ctx context.Context, payload *misttriggers.PushOutStartPayload) (string, error) {
 	go func() {
-		playbackID := mistStreamName2playbackID(lines[0])
+		playbackID := mistStreamName2playbackID(payload.StreamName)
 		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
 			info.mu.Lock()
 			defer info.mu.Unlock()
-			if pushInfo, ok := info.pushStatus[lines[1]]; ok {
+			if pushInfo, ok := info.pushStatus[payload.URL]; ok {
 				go mc.waitPush(info, pushInfo)
 			} else {
-				glog.Errorf("For stream playbackID=%s got unknown RTMP push %s", playbackID, lines[1])
+				glog.Errorf("For stream playbackID=%s got unknown RTMP push %s", playbackID, payload.URL)
 			}
 		}
 
 	}()
-	return true
+	return payload.URL, nil
 }
 
 // waits for RTMP push error
@@ -428,20 +417,14 @@ func (mc *mac) emitAmqpEvent(exchange, key string, evt data.Event) {
 	}
 }
 
-func (mc *mac) triggerPushEnd(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("yes"))
-	if len(lines) < 3 {
-		glog.Errorf("Expected 6 lines, got %d, request \n%s", len(lines), rawRequest)
-		return false
-	}
+func (mc *mac) handlePushEnd(ctx context.Context, payload *misttriggers.PushEndPayload) error {
 	go func() {
-		playbackID := mistStreamName2playbackID(lines[1])
+		playbackID := mistStreamName2playbackID(payload.StreamName)
 		// glog.Infof("for video %s got %d video tracks", playbackID, videoTracksNum)
 		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
 			info.mu.Lock()
 			defer info.mu.Unlock()
-			if pushInfo, ok := info.pushStatus[lines[2]]; ok {
+			if pushInfo, ok := info.pushStatus[payload.Destination]; ok {
 				if pushInfo.pushStartEmitted {
 					// emit normal push.end
 					mc.emitWebhookEvent(info.stream, pushInfo, eventMultistreamDisconnected)
@@ -451,63 +434,11 @@ func (mc *mac) triggerPushEnd(w http.ResponseWriter, r *http.Request, lines []st
 					mc.emitWebhookEvent(info.stream, pushInfo, eventMultistreamError)
 				}
 			} else {
-				glog.Errorf("For stream playbackID=%s got unknown RTMP push %s", playbackID, lines[1])
+				glog.Errorf("For stream playbackID=%s got unknown RTMP push %s", playbackID, payload.StreamName)
 			}
 		}
 	}()
-	return true
-}
-
-func (mc *mac) HandleDefaultStreamTrigger() httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			w.Write([]byte("false"))
-			return
-		}
-		b, err := io.ReadAll(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("false"))
-			return
-		}
-		bs := string(b)
-		lines := strings.Split(bs, "\n")
-		trigger := r.Header.Get("X-Trigger")
-		if trigger == "" {
-			glog.Errorf("Trigger not defined in request %s", bs)
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("false"))
-			return
-		}
-		mistVersion := r.Header.Get("X-Version")
-		if mistVersion == "" {
-			mistVersion = r.UserAgent()
-		}
-		glog.V(model.VERBOSE).Infof("Got request (%s) mist=%s (%d lines): `%s`", trigger, mistVersion, len(lines), strings.Join(lines, `\n`))
-		// glog.V(model.VERBOSE).Infof("User agent: %s", r.UserAgent())
-		// glog.V(model.VERBOSE).Infof("Mist version: %s", r.Header.Get("X-Version"))
-		started := time.Now()
-		doLogRequestEnd := false
-		defer func(s time.Time, t string) {
-			if doLogRequestEnd {
-				took := time.Since(s)
-				glog.V(model.VERBOSE).Infof("Request %s ended in %s", t, took)
-				metrics.TriggerDuration(t, took)
-			}
-		}(started, trigger)
-
-		switch trigger {
-		case "PUSH_OUT_START":
-			doLogRequestEnd = mc.triggerPushOutStart(w, r, lines, bs)
-		case "PUSH_END":
-			doLogRequestEnd = mc.triggerPushEnd(w, r, lines, bs)
-		default:
-			glog.Errorf("Got unsupported trigger: '%s'", trigger)
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("false"))
-		}
-	}
+	return nil
 }
 
 func (mc *mac) removeInfoDelayed(playbackID string, done chan struct{}) {
@@ -569,46 +500,6 @@ func (mc *mac) createMistStream(streamName string, stream *api.Stream, skipTrans
 	err := mc.mapi.CreateStream(streamName, stream.Presets,
 		LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID, source, mc.mistHardcodedBroadcasters, skipTranscoding, audio, true)
 	// err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", "http://host.docker.internal:3004/api/stream/"+stream.ID)
-	return err
-}
-
-func (mc *mac) addTrigger(triggers mist.TriggersMap, name, ownURI, def, params string, sync bool) bool {
-	nt := mist.Trigger{
-		Default: def,
-		Handler: ownURI,
-		Sync:    sync,
-		Params:  params,
-	}
-	pr := triggers[name]
-	found := false
-	for _, trig := range pr {
-		if trig.Default == nt.Default && trig.Handler == nt.Handler && trig.Sync == nt.Sync && trig.Params == params {
-			found = true
-			break
-		}
-	}
-	if !found {
-		pr = append(pr, nt)
-		triggers[name] = pr
-	}
-	return !found
-}
-
-func (mc *mac) SetupTriggers(ownURI string) error {
-	var err error
-	// setup base stream if needed
-	if mc.baseStreamName != "" {
-		apiURL := mc.lapi.GetServer() + "/api/stream/" + mc.baseStreamName
-		presets := []string{"P144p30fps16x9"}
-		// base stream created with audio disabled
-		err = mc.mapi.CreateStream(mc.baseStreamName, presets, nil, "1", apiURL, mc.mistStreamSource, mc.mistHardcodedBroadcasters, false, false, false)
-		if err != nil {
-			glog.Error(err)
-			return err
-		}
-		// create second stream with audio enabled - used for stream with recording enabled
-		err = mc.mapi.CreateStream(mc.baseStreamName+audioEnabledStreamSuffix, presets, nil, "1", apiURL, mc.mistStreamSource, mc.mistHardcodedBroadcasters, false, true, false)
-	}
 	return err
 }
 
