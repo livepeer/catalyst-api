@@ -48,10 +48,13 @@ type TriggerBroker interface {
 
 	OnPushEnd(func(context.Context, *PushEndPayload) error)
 	TriggerPushEnd(context.Context, *PushEndPayload) error
+
+	OnUserNew(func(context.Context, *UserNewPayload) (bool, error))
+	TriggerUserNew(context.Context, *UserNewPayload) (string, error)
 }
 
 type TriggerPayload interface {
-	StreamBufferPayload | PushEndPayload | PushRewritePayload | LiveTrackListPayload | PushOutStartPayload
+	StreamBufferPayload | PushEndPayload | PushRewritePayload | LiveTrackListPayload | PushOutStartPayload | UserNewPayload
 }
 
 func NewTriggerBroker() TriggerBroker {
@@ -64,6 +67,7 @@ type triggerBroker struct {
 	liveTrackListFuncs funcGroup[LiveTrackListPayload]
 	pushOutStartFuncs  funcGroup[PushOutStartPayload]
 	pushEndFuncs       funcGroup[PushEndPayload]
+	userNewFuncs       funcGroup[UserNewPayload]
 }
 
 var triggers = map[string]bool{
@@ -129,6 +133,14 @@ func (b *triggerBroker) TriggerPushEnd(ctx context.Context, payload *PushEndPayl
 	return err
 }
 
+func (b *triggerBroker) OnUserNew(cb func(context.Context, *UserNewPayload) (bool, error)) {
+	b.userNewFuncs.RegisterBoolean(cb)
+}
+
+func (b *triggerBroker) TriggerUserNew(ctx context.Context, payload *UserNewPayload) (string, error) {
+	return b.userNewFuncs.Trigger(ctx, payload)
+}
+
 // a funcGroup represents a collection of callback functions such that we can register new
 // callbacks in a thread-safe manner.
 type funcGroup[T TriggerPayload] struct {
@@ -148,6 +160,18 @@ func (g *funcGroup[T]) RegisterNoResponse(cb func(context.Context, *T) error) {
 	wrapped := func(ctx context.Context, payload *T) (string, error) {
 		err := cb(ctx, payload)
 		return "", err
+	}
+	g.Register(wrapped)
+}
+
+// add a function that returns "true" or "false" to Mist
+func (g *funcGroup[T]) RegisterBoolean(cb func(context.Context, *T) (bool, error)) {
+	wrapped := func(ctx context.Context, payload *T) (string, error) {
+		result, err := cb(ctx, payload)
+		if result {
+			return "true", err
+		}
+		return "false", err
 	}
 	g.Register(wrapped)
 }

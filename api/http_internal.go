@@ -87,8 +87,8 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	// Endpoint for handling STREAM_SOURCE requests
 	router.POST("/STREAM_SOURCE", withLogging(geoHandlers.StreamSourceHandler()))
 
-	// Endpoint for handling USER_NEW requests
-	router.POST("/USER_NEW", withLogging(accessControlHandlers.TriggerHandler()))
+	// TODO FIXME XXX this is not the right place for this call to live
+	broker.OnUserNew(accessControlHandlers.HandleUserNew)
 
 	// Public Catalyst API
 	router.POST("/api/vod",

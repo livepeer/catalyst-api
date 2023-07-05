@@ -37,14 +37,14 @@ func TestItCanParseAValidPushRewritePayload(t *testing.T) {
 	require.Equal(t, p.StreamName, "c447-3l8v-1vmz-ej5t")
 }
 
-func ItCanRejectABadPushRewritePayload(t *testing.T) {
+func TestItCanRejectABadPushRewritePayload(t *testing.T) {
 	_, err := ParsePushRewritePayload(pushRewritePayloadInvalid)
 	require.Error(t, err)
 	_, err = ParsePushRewritePayload(pushRewritePayloadBadUrl)
 	require.Error(t, err)
 }
 
-func doRequest(t *testing.T, payload MistTriggerBody, cb func(ctx context.Context, prp *PushRewritePayload) (string, error)) *httptest.ResponseRecorder {
+func doPushRewriteRequest(t *testing.T, payload MistTriggerBody, cb func(ctx context.Context, prp *PushRewritePayload) (string, error)) *httptest.ResponseRecorder {
 	broker := NewTriggerBroker()
 	broker.OnPushRewrite(cb)
 	d := NewMistCallbackHandlersCollection(config.Cli{}, broker)
@@ -55,8 +55,8 @@ func doRequest(t *testing.T, payload MistTriggerBody, cb func(ctx context.Contex
 	return rr
 }
 
-func TestItCanHandlePushRewriteRequests(t *testing.T) {
-	rr := doRequest(t, pushRewritePayload, func(ctx context.Context, prp *PushRewritePayload) (string, error) {
+func TestPushRewriteCanHandlePushRewriteRequests(t *testing.T) {
+	rr := doPushRewriteRequest(t, pushRewritePayload, func(ctx context.Context, prp *PushRewritePayload) (string, error) {
 		require.Equal(t, prp.StreamName, "c447-3l8v-1vmz-ej5t")
 		return "funky-stream", nil
 	})
@@ -64,8 +64,8 @@ func TestItCanHandlePushRewriteRequests(t *testing.T) {
 	require.Equal(t, rr.Body.String(), "funky-stream")
 }
 
-func TestItCanRejectPushRewriteRequests(t *testing.T) {
-	rr := doRequest(t, pushRewritePayload, func(ctx context.Context, prp *PushRewritePayload) (string, error) {
+func TestPushRewriteCanRejectPushRewriteRequests(t *testing.T) {
+	rr := doPushRewriteRequest(t, pushRewritePayload, func(ctx context.Context, prp *PushRewritePayload) (string, error) {
 		// Proper way to reject Mist
 		return "", nil
 	})
@@ -73,21 +73,21 @@ func TestItCanRejectPushRewriteRequests(t *testing.T) {
 	require.Equal(t, rr.Body.String(), "")
 }
 
-func TestItCanHandleFailureToHandle(t *testing.T) {
-	rr := doRequest(t, pushRewritePayload, func(ctx context.Context, prp *PushRewritePayload) (string, error) {
+func TestPushRewriteCanHandleFailureToHandle(t *testing.T) {
+	rr := doPushRewriteRequest(t, pushRewritePayload, func(ctx context.Context, prp *PushRewritePayload) (string, error) {
 		return "", fmt.Errorf("something went wrong")
 	})
 	require.Equal(t, rr.Result().StatusCode, 500)
 }
 
-func TestItCanErrorPushRewriteRequests(t *testing.T) {
-	rr := doRequest(t, pushRewritePayloadBadUrl, func(ctx context.Context, prp *PushRewritePayload) (string, error) {
+func TestPushRewriteCanErrorPushRewriteRequests(t *testing.T) {
+	rr := doPushRewriteRequest(t, pushRewritePayloadBadUrl, func(ctx context.Context, prp *PushRewritePayload) (string, error) {
 		require.Fail(t, "test should be failing before it gets to me")
 		return "", nil
 	})
 	require.Equal(t, rr.Result().StatusCode, 400)
 
-	rr = doRequest(t, pushRewritePayloadInvalid, func(ctx context.Context, prp *PushRewritePayload) (string, error) {
+	rr = doPushRewriteRequest(t, pushRewritePayloadInvalid, func(ctx context.Context, prp *PushRewritePayload) (string, error) {
 		require.Fail(t, "test should be failing before it gets to me")
 		return "", nil
 	})
