@@ -51,10 +51,13 @@ type TriggerBroker interface {
 
 	OnUserNew(func(context.Context, *UserNewPayload) (bool, error))
 	TriggerUserNew(context.Context, *UserNewPayload) (string, error)
+
+	OnStreamSource(func(context.Context, *StreamSourcePayload) (string, error))
+	TriggerStreamSource(context.Context, *StreamSourcePayload) (string, error)
 }
 
 type TriggerPayload interface {
-	StreamBufferPayload | PushEndPayload | PushRewritePayload | LiveTrackListPayload | PushOutStartPayload | UserNewPayload
+	StreamBufferPayload | PushEndPayload | PushRewritePayload | LiveTrackListPayload | PushOutStartPayload | UserNewPayload | StreamSourcePayload
 }
 
 func NewTriggerBroker() TriggerBroker {
@@ -68,6 +71,7 @@ type triggerBroker struct {
 	pushOutStartFuncs  funcGroup[PushOutStartPayload]
 	pushEndFuncs       funcGroup[PushEndPayload]
 	userNewFuncs       funcGroup[UserNewPayload]
+	streamSourceFuncs  funcGroup[StreamSourcePayload]
 }
 
 var triggers = map[string]bool{
@@ -76,6 +80,8 @@ var triggers = map[string]bool{
 	TRIGGER_PUSH_REWRITE:    true,
 	TRIGGER_STREAM_BUFFER:   false,
 	TRIGGER_LIVE_TRACK_LIST: false,
+	TRIGGER_USER_NEW:        true,
+	TRIGGER_STREAM_SOURCE:   true,
 }
 
 func (b *triggerBroker) SetupMistTriggers(mist clients.MistAPIClient) error {
@@ -104,7 +110,7 @@ func (b *triggerBroker) OnPushRewrite(cb func(context.Context, *PushRewritePaylo
 }
 
 func (b *triggerBroker) TriggerPushRewrite(ctx context.Context, payload *PushRewritePayload) (string, error) {
-	return b.pushRewriteFuncs.Trigger(ctx, payload)
+	return b.pushRewriteFuncs.TriggerWithDefault(ctx, payload, payload.StreamName)
 }
 
 func (b *triggerBroker) OnLiveTrackList(cb func(context.Context, *LiveTrackListPayload) error) {
@@ -139,6 +145,14 @@ func (b *triggerBroker) OnUserNew(cb func(context.Context, *UserNewPayload) (boo
 
 func (b *triggerBroker) TriggerUserNew(ctx context.Context, payload *UserNewPayload) (string, error) {
 	return b.userNewFuncs.Trigger(ctx, payload)
+}
+
+func (b *triggerBroker) OnStreamSource(cb func(context.Context, *StreamSourcePayload) (string, error)) {
+	b.streamSourceFuncs.Register(cb)
+}
+
+func (b *triggerBroker) TriggerStreamSource(ctx context.Context, payload *StreamSourcePayload) (string, error) {
+	return b.streamSourceFuncs.Trigger(ctx, payload)
 }
 
 // a funcGroup represents a collection of callback functions such that we can register new
@@ -177,10 +191,14 @@ func (g *funcGroup[T]) RegisterBoolean(cb func(context.Context, *T) (bool, error
 }
 
 func (g *funcGroup[T]) Trigger(ctx context.Context, payload *T) (string, error) {
+	return g.TriggerWithDefault(ctx, payload, "")
+}
+
+func (g *funcGroup[T]) TriggerWithDefault(ctx context.Context, payload *T, defaultResponse string) (string, error) {
 	g.mutex.RLock()
 	defer g.mutex.RUnlock()
 	group, ctx := errgroup.WithContext(ctx)
-	ret := ""
+	ret := defaultResponse
 	for i, cb := range g.funcs {
 		i := i
 		cb := cb

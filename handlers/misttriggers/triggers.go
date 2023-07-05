@@ -20,6 +20,7 @@ const (
 	TRIGGER_STREAM_BUFFER   = "STREAM_BUFFER"
 	TRIGGER_LIVE_TRACK_LIST = "LIVE_TRACK_LIST"
 	TRIGGER_USER_NEW        = "USER_NEW"
+	TRIGGER_STREAM_SOURCE   = "STREAM_SOURCE"
 )
 
 type MistCallbackHandlersCollection struct {
@@ -71,6 +72,8 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 			d.TriggerLiveTrackList(ctx, w, req, body)
 		case TRIGGER_USER_NEW:
 			d.TriggerUserNew(ctx, w, req, body)
+		case TRIGGER_STREAM_SOURCE:
+			d.TriggerStreamSource(ctx, w, req, body)
 		default:
 			errors.WriteHTTPBadRequest(w, "Unsupported X-Trigger", fmt.Errorf("unknown trigger '%s'", triggerName))
 			return

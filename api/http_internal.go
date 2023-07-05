@@ -84,8 +84,8 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 		router.Handler("GET", "/metrics", promhttp.Handler())
 	}
 
-	// Endpoint for handling STREAM_SOURCE requests
-	router.POST("/STREAM_SOURCE", withLogging(geoHandlers.StreamSourceHandler()))
+	// TODO FIXME XXX this is not the right place for this call to live
+	broker.OnStreamSource(geoHandlers.HandleStreamSource)
 
 	// TODO FIXME XXX this is not the right place for this call to live
 	broker.OnUserNew(accessControlHandlers.HandleUserNew)

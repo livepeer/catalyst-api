@@ -3,7 +3,6 @@ package geolocation
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -14,6 +13,7 @@ import (
 	"github.com/livepeer/catalyst-api/balancer"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 )
 
 type GeolocationHandlersCollection struct {
@@ -77,44 +77,28 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 }
 
 // respond to a STREAM_SOURCE request from Mist
-func (c *GeolocationHandlersCollection) StreamSourceHandler() httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		lat := c.Config.NodeLatitude
-		lon := c.Config.NodeLongitude
-		// Workaround for https://github.com/DDVTECH/mistserver/issues/114
-		w.Header().Set("Transfer-Encoding", "chunked")
-		b, err := io.ReadAll(r.Body)
-		if err != nil {
-			glog.Errorf("error handling STREAM_SOURCE body=%s", err)
-			w.Write([]byte("push://")) // nolint:errcheck
-			return
-		}
-		streamName := string(b)
-		glog.V(7).Infof("got mist STREAM_SOURCE request=%s", streamName)
-
-		// if VOD source is detected, return empty response to use input URL as configured
-		if strings.HasPrefix(streamName, "catalyst_vod_") || strings.HasPrefix(streamName, "tr_src_") {
-			w.Write([]byte("")) // nolint:errcheck
-			return
-		}
-
-		latStr := fmt.Sprintf("%f", lat)
-		lonStr := fmt.Sprintf("%f", lon)
-		dtscURL, err := c.Balancer.MistUtilLoadSource(context.Background(), streamName, latStr, lonStr)
-		if err != nil {
-			glog.Errorf("error querying mist for STREAM_SOURCE: %s", err)
-			w.Write([]byte("push://")) // nolint:errcheck
-			return
-		}
-		outURL, err := c.Cluster.ResolveNodeURL(dtscURL)
-		if err != nil {
-			glog.Errorf("error finding STREAM_SOURCE: %s", err)
-			w.Write([]byte("push://")) // nolint:errcheck
-			return
-		}
-		glog.V(7).Infof("replying to Mist STREAM_SOURCE request=%s response=%s", streamName, outURL)
-		w.Write([]byte(outURL)) // nolint:errcheck
+func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, payload *misttriggers.StreamSourcePayload) (string, error) {
+	lat := c.Config.NodeLatitude
+	lon := c.Config.NodeLongitude
+	// if VOD source is detected, return empty response to use input URL as configured
+	if strings.HasPrefix(payload.StreamName, "catalyst_vod_") || strings.HasPrefix(payload.StreamName, "tr_src_") {
+		return "", nil
 	}
+
+	latStr := fmt.Sprintf("%f", lat)
+	lonStr := fmt.Sprintf("%f", lon)
+	dtscURL, err := c.Balancer.MistUtilLoadSource(context.Background(), payload.StreamName, latStr, lonStr)
+	if err != nil {
+		glog.Errorf("error querying mist for STREAM_SOURCE: %s", err)
+		return "push://", nil
+	}
+	outURL, err := c.Cluster.ResolveNodeURL(dtscURL)
+	if err != nil {
+		glog.Errorf("error finding STREAM_SOURCE: %s", err)
+		return "push://", nil
+	}
+	glog.V(7).Infof("replying to Mist STREAM_SOURCE request=%s response=%s", payload.StreamName, outURL)
+	return outURL, nil
 }
 
 func parsePlus(plusString string) (string, string) {
