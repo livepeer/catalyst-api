@@ -169,7 +169,7 @@ type Coordinator struct {
 	SourceOutputURL      *url.URL
 }
 
-func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB, VodDecryptPrivateKey *rsa.PrivateKey) (*Coordinator, error) {
+func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB, VodDecryptPrivateKey *rsa.PrivateKey, broadcasterURL string) (*Coordinator, error) {
 	if !strategy.IsValid() {
 		return nil, fmt.Errorf("invalid strategy: %s", strategy)
 	}
@@ -189,11 +189,18 @@ func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string,
 	if err != nil {
 		return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
 	}
+	broadcaster, err := clients.NewLocalBroadcasterClient(broadcasterURL)
+	if err != nil {
+		return nil, fmt.Errorf("cannot initalilze local broadcaster: %w", err)
+	}
 
 	return &Coordinator{
 		strategy:     strategy,
 		statusClient: statusClient,
-		pipeFfmpeg:   &ffmpeg{SourceOutputUrl: sourceOutputURL},
+		pipeFfmpeg: &ffmpeg{
+			SourceOutputUrl: sourceOutputURL,
+			Broadcaster:     broadcaster,
+		},
 		pipeExternal: &external{extTranscoder},
 		Jobs:         cache.New[*JobInfo](),
 		MetricsDB:    metricsDB,

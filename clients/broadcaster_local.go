@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/url"
 
-	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/video"
 )
 
@@ -20,17 +19,17 @@ type LocalBroadcasterClient struct {
 	broadcasterURL url.URL
 }
 
-func NewLocalBroadcasterClient(broadcasterURL string) (LocalBroadcasterClient, error) {
+func NewLocalBroadcasterClient(broadcasterURL string) (BroadcasterClient, error) {
 	u, err := url.Parse(broadcasterURL)
 	if err != nil {
-		return LocalBroadcasterClient{}, fmt.Errorf("error parsing local broadcaster URL %q: %s", config.DefaultBroadcasterURL, err)
+		return &LocalBroadcasterClient{}, fmt.Errorf("error parsing local broadcaster URL %q: %s", broadcasterURL, err)
 	}
-	return LocalBroadcasterClient{
+	return &LocalBroadcasterClient{
 		broadcasterURL: *u,
 	}, nil
 }
 
-func (c LocalBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumber int64, profiles []video.EncodedProfile, durationMillis int64, manifestID string) (TranscodeResult, error) {
+func (c *LocalBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumber int64, profiles []video.EncodedProfile, durationMillis int64, manifestID string) (TranscodeResult, error) {
 	conf := LivepeerTranscodeConfiguration{
 		TimeoutMultiplier: 10,
 	}

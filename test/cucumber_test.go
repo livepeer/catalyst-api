@@ -11,8 +11,8 @@ import (
 	"github.com/livepeer/catalyst-api/test/steps"
 )
 
-var baseURL = "http://127.0.0.1:8989"
-var baseInternalURL = "http://127.0.0.1:7979"
+var baseURL = "http://127.0.0.1:18989"
+var baseInternalURL = "http://127.0.0.1:17979"
 var sourceOutputDir string
 var app *exec.Cmd
 
@@ -48,7 +48,19 @@ func init() {
 
 func startApp() error {
 	sourceOutputDir = fmt.Sprintf("file://%s/%s/", os.TempDir(), "livepeer/source")
-	app = exec.Command("./app", "-private-bucket", "fixtures/playback-bucket", "-gate-url", "http://localhost:13000/api/access-control/gate", "-source-output", sourceOutputDir)
+	app = exec.Command(
+		"./app",
+		"-http-addr=127.0.0.1:18989",
+		"-http-internal-addr=127.0.0.1:17979",
+		"-cluster-addr=127.0.0.1:19935",
+		"-broadcaster-url=http://127.0.0.1:18935",
+		"-private-bucket",
+		"fixtures/playback-bucket",
+		"-gate-url=http://localhost:13000/api/access-control/gate",
+		"-source-output",
+		sourceOutputDir,
+	)
+
 	outfile, err := os.Create("logs/app.log")
 	if err != nil {
 		return err
