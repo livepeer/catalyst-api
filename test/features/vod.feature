@@ -8,7 +8,7 @@ Feature: VOD Streaming
     And the Client app is authenticated
     And an object store is available
     And Studio API server is running at "localhost:13000"
-    And a Broadcaster is running at "localhost:8935"
+    And a Broadcaster is running at "localhost:18935"
     And a callback server is running at "localhost:3333"
     And ffmpeg is available
 

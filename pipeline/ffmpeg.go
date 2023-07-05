@@ -24,6 +24,8 @@ const LocalSourceFilePattern = "sourcevideo*"
 type ffmpeg struct {
 	// The base of where to output source segments to
 	SourceOutputUrl string
+	// Broadcaster for local transcoding
+	Broadcaster clients.BroadcasterClient
 }
 
 func init() {
@@ -139,7 +141,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		}
 	}
 
-	outputs, transcodedSegments, err := transcode.RunTranscodeProcess(transcodeRequest, job.StreamName, inputInfo)
+	outputs, transcodedSegments, err := transcode.RunTranscodeProcess(transcodeRequest, job.StreamName, inputInfo, f.Broadcaster)
 	if err != nil {
 		log.LogError(job.RequestID, "RunTranscodeProcess returned an error", err)
 		return nil, fmt.Errorf("transcoding failed: %w", err)

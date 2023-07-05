@@ -14,7 +14,6 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/livepeer/catalyst-api/clients"
-	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/video"
@@ -47,17 +46,7 @@ type TranscodeSegmentRequest struct {
 	GenerateMP4    bool
 }
 
-var LocalBroadcasterClient clients.BroadcasterClient
-
-func init() {
-	b, err := clients.NewLocalBroadcasterClient(config.DefaultBroadcasterURL)
-	if err != nil {
-		panic(fmt.Sprintf("Error initialising Local Broadcaster Client with URL %q: %s", config.DefaultBroadcasterURL, err))
-	}
-	LocalBroadcasterClient = b
-}
-
-func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo video.InputVideo) ([]video.OutputVideo, int, error) {
+func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo video.InputVideo, broadcaster clients.BroadcasterClient) ([]video.OutputVideo, int, error) {
 	log.AddContext(transcodeRequest.RequestID, "source_manifest", transcodeRequest.SourceManifestURL, "stream_name", streamName)
 	log.Log(transcodeRequest.RequestID, "RunTranscodeProcess (v2) Beginning")
 
@@ -142,7 +131,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	var jobs *ParallelTranscoding
 	jobs = NewParallelTranscoding(sourceSegmentURLs, func(segment segmentInfo) error {
-		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, hlsTargetURL, transcodedStats, &renditionList)
+		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, hlsTargetURL, transcodedStats, &renditionList, broadcaster)
 		segmentsCount++
 		if err != nil {
 			return err
@@ -321,6 +310,7 @@ func transcodeSegment(
 	targetOSURL *url.URL,
 	transcodedStats []*video.RenditionStats,
 	renditionList *video.TRenditionList,
+	broadcaster clients.BroadcasterClient,
 ) error {
 	start := time.Now()
 
@@ -347,7 +337,7 @@ func transcodeSegment(
 				return fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
 			}
 		} else {
-			tr, err = LocalBroadcasterClient.TranscodeSegment(rc, int64(segment.Index), transcodeProfiles, segment.Input.DurationMillis, manifestID)
+			tr, err = broadcaster.TranscodeSegment(rc, int64(segment.Index), transcodeProfiles, segment.Input.DurationMillis, manifestID)
 			if err != nil {
 				return fmt.Errorf("failed to run TranscodeSegment: %s", err)
 			}

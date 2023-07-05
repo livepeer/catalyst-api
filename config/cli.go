@@ -55,6 +55,7 @@ type Cli struct {
 	VodDecryptPrivateKey      string
 	GateURL                   string
 	StreamHealthHookURL       string
+	BroadcasterURL            string
 }
 
 // Return our own URL for callback trigger purposes
