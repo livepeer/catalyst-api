@@ -3,16 +3,14 @@
 package accesscontrol
 
 import (
-	"bytes"
+	"context"
 	"errors"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,11 +46,11 @@ var denyAccess = func(body []byte) (bool, int32, int32, error) {
 	return false, 120, 300, nil
 }
 
-func testTriggerHandler() httprouter.Handle {
+func testTriggerHandler() func(context.Context, *misttriggers.UserNewPayload) (bool, error) {
 	return (&AccessControlHandlersCollection{
 		cache:      make(map[string]map[string]*PlaybackAccessControlEntry),
 		gateClient: &stubGateClient{},
-	}).TriggerHandler()
+	}).HandleUserNew
 }
 
 func TestAllowedAccessValidToken(t *testing.T) {
@@ -179,20 +177,24 @@ func TestInvalidCache(t *testing.T) {
 	require.Equal(t, 2, callCount)
 }
 
-func executeFlow(payload []byte, handler httprouter.Handle, request func(body []byte) (bool, int32, int32, error)) string {
+func executeFlow(body []byte, handler func(context.Context, *misttriggers.UserNewPayload) (bool, error), request func(body []byte) (bool, int32, int32, error)) string {
 	original := queryGate
 	queryGate = request
+	defer func() { queryGate = original }()
 
-	req, _ := http.NewRequest("POST", "/triggers", bytes.NewReader(payload))
-	req.Header.Add("X-Trigger", UserNewTrigger)
+	payload, err := misttriggers.ParseUserNewPayload(misttriggers.MistTriggerBody(body))
+	if err != nil {
+		panic(err)
+	}
 
-	rr := httptest.NewRecorder()
-
-	handler(rr, req, httprouter.Params{})
-
-	queryGate = original
-
-	return rr.Body.String()
+	allowed, err := handler(context.Background(), &payload)
+	if err != nil {
+		return "false"
+	}
+	if !allowed {
+		return "false"
+	}
+	return "true"
 }
 
 func craftToken(sk, publicKey, playbackID string, expiration time.Time) (string, error) {

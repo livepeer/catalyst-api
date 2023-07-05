@@ -2,11 +2,11 @@ package accesscontrol
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -15,8 +15,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/glog"
-	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/pquerna/cachecontrol/cacheobject"
 )
 
@@ -60,61 +60,22 @@ func NewAccessControlHandlersCollection(cli config.Cli) *AccessControlHandlersCo
 	}
 }
 
-func (ac *AccessControlHandlersCollection) TriggerHandler() httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		payload, err := io.ReadAll(r.Body)
+func (ac *AccessControlHandlersCollection) HandleUserNew(ctx context.Context, payload *misttriggers.UserNewPayload) (bool, error) {
+	playbackID := payload.StreamName[strings.Index(payload.StreamName, "+")+1:]
 
-		if err != nil {
-			w.Write([]byte("false")) // nolint:errcheck
-			glog.Errorf("Unable to parse trigger body %v", err)
-			return
-		}
-
-		triggerName := r.Header.Get("X-Trigger")
-
-		switch triggerName {
-		case UserNewTrigger:
-			w.Write(ac.handleUserNew(payload)) // nolint:errcheck
-			return
-		default:
-			w.Write([]byte("false")) // nolint:errcheck
-			glog.Errorf("Trigger not handled %v", triggerName)
-			return
-		}
-
-	}
-}
-
-func (ac *AccessControlHandlersCollection) handleUserNew(payload []byte) []byte {
-	lines := strings.Split(string(payload), "\n")
-
-	if len(lines) != 6 {
-		glog.Errorf("Malformed trigger payload")
-		return []byte("false")
-	}
-
-	requestURL, err := url.Parse(lines[4])
-	if err != nil {
-		glog.Errorf("Unable to parse URL %v", err)
-		return []byte("false")
-	}
-
-	playbackID := lines[0]
-	playbackID = playbackID[strings.Index(playbackID, "+")+1:]
-
-	playbackAccessControlAllowed, err := ac.IsAuthorized(playbackID, requestURL)
+	playbackAccessControlAllowed, err := ac.IsAuthorized(playbackID, payload.URL)
 	if err != nil {
 		glog.Errorf("Unable to get playback access control info for playbackId=%v err=%s", playbackID, err.Error())
-		return []byte("false")
+		return false, err
 	}
 
 	if playbackAccessControlAllowed {
 		glog.Infof("Playback access control allowed for playbackId=%v", playbackID)
-		return []byte("true")
+		return true, nil
 	}
 
 	glog.Infof("Playback access control denied for playbackId=%v", playbackID)
-	return []byte("false")
+	return false, nil
 }
 
 func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, reqURL *url.URL) (bool, error) {
