@@ -84,12 +84,6 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 		router.Handler("GET", "/metrics", promhttp.Handler())
 	}
 
-	// TODO FIXME XXX this is not the right place for this call to live
-	broker.OnStreamSource(geoHandlers.HandleStreamSource)
-
-	// TODO FIXME XXX this is not the right place for this call to live
-	broker.OnUserNew(accessControlHandlers.HandleUserNew)
-
 	// Public Catalyst API
 	router.POST("/api/vod",
 		withLogging(
@@ -108,6 +102,12 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 
 	// Endpoint to receive "Triggers" (callbacks) from Mist
 	router.POST("/api/mist/trigger", withLogging(mistCallbackHandlers.Trigger()))
+
+	// Handler for STREAM_SOURCE triggers
+	broker.OnStreamSource(geoHandlers.HandleStreamSource)
+
+	// Handler for USER_NEW triggers
+	broker.OnUserNew(accessControlHandlers.HandleUserNew)
 
 	// Endpoint to receive segments and manifests that ffmpeg produces
 	router.PUT("/api/ffmpeg/:id/:filename", withLogging(ffmpegSegmentingHandlers.NewFile()))
