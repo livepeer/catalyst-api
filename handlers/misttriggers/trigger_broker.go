@@ -23,12 +23,10 @@ import (
 //    or we kick them out, but there's no return value other than that.
 //    These handlers can be called in parallel too, but any one of them
 //    returning an error will cause an (immediate) trigger rejection.
-//    TODO: VID-121
 // 3. Triggers with response values, like PUSH_REWRITE. These functions need
 //    to return both an error (for rejections) and a string (for responses).
 //    They can't be called in parallel; there really should only be one
 //    handler for these sorts of triggers.
-//    TODO: VID-120
 
 type TriggerBroker interface {
 	SetupMistTriggers(clients.MistAPIClient) error
