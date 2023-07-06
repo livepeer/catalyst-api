@@ -114,11 +114,8 @@ func UnmarshalJSONArray(data []byte, values ...interface{}) error {
 	if err := json.Unmarshal(data, &valuesData); err != nil {
 		return err
 	}
-	if len(valuesData) > len(values) {
-		valuesData = valuesData[:len(values)]
-	}
-	for i, vd := range valuesData {
-		if err := json.Unmarshal(vd, values[i]); err != nil {
+	for i := 0; i < len(values); i++ {
+		if err := json.Unmarshal(valuesData[i], values[i]); err != nil {
 			return err
 		}
 	}
