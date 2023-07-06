@@ -188,11 +188,6 @@ func main() {
 
 	broker := misttriggers.NewTriggerBroker()
 
-	var mapic mistapiconnector.IMac
-	if cli.ShouldMapic() {
-		mapic = mistapiconnector.NewMapic(&cli, broker)
-	}
-
 	var mist clients.MistAPIClient
 	if cli.ShouldMist() {
 		ownURL := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
@@ -203,6 +198,11 @@ func main() {
 		}
 	} else {
 		glog.Info("No mist-host/mist-port provided; I'm not initalizing any stream triggers")
+	}
+
+	var mapic mistapiconnector.IMac
+	if cli.ShouldMapic() {
+		mapic = mistapiconnector.NewMapic(&cli, broker, mist)
 	}
 
 	// Start balancer

@@ -1,13 +1,14 @@
 package mistapiconnector
 
 import (
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/mapic/metrics"
 	"github.com/livepeer/catalyst-api/mapic/model"
 )
 
-func NewMapic(cli *config.Cli, broker misttriggers.TriggerBroker) IMac {
+func NewMapic(cli *config.Cli, broker misttriggers.TriggerBroker, mist clients.MistAPIClient) IMac {
 	mc := &mac{
 		config:                    cli,
 		nodeID:                    cli.NodeName,
@@ -19,6 +20,7 @@ func NewMapic(cli *config.Cli, broker misttriggers.TriggerBroker) IMac {
 		mistStreamSource:          cli.MistStreamSource,
 		mistHardcodedBroadcasters: cli.MistHardcodedBroadcasters,
 		broker:                    broker,
+		mist:                      mist,
 	}
 	metrics.InitCensus(mc.config.NodeName, model.Version, "mistconnector")
 	return mc
