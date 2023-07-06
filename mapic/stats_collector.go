@@ -8,7 +8,6 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/clients"
-	"github.com/livepeer/catalyst-api/mapic/apis/mist"
 	census "github.com/livepeer/catalyst-api/mapic/metrics"
 	"github.com/livepeer/go-api-client"
 	"github.com/livepeer/livepeer-data/pkg/data"
@@ -24,14 +23,14 @@ type infoProvider interface {
 
 type metricsCollector struct {
 	nodeID, ownRegion string
-	mapi              *mist.API
+	mist              clients.MistAPIClient
 	lapi              *api.Client
 	producer          event.AMQPProducer
 	amqpExchange      string
 	infoProvider
 }
 
-func startMetricsCollector(ctx context.Context, period time.Duration, nodeID, ownRegion string, mapi *mist.API, lapi *api.Client, producer event.AMQPProducer, amqpExchange string, infop infoProvider) {
+func startMetricsCollector(ctx context.Context, period time.Duration, nodeID, ownRegion string, mapi clients.MistAPIClient, lapi *api.Client, producer event.AMQPProducer, amqpExchange string, infop infoProvider) {
 	mc := &metricsCollector{nodeID, ownRegion, mapi, lapi, producer, amqpExchange, infop}
 	mc.collectMetricsLogged(ctx, period)
 	go mc.mainLoop(ctx, period)
@@ -65,11 +64,11 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 		}
 	}()
 
-	mistStats, err := c.mapi.GetStats()
+	mistStats, err := c.mist.GetStats()
 	if err != nil {
 		return err
 	}
-	streamsMetrics := compileStreamMetrics(mistStats)
+	streamsMetrics := compileStreamMetrics(&mistStats)
 
 	eg := errgroup.Group{}
 	eg.SetLimit(5)
@@ -176,11 +175,11 @@ func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *stream
 // will create analytics across multiple observations. So they are more like
 // metrics for our infrastrucutre and that's what we call them from here on.
 type streamMetrics struct {
-	stream *mist.StreamStats
+	stream *clients.MistStreamStats
 	pushes []*clients.MistPush
 }
 
-func compileStreamMetrics(mistStats *mist.MistStats) map[string]*streamMetrics {
+func compileStreamMetrics(mistStats *clients.MistStats) map[string]*streamMetrics {
 	streamsMetrics := map[string]*streamMetrics{}
 	getOrCreate := func(stream string) *streamMetrics {
 		if metrics, ok := streamsMetrics[stream]; ok {

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,10 +12,9 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
-	"github.com/livepeer/catalyst-api/mapic/apis/mist"
-	mistapi "github.com/livepeer/catalyst-api/mapic/apis/mist"
 	"github.com/livepeer/catalyst-api/mapic/metrics"
 	"github.com/livepeer/catalyst-api/mapic/model"
 	"github.com/livepeer/go-api-client"
@@ -70,7 +68,6 @@ type (
 	// MacOptions configuration object
 	MacOptions struct {
 		NodeID, MistHost string
-		MistAPI          *mist.API
 		LivepeerAPI      *api.Client
 		BalancerHost     string
 		CheckBandwidth   bool
@@ -85,7 +82,6 @@ type (
 	mac struct {
 		ctx                       context.Context
 		cancel                    context.CancelFunc
-		mapi                      *mist.API
 		lapi                      *api.Client
 		balancerHost              string
 		mu                        sync.RWMutex
@@ -100,6 +96,7 @@ type (
 		mistHardcodedBroadcasters string
 		config                    *config.Cli
 		broker                    misttriggers.TriggerBroker
+		mist                      clients.MistAPIClient
 	}
 )
 
@@ -121,10 +118,6 @@ func (mc *mac) Start(ctx context.Context) error {
 		AccessToken: mc.config.APIToken,
 	})
 	mc.lapi = lapi
-
-	mapi := mistapi.NewMist(mc.config.MistHost, mc.config.MistUser, mc.config.MistPassword, mc.config.APIToken, uint(mc.config.MistPort))
-	ensureLoggedIn(mapi, mc.config.MistConnectTimeout)
-	mc.mapi = mapi
 
 	if mc.balancerHost != "" && !strings.Contains(mc.balancerHost, ":") {
 		mc.balancerHost = mc.balancerHost + ":8042" // must set default port for Mist's Load Balancer
@@ -152,7 +145,7 @@ func (mc *mac) Start(ctx context.Context) error {
 		glog.Infof("AMQP url is empty!")
 	}
 	if producer != nil && mc.config.MistScrapeMetrics {
-		startMetricsCollector(ctx, statsCollectionPeriod, mc.nodeID, mc.ownRegion, mapi, lapi, producer, ownExchangeName, mc)
+		startMetricsCollector(ctx, statsCollectionPeriod, mc.nodeID, mc.ownRegion, mc.mist, lapi, producer, ownExchangeName, mc)
 	}
 	<-ctx.Done()
 	return nil
@@ -160,45 +153,6 @@ func (mc *mac) Start(ctx context.Context) error {
 
 func (mc *mac) MetricsHandler() http.Handler {
 	return metrics.Exporter
-}
-
-func ensureLoggedIn(mapi *mistapi.API, timeout time.Duration) {
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-	for {
-		err := mapi.Login()
-		if err == nil {
-			return
-		}
-
-		var netErr net.Error
-		if !errors.As(err, &netErr) {
-			glog.Fatalf("Fatal non-network error logging to mist. err=%q", err)
-		}
-		select {
-		case <-deadline.C:
-			glog.Fatalf("Failed to login to mist after %s. err=%q", timeout, netErr)
-		case <-time.After(1 * time.Second):
-			glog.Errorf("Retrying after network error logging to mist. err=%q", netErr)
-		}
-	}
-}
-
-// LivepeerProfiles2MistProfiles converts Livepeer's API profiles to Mist's ones
-func LivepeerProfiles2MistProfiles(lps []api.Profile) []mist.Profile {
-	var res []mist.Profile
-	for _, p := range lps {
-		mp := mist.Profile{
-			Name:      p.Name,
-			HumanName: p.Name,
-			Width:     p.Width,
-			Height:    p.Height,
-			Fps:       p.Fps,
-			Bitrate:   p.Bitrate,
-		}
-		res = append(res, mp)
-	}
-	return res
 }
 
 func (mc *mac) handleStreamBuffer(ctx context.Context, payload *misttriggers.StreamBufferPayload) error {
@@ -250,19 +204,6 @@ func (mc *mac) handlePushRewrite(ctx context.Context, payload *misttriggers.Push
 	}
 	glog.V(model.VERBOSE).Infof("For stream %s got info %+v", streamKey, stream)
 
-	if stream.Deleted {
-		glog.Infof("Stream %s was deleted, so deleting Mist's stream configuration", streamKey)
-		if mc.baseStreamName == "" {
-			streamKey = stream.PlaybackID
-			// streamKey = strings.ReplaceAll(streamKey, "-", "")
-			if mc.balancerHost != "" {
-				streamKey = streamPlaybackPrefix + streamKey
-			}
-			mc.mapi.DeleteStreams(streamKey)
-		}
-		return "", nil
-	}
-
 	if stream.PlaybackID != "" {
 		mc.mu.Lock()
 		if info, ok := mc.streamInfo[stream.PlaybackID]; ok {
@@ -301,12 +242,6 @@ func (mc *mac) handlePushRewrite(ctx context.Context, payload *misttriggers.Push
 	} else {
 		glog.Errorf("Shouldn't happen streamID=%s", stream.ID)
 		// streamKey = strings.ReplaceAll(streamKey, "-", "")
-	}
-	if mc.baseStreamName == "" {
-		err = mc.createMistStream(streamKey, stream, false)
-		if err != nil {
-			return "", fmt.Errorf("Error creating stream on the Mist server: %v", err)
-		}
 	}
 	go mc.emitStreamStateEvent(stream, data.StreamState{Active: true})
 	metrics.StartStream()
@@ -488,21 +423,6 @@ func (mc *mac) shouldEnableAudio(stream *api.Stream) bool {
 	return audio
 }
 
-func (mc *mac) createMistStream(streamName string, stream *api.Stream, skipTranscoding bool) error {
-	if len(stream.Presets) == 0 && len(stream.Profiles) == 0 {
-		stream.Presets = append(stream.Presets, "P144p30fps16x9")
-	}
-	source := ""
-	if mc.balancerHost != "" {
-		source = fmt.Sprintf("balance:http://%s/?fallback=push://", mc.balancerHost)
-	}
-	audio := mc.shouldEnableAudio(stream)
-	err := mc.mapi.CreateStream(streamName, stream.Presets,
-		LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID, source, mc.mistHardcodedBroadcasters, skipTranscoding, audio, true)
-	// err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", "http://host.docker.internal:3004/api/stream/"+stream.ID)
-	return err
-}
-
 func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *streamInfo) {
 	for i := range info.stream.Multistream.Targets {
 		go func(targetRef api.MultistreamTargetRef) {
@@ -525,8 +445,7 @@ func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *str
 				metrics: &data.MultistreamMetrics{},
 			}
 			info.mu.Unlock()
-
-			err = mc.mapi.StartPush(wildcardPlaybackID, pushURL)
+			err = mc.mist.PushStart(wildcardPlaybackID, pushURL)
 			if err != nil {
 				glog.Errorf("Error starting multistream to target. targetId=%s stream=%s err=%v", targetRef.ID, wildcardPlaybackID, err)
 				info.mu.Lock()

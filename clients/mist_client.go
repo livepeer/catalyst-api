@@ -22,6 +22,7 @@ type MistAPIClient interface {
 	AddTrigger(streamName []string, triggerName string, sync bool) error
 	DeleteTrigger(streamName []string, triggerName string) error
 	GetStreamInfo(streamName string) (MistStreamInfo, error)
+	GetStats() (MistStats, error)
 }
 
 type MistClient struct {
@@ -90,6 +91,7 @@ type MistStreamInfo struct {
 	Error  string                 `json:"error,omitempty"`
 }
 
+// MistStreamStats and MistPush have a custom JSON unmarshaller, parsed from array.
 type MistPush struct {
 	ID           int64
 	Stream       string
@@ -106,6 +108,25 @@ func (p *MistPush) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*p = tmp
+	return nil
+}
+
+type MistStats struct {
+	StreamsStats map[string]*MistStreamStats `json:"stats_streams"`
+	PushList     []*MistPush                 `json:"push_list"`
+}
+
+type MistStreamStats struct {
+	Clients     int
+	MediaTimeMs int64
+}
+
+func (s *MistStreamStats) UnmarshalJSON(data []byte) error {
+	var tmp MistStreamStats
+	if err := UnmarshalJSONArray(data, &tmp.Clients, &tmp.MediaTimeMs); err != nil {
+		return err
+	}
+	*s = tmp
 	return nil
 }
 
@@ -286,6 +307,21 @@ func (mc *MistClient) GetStreamInfo(streamName string) (MistStreamInfo, error) {
 	return msi, nil
 }
 
+func (mc *MistClient) GetStats() (MistStats, error) {
+	c := commandStatsStreams()
+	resp, err := mc.sendCommand(c)
+	if err := validateAuth(resp, err); err != nil {
+		return MistStats{}, err
+	}
+
+	stats := MistStats{}
+	if err := json.Unmarshal([]byte(resp), &stats); err != nil {
+		return MistStats{}, err
+	}
+
+	return stats, nil
+}
+
 type addStreamCommand struct {
 	Addstream map[string]Stream `json:"addstream"`
 }
@@ -405,6 +441,18 @@ func sameStringSlice(s1, s2 []string) bool {
 func commandGetTriggers() MistConfig {
 	// send an empty config struct returns the current Mist configuration
 	return MistConfig{}
+}
+
+type statsStreamsCommand struct {
+	StatsStreams []string `json:"stats_streams"`
+	PushList     bool     `json:"push_list"`
+}
+
+func commandStatsStreams() statsStreamsCommand {
+	return statsStreamsCommand{
+		StatsStreams: []string{"clients", "lastms"},
+		PushList:     true,
+	}
 }
 
 func validateAddStream(resp string, err error) error {
