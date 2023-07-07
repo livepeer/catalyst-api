@@ -198,12 +198,12 @@ func TestCheckUpdatedAlgo(t *testing.T) {
 }
 
 func TestPopulateOutput(t *testing.T) {
-	out, err := PopulateOutput("requestID", Probe{}, "fixtures/parametric-stereo-error.mp4", OutputVideoFile{})
+	out, err := PopulateOutput("requestID", Probe{}, "fixtures/bbb-180rotated.mov", OutputVideoFile{})
 	require.NoError(t, err)
 	require.Equal(t, OutputVideoFile{
-		SizeBytes: 275075,
-		Width:     576,
-		Height:    1024,
-		Bitrate:   315733,
+		SizeBytes: 123542,
+		Width:     416,
+		Height:    240,
+		Bitrate:   414661,
 	}, out)
 }

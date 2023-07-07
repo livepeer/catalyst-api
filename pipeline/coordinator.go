@@ -200,13 +200,12 @@ func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string,
 		pipeFfmpeg: &ffmpeg{
 			SourceOutputUrl: sourceOutputURL,
 			Broadcaster:     broadcaster,
+			probe:           video.Probe{},
 		},
-		pipeExternal: &external{extTranscoder},
-		Jobs:         cache.New[*JobInfo](),
-		MetricsDB:    metricsDB,
-		InputCopy: &clients.InputCopy{
-			Probe: video.Probe{},
-		},
+		pipeExternal:         &external{extTranscoder},
+		Jobs:                 cache.New[*JobInfo](),
+		MetricsDB:            metricsDB,
+		InputCopy:            clients.NewInputCopy(),
 		VodDecryptPrivateKey: VodDecryptPrivateKey,
 		SourceOutputURL:      sourceOutput,
 	}, nil
@@ -224,7 +223,7 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 		statusClient = clients.TranscodeStatusFunc(func(tsm clients.TranscodeStatusMessage) error { return nil })
 	}
 	if pipeFfmpeg == nil {
-		pipeFfmpeg = &ffmpeg{SourceOutputUrl: sourceOutputUrl}
+		pipeFfmpeg = &ffmpeg{SourceOutputUrl: sourceOutputUrl, probe: video.Probe{}}
 	}
 	if pipeExternal == nil {
 		pipeExternal = &external{}

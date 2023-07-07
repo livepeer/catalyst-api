@@ -26,6 +26,7 @@ type ffmpeg struct {
 	SourceOutputUrl string
 	// Broadcaster for local transcoding
 	Broadcaster clients.BroadcasterClient
+	probe       video.Prober
 }
 
 func init() {
@@ -88,7 +89,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	inputInfo := video.InputVideo{
 		Format:    job.InputFileInfo.Format,
 		Duration:  job.InputFileInfo.Duration,
-		SizeBytes: int64(job.sourceBytes),
+		SizeBytes: job.sourceBytes,
 		Tracks: []video.InputTrack{
 			// Video Track
 			{
@@ -128,17 +129,9 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	sourceSegments := sourceManifest.GetAllSegments()
 	job.sourceSegments = len(sourceSegments)
-
-	if job.sourceSegments > 0 && job.InputFileInfo.Format != "hls" {
-		firstSeg := sourceSegments[0]
-		lastSeg := sourceSegments[job.sourceSegments-1]
-
-		if err := probeSourceSegment(transcodeRequest.RequestID, firstSeg, transcodeRequest.SourceManifestURL); err != nil {
-			return nil, err
-		}
-		if err := probeSourceSegment(transcodeRequest.RequestID, lastSeg, transcodeRequest.SourceManifestURL); err != nil {
-			return nil, err
-		}
+	err = f.probeSourceSegments(job, sourceSegments)
+	if err != nil {
+		return nil, err
 	}
 
 	outputs, transcodedSegments, err := transcode.RunTranscodeProcess(transcodeRequest, job.StreamName, inputInfo, f.Broadcaster)
@@ -216,7 +209,29 @@ func sendSourcePlayback(job *JobInfo) {
 	job.SourcePlaybackDone = time.Now()
 }
 
-func probeSourceSegment(requestID string, seg *m3u8.MediaSegment, sourceManifestURL string) error {
+func (f *ffmpeg) probeSourceSegments(job *JobInfo, sourceSegments []*m3u8.MediaSegment) error {
+	if job.InputFileInfo.Format == "hls" {
+		return nil
+	}
+	segCount := len(sourceSegments)
+	if segCount < 4 {
+		for _, segment := range sourceSegments {
+			if err := f.probeSourceSegment(job.RequestID, segment, job.SegmentingTargetURL); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	segmentsToCheck := []int{0, 1, segCount - 2, segCount - 1}
+	for _, i := range segmentsToCheck {
+		if err := f.probeSourceSegment(job.RequestID, sourceSegments[i], job.SegmentingTargetURL); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (f *ffmpeg) probeSourceSegment(requestID string, seg *m3u8.MediaSegment, sourceManifestURL string) error {
 	u, err := clients.ManifestURLToSegmentURL(sourceManifestURL, seg.URI)
 	if err != nil {
 		return fmt.Errorf("error checking source segments: %w", err)
@@ -225,8 +240,14 @@ func probeSourceSegment(requestID string, seg *m3u8.MediaSegment, sourceManifest
 	if err != nil {
 		return fmt.Errorf("failed to create signed url for %s: %w", u, err)
 	}
-	_, err = video.Probe{}.ProbeFile(requestID, probeURL)
+	_, err = f.probe.ProbeFile(requestID, probeURL)
 	if err != nil {
+		return fmt.Errorf("probe failed for segment %s: %w", u, err)
+	}
+
+	// check for audio issues https://linear.app/livepeer/issue/VID-287/audio-missing-after-segmenting
+	_, err = f.probe.ProbeFile(requestID, probeURL, "-loglevel", "warning")
+	if err != nil && strings.Contains(err.Error(), "no TS found at start of file, duration not set") {
 		return fmt.Errorf("probe failed for segment %s: %w", u, err)
 	}
 	return nil
