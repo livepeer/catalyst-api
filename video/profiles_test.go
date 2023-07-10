@@ -1,6 +1,9 @@
 package video
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -68,7 +71,7 @@ func TestGetPlaybackProfiles(t *testing.T) {
 				},
 			},
 			want: []EncodedProfile{
-				{Name: "360p0", Width: 640, Height: 360, Bitrate: 1_000_000},
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 266_666},
 				{Name: "720p0", Width: 1200, Height: 720, Bitrate: 1_000_001},
 			},
 		},
@@ -83,8 +86,8 @@ func TestGetPlaybackProfiles(t *testing.T) {
 				},
 			},
 			want: []EncodedProfile{
-				{Name: "360p0", Width: 640, Height: 360, Bitrate: 1_000_000},
-				{Name: "720p0", Width: 1280, Height: 720, Bitrate: 4_000_000},
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 555_555},
+				{Name: "720p0", Width: 1280, Height: 720, Bitrate: 2_222_222},
 				{Name: "1080p0", Width: 1920, Height: 1080, Bitrate: 5_000_000},
 			},
 		},
@@ -119,6 +122,21 @@ func TestGetPlaybackProfiles(t *testing.T) {
 				{Name: "1080p0", Width: 1920, Height: 1080, Bitrate: MaxVideoBitrate},
 			},
 		},
+		{
+			name: "low bitrate 1080p", // https://linear.app/livepeer/issue/VID-228/streameth-recording-uploaded-assets-returns-bad-quality
+			track: InputTrack{
+				Type:    "video",
+				Bitrate: 1_100_000,
+				VideoTrack: VideoTrack{
+					Width:  1920,
+					Height: 1080,
+				},
+			},
+			want: []EncodedProfile{
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 122_222},
+				{Name: "1080p0", Width: 1920, Height: 1080, Bitrate: 1_100_000},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -127,6 +145,52 @@ func TestGetPlaybackProfiles(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestCheckUpdatedAlgo(t *testing.T) {
+	type ProfilesTest struct {
+		Width          int64
+		Height         int64
+		Bitrate        int64
+		ExpectedOutput []EncodedProfile
+	}
+	dir := "./fixtures/profiles_tests"
+	files, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		contents, err := os.ReadFile(filepath.Join(dir, file.Name()))
+		require.NoError(t, err)
+		var testCase ProfilesTest
+		err = json.Unmarshal(contents, &testCase)
+		require.NoError(t, err)
+		t.Run(file.Name(), func(t *testing.T) {
+			require.NoError(t, err)
+			iv := InputVideo{
+				Tracks: []InputTrack{{
+					Type:    "video",
+					Bitrate: testCase.Bitrate,
+					VideoTrack: VideoTrack{
+						Width:  testCase.Width,
+						Height: testCase.Height,
+					},
+				}},
+			}
+			oldAlgorithmOutput := testCase.ExpectedOutput
+			updated, err := GetPlaybackProfiles(iv)
+			require.NoError(t, err)
+			require.Equal(t, len(oldAlgorithmOutput), len(updated))
+			for i, profile := range oldAlgorithmOutput {
+				updatedProfile := updated[i]
+				// check that they're equal other than the new bitrates being lower
+				require.LessOrEqual(t, updatedProfile.Bitrate, profile.Bitrate)
+				profile.Bitrate = updatedProfile.Bitrate
+				require.Equal(t, profile, updatedProfile)
+			}
 		})
 	}
 }
