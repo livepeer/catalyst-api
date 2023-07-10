@@ -385,7 +385,7 @@ func checkDisplayAspectRatio(track video.InputTrack, requestID string) bool {
 	resRatio := float64(track.Width) / float64(track.Height)
 
 	// calculate the difference between the aspect ratio and the real ratio of the resolution, allow up to 20%
-	diff := dar - resRatio
+	diff := math.Abs(dar - resRatio)
 	if (diff / dar) < 0.2 {
 		return true
 	}
