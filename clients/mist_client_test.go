@@ -662,3 +662,22 @@ var mistStatsResponse = `
 	}
   }
 `
+
+func TestSameStringSlice(t *testing.T) {
+	good := [][][]string{
+		{[]string{"one", "two", "three"}, []string{"two", "three", "one"}},
+		{[]string{}, []string{}},
+		{[]string{"", "foo"}, []string{"foo", ""}},
+	}
+	bad := [][][]string{
+		{[]string{"one", "two"}, []string{"one", "two", "three"}},
+		{[]string{"one", "two", "three"}, []string{}},
+		{[]string{"one", "two", "three"}, []string{"one", "four", "three"}},
+	}
+	for _, testCase := range good {
+		require.True(t, sameStringSlice(testCase[0], testCase[1]))
+	}
+	for _, testCase := range bad {
+		require.False(t, sameStringSlice(testCase[0], testCase[1]))
+	}
+}
