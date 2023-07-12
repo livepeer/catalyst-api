@@ -429,6 +429,7 @@ func deleteAllTriggersFor(triggers []ConfigTrigger, streamNames []string) []Conf
 	return res
 }
 
+// set equality; returns true if they contain the same strings disregarding order
 func sameStringSlice(s1, s2 []string) bool {
 	s1 = append([]string{}, s1...)
 	s2 = append([]string{}, s2...)
