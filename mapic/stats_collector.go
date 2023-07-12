@@ -131,9 +131,9 @@ func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *stream
 	defer info.mu.Unlock()
 	multistream := make([]*data.MultistreamTargetMetrics, len(metrics.pushes))
 	for i, push := range metrics.pushes {
-		pushInfo := info.pushStatus[push.OriginalURI]
+		pushInfo := info.pushStatus[push.OriginalURL]
 		if pushInfo == nil {
-			glog.Infof("Mist exported metrics from unknown push. streamId=%q pushURL=%q", info.id, push.OriginalURI)
+			glog.Infof("Mist exported metrics from unknown push. streamId=%q pushURL=%q", info.id, push.OriginalURL)
 			continue
 		}
 		var metrics *data.MultistreamMetrics
