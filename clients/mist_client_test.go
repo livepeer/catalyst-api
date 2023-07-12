@@ -1,9 +1,12 @@
 package clients
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -297,6 +300,119 @@ func TestItFailsWhenMaxRetriesReached(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestItCanGetStreamStats(t *testing.T) {
+	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.Equal(t, string(body), "command="+url.QueryEscape(`{"stats_streams":["clients","lastms"],"push_list":true}`))
+
+		_, err = w.Write([]byte(mistStatsResponse))
+		require.NoError(t, err)
+	}))
+	defer svr.Close()
+
+	mc := &MistClient{
+		ApiUrl: svr.URL,
+	}
+
+	stats, err := mc.GetStats()
+	require.NoError(t, err)
+
+	require.Len(t, stats.PushList, 1)
+	require.Equal(t, stats.PushList[0].Stream, "video+c447r0acdmqhhhpb")
+	require.Len(t, stats.StreamsStats, 1)
+	streamStats, ok := stats.StreamsStats["video+c447r0acdmqhhhpb"]
+	require.Equal(t, ok, true)
+	require.Equal(t, streamStats.MediaTimeMs, int64(265458))
+}
+
+func TestUnmarshalJSONArray(t *testing.T) {
+	var str string
+	var num int
+	err := unmarshalJSONArray([]byte(`["foo", 173]`), &str, &num)
+	require.NoError(t, err)
+	require.Equal(t, str, "foo")
+	require.Equal(t, num, 173)
+
+	// not json
+	err = unmarshalJSONArray([]byte(`crabbadonk`), &str, &num)
+	require.Error(t, err)
+
+	// wrong type
+	err = unmarshalJSONArray([]byte(`[173, "foo"]`), &str, &num)
+	require.Error(t, err)
+
+	// too many args
+	err = unmarshalJSONArray([]byte(`[173]`), &num, &num, &num)
+	require.Error(t, err)
+
+	// too much json
+	err = unmarshalJSONArray([]byte(`[173, 173, 173]`), &num)
+	require.Error(t, err)
+}
+
+var mistPushBody = `
+	[
+		3116,
+		"video+c447r0acdmqhhhpb",
+		"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
+		"rtmp://new-rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
+		[
+			[
+				1688680237,
+				"INFO",
+				"Switching UDP socket from IPv6 to IPv4",
+				"video+c447r0acdmqhhhpb"
+			]
+		],
+		{
+			"active_seconds": 259,
+			"bytes": 24887717,
+			"mediatime": 260982,
+			"tracks": [
+			    0,
+			    1
+			]
+		}
+	]
+`
+
+func TestMistPushUnmarshal(t *testing.T) {
+	var push MistPush
+	err := json.Unmarshal([]byte(mistPushBody), &push)
+	require.NoError(t, err)
+	require.Equal(t, push.ID, int64(3116))
+	require.Equal(t, push.Stream, "video+c447r0acdmqhhhpb")
+	require.Equal(t, push.OriginalURL, "rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps")
+	require.Equal(t, push.EffectiveURL, "rtmp://new-rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps")
+	stats := push.Stats
+	require.Equal(t, stats.ActiveSeconds, int64(259))
+	require.Equal(t, stats.Bytes, int64(24887717))
+	require.Equal(t, stats.MediaTime, int64(260982))
+	require.Equal(t, stats.Tracks, []int{0, 1})
+
+	err = json.Unmarshal([]byte("{}"), &push)
+	require.Error(t, err)
+}
+
+var mistStreamStatsBody = `
+	[
+		0,
+		265458
+	]
+`
+
+func TestMistStreamStatsUnmarshal(t *testing.T) {
+	var stats MistStreamStats
+	err := json.Unmarshal([]byte(mistStreamStatsBody), &stats)
+	require.NoError(t, err)
+	require.Equal(t, stats.Clients, 0)
+	require.Equal(t, stats.MediaTimeMs, int64(265458))
+
+	err = json.Unmarshal([]byte("{}"), &stats)
+	require.Error(t, err)
+}
+
 var mistResponse = `{
 	"height": 720,
 	"meta": {
@@ -450,4 +566,99 @@ var mistResponse = `{
 	],
 	"type": "vod",
 	"width": 1280
-	}`
+}`
+
+var mistStatsResponse = `
+  {
+	"LTS": 1,
+	"authorize": {
+	  "local": true,
+	  "status": "OK"
+	},
+	"push_list": [
+	  [
+		3116,
+		"video+c447r0acdmqhhhpb",
+		"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
+		"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
+		[
+		  [
+			1688680237,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680242,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680247,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680252,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680257,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680262,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680267,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680272,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680277,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680282,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ]
+		],
+		{
+		  "active_seconds": 259,
+		  "bytes": 24887717,
+		  "mediatime": 260982,
+		  "tracks": [
+			0,
+			1
+		  ]
+		}
+	  ]
+	],
+	"stats_streams": {
+	  "video+c447r0acdmqhhhpb": [
+		0,
+		265458
+	  ]
+	}
+  }
+`

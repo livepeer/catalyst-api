@@ -95,19 +95,17 @@ type MistStreamInfo struct {
 type MistPush struct {
 	ID           int64
 	Stream       string
-	OriginalURI  string
-	EffectiveURI string
+	OriginalURL  string
+	EffectiveURL string
 	Stats        *MistPushStats
 }
 
 func (p *MistPush) UnmarshalJSON(data []byte) error {
 	// this field is undocumented and shows up as null everytime.
 	var unknown json.RawMessage
-	var tmp MistPush
-	if err := UnmarshalJSONArray(data, &tmp.ID, &tmp.Stream, &tmp.OriginalURI, &tmp.EffectiveURI, &unknown, &tmp.Stats); err != nil {
+	if err := unmarshalJSONArray(data, &p.ID, &p.Stream, &p.OriginalURL, &p.EffectiveURL, &unknown, &p.Stats); err != nil {
 		return err
 	}
-	*p = tmp
 	return nil
 }
 
@@ -122,18 +120,19 @@ type MistStreamStats struct {
 }
 
 func (s *MistStreamStats) UnmarshalJSON(data []byte) error {
-	var tmp MistStreamStats
-	if err := UnmarshalJSONArray(data, &tmp.Clients, &tmp.MediaTimeMs); err != nil {
+	if err := unmarshalJSONArray(data, &s.Clients, &s.MediaTimeMs); err != nil {
 		return err
 	}
-	*s = tmp
 	return nil
 }
 
-func UnmarshalJSONArray(data []byte, values ...interface{}) error {
+func unmarshalJSONArray(data []byte, values ...interface{}) error {
 	var valuesData []json.RawMessage
 	if err := json.Unmarshal(data, &valuesData); err != nil {
 		return err
+	}
+	if len(values) != len(valuesData) {
+		return fmt.Errorf("error parsing json array; incorrect length wanted=%d got=%d", len(values), len(valuesData))
 	}
 	for i := 0; i < len(values); i++ {
 		if err := json.Unmarshal(valuesData[i], values[i]); err != nil {
