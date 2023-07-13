@@ -60,8 +60,6 @@ func TestItCanRejectPushOutStartRequests(t *testing.T) {
 	})
 	require.Equal(t, rr.Result().StatusCode, 200)
 	require.Equal(t, rr.Body.String(), "")
-	// doesn't work in the test environment, but does get set in production:
-	// require.Equal(t, rr.Result().Header.Get("Transfer-Encoding"), "chunked")
 }
 
 func TestPushOutStartCan500(t *testing.T) {
