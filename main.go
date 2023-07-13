@@ -57,6 +57,7 @@ func main() {
 	config.URLSliceVarFlag(fs, &cli.ImportArweaveGatewayURLs, "import-arweave-gateway-urls", "https://arweave.net/", "Comma delimited ordered list of arweave gateways")
 	fs.BoolVar(&cli.MistCleanup, "run-mist-cleanup", true, "Run mist cleanup script")
 	fs.StringVar(&cli.BroadcasterURL, "broadcaster-url", config.DefaultBroadcasterURL, "URL of local broadcaster")
+	config.InvertedBoolFlag(fs, &cli.MistEnabled, "mist", true, "Disable all Mist integrations. Should only be used for development and CI")
 
 	// mist-api-connector parameters
 	fs.IntVar(&cli.MistPort, "mist-port", 4242, "Port to connect to Mist")
@@ -189,12 +190,14 @@ func main() {
 	broker := misttriggers.NewTriggerBroker()
 
 	var mist clients.MistAPIClient
-	if cli.ShouldMist() {
+	if cli.MistEnabled {
 		ownURL := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
 		mist = clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort, ownURL)
 		err := broker.SetupMistTriggers(mist)
 		if err != nil {
-			glog.Fatalf("error setting up mist triggers: %s", err)
+			glog.Error("catalyst-api was unable to communicate with MistServer to set up its triggers.")
+			glog.Error("hint: are you trying to boot catalyst-api without Mist for development purposes? use the flag -no-mist")
+			glog.Fatalf("error setting up Mist triggers err=%s", err)
 		}
 	} else {
 		glog.Info("No mist-host/mist-port provided; I'm not initalizing any stream triggers")
