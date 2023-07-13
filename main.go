@@ -131,6 +131,10 @@ func main() {
 		return
 	}
 
+	if cli.MistUser != "" || cli.MistPassword != "" {
+		glog.Warning("DEPRECATION NOTICE: mist-user and mist-password are no longer used and will be removed in a later version")
+	}
+
 	// TODO: I don't love the global variables for these
 	config.ImportIPFSGatewayURLs = cli.ImportIPFSGatewayURLs
 	config.ImportArweaveGatewayURLs = cli.ImportArweaveGatewayURLs
@@ -200,7 +204,7 @@ func main() {
 			glog.Fatalf("error setting up Mist triggers err=%s", err)
 		}
 	} else {
-		glog.Info("No mist-host/mist-port provided; I'm not initalizing any stream triggers")
+		glog.Info("-no-mist flag detected, not initializing Mist stream triggers")
 	}
 
 	var mapic mistapiconnector.IMac
