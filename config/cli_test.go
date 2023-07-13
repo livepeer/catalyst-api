@@ -115,4 +115,14 @@ func TestInvertedBool(t *testing.T) {
 	require.Equal(t, crayon, true)
 	require.Equal(t, marker, true)
 	require.Equal(t, paintbrush, false)
+
+	trueRef := true
+	falseRef := false
+
+	trueFlag := InvertedBool{Value: &trueRef}
+	falseFlag := InvertedBool{Value: &falseRef}
+	nilFlag := InvertedBool{Value: nil}
+	require.Equal(t, trueFlag.String(), "true")
+	require.Equal(t, falseFlag.String(), "false")
+	require.Equal(t, nilFlag.String(), "")
 }

@@ -18,6 +18,7 @@ type Cli struct {
 	HTTPInternalAddress       string
 	ClusterAddress            string
 	ClusterAdvertiseAddress   string
+	MistEnabled               bool
 	MistHost                  string
 	MistUser                  string
 	MistPassword              string
@@ -78,11 +79,6 @@ func (cli *Cli) EncryptBytes() ([]byte, error) {
 // Should we enable mapic?
 func (cli *Cli) ShouldMapic() bool {
 	return cli.APIServer != ""
-}
-
-// Should we attempt communication with Mist?
-func (cli *Cli) ShouldMist() bool {
-	return cli.MistPort != 0 && cli.MistHost != ""
 }
 
 // Should we enable mist-cleanup script to run periodically and delete leaky shm?
@@ -233,7 +229,10 @@ type InvertedBool struct {
 }
 
 func (f *InvertedBool) String() string {
-	return fmt.Sprint(*f.Value)
+	if f.Value != nil {
+		return fmt.Sprint(*f.Value)
+	}
+	return ""
 }
 
 func (f *InvertedBool) IsBoolFlag() bool {
@@ -251,7 +250,7 @@ func (f *InvertedBool) Set(value string) error {
 	return nil
 }
 
-// MistController has trouble giving us `-booleanFlag=false` values, so we use `-noBooleanFlag=true` instead 🤷‍♂️
+// MistController has trouble giving us `-boolean-flag=false` values, so we use `-no-boolean-flag=true` instead 🤷‍♂️
 func InvertedBoolFlag(fs *flag.FlagSet, dest *bool, name string, value bool, usage string) {
 	*dest = value
 	fs.Var(&InvertedBool{dest}, fmt.Sprintf("no-%s", name), usage)
