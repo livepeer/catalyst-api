@@ -257,6 +257,10 @@ func main() {
 		return reconcileBalancer(ctx, bal, c)
 	})
 
+	group.Go(func() error {
+		return handleClusterEvents(ctx, c)
+	})
+
 	err = group.Wait()
 	glog.Infof("Shutdown complete. Reason for shutdown: %s", err)
 }
@@ -273,6 +277,19 @@ func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Clu
 			if err != nil {
 				return fmt.Errorf("failed to update load balancer from member list: %w", err)
 			}
+		}
+	}
+}
+
+func handleClusterEvents(ctx context.Context, c cluster.Cluster) error {
+	eventCh := c.EventChan()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case e := <-eventCh:
+			// TODO: add proper event handling
+			fmt.Printf("\n\n##########\n\nReceived an event: name=%s, payload=%s\n\n", e.Name, e.Payload)
 		}
 	}
 }
