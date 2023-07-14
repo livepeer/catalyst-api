@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -24,6 +25,7 @@ import (
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/catalyst-api/pipeline"
+	"github.com/livepeer/catalyst-api/pprof"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
 	"github.com/peterbourgon/ff/v3"
 	"golang.org/x/sync/errgroup"
@@ -91,6 +93,7 @@ func main() {
 	fs.StringVar(&cli.VodDecryptPublicKey, "catalyst-public-key", "", "Public key of the catalyst node for encryption")
 	fs.StringVar(&cli.VodDecryptPrivateKey, "catalyst-private-key", "", "Private key of the catalyst node for encryption")
 	fs.StringVar(&cli.GateURL, "gate-url", "http://localhost:3004/api/access-control/gate", "Address to contact playback gating API for access control verification")
+	pprofPort := fs.Int("pprof-port", 6061, "Pprof listen port")
 
 	// special parameters
 	mistJson := fs.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
@@ -118,6 +121,10 @@ func main() {
 		fmt.Printf("catalyst-api version: %s", config.Version)
 		return
 	}
+
+	go func() {
+		log.Println(pprof.ListenAndServe(*pprofPort))
+	}()
 
 	if *verbosity != "" {
 		err = vFlag.Value.Set(*verbosity)
