@@ -2,6 +2,7 @@ package video
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 )
 
@@ -89,21 +90,24 @@ func GetPlaybackProfiles(iv InputVideo) ([]EncodedProfile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("no video track found in input video: %w", err)
 	}
+	videoBitrate := video.Bitrate
+	if videoBitrate > MaxVideoBitrate {
+		videoBitrate = MaxVideoBitrate
+	}
 	profiles := make([]EncodedProfile, 0, len(DefaultTranscodeProfiles)+1)
 	for _, profile := range DefaultTranscodeProfiles {
 		// transcoding job will adjust the width to match aspect ratio. no need to
 		// check it here.
 		lowerQualityThanSrc := profile.Height < video.Height && profile.Bitrate < video.Bitrate
 		if lowerQualityThanSrc {
+			relativeBitrate := float64(profile.Width*profile.Height) * (float64(videoBitrate) / float64(video.Width*video.Height))
+			br := math.Min(relativeBitrate, float64(profile.Bitrate))
+			profile.Bitrate = int64(br)
 			profiles = append(profiles, profile)
 		}
 	}
 	if len(profiles) == 0 {
 		profiles = []EncodedProfile{lowBitrateProfile(video)}
-	}
-	videoBitrate := video.Bitrate
-	if videoBitrate > MaxVideoBitrate {
-		videoBitrate = MaxVideoBitrate
 	}
 	profiles = append(profiles, EncodedProfile{
 		Name:    strconv.FormatInt(nearestEven(video.Height), 10) + "p0",

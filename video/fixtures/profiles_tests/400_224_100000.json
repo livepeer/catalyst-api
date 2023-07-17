@@ -1,0 +1,1 @@
+{"Width":400,"Height":224,"Bitrate":100000,"ExpectedOutput":[{"name":"low-bitrate","width":400,"height":224,"bitrate":50000,"fps":0},{"name":"224p0","width":400,"height":224,"bitrate":100000,"fps":0}],"CurrentOutput":[{"name":"low-bitrate","width":400,"height":224,"bitrate":50000,"fps":0},{"name":"224p0","width":400,"height":224,"bitrate":100000,"fps":0}]}

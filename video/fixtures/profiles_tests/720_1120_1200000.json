@@ -1,0 +1,1 @@
+{"Width":720,"Height":1120,"Bitrate":1200000,"ExpectedOutput":[{"name":"360p0","width":640,"height":360,"bitrate":1000000,"fps":0},{"name":"1120p0","width":720,"height":1120,"bitrate":1200000,"fps":0}],"CurrentOutput":[{"name":"360p0","width":640,"height":360,"bitrate":342857,"fps":0},{"name":"1120p0","width":720,"height":1120,"bitrate":1200000,"fps":0}]}
