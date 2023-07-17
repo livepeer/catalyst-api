@@ -37,15 +37,6 @@ var errCodesAcceleration = []int64{
 }
 var ErrJobAcceleration = errors.New("job should not have acceleration")
 
-type ByteAccumulatorWriter struct {
-	count int64
-}
-
-func (acc *ByteAccumulatorWriter) Write(p []byte) (int, error) {
-	acc.count += int64(len(p))
-	return 0, nil
-}
-
 type MediaConvertOptions struct {
 	Endpoint, Region, Role       string
 	AccessKeyID, AccessKeySecret string

@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"context"
 	"crypto/rsa"
 	"database/sql"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -44,8 +46,17 @@ const (
 
 const (
 	// Only mp4s of maxMP4OutDuration will have MP4s generated for each rendition
-	maxMP4OutDuration = 2 * time.Minute
+	maxMP4OutDuration      = 2 * time.Minute
+	localSourceFilePattern = "sourcevideo*"
 )
+
+func init() {
+	// Clean up any temp source files that might be lying around from jobs that were interrupted
+	// during a deploy
+	if err := cleanUpLocalTmpFiles(os.TempDir(), localSourceFilePattern, 6*time.Hour); err != nil {
+		log.LogNoRequestID("cleanUpLocalTmpFiles error: %w", err)
+	}
+}
 
 func (s Strategy) IsValid() bool {
 	switch s {
@@ -78,6 +89,41 @@ type UploadJobPayload struct {
 	InFallbackMode        bool
 	LivepeerSupported     bool
 	SourceCopy            bool
+	localSourceFile       *os.File
+}
+
+func (p *UploadJobPayload) CopySourceToDisk() error {
+	if p.localSourceFile != nil {
+		if _, err := os.Stat(p.localSourceFile.Name()); err == nil {
+			// file already exists
+			log.Log(p.RequestID, "local source already exists")
+			return nil
+		}
+	}
+
+	log.Log(p.RequestID, "copying to local disk")
+	localSourceFile, err := os.CreateTemp(os.TempDir(), localSourceFilePattern)
+	if err != nil {
+		return fmt.Errorf("failed to create local file (%s): %w", localSourceFile.Name(), err)
+	}
+	// Copy the file locally because of issues with ffmpeg segmenting and remote files
+	// We can be aggressive with the timeout because we're copying from cloud storage
+	timeout, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+	_, err = clients.CopyFile(timeout, p.SignedSourceURL, localSourceFile.Name(), "", p.RequestID)
+	if err != nil {
+		return fmt.Errorf("failed to copy file (%s) locally: %w", p.SignedSourceURL, err)
+	}
+	p.localSourceFile = localSourceFile
+	return nil
+}
+
+func (p *UploadJobPayload) DeleteLocalSource() {
+	if p.localSourceFile == nil {
+		return
+	}
+	p.localSourceFile.Close()
+	os.Remove(p.localSourceFile.Name())
 }
 
 type EncryptionPayload struct {
@@ -164,7 +210,7 @@ type Coordinator struct {
 
 	Jobs                 *cache.Cache[*JobInfo]
 	MetricsDB            *sql.DB
-	InputCopy            clients.InputCopier
+	InputCopy            InputCopier
 	VodDecryptPrivateKey *rsa.PrivateKey
 	SourceOutputURL      *url.URL
 }
@@ -205,7 +251,7 @@ func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string,
 		pipeExternal:         &external{extTranscoder},
 		Jobs:                 cache.New[*JobInfo](),
 		MetricsDB:            metricsDB,
-		InputCopy:            clients.NewInputCopy(),
+		InputCopy:            NewInputCopy(),
 		VodDecryptPrivateKey: VodDecryptPrivateKey,
 		SourceOutputURL:      sourceOutput,
 	}, nil
@@ -234,7 +280,7 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 		pipeFfmpeg:   pipeFfmpeg,
 		pipeExternal: pipeExternal,
 		Jobs:         cache.New[*JobInfo](),
-		InputCopy: &clients.InputCopy{
+		InputCopy: &InputCopy{
 			Probe: video.Probe{},
 		},
 		SourceOutputURL: &url.URL{},
@@ -280,13 +326,12 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 			osTransferURL = p.HlsTargetURL.JoinPath("video")
 		}
 
-		inputVideoProbe, signedNewSourceURL, err := c.InputCopy.CopyInputToS3(p.RequestID, sourceURL, osTransferURL, decryptor)
+		inputVideoProbe, err := c.InputCopy.CopyInputToS3(&p, sourceURL, osTransferURL, decryptor)
 		if err != nil {
 			return nil, fmt.Errorf("error copying input to storage: %w", err)
 		}
 
-		p.SourceFile = osTransferURL.String()  // OS URL used by mist
-		p.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert
+		p.SourceFile = osTransferURL.String() // OS URL used by mist
 		p.InputFileInfo = inputVideoProbe
 		p.GenerateMP4 = ShouldGenerateMP4(sourceURL, p.Mp4TargetURL, p.Mp4OnlyShort, p.InputFileInfo.Duration)
 
@@ -504,6 +549,7 @@ func (c *Coordinator) runHandlerAsync(job *JobInfo, handler func() (*HandlerOutp
 }
 
 func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
+	job.DeleteLocalSource()
 	defer close(job.result)
 	var tsm clients.TranscodeStatusMessage
 	if err != nil {
@@ -656,4 +702,24 @@ func recovered[T any](f func() (T, error)) (t T, err error) {
 		}
 	}()
 	return f()
+}
+
+func cleanUpLocalTmpFiles(dir string, filenamePattern string, maxAge time.Duration) error {
+	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.Mode().IsRegular() {
+			if match, _ := filepath.Match(filenamePattern, info.Name()); match {
+				if time.Since(info.ModTime()) > maxAge {
+					err = os.Remove(path)
+					if err != nil {
+						return fmt.Errorf("error removing file %s: %w", path, err)
+					}
+					log.LogNoRequestID("Cleaned up file", "path", path, "filename", info.Name(), "age", info.ModTime())
+				}
+			}
+		}
+		return nil
+	})
 }

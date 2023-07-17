@@ -1,12 +1,9 @@
 package pipeline
 
 import (
-	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,22 +16,12 @@ import (
 	"github.com/livepeer/go-tools/drivers"
 )
 
-const LocalSourceFilePattern = "sourcevideo*"
-
 type ffmpeg struct {
 	// The base of where to output source segments to
 	SourceOutputUrl string
 	// Broadcaster for local transcoding
 	Broadcaster clients.BroadcasterClient
 	probe       video.Prober
-}
-
-func init() {
-	// Clean up any temp source files that might be lying around from jobs that were interrupted
-	// during a deploy
-	if err := cleanUpLocalTmpFiles(os.TempDir(), LocalSourceFilePattern, 6*time.Hour); err != nil {
-		log.LogNoRequestID("cleanUpLocalTmpFiles error: %w", err)
-	}
 }
 
 func (f *ffmpeg) Name() string {
@@ -254,22 +241,11 @@ func (f *ffmpeg) probeSourceSegment(requestID string, seg *m3u8.MediaSegment, so
 }
 
 func copyFileToLocalTmpAndSegment(job *JobInfo) error {
-	// Create a temporary local file to write to
-	localSourceFile, err := os.CreateTemp(os.TempDir(), LocalSourceFilePattern)
-	if err != nil {
-		return fmt.Errorf("failed to create local file (%s) for segmenting: %s", localSourceFile.Name(), err)
+	if err := job.CopySourceToDisk(); err != nil {
+		return err
 	}
-	defer localSourceFile.Close()
-	defer os.Remove(localSourceFile.Name()) // Clean up the file as soon as we're done segmenting
 
-	// Copy the file locally because of issues with ffmpeg segmenting and remote files
-	// We can be aggressive with the timeout because we're copying from cloud storage
-	timeout, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	defer cancel()
-	_, err = clients.CopyFile(timeout, job.SignedSourceURL, localSourceFile.Name(), "", job.RequestID)
-	if err != nil {
-		return fmt.Errorf("failed to copy file (%s) locally for segmenting: %s", job.SignedSourceURL, err)
-	}
+	defer job.DeleteLocalSource() // Clean up the file as soon as we're done segmenting
 
 	// Begin Segmenting
 	log.Log(job.RequestID, "Beginning segmenting via FFMPEG/Livepeer pipeline")
@@ -282,31 +258,11 @@ func copyFileToLocalTmpAndSegment(job *JobInfo) error {
 	}
 
 	destinationURL := fmt.Sprintf("%s/api/ffmpeg/%s/index.m3u8", internalAddress, job.StreamName)
-	if err := video.Segment(localSourceFile.Name(), destinationURL, job.TargetSegmentSizeSecs); err != nil {
+	if err := video.Segment(job.localSourceFile.Name(), destinationURL, job.TargetSegmentSizeSecs); err != nil {
 		return err
 	}
 
 	return nil
-}
-
-func cleanUpLocalTmpFiles(dir string, filenamePattern string, maxAge time.Duration) error {
-	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		if info.Mode().IsRegular() {
-			if match, _ := filepath.Match(filenamePattern, info.Name()); match {
-				if time.Since(info.ModTime()) > maxAge {
-					err = os.Remove(path)
-					if err != nil {
-						return fmt.Errorf("error removing file %s: %w", path, err)
-					}
-					log.LogNoRequestID("Cleaned up file", "path", path, "filename", info.Name(), "age", info.ModTime())
-				}
-			}
-		}
-		return nil
-	})
 }
 
 func toStr(URL *url.URL) string {

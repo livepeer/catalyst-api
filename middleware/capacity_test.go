@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/pipeline"
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +41,7 @@ func TestItErrorsWhenNoCapacityAvailable(t *testing.T) {
 	pipeFfmpeg, release := pipeline.NewBlockingStubHandler()
 	defer release()
 	coordinator := pipeline.NewStubCoordinatorOpts(pipeline.StrategyCatalystFfmpegDominance, nil, pipeFfmpeg, nil, "")
-	coordinator.InputCopy = &clients.StubInputCopy{}
+	coordinator.InputCopy = &pipeline.StubInputCopy{}
 
 	// Create a lot of in-flight jobs
 	for x := 0; x < 8; x++ {

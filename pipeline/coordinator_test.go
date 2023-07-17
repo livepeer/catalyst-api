@@ -61,7 +61,7 @@ func setupTransferDir(t *testing.T, coor *Coordinator) (inputFile *os.File, tran
 		require.NoError(t, inputFile.Close())
 	}
 
-	coor.InputCopy = &clients.InputCopy{
+	coor.InputCopy = &InputCopy{
 		Probe: video.Probe{},
 	}
 	transferURL, err = url.Parse(transferDir)
@@ -483,7 +483,7 @@ func Test_ProbeErrors(t *testing.T) {
 			coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil, "")
 			inputFile, transferDir, cleanup := setupTransferDir(t, coord)
 			defer cleanup()
-			coord.InputCopy = &clients.InputCopy{
+			coord.InputCopy = &InputCopy{
 				Probe: stubFFprobe{
 					FPS:  tt.fps,
 					Type: tt.assetType,

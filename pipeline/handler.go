@@ -36,10 +36,7 @@ type HandlerOutput struct {
 	Result *UploadJobResult
 }
 
-// Helper value to be returned by the handlers when continuing the pipeline async.
-var ContinuePipeline = &HandlerOutput{Continue: true}
-
-// Used for testing
+// StubHandler is used for testing
 type StubHandler struct {
 	name                      string
 	handleStartUploadJob      func(job *JobInfo) (*HandlerOutput, error)
