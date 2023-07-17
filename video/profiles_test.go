@@ -155,6 +155,7 @@ func TestCheckUpdatedAlgo(t *testing.T) {
 		Height         int64
 		Bitrate        int64
 		ExpectedOutput []EncodedProfile
+		CurrentOutput  []EncodedProfile
 	}
 	dir := "./fixtures/profiles_tests"
 	files, err := os.ReadDir(dir)
@@ -181,15 +182,16 @@ func TestCheckUpdatedAlgo(t *testing.T) {
 				}},
 			}
 			oldAlgorithmOutput := testCase.ExpectedOutput
-			updated, err := GetPlaybackProfiles(iv)
+			current, err := GetPlaybackProfiles(iv)
 			require.NoError(t, err)
-			require.Equal(t, len(oldAlgorithmOutput), len(updated))
+			require.Equal(t, testCase.CurrentOutput, current)
+			require.Equal(t, len(oldAlgorithmOutput), len(current))
 			for i, profile := range oldAlgorithmOutput {
-				updatedProfile := updated[i]
+				currentProfile := current[i]
 				// check that they're equal other than the new bitrates being lower
-				require.LessOrEqual(t, updatedProfile.Bitrate, profile.Bitrate)
-				profile.Bitrate = updatedProfile.Bitrate
-				require.Equal(t, profile, updatedProfile)
+				require.LessOrEqual(t, currentProfile.Bitrate, profile.Bitrate)
+				profile.Bitrate = currentProfile.Bitrate
+				require.Equal(t, profile, currentProfile)
 			}
 		})
 	}

@@ -1,1 +1,1 @@
-{"Width":320,"Height":240,"Bitrate":300000,"ExpectedOutput":[{"name":"low-bitrate","width":320,"height":240,"bitrate":150000,"fps":0},{"name":"240p0","width":320,"height":240,"bitrate":300000,"fps":0}]}
+{"Width":320,"Height":240,"Bitrate":300000,"ExpectedOutput":[{"name":"low-bitrate","width":320,"height":240,"bitrate":150000,"fps":0},{"name":"240p0","width":320,"height":240,"bitrate":300000,"fps":0}],"CurrentOutput":[{"name":"low-bitrate","width":320,"height":240,"bitrate":150000,"fps":0},{"name":"240p0","width":320,"height":240,"bitrate":300000,"fps":0}]}

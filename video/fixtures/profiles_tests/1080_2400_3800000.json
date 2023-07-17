@@ -1,1 +1,1 @@
-{"Width":1080,"Height":2400,"Bitrate":3800000,"ExpectedOutput":[{"name":"360p0","width":640,"height":360,"bitrate":1000000,"fps":0},{"name":"2400p0","width":1080,"height":2400,"bitrate":3800000,"fps":0}]}
+{"Width":1080,"Height":2400,"Bitrate":3800000,"ExpectedOutput":[{"name":"360p0","width":640,"height":360,"bitrate":1000000,"fps":0},{"name":"2400p0","width":1080,"height":2400,"bitrate":3800000,"fps":0}],"CurrentOutput":[{"name":"360p0","width":640,"height":360,"bitrate":337777,"fps":0},{"name":"2400p0","width":1080,"height":2400,"bitrate":3800000,"fps":0}]}

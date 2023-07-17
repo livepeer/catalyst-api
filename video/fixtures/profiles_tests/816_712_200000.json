@@ -1,1 +1,1 @@
-{"Width":816,"Height":712,"Bitrate":200000,"ExpectedOutput":[{"name":"low-bitrate","width":816,"height":712,"bitrate":100000,"fps":0},{"name":"712p0","width":816,"height":712,"bitrate":200000,"fps":0}]}
+{"Width":816,"Height":712,"Bitrate":200000,"ExpectedOutput":[{"name":"low-bitrate","width":816,"height":712,"bitrate":100000,"fps":0},{"name":"712p0","width":816,"height":712,"bitrate":200000,"fps":0}],"CurrentOutput":[{"name":"low-bitrate","width":816,"height":712,"bitrate":100000,"fps":0},{"name":"712p0","width":816,"height":712,"bitrate":200000,"fps":0}]}
