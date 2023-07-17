@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -240,7 +241,7 @@ func ResolveNodeURL(c Cluster, streamURL string) (string, error) {
 		glog.Error(err)
 		return "", err
 	}
-	u2.Path = u.Path
+	u2.Path = filepath.Join(u2.Path, u.Path)
 	u2.RawQuery = u.RawQuery
 	return u2.String(), nil
 }
