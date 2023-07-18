@@ -44,11 +44,12 @@ type (
 	}
 
 	pushStatus struct {
-		target           *api.MultistreamTarget
-		profile          string
-		pushStartEmitted bool
-		pushStopped      bool
-		metrics          *data.MultistreamMetrics
+		wildcardPlaybackID string
+		target             *api.MultistreamTarget
+		profile            string
+		pushStartEmitted   bool
+		pushStopped        bool
+		metrics            *data.MultistreamMetrics
 	}
 
 	streamInfo struct {
@@ -80,23 +81,24 @@ type (
 	}
 
 	mac struct {
-		ctx                       context.Context
-		cancel                    context.CancelFunc
-		lapi                      *api.Client
-		balancerHost              string
-		mu                        sync.RWMutex
-		mistHot                   string
-		checkBandwidth            bool
-		baseStreamName            string
-		streamInfo                map[string]*streamInfo // public key to info
-		producer                  event.AMQPProducer
-		nodeID                    string
-		ownRegion                 string
-		mistStreamSource          string
-		mistHardcodedBroadcasters string
-		config                    *config.Cli
-		broker                    misttriggers.TriggerBroker
-		mist                      clients.MistAPIClient
+		ctx                         context.Context
+		cancel                      context.CancelFunc
+		lapi                        *api.Client
+		balancerHost                string
+		mu                          sync.RWMutex
+		mistHot                     string
+		checkBandwidth              bool
+		baseStreamName              string
+		streamInfo                  map[string]*streamInfo
+		producer                    event.AMQPProducer
+		nodeID                      string
+		ownRegion                   string
+		mistStreamSource            string
+		mistHardcodedBroadcasters   string
+		config                      *config.Cli
+		broker                      misttriggers.TriggerBroker
+		mist                        clients.MistAPIClient
+		reconcileMultistreamTrigger chan struct{}
 	}
 )
 
@@ -147,6 +149,12 @@ func (mc *mac) Start(ctx context.Context) error {
 	if producer != nil && mc.config.MistScrapeMetrics {
 		startMetricsCollector(ctx, statsCollectionPeriod, mc.nodeID, mc.ownRegion, mc.mist, lapi, producer, ownExchangeName, mc)
 	}
+
+	mc.reconcileMultistreamTrigger = make(chan struct{})
+	go func() {
+		mc.reconcileMultistreamLoop(ctx)
+	}()
+
 	<-ctx.Done()
 	return nil
 }
@@ -390,7 +398,9 @@ func (mc *mac) removeInfoDelayed(playbackID string, done chan struct{}) {
 func (mc *mac) removeInfo(playbackID string) {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
+	//fmt.Printf("\n\n##### \nRemoving stream info for playbackID=%s\n\n", playbackID)
 	mc.removeInfoLocked(playbackID)
+	//fmt.Printf("Current stream infos: %s\n", mc.streamInfo)
 }
 
 // must be called inside mc.mu.Lock
@@ -423,6 +433,80 @@ func (mc *mac) shouldEnableAudio(stream *api.Stream) bool {
 	return audio
 }
 
+func (mc *mac) reconcileMultistreamLoop(ctx context.Context) {
+	for {
+		//tick := time.NewTicker(1 * time.Minute)
+		tick := time.NewTicker(30 * time.Second)
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		case <-mc.reconcileMultistreamTrigger:
+		}
+		mc.reconcileMultistream()
+	}
+}
+
+type MapKey struct {
+	stream string
+	target string
+}
+
+func toKey(stream, target string) MapKey {
+	return MapKey{stream: stream, target: target}
+}
+
+func (mc *mac) reconcileMultistream() {
+	fmt.Println("#### Reconciling")
+
+	pushAutoList, _ := mc.mist.PushAutoList()
+	existing := filterMultistream(pushAutoList)
+
+	existingMap := map[MapKey]bool{}
+
+	for _, e := range existing {
+		existingMap[toKey(e.Stream, e.Target)] = true
+	}
+
+	streamInfoMap := map[MapKey]bool{}
+
+	mc.mu.Lock()
+	for _, si := range mc.streamInfo {
+		for target, v := range si.pushStatus {
+			if v.target != nil && !v.target.Disabled {
+				stream := v.wildcardPlaybackID
+				streamInfoMap[toKey(stream, target)] = true
+			}
+		}
+	}
+	mc.mu.Unlock()
+
+	for _, e := range existing {
+		if !streamInfoMap[toKey(e.Stream, e.Target)] {
+			mc.mist.PushAutoRemove(e.StreamParams)
+		}
+	}
+
+	for k, _ := range streamInfoMap {
+		if !existingMap[toKey(k.stream, k.target)] {
+			mc.mist.PushAutoAdd(k.stream, k.target)
+		}
+	}
+
+	// TODO: Think what to do with stale stream infos
+}
+
+func filterMultistream(list []clients.MistPushAuto) []clients.MistPushAuto {
+	var res []clients.MistPushAuto
+	for _, e := range list {
+		if strings.HasPrefix(e.Stream, "video+") &&
+			(strings.HasPrefix(strings.ToLower(e.Target), "rtmp:") || strings.HasPrefix(strings.ToLower(e.Target), "srt:")) {
+			res = append(res, e)
+		}
+	}
+	return res
+}
+
 func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *streamInfo) {
 	for i := range info.stream.Multistream.Targets {
 		go func(targetRef api.MultistreamTargetRef) {
@@ -440,12 +524,14 @@ func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *str
 
 			info.mu.Lock()
 			info.pushStatus[pushURL] = &pushStatus{
-				target:  target,
-				profile: targetRef.Profile,
-				metrics: &data.MultistreamMetrics{},
+				wildcardPlaybackID: wildcardPlaybackID,
+				target:             target,
+				profile:            targetRef.Profile,
+				metrics:            &data.MultistreamMetrics{},
 			}
 			info.mu.Unlock()
-			err = mc.mist.PushStart(wildcardPlaybackID, pushURL)
+			err = mc.mist.PushAutoAdd(wildcardPlaybackID, pushURL)
+			fmt.Printf("\n\n######\n  %s %s", wildcardPlaybackID, pushURL)
 			if err != nil {
 				glog.Errorf("Error starting multistream to target. targetId=%s stream=%s err=%v", targetRef.ID, wildcardPlaybackID, err)
 				info.mu.Lock()

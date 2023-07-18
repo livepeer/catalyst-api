@@ -3,6 +3,7 @@ package clients
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -24,8 +25,12 @@ func TestRequestPayload(t *testing.T) {
 			commandAddStream("somestream", "http://some-storage-url.com/vod.mp4"),
 		},
 		{
-			"command=%7B%22push_start%22%3A%7B%22stream%22%3A%22somestream%22%2C%22target%22%3A%22http%3A%2F%2Fsome-target-url.com%2Ftarget.mp4%22%7D%7D",
-			commandPushStart("somestream", "http://some-target-url.com/target.mp4"),
+			"command=%7B%22push_auto_add%22%3A%7B%22stream%22%3A%22somestream%22%2C%22target%22%3A%22http%3A%2F%2Fsome-target-url.com%2Ftarget.mp4%22%7D%7D",
+			commandPushAutoAdd("somestream", "http://some-target-url.com/target.mp4"),
+		},
+		{
+			"command=%7B%22push_auto_remove%22%3A%5B%7B%22stream%22%3A%5B%22somestream%22%2C%22http%3A%2F%2Fsome-target-url.com%2Ftarget.mp4%22%5D%7D%5D%7D",
+			commandPushAutoRemove([]interface{}{"somestream", "http://some-target-url.com/target.mp4"}),
 		},
 		{
 			"command=%7B%22deletestream%22%3A%7B%22somestream%22%3Anull%7D%7D",
@@ -194,7 +199,7 @@ func TestResponseValidation(t *testing.T) {
 
 	// correct responses
 	require.NoError(validateAddStream(`{"LTS":1,"authorize":{"status":"OK"},"streams":{"catalyst_vod_gedhbdhc":{"name":"catalyst_vod_gedhbdhc","source":"http://some-storage-url.com/vod.mp4"},"incomplete list":1}}`, nil))
-	require.NoError(validatePushStart(`{"LTS":1,"authorize":{"status":"OK"}}`, nil))
+	require.NoError(validatePushAutoAdd(`{"LTS":1,"authorize":{"status":"OK"}}`, nil))
 	require.NoError(validateDeleteStream(`{"LTS":1,"authorize":{"status":"OK"},"streams":{"incomplete list":1}}`, nil))
 	require.NoError(validateNukeStream(`{"LTS":1,"authorize":{"local":true,"status":"OK"}}`, nil))
 	require.NoError(validateAddTrigger([]string{"catalyst_vod_gedhbdhc"}, "PUSH_END", `{"LTS":1,"authorize":{"status":"OK"},"config":{"accesslog":"LOG","controller":{"interface":null,"port":null,"username":null},"debug":null,"defaultStream":null,"iid":"IIcEj|Z\\|^lbDbjg","limits":null,"location":{"lat":0.0000000000,"lon":0.0000000000,"name":""},"prometheus":"koekjes","protocols":[{"connector":"AAC","online":"Enabled"},{"connector":"CMAF","online":"Enabled"},{"connector":"DTSC","online":1},{"connector":"EBML","online":"Enabled"},{"connector":"FLV","online":"Enabled"},{"connector":"H264","online":"Enabled"},{"connector":"HDS","online":"Enabled"},{"connector":"HLS","online":1},{"connector":"HTTP","online":1},{"connector":"HTTPTS","online":"Enabled"},{"connector":"JSON","online":"Enabled"},{"connector":"MP3","online":"Enabled"},{"connector":"MP4","online":"Enabled"},{"connector":"OGG","online":"Enabled"},{"connector":"RTMP","online":1},{"connector":"RTSP","online":1},{"connector":"SDP","online":"Enabled"},{"connector":"SRT","online":"Enabled"},{"connector":"TSSRT","online":1},{"connector":"WAV","online":"Enabled"},{"connector":"WebRTC","online":"Enabled"},{"connector":null,"online":"Missing connector name"}],"serverid":null,"sessionInputMode":"14","sessionOutputMode":"14","sessionStreamInfoMode":"1","sessionUnspecifiedMode":"0","sessionViewerMode":"14","sidMode":"0","time":1660027761,"triggers":{"PUSH_END":[{"handler":"http://host.docker.internal:8080/api/mist/trigger","streams":["catalyst_vod_gedhbdhc"],"sync":false}],"RECORDING_END":null},"trustedproxy":[],"version":"eb84bc4ba743885734c60b312ca97ed07311d86f Generic_64"}}`, nil, false))
@@ -301,6 +306,100 @@ func TestItFailsWhenMaxRetriesReached(t *testing.T) {
 }
 
 func TestItCanGetStreamStats(t *testing.T) {
+	mistStatsResponse := `
+  {
+	"LTS": 1,
+	"authorize": {
+	  "local": true,
+	  "status": "OK"
+	},
+	"push_list": [
+	  [
+		3116,
+		"video+c447r0acdmqhhhpb",
+		"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
+		"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
+		[
+		  [
+			1688680237,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680242,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680247,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680252,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680257,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680262,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680267,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680272,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680277,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ],
+		  [
+			1688680282,
+			"INFO",
+			"Switching UDP socket from IPv6 to IPv4",
+			"video+c447r0acdmqhhhpb"
+		  ]
+		],
+		{
+		  "active_seconds": 259,
+		  "bytes": 24887717,
+		  "mediatime": 260982,
+		  "tracks": [
+			0,
+			1
+		  ]
+		}
+	  ]
+	],
+	"stats_streams": {
+	  "video+c447r0acdmqhhhpb": [
+		0,
+		265458
+	  ]
+	}
+  }
+`
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
@@ -351,7 +450,8 @@ func TestUnmarshalJSONArray(t *testing.T) {
 	require.Error(t, err)
 }
 
-var mistPushBody = `
+func TestMistPushUnmarshal(t *testing.T) {
+	mistPushBody := `
 	[
 		3116,
 		"video+c447r0acdmqhhhpb",
@@ -376,8 +476,6 @@ var mistPushBody = `
 		}
 	]
 `
-
-func TestMistPushUnmarshal(t *testing.T) {
 	var push MistPush
 	err := json.Unmarshal([]byte(mistPushBody), &push)
 	require.NoError(t, err)
@@ -395,14 +493,13 @@ func TestMistPushUnmarshal(t *testing.T) {
 	require.Error(t, err)
 }
 
-var mistStreamStatsBody = `
-	[
-		0,
-		265458
-	]
-`
-
 func TestMistStreamStatsUnmarshal(t *testing.T) {
+	mistStreamStatsBody := `
+		[
+			0,
+			265458
+		]
+	`
 	var stats MistStreamStats
 	err := json.Unmarshal([]byte(mistStreamStatsBody), &stats)
 	require.NoError(t, err)
@@ -568,101 +665,6 @@ var mistResponse = `{
 	"width": 1280
 }`
 
-var mistStatsResponse = `
-  {
-	"LTS": 1,
-	"authorize": {
-	  "local": true,
-	  "status": "OK"
-	},
-	"push_list": [
-	  [
-		3116,
-		"video+c447r0acdmqhhhpb",
-		"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
-		"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
-		[
-		  [
-			1688680237,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680242,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680247,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680252,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680257,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680262,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680267,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680272,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680277,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680282,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ]
-		],
-		{
-		  "active_seconds": 259,
-		  "bytes": 24887717,
-		  "mediatime": 260982,
-		  "tracks": [
-			0,
-			1
-		  ]
-		}
-	  ]
-	],
-	"stats_streams": {
-	  "video+c447r0acdmqhhhpb": [
-		0,
-		265458
-	  ]
-	}
-  }
-`
-
 func TestSameStringSlice(t *testing.T) {
 	good := [][][]string{
 		{[]string{"one", "two", "three"}, []string{"two", "three", "one"}},
@@ -680,4 +682,63 @@ func TestSameStringSlice(t *testing.T) {
 	for _, testCase := range bad {
 		require.False(t, sameStringSlice(testCase[0], testCase[1]))
 	}
+}
+
+func TestParsePushAutoList(t *testing.T) {
+	mistPushAutoListBody := `
+	{
+	  "LTS": 1,
+	  "authorize": {
+		"local": true,
+		"status": "OK"
+	  },
+	  "push_auto_list": [
+		[
+		  "videorec+",
+		  "s3+https://***:***@storage.googleapis.com/lp-us-catalyst-recordings-monster/hls/$wildcard/$uuid/source/$segmentCounter.ts?m3u8=../output.m3u8&split=5&video=source&audio=source",
+		  null,
+		  null,
+		  null,
+		  null,
+		  null,
+		  null
+		],
+		[
+		  "video+6736xac7u1hj36pa",
+		  "rtmp://localhost/live/4783-4xpf-hced-2k4o?video=maxbps&audio=maxbps",
+		  0,
+		  0,
+		  "",
+		  0,
+		  "",
+		  "",
+		  0,
+		  ""
+		]
+	  ]
+	}
+	`
+
+	res, err := parsePushAutoList(mistPushAutoListBody)
+	require.NoError(t, err)
+	require.Len(t, res, 2)
+	require.Equal(t, "videorec+", res[0].Stream)
+	require.Equal(t, "s3+https://***:***@storage.googleapis.com/lp-us-catalyst-recordings-monster/hls/$wildcard/$uuid/source/$segmentCounter.ts?m3u8=../output.m3u8&split=5&video=source&audio=source", res[0].Target)
+	require.Equal(t, "video+6736xac7u1hj36pa", res[1].Stream)
+	require.Equal(t, "rtmp://localhost/live/4783-4xpf-hced-2k4o?video=maxbps&audio=maxbps", res[1].Target)
+}
+
+func TestRealMistPushRemove(t *testing.T) {
+	fmt.Println("Test test")
+	mc := NewMistAPIClient("", "", "localhost", 4242, "")
+	err := mc.PushAutoRemove([]interface{}{"video+6736xac7u1hj36pa", "rtmp://localhost/live/3c36-sgjq-qbsb-u0ik?video=maxbps&audio=maxbps", 0, 0, "", 0, "", "", 0, ""})
+	fmt.Println(err)
+}
+
+func TestRealMistPushAutoList(t *testing.T) {
+	fmt.Println("Test test")
+	mc := NewMistAPIClient("", "", "localhost", 4242, "")
+	res, err := mc.PushAutoList()
+	fmt.Println(err)
+	fmt.Println(res)
 }

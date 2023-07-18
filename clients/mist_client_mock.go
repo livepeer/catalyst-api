@@ -1,20 +1,32 @@
 package clients
 
-type StubMistClient struct{}
+type RecordedPushAutoAdd struct {
+	Stream string
+	Target string
+}
 
-func (s StubMistClient) AddStream(streamName, sourceUrl string) error {
+type RecordedPushAutoRemove struct {
+	StreamParams []interface{}
+}
+type MockMistClient struct {
+	PushAutoListStub       []MistPushAuto
+	RecordedPushAutoAdd    []RecordedPushAutoAdd
+	RecordedPushAutoRemove []RecordedPushAutoRemove
+}
+
+func (s *MockMistClient) AddStream(streamName, sourceUrl string) error {
 	return nil
 }
 
-func (s StubMistClient) PushStart(streamName, targetURL string) error {
+func (s *MockMistClient) PushStart(streamName, targetURL string) error {
 	return nil
 }
 
-func (s StubMistClient) DeleteStream(streamName string) error {
+func (s *MockMistClient) DeleteStream(streamName string) error {
 	return nil
 }
 
-func (s StubMistClient) GetStreamInfo(streamName string) (MistStreamInfo, error) {
+func (s *MockMistClient) GetStreamInfo(streamName string) (MistStreamInfo, error) {
 	// Populate media information for testing purposes
 	return MistStreamInfo{
 		Height: 720,
@@ -55,14 +67,36 @@ func (s StubMistClient) GetStreamInfo(streamName string) (MistStreamInfo, error)
 	}, nil
 }
 
-func (s StubMistClient) AddTrigger(streamName, triggerName string) error {
+func (s *MockMistClient) AddTrigger(streamName []string, triggerName string, sync bool) error {
 	return nil
 }
 
-func (s StubMistClient) DeleteTrigger(streamName, triggerName string) error {
+func (s *MockMistClient) DeleteTrigger(streamName []string, triggerName string) error {
 	return nil
 }
 
-func (s StubMistClient) CreateDTSH(requestID, source, destination string) error {
+func (s *MockMistClient) CreateDTSH(requestID, source, destination string) error {
 	return nil
+}
+
+func (s *MockMistClient) PushAutoAdd(streamName, targetURL string) error {
+	s.RecordedPushAutoAdd = append(s.RecordedPushAutoAdd, RecordedPushAutoAdd{
+		Stream: streamName,
+		Target: targetURL,
+	})
+	return nil
+}
+func (s *MockMistClient) PushAutoRemove(streamParams []interface{}) error {
+	s.RecordedPushAutoRemove = append(s.RecordedPushAutoRemove, RecordedPushAutoRemove{
+		StreamParams: streamParams,
+	})
+	return nil
+}
+
+func (s *MockMistClient) PushAutoList() ([]MistPushAuto, error) {
+	return s.PushAutoListStub, nil
+}
+
+func (s *MockMistClient) GetStats() (MistStats, error) {
+	return MistStats{}, nil
 }
