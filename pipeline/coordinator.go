@@ -574,6 +574,12 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
 		return
 	}
 
+	// If it's a fallback, we want a unique Request ID so that it doesn't clash with the row that's already been created for the first pipeline
+	metricsRequestID := job.RequestID
+	if job.InFallbackMode {
+		metricsRequestID = "fb_" + metricsRequestID
+	}
+
 	targetURL := ""
 	if job.HlsTargetURL != nil {
 		targetURL = job.HlsTargetURL.Redacted()
@@ -606,7 +612,7 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
 		insertDynStmt,
 		time.Now().Unix(),
 		job.startTime.Unix(),
-		job.RequestID,
+		metricsRequestID,
 		job.ExternalID,
 		job.sourceCodecVideo,
 		job.sourceCodecAudio,
