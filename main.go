@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/rsa"
 	"database/sql"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/hashicorp/serf/serf"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -258,7 +260,7 @@ func main() {
 	})
 
 	group.Go(func() error {
-		return handleClusterEvents(ctx, c)
+		return handleClusterEvents(ctx, mapic, c)
 	})
 
 	err = group.Wait()
@@ -281,17 +283,38 @@ func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Clu
 	}
 }
 
-func handleClusterEvents(ctx context.Context, c cluster.Cluster) error {
+func handleClusterEvents(ctx context.Context, mapic mistapiconnector.IMac, c cluster.Cluster) error {
 	eventCh := c.EventChan()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case e := <-eventCh:
-			// TODO: add proper event handling
-			fmt.Printf("\n\n##########\n\nReceived an event: name=%s, payload=%s\n\n", e.Name, e.Payload)
+			processClusterEvent(mapic, e)
 		}
 	}
+}
+
+func processClusterEvent(mapic mistapiconnector.IMac, e serf.UserEvent) {
+	type EventPayload struct {
+		Resource   string `json:"resource"`
+		PlaybackID string `json:"playbackID"`
+	}
+
+	go func() {
+		var eventPayload EventPayload
+		err := json.Unmarshal(e.Payload, &eventPayload)
+		if err != nil {
+			glog.Errorf("cannot unmarshall received serf event: %v", e)
+		}
+		switch eventPayload.Resource {
+		case "stream":
+			mapic.RefreshMultistreamIfNeeded(eventPayload.PlaybackID)
+			return
+		default:
+			glog.Errorf("unsupported serf event: %v", e)
+		}
+	}()
 }
 
 func handleSignals(ctx context.Context) error {
