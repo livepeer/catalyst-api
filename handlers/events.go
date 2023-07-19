@@ -16,12 +16,12 @@ type EventsHandlersCollection struct {
 	Cluster cluster.Cluster
 }
 
-type Event struct {
-	Resource   string `json:"resource"`
-	PlaybackID string `json:"playback_id"`
-}
-
 func (d *EventsHandlersCollection) Events() httprouter.Handle {
+	type Event struct {
+		Resource   string `json:"resource"`
+		PlaybackID string `json:"playback_id"`
+	}
+
 	schema := inputSchemasCompiled["Event"]
 	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 		payload, err := io.ReadAll(req.Body)
