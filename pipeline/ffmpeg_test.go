@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/video"
 	"github.com/stretchr/testify/require"
@@ -138,4 +139,42 @@ func Test_sendSourcePlayback(t *testing.T) {
 			}
 		})
 	}
+}
+
+type stubProbe struct {
+	probedUrls []string
+}
+
+func (p *stubProbe) ProbeFile(requestID string, url string, ffProbeOptions ...string) (video.InputVideo, error) {
+	p.probedUrls = append(p.probedUrls, url)
+	return video.InputVideo{}, nil
+}
+
+func Test_probeSegments(t *testing.T) {
+	probe := stubProbe{}
+	f := ffmpeg{
+		probe: &probe,
+	}
+	job := &JobInfo{
+		UploadJobPayload: UploadJobPayload{
+			RequestID: "requestID",
+		},
+	}
+
+	// each segment should be probed twice, an extra call is made with loglevel warning
+	err := f.probeSourceSegments(job, []*m3u8.MediaSegment{{URI: "0.ts"}})
+	require.NoError(t, err)
+	require.Equal(t, []string{"/0.ts", "/0.ts"}, probe.probedUrls)
+
+	probe.probedUrls = []string{}
+	_ = f.probeSourceSegments(job, []*m3u8.MediaSegment{{URI: "0.ts"}, {URI: "1.ts"}})
+	require.Equal(t, []string{"/0.ts", "/0.ts", "/1.ts", "/1.ts"}, probe.probedUrls)
+
+	probe.probedUrls = []string{}
+	_ = f.probeSourceSegments(job, []*m3u8.MediaSegment{{URI: "0.ts"}, {URI: "1.ts"}, {URI: "2.ts"}, {URI: "3.ts"}})
+	require.Equal(t, []string{"/0.ts", "/0.ts", "/1.ts", "/1.ts", "/2.ts", "/2.ts", "/3.ts", "/3.ts"}, probe.probedUrls)
+
+	probe.probedUrls = []string{}
+	_ = f.probeSourceSegments(job, []*m3u8.MediaSegment{{URI: "0.ts"}, {URI: "1.ts"}, {URI: "2.ts"}, {URI: "3.ts"}, {URI: "4.ts"}, {URI: "5.ts"}})
+	require.Equal(t, []string{"/0.ts", "/0.ts", "/1.ts", "/1.ts", "/4.ts", "/4.ts", "/5.ts", "/5.ts"}, probe.probedUrls)
 }
