@@ -2,7 +2,6 @@ package transcode
 
 import (
 	"sync"
-	"time"
 
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
@@ -41,8 +40,6 @@ func (t *ParallelTranscoding) Start() {
 	t.completed.Add(config.TranscodingParallelJobs)
 	for index := 0; index < config.TranscodingParallelJobs; index++ {
 		go t.workerRoutine()
-		// Add some desync interval to avoid load spikes on segment-encode-end
-		time.Sleep(config.TranscodingParallelSleep)
 	}
 }
 
