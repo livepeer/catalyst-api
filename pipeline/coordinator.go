@@ -289,12 +289,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		p.SourceFile = osTransferURL.String()  // OS URL used by mist
 		p.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert
 		p.InputFileInfo = inputVideoProbe
-		p.GenerateMP4 = func(mp4TargetUrl *url.URL, mp4OnlyShort bool, duration float64) bool {
-			if mp4TargetUrl != nil && (!mp4OnlyShort || duration <= maxMP4OutDuration.Seconds()) {
-				return true
-			}
-			return false
-		}(p.Mp4TargetURL, p.Mp4OnlyShort, p.InputFileInfo.Duration)
+		p.GenerateMP4 = ShouldGenerateMP4(sourceURL, p.Mp4TargetURL, p.Mp4OnlyShort, p.InputFileInfo.Duration)
 
 		log.AddContext(p.RequestID, "new_source_url", p.SourceFile)
 		log.AddContext(p.RequestID, "signed_url", p.SignedSourceURL)
@@ -303,6 +298,21 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		return nil, nil
 	})
 }
+
+func ShouldGenerateMP4(sourceURL, mp4TargetUrl *url.URL, mp4OnlyShort bool, durationSecs float64) bool {
+	// We're currently memory-bound for generating MP4s above a certain file size
+	// This has been hitting us for long recordings, so do a crude "is it longer than 3 hours?" check and skip the MP4 if it is
+	const maxRecordingMP4Duration = 3 * time.Hour
+	if clients.IsHLSInput(sourceURL) && durationSecs > maxRecordingMP4Duration.Seconds() {
+		return false
+	}
+
+	if mp4TargetUrl != nil && (!mp4OnlyShort || durationSecs <= maxMP4OutDuration.Seconds()) {
+		return true
+	}
+	return false
+}
+
 func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 	strategy := c.strategy
 	if p.PipelineStrategy.IsValid() {
