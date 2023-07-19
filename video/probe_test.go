@@ -125,8 +125,8 @@ func TestProbe_VP9(t *testing.T) {
 }
 
 func TestProbe_IgnoreSomeErrors(t *testing.T) {
-	_, err := Probe{}.ProbeFile("requestID", "./fixtures/parametric-stereo-error.mp4")
+	_, err := Probe{IgnoreErrMessages: []string{"parametric stereo signaled to be not-present but was found in the bitstream"}}.ProbeFile("requestID", "./fixtures/parametric-stereo-error.mp4")
 	require.NoError(t, err)
-	_, err = Probe{}.ProbeFile("requestID", "./fixtures/non-existing-pps.ts")
+	_, err = Probe{IgnoreErrMessages: []string{"non-existing pps 0 referenced"}}.ProbeFile("requestID", "./fixtures/non-existing-pps.ts")
 	require.NoError(t, err)
 }

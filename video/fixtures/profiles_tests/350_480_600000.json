@@ -1,0 +1,1 @@
+{"Width":350,"Height":480,"Bitrate":600000,"ExpectedOutput":[{"name":"low-bitrate","width":350,"height":480,"bitrate":300000,"fps":0},{"name":"480p0","width":350,"height":480,"bitrate":600000,"fps":0}],"CurrentOutput":[{"name":"low-bitrate","width":350,"height":480,"bitrate":300000,"fps":0},{"name":"480p0","width":350,"height":480,"bitrate":600000,"fps":0}]}

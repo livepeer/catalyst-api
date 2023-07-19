@@ -200,13 +200,12 @@ func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string,
 		pipeFfmpeg: &ffmpeg{
 			SourceOutputUrl: sourceOutputURL,
 			Broadcaster:     broadcaster,
+			probe:           video.Probe{},
 		},
-		pipeExternal: &external{extTranscoder},
-		Jobs:         cache.New[*JobInfo](),
-		MetricsDB:    metricsDB,
-		InputCopy: &clients.InputCopy{
-			Probe: video.Probe{},
-		},
+		pipeExternal:         &external{extTranscoder},
+		Jobs:                 cache.New[*JobInfo](),
+		MetricsDB:            metricsDB,
+		InputCopy:            clients.NewInputCopy(),
 		VodDecryptPrivateKey: VodDecryptPrivateKey,
 		SourceOutputURL:      sourceOutput,
 	}, nil
@@ -224,7 +223,7 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 		statusClient = clients.TranscodeStatusFunc(func(tsm clients.TranscodeStatusMessage) error { return nil })
 	}
 	if pipeFfmpeg == nil {
-		pipeFfmpeg = &ffmpeg{SourceOutputUrl: sourceOutputUrl}
+		pipeFfmpeg = &ffmpeg{SourceOutputUrl: sourceOutputUrl, probe: video.Probe{}}
 	}
 	if pipeExternal == nil {
 		pipeExternal = &external{}
@@ -289,12 +288,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		p.SourceFile = osTransferURL.String()  // OS URL used by mist
 		p.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert
 		p.InputFileInfo = inputVideoProbe
-		p.GenerateMP4 = func(mp4TargetUrl *url.URL, mp4OnlyShort bool, duration float64) bool {
-			if mp4TargetUrl != nil && (!mp4OnlyShort || duration <= maxMP4OutDuration.Seconds()) {
-				return true
-			}
-			return false
-		}(p.Mp4TargetURL, p.Mp4OnlyShort, p.InputFileInfo.Duration)
+		p.GenerateMP4 = ShouldGenerateMP4(sourceURL, p.Mp4TargetURL, p.Mp4OnlyShort, p.InputFileInfo.Duration)
 
 		log.AddContext(p.RequestID, "new_source_url", p.SourceFile)
 		log.AddContext(p.RequestID, "signed_url", p.SignedSourceURL)
@@ -303,6 +297,21 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		return nil, nil
 	})
 }
+
+func ShouldGenerateMP4(sourceURL, mp4TargetUrl *url.URL, mp4OnlyShort bool, durationSecs float64) bool {
+	// We're currently memory-bound for generating MP4s above a certain file size
+	// This has been hitting us for long recordings, so do a crude "is it longer than 3 hours?" check and skip the MP4 if it is
+	const maxRecordingMP4Duration = 3 * time.Hour
+	if clients.IsHLSInput(sourceURL) && durationSecs > maxRecordingMP4Duration.Seconds() {
+		return false
+	}
+
+	if mp4TargetUrl != nil && (!mp4OnlyShort || durationSecs <= maxMP4OutDuration.Seconds()) {
+		return true
+	}
+	return false
+}
+
 func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 	strategy := c.strategy
 	if p.PipelineStrategy.IsValid() {
@@ -574,6 +583,12 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
 		return
 	}
 
+	// If it's a fallback, we want a unique Request ID so that it doesn't clash with the row that's already been created for the first pipeline
+	metricsRequestID := job.RequestID
+	if job.InFallbackMode {
+		metricsRequestID = "fb_" + metricsRequestID
+	}
+
 	targetURL := ""
 	if job.HlsTargetURL != nil {
 		targetURL = job.HlsTargetURL.Redacted()
@@ -606,7 +621,7 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
 		insertDynStmt,
 		time.Now().Unix(),
 		job.startTime.Unix(),
-		job.RequestID,
+		metricsRequestID,
 		job.ExternalID,
 		job.sourceCodecVideo,
 		job.sourceCodecAudio,

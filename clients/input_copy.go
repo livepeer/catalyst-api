@@ -22,7 +22,12 @@ import (
 
 const MaxCopyFileDuration = 2 * time.Hour
 const PresignDuration = 24 * time.Hour
-const LocalSourceFilePattern = "sourcevideo*"
+
+// These probe errors were found in the past on mist recordings but still process fine so we are ignoring them
+var ignoreProbeErrs = []string{
+	"parametric stereo signaled to be not-present but was found in the bitstream",
+	"non-existing pps 0 referenced",
+}
 
 type InputCopier interface {
 	CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL, decryptor *crypto.DecryptionKeys) (video.InputVideo, string, error)
@@ -31,6 +36,12 @@ type InputCopier interface {
 type InputCopy struct {
 	S3    S3
 	Probe video.Prober
+}
+
+func NewInputCopy() *InputCopy {
+	return &InputCopy{
+		Probe: video.Probe{IgnoreErrMessages: ignoreProbeErrs},
+	}
 }
 
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
