@@ -45,12 +45,11 @@ type (
 	}
 
 	pushStatus struct {
-		wildcardPlaybackID string
-		target             *api.MultistreamTarget
-		profile            string
-		pushStartEmitted   bool
-		pushStopped        bool
-		metrics            *data.MultistreamMetrics
+		target           *api.MultistreamTarget
+		profile          string
+		pushStartEmitted bool
+		pushStopped      bool
+		metrics          *data.MultistreamMetrics
 	}
 
 	streamInfo struct {
@@ -471,60 +470,54 @@ func toKey(stream, target string) MapKey {
 }
 
 func (mc *mac) reconcileMultistream() {
-	fmt.Println("#### Reconciling")
-
-	pushAutoList, _ := mc.mist.PushAutoList()
-	existing := filterMultistream(pushAutoList)
-
-	existingMap := map[MapKey]bool{}
-
-	for _, e := range existing {
-		existingMap[toKey(e.Stream, e.Target)] = true
+	mistPushAutoList, err := mc.mist.PushAutoList()
+	if err != nil {
+		glog.Errorf("error executing PUSH_AUTO_LIST on Mist, cannot reconcile multistream err=%v", err)
+		return
+	}
+	filteredMistPushAutoList := filterMultistream(mistPushAutoList)
+	mistMap := map[MapKey]bool{}
+	for _, e := range filteredMistPushAutoList {
+		mistMap[toKey(e.Stream, e.Target)] = true
 	}
 
-	streamInfoMap := map[MapKey]bool{}
-
+	cachedMap := map[MapKey]bool{}
 	mc.mu.Lock()
 	for _, si := range mc.streamInfo {
 		for target, v := range si.pushStatus {
 			if v.target != nil && !v.target.Disabled {
 				stream := mc.wildcardPlaybackID(si.stream)
-				streamInfoMap[toKey(stream, target)] = true
+				cachedMap[toKey(stream, target)] = true
 			}
 		}
 	}
 	mc.mu.Unlock()
 
-	for _, e := range existing {
-		if !streamInfoMap[toKey(e.Stream, e.Target)] {
-			mc.mist.PushAutoRemove(e.StreamParams)
+	// Remove AUTO_PUSH that exists in Mist, but is not in streamInfo cache
+	for _, e := range filteredMistPushAutoList {
+		if !cachedMap[toKey(e.Stream, e.Target)] {
+			glog.Infof("removing AUTO_PUSH for stream=%s target=%s", e.Stream, e.Target)
+			if err := mc.mist.PushAutoRemove(e.StreamParams); err != nil {
+				glog.Errorf("cannot remove AUTO_PUSH for stream=%s target=%s err=%v", e.Stream, e.Target, err)
+			}
 		}
 	}
 
-	for k, _ := range streamInfoMap {
-		if !existingMap[toKey(k.stream, k.target)] {
-			mc.mist.PushAutoAdd(k.stream, k.target)
+	// Add AUTO_PUSH that exists streamInfo cache, but not in Mist
+	for k, _ := range cachedMap {
+		if !mistMap[toKey(k.stream, k.target)] {
+			glog.Infof("adding AUTO_PUSH for stream=%s target=%s", k.stream, k.target)
+			if err := mc.mist.PushAutoAdd(k.stream, k.target); err != nil {
+				glog.Errorf("cannot add AUTO_PUSH for stream=%s target=%s err=%v", k.stream, k.target, err)
+			}
 		}
 	}
-
-	//err = mc.mist.PushAutoAdd(wildcardPlaybackID, pushURL)
-	//fmt.Printf("\n\n######\n  %s %s", wildcardPlaybackID, pushURL)
-	//if err != nil {
-	//	glog.Errorf("Error starting multistream to target. targetId=%s stream=%s err=%v", targetRef.ID, wildcardPlaybackID, err)
-	//	info.mu.Lock()
-	//	delete(info.pushStatus, pushURL)
-	//	info.mu.Unlock()
-	//	return
-	//}
-	//glog.Infof("Started multistream to target. targetId=%s stream=%s url=%s", wildcardPlaybackID, targetRef.ID, pushURL)
-
-	// TODO: Think what to do with stale stream infos
 }
 
 func filterMultistream(list []clients.MistPushAuto) []clients.MistPushAuto {
 	var res []clients.MistPushAuto
 	for _, e := range list {
-		if strings.HasPrefix(e.Stream, "video+") &&
+		if (strings.HasPrefix(e.Stream, "video+") || strings.HasPrefix(e.Stream, "videorec+")) &&
 			(strings.HasPrefix(strings.ToLower(e.Target), "rtmp:") || strings.HasPrefix(strings.ToLower(e.Target), "srt:")) {
 			res = append(res, e)
 		}
@@ -594,9 +587,8 @@ func (mc *mac) refreshStreamInfo(playbackID string) (*streamInfo, error) {
 			return nil, err
 		}
 		newPushes[pushURL] = &pushStatus{
-			wildcardPlaybackID: mc.wildcardPlaybackID(info.stream),
-			target:             target,
-			profile:            ref.Profile,
+			target:  target,
+			profile: ref.Profile,
 			// Assume setup was all successful
 			pushStartEmitted: true,
 			metrics:          &data.MultistreamMetrics{},

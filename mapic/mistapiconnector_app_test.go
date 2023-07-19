@@ -2,6 +2,7 @@ package mistapiconnector
 
 import (
 	"github.com/livepeer/catalyst-api/clients"
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/go-api-client"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -28,22 +29,24 @@ func TestReconcileMultistream(t *testing.T) {
 		},
 	}
 	mc := mac{
-		mist: &mistClientMock,
+		mist:           &mistClientMock,
+		baseStreamName: "video",
+		config:         &config.Cli{},
 	}
 
 	mc.streamInfo = map[string]*streamInfo{
 		"6736xac7u1hj36pa": {
+			stream: &api.Stream{
+				PlaybackID: "6736xac7u1hj36pa",
+			},
 			pushStatus: map[string]*pushStatus{
 				"rtmp://localhost/live/3c36-sgjq-qbsb-u0ik?video=maxbps&audio=maxbps": {
-					wildcardPlaybackID: "video+6736xac7u1hj36pa",
-					target:             &api.MultistreamTarget{},
+					target: &api.MultistreamTarget{},
 				},
 				"rtmp://localhost/live/3c36-sgjq-qbsb-abcd?video=maxbps&audio=maxbps": {
-					wildcardPlaybackID: "video+6736xac7u1hj36pa",
-					target:             &api.MultistreamTarget{},
+					target: &api.MultistreamTarget{},
 				},
 				"rtmp://localhost/live/3c36-sgjq-qbsb-disabled?video=maxbps&audio=maxbps": {
-					wildcardPlaybackID: "video+6736xac7u1disabled",
 					target: &api.MultistreamTarget{
 						Disabled: true,
 					},
@@ -51,10 +54,12 @@ func TestReconcileMultistream(t *testing.T) {
 			},
 		},
 		"abcdefghi": {
+			stream: &api.Stream{
+				PlaybackID: "abcdefghi",
+			},
 			pushStatus: map[string]*pushStatus{
 				"rtmp://localhost/live/3c36-sgjq-qbsb-efgi?video=maxbps&audio=maxbps": {
-					wildcardPlaybackID: "video+abcdefghi",
-					target:             &api.MultistreamTarget{},
+					target: &api.MultistreamTarget{},
 				},
 			},
 		},
