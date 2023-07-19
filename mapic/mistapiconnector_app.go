@@ -255,7 +255,6 @@ func (mc *mac) handlePushRewrite(ctx context.Context, payload *misttriggers.Push
 		}
 	} else {
 		glog.Errorf("Shouldn't happen streamID=%s", stream.ID)
-		// streamKey = strings.ReplaceAll(streamKey, "-", "")
 	}
 	go mc.emitStreamStateEvent(stream, data.StreamState{Active: true})
 	metrics.StartStream()
