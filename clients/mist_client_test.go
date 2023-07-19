@@ -3,7 +3,6 @@ package clients
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -682,7 +681,7 @@ func TestSameStringSlice(t *testing.T) {
 	}
 }
 
-func TestParsePushAutoList(t *testing.T) {
+func TestParsePushAutoListValid(t *testing.T) {
 	mistPushAutoListBody := `
 	{
 	  "LTS": 1,
@@ -726,17 +725,85 @@ func TestParsePushAutoList(t *testing.T) {
 	require.Equal(t, "rtmp://localhost/live/4783-4xpf-hced-2k4o?video=maxbps&audio=maxbps", res[1].Target)
 }
 
-func TestRealMistPushRemove(t *testing.T) {
-	fmt.Println("Test test")
-	mc := NewMistAPIClient("", "", "localhost", 4242, "")
-	err := mc.PushAutoRemove([]interface{}{"video+6736xac7u1hj36pa", "rtmp://localhost/live/3c36-sgjq-qbsb-u0ik?video=maxbps&audio=maxbps", 0, 0, "", 0, "", "", 0, ""})
-	fmt.Println(err)
-}
+func TestParsePushAutoListInvalid(t *testing.T) {
+	tests := []struct {
+		mistPushAutoListBody string
+	}{
+		{
+			mistPushAutoListBody: `
+			{
+			  "LTS": 1,
+			  "authorize": {
+				"local": true,
+				"status": "OK"
+			  },
+			  "push_auto_list": [
+				[
+				  "videorec+",
+				  null,
+				  null,
+				  null,
+				  null,
+				  null,
+				  null,
+				  null
+				],
+				[
+				  "video+6736xac7u1hj36pa",
+				  null,
+				  0,
+				  0,
+				  "",
+				  0,
+				  "",
+				  "",
+				  0,
+				  ""
+				]
+			  ]
+			}
+		`},
+		{
+			mistPushAutoListBody: `
+			{
+			  "LTS": 1,
+			  "authorize": {
+				"local": true,
+				"status": "OK"
+			  },
+			  "push_auto_list": [
+				[
+				  null,
+				  ""rtmp://localhost/live/4783-4xpf-hced-2k4o?video=maxbps&audio=maxbps"",
+				  null,
+				  null,
+				  null,
+				  null,
+				  null,
+				  null
+				],
+				[
+				  null,
+				  null,
+				  0,
+				  0,
+				  "",
+				  0,
+				  "",
+				  "",
+				  0,
+				  ""
+				]
+			  ]
+			}
+		`},
+		{
+			mistPushAutoListBody: "invalid payload",
+		},
+	}
 
-func TestRealMistPushAutoList(t *testing.T) {
-	fmt.Println("Test test")
-	mc := NewMistAPIClient("", "", "localhost", 4242, "")
-	res, err := mc.PushAutoList()
-	fmt.Println(err)
-	fmt.Println(res)
+	for _, tt := range tests {
+		_, err := parsePushAutoList(tt.mistPushAutoListBody)
+		require.Error(t, err)
+	}
 }

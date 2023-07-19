@@ -15,6 +15,8 @@ import (
 	"github.com/livepeer/catalyst-api/metrics"
 )
 
+//go:generate mockgen -source=./mist_client.go -destination=../mocks/clients/mist_client.go
+
 type MistAPIClient interface {
 	AddStream(streamName, sourceUrl string) error
 	PushAutoAdd(streamName, targetURL string) error
@@ -169,7 +171,7 @@ func (mc *MistClient) PushAutoRemove(streamParams []interface{}) error {
 	}
 	streamName, ok := streamParams[0].(string)
 	if !ok {
-		return errors.New("first parameters in streamParams must be a stream name")
+		return errors.New("first param in streamParams must be the stream name")
 	}
 	c := commandPushAutoRemove(streamParams)
 	return wrapErr(validatePushAutoRemove(mc.sendCommand(c)), streamName)
@@ -186,6 +188,10 @@ func (mc *MistClient) PushAutoList() ([]MistPushAuto, error) {
 }
 
 func parsePushAutoList(mistResponse string) ([]MistPushAuto, error) {
+	type MistPushAutoList struct {
+		PushAutoList [][]interface{} `json:"push_auto_list"`
+	}
+
 	parsed := MistPushAutoList{}
 	if err := json.Unmarshal([]byte(mistResponse), &parsed); err != nil {
 		return nil, err
@@ -430,10 +436,6 @@ type MistPushAuto struct {
 	Stream       string
 	Target       string
 	StreamParams []interface{}
-}
-
-type MistPushAutoList struct {
-	PushAutoList [][]interface{} `json:"push_auto_list"`
 }
 
 func commandPushAutoAdd(streamName, target string) pushAutoAddCommand {
