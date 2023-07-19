@@ -240,7 +240,7 @@ func (mc *MistClient) sendCommand(command interface{}) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := metrics.MonitorRequest(metrics.Metrics.MistClient, mistRetryableClient, req)
 	if err != nil {
 		return "", err
