@@ -119,13 +119,29 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	transcodedStats := statsFromProfiles(transcodeProfiles)
 
 	renditionList := video.TRenditionList{RenditionSegmentTable: make(map[string]*video.TSegmentList)}
-	// only populate video.TRenditionList map if MP4 is enabled via override or short-form video detection
+	// Only populate video.TRenditionList map if MP4 is enabled via override or short-form video detection.
+	// And if the original input file was an HLS video, then only generate an MP4 for the highest bitrate profile.
+	var maxBitrate int64
+	var maxProfile video.EncodedProfile
 	if transcodeRequest.GenerateMP4 {
-		for _, profile := range transcodeProfiles {
-			renditionList.AddRenditionSegment(profile.Name,
+		if inputInfo.Format == "hls" {
+			for _, profile := range transcodeProfiles {
+				if profile.Bitrate > maxBitrate {
+					maxBitrate = profile.Bitrate
+					maxProfile = profile
+				}
+			}
+			renditionList.AddRenditionSegment(maxProfile.Name,
 				&video.TSegmentList{
 					SegmentDataTable: make(map[int][]byte),
 				})
+		} else {
+			for _, profile := range transcodeProfiles {
+				renditionList.AddRenditionSegment(profile.Name,
+					&video.TSegmentList{
+						SegmentDataTable: make(map[int][]byte),
+					})
+			}
 		}
 	}
 
@@ -366,8 +382,13 @@ func transcodeSegment(
 		if transcodeRequest.GenerateMP4 {
 			// get inner segments table from outer rendition table
 			segmentsList := renditionList.GetSegmentList(transcodedSegment.Name)
-			// add new entry for segment # and corresponding byte stream
-			segmentsList.AddSegmentData(segment.Index, transcodedSegment.MediaData)
+			if segmentsList != nil {
+				// add new entry for segment # and corresponding byte stream if the profile
+				// exists in the renditionList which contains only profiles for which mp4s will
+				// be generated i.e. all profiles for mp4 inputs and only highest quality
+				// rendition for hls inputs like recordings.
+				segmentsList.AddSegmentData(segment.Index, transcodedSegment.MediaData)
+			}
 		}
 
 		err = backoff.Retry(func() error {
