@@ -500,6 +500,7 @@ func (mc *mac) reconcileMultistream() {
 			if err := mc.mist.PushAutoRemove(e.StreamParams); err != nil {
 				glog.Errorf("cannot remove AUTO_PUSH for stream=%s target=%s err=%v", e.Stream, e.Target, err)
 			}
+			// TODO: Add calling PUSH_STOP(just realized PUSH_AUTO_REMOVE doesn't remove PUSH automatically)
 		}
 	}
 
