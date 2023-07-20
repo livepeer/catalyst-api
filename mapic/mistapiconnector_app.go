@@ -467,6 +467,10 @@ func (mc *mac) reconcileMultistream() {
 	toKey := func(stream, target string) key {
 		return key{stream: stream, target: target}
 	}
+	isMultistream := func(k key) bool {
+		return (strings.HasPrefix(k.stream, "video+") || strings.HasPrefix(k.stream, "videorec+")) &&
+			(strings.HasPrefix(strings.ToLower(k.target), "rtmp:") || strings.HasPrefix(strings.ToLower(k.target), "srt:"))
+	}
 
 	// Get the existing PUSH_AUTO from Mist
 	mistPushAutoList, err := mc.mist.PushAutoList()
@@ -474,10 +478,30 @@ func (mc *mac) reconcileMultistream() {
 		glog.Errorf("error executing PUSH_AUTO_LIST on Mist, cannot reconcile multistream err=%v", err)
 		return
 	}
-	filteredMistPushAutoList := filterMultistream(mistPushAutoList)
+	var filteredMistPushAutoList []clients.MistPushAuto
 	mistMap := map[key]bool{}
-	for _, e := range filteredMistPushAutoList {
-		mistMap[toKey(e.Stream, e.Target)] = true
+	for _, e := range mistPushAutoList {
+		k := toKey(e.Stream, e.Target)
+		if isMultistream(k) {
+			filteredMistPushAutoList = append(filteredMistPushAutoList, e)
+			mistMap[toKey(e.Stream, e.Target)] = true
+		}
+	}
+
+	// Get the existing PUSH from Mist
+	stats, err := mc.mist.GetStats()
+	if err != nil {
+		glog.Errorf("error executing PUSH_LIST on Mist, cannot reconcile multistream err=%v", err)
+		return
+	}
+	var filteredMistPushList []*clients.MistPush
+	mistPushMap := map[key]int64{}
+	for _, e := range stats.PushList {
+		k := toKey(e.Stream, e.OriginalURL)
+		if isMultistream(k) {
+			filteredMistPushList = append(filteredMistPushList, e)
+			mistPushMap[toKey(e.Stream, e.OriginalURL)] = e.ID
+		}
 	}
 
 	// Get the expected multistreams from cached streamInfo
@@ -500,7 +524,17 @@ func (mc *mac) reconcileMultistream() {
 			if err := mc.mist.PushAutoRemove(e.StreamParams); err != nil {
 				glog.Errorf("cannot remove AUTO_PUSH for stream=%s target=%s err=%v", e.Stream, e.Target, err)
 			}
-			// TODO: Add calling PUSH_STOP(just realized PUSH_AUTO_REMOVE doesn't remove PUSH automatically)
+		}
+	}
+
+	// Remove PUSH that exists in Mist, but is not in streamInfo cache
+	// Deleted AUTO_PUSH does not automatically delete the related PUSH
+	for _, e := range filteredMistPushList {
+		if !cachedMap[toKey(e.Stream, e.OriginalURL)] {
+			glog.Infof("stopping PUSH for stream=%s target=%s id=%d", e.Stream, e.OriginalURL, e.ID)
+			if err := mc.mist.PushStop(e.ID); err != nil {
+				glog.Errorf("cannot stop PUSH for stream=%s target=%s id=%d err=%v", e.Stream, e.OriginalURL, e.ID, err)
+			}
 		}
 	}
 
@@ -513,17 +547,6 @@ func (mc *mac) reconcileMultistream() {
 			}
 		}
 	}
-}
-
-func filterMultistream(list []clients.MistPushAuto) []clients.MistPushAuto {
-	var res []clients.MistPushAuto
-	for _, e := range list {
-		if (strings.HasPrefix(e.Stream, "video+") || strings.HasPrefix(e.Stream, "videorec+")) &&
-			(strings.HasPrefix(strings.ToLower(e.Target), "rtmp:") || strings.HasPrefix(strings.ToLower(e.Target), "srt:")) {
-			res = append(res, e)
-		}
-	}
-	return res
 }
 
 func (mc *mac) getPushUrl(stream *api.Stream, targetRef *api.MultistreamTargetRef) (*api.MultistreamTarget, string, error) {

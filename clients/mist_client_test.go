@@ -32,6 +32,10 @@ func TestRequestPayload(t *testing.T) {
 			commandPushAutoRemove([]interface{}{"somestream", "http://some-target-url.com/target.mp4"}),
 		},
 		{
+			"command=%7B%22push_stop%22%3A%5B4%5D%7D",
+			commandPushStop(4),
+		},
+		{
 			"command=%7B%22deletestream%22%3A%7B%22somestream%22%3Anull%7D%7D",
 			commandDeleteStream("somestream"),
 		},

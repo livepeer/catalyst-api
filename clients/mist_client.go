@@ -22,6 +22,7 @@ type MistAPIClient interface {
 	PushAutoAdd(streamName, targetURL string) error
 	PushAutoRemove(streamParams []interface{}) error
 	PushAutoList() ([]MistPushAuto, error)
+	PushStop(id int64) error
 	DeleteStream(streamName string) error
 	AddTrigger(streamName []string, triggerName string, sync bool) error
 	DeleteTrigger(streamName []string, triggerName string) error
@@ -218,6 +219,14 @@ func parsePushAutoList(mistResponse string) ([]MistPushAuto, error) {
 	}
 
 	return res, nil
+}
+
+func (mc *MistClient) PushStop(id int64) error {
+	c := commandPushStop(id)
+	if err := validatePushAutoRemove(mc.sendCommand(c)); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (mc *MistClient) DeleteStream(streamName string) error {
@@ -459,6 +468,16 @@ func commandPushAutoList() pushAutoListCommand {
 func commandPushAutoRemove(streamParams []interface{}) pushAutoRemoveCommand {
 	return pushAutoRemoveCommand{
 		PushAutoRemove: [][]interface{}{streamParams},
+	}
+}
+
+type pushStopCommand struct {
+	PushStop []int64 `json:"push_stop"`
+}
+
+func commandPushStop(id int64) pushStopCommand {
+	return pushStopCommand{
+		PushStop: []int64{id},
 	}
 }
 

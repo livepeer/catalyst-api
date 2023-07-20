@@ -41,6 +41,30 @@ func TestReconcileMultistream(t *testing.T) {
 			},
 		}, nil
 	}).Times(1)
+	mm.EXPECT().GetStats().DoAndReturn(func() (clients.MistStats, error) {
+		return clients.MistStats{
+			PushList: []*clients.MistPush{
+				// Ignore, PUSH used for recordings
+				{
+					ID:          1,
+					Stream:      "videorec+",
+					OriginalURL: "s3+https://***:***@storage.googleapis.com/lp-us-catalyst-recordings-monster/hls/$wildcard/$uuid/source/$segmentCounter.ts?m3u8=../output.m3u8&split=5&video=source&audio=source",
+				},
+				// Stop, does not exist in cached stream info
+				{
+					ID:          2,
+					Stream:      "video+6736xac7u1hj36pa",
+					OriginalURL: "rtmp://localhost/live/4783-4xpf-hced-2k4o?video=maxbps&audio=maxbps",
+				},
+				// Ignore, exist in the cached stream info
+				{
+					ID:          3,
+					Stream:      "video+6736xac7u1hj36pa",
+					OriginalURL: "rtmp://localhost/live/3c36-sgjq-qbsb-u0ik?video=maxbps&audio=maxbps",
+				},
+			},
+		}, nil
+	}).Times(1)
 	mc.streamInfo = map[string]*streamInfo{
 		"6736xac7u1hj36pa": {
 			stream: &api.Stream{
@@ -90,10 +114,15 @@ func TestReconcileMultistream(t *testing.T) {
 		recordedAutoRemove = append(recordedAutoRemove, streamParams)
 		return nil
 	}).AnyTimes()
+	var recordedPushStop []int64
+	mm.EXPECT().PushStop(gomock.Any()).DoAndReturn(func(id int64) error {
+		recordedPushStop = append(recordedPushStop, id)
+		return nil
+	}).AnyTimes()
 
 	mc.reconcileMultistream()
 
-	expectedToAdd := []streamTarget{
+	expectedAutoToAdd := []streamTarget{
 		{
 			stream: "video+6736xac7u1hj36pa",
 			target: "rtmp://localhost/live/3c36-sgjq-qbsb-abcd?video=maxbps&audio=maxbps",
@@ -103,53 +132,11 @@ func TestReconcileMultistream(t *testing.T) {
 			target: "rtmp://localhost/live/3c36-sgjq-qbsb-efgi?video=maxbps&audio=maxbps",
 		},
 	}
-	expectedToRemove := [][]interface{}{
+	expectedAutoToRemove := [][]interface{}{
 		{"video+6736xac7u1hj36pa", "rtmp://localhost/live/4783-4xpf-hced-2k4o?video=maxbps&audio=maxbps", 0, 0, 0, 0},
 	}
-	require.ElementsMatch(t, expectedToAdd, recordedAutoAdd)
-	require.ElementsMatch(t, expectedToRemove, recordedAutoRemove)
-}
-
-func TestFilterMultistream(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    []clients.MistPushAuto
-		expected []clients.MistPushAuto
-	}{
-		{
-			name:     "Empty list",
-			input:    []clients.MistPushAuto{},
-			expected: []clients.MistPushAuto{},
-		},
-		{
-			name: "Filter with no valid entries",
-			input: []clients.MistPushAuto{
-				{Stream: "invalidprefix+music", Target: "rtmp://example.com/audio"},
-				{Stream: "invalidprefix+music", Target: "srt://example.com/audio"},
-				{Stream: "video+photo", Target: "https://example.com/image"},
-				{Stream: "videorec+photo", Target: "https://example.com/image"},
-			},
-			expected: []clients.MistPushAuto{},
-		},
-		{
-			name: "Filter with valid entries",
-			input: []clients.MistPushAuto{
-				{Stream: "video+example", Target: "rtmp://example.com/stream"},
-				{Stream: "videorec+test", Target: "srt://test.com"},
-				{Stream: "audio+music", Target: "rtmp://example.com/audio"},
-				{Stream: "video+demo", Target: "http://example.com/stream"},
-			},
-			expected: []clients.MistPushAuto{
-				{Stream: "video+example", Target: "rtmp://example.com/stream"},
-				{Stream: "videorec+test", Target: "srt://test.com"},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := filterMultistream(tt.input)
-			require.ElementsMatch(t, tt.expected, result)
-		})
-	}
+	expectedPushToStop := []int64{2}
+	require.ElementsMatch(t, expectedAutoToAdd, recordedAutoAdd)
+	require.ElementsMatch(t, expectedAutoToRemove, recordedAutoRemove)
+	require.ElementsMatch(t, expectedPushToStop, recordedPushStop)
 }
