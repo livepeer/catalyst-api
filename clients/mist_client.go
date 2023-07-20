@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"reflect"
 	"sort"
 	"sync"
 
-	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/metrics"
 )
 
@@ -38,7 +38,7 @@ type MistClient struct {
 
 func NewMistAPIClient(user, password, host string, port int, ownURL string) MistAPIClient {
 	mist := &MistClient{
-		ApiUrl:          fmt.Sprintf("http://%s:%d/api2", host, port),
+		ApiUrl:          fmt.Sprintf("http://%s:%d", host, port),
 		TriggerCallback: ownURL,
 	}
 	return mist
@@ -294,12 +294,12 @@ func (mc *MistClient) sendCommand(command interface{}) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	req, err := http.NewRequest(http.MethodPost, mc.ApiUrl, bytes.NewBuffer([]byte(c)))
+	payload := payloadFor(c)
+	req, err := http.NewRequest(http.MethodPost, mc.ApiUrl, bytes.NewBuffer([]byte(payload)))
 	if err != nil {
 		return "", err
 	}
-	req.Header.Add("Content-Type", "application/json")
-	glog.Infof("Mist request url=%s, payload=%s", mc.ApiUrl, c)
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := metrics.MonitorRequest(metrics.Metrics.MistClient, mistRetryableClient, req)
 	if err != nil {
 		return "", err
@@ -309,7 +309,6 @@ func (mc *MistClient) sendCommand(command interface{}) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	glog.Infof("Mist response: %s", string(body))
 	return string(body), err
 }
 
@@ -319,6 +318,10 @@ func commandToString(command interface{}) (string, error) {
 		return "", err
 	}
 	return string(res), nil
+}
+
+func payloadFor(command string) string {
+	return fmt.Sprintf("command=%s", url.QueryEscape(command))
 }
 
 func (mc *MistClient) sendHttpRequest(streamName string) (string, error) {

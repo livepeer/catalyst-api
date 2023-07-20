@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -19,7 +20,7 @@ func TestRequestPayload(t *testing.T) {
 		command  interface{}
 	}{
 		{
-			`{"addstream":{"somestream":{"source":"http://some-storage-url.com/vod.mp4"}}}`,
+			"command=%7B%22addstream%22%3A%7B%22somestream%22%3A%7B%22source%22%3A%22http%3A%2F%2Fsome-storage-url.com%2Fvod.mp4%22%7D%7D%7D",
 			commandAddStream("somestream", "http://some-storage-url.com/vod.mp4"),
 		},
 		{
@@ -31,19 +32,19 @@ func TestRequestPayload(t *testing.T) {
 			commandPushAutoRemove([]interface{}{"somestream", "http://some-target-url.com/target.mp4"}),
 		},
 		{
-			`{"deletestream":{"somestream":null}}`,
+			"command=%7B%22deletestream%22%3A%7B%22somestream%22%3Anull%7D%7D",
 			commandDeleteStream("somestream"),
 		},
 		{
-			`{"nuke_stream":"somestream"}`,
+			"command=%7B%22nuke_stream%22%3A%22somestream%22%7D",
 			commandNukeStream("somestream"),
 		},
 		{
-			`{"config":{"triggers":{"PUSH_END":[{"handler":"http://localhost/api","streams":["somestream"],"sync":false}]}}}`,
+			"command=%7B%22config%22%3A%7B%22triggers%22%3A%7B%22PUSH_END%22%3A%5B%7B%22handler%22%3A%22http%3A%2F%2Flocalhost%2Fapi%22%2C%22streams%22%3A%5B%22somestream%22%5D%2C%22sync%22%3Afalse%7D%5D%7D%7D%7D",
 			commandAddTrigger([]string{"somestream"}, "PUSH_END", "http://localhost/api", Triggers{}, false),
 		},
 		{
-			`{"config":{"triggers":{"PUSH_END":null}}}`,
+			"command=%7B%22config%22%3A%7B%22triggers%22%3A%7B%22PUSH_END%22%3Anull%7D%7D%7D",
 			commandDeleteTrigger([]string{"somestream"}, "PUSH_END", Triggers{}),
 		},
 	}
@@ -51,7 +52,8 @@ func TestRequestPayload(t *testing.T) {
 	for _, tt := range tests {
 		c, err := commandToString(tt.command)
 		require.NoError(err)
-		require.Equal(tt.expected, c)
+		p := payloadFor(c)
+		require.Equal(tt.expected, p)
 	}
 }
 
@@ -400,7 +402,7 @@ func TestItCanGetStreamStats(t *testing.T) {
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
-		require.Equal(t, string(body), `{"stats_streams":["clients","lastms"],"push_list":true}`)
+		require.Equal(t, string(body), "command="+url.QueryEscape(`{"stats_streams":["clients","lastms"],"push_list":true}`))
 
 		_, err = w.Write([]byte(mistStatsResponse))
 		require.NoError(t, err)
