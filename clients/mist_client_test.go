@@ -28,7 +28,7 @@ func TestRequestPayload(t *testing.T) {
 			commandPushAutoAdd("somestream", "http://some-target-url.com/target.mp4"),
 		},
 		{
-			"command=%7B%22push_auto_remove%22%3A%5B%7B%22stream%22%3A%5B%22somestream%22%2C%22http%3A%2F%2Fsome-target-url.com%2Ftarget.mp4%22%5D%7D%5D%7D",
+			"command=%7B%22push_auto_remove%22%3A%5B%5B%22somestream%22%2C%22http%3A%2F%2Fsome-target-url.com%2Ftarget.mp4%22%5D%5D%7D",
 			commandPushAutoRemove([]interface{}{"somestream", "http://some-target-url.com/target.mp4"}),
 		},
 		{
