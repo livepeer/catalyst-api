@@ -72,10 +72,15 @@ func (b *BalancerImpl) Start(ctx context.Context) error {
 // wait for the mist LB to be available. can be called multiple times.
 func (b *BalancerImpl) waitForStartup(ctx context.Context) {
 	b.startupOnce.Do(func() {
+		i := 0
 		for {
 			_, err := b.getMistLoadBalancerServers(ctx)
 			if err == nil {
 				return
+			}
+			i += 1
+			if i > 10 {
+				panic("no mist startup!!!!")
 			}
 			time.Sleep(250 * time.Millisecond)
 		}
