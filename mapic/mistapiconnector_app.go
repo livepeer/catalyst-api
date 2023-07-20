@@ -597,7 +597,8 @@ func (mc *mac) refreshStreamInfo(playbackID string) (*streamInfo, error) {
 	for _, ref := range stream.Multistream.Targets {
 		target, pushURL, err := mc.getPushUrl(stream, &ref)
 		if err != nil {
-			return nil, err
+			glog.Errorf("error fetching multistream target, err=%v", err)
+			continue
 		}
 		newPushes[pushURL] = &pushStatus{
 			target:  target,
