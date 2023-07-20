@@ -305,7 +305,7 @@ func handleClusterEvents(ctx context.Context, mapic mistapiconnector.IMac, c clu
 func processClusterEvent(mapic mistapiconnector.IMac, e serf.UserEvent) {
 	type EventPayload struct {
 		Resource   string `json:"resource"`
-		PlaybackID string `json:"playbackID"`
+		PlaybackID string `json:"playback_id"`
 	}
 
 	go func() {
