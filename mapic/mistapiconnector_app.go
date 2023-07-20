@@ -81,24 +81,24 @@ type (
 	}
 
 	mac struct {
-		ctx                         context.Context
-		cancel                      context.CancelFunc
-		lapi                        *api.Client
-		balancerHost                string
-		mu                          sync.RWMutex
-		mistHot                     string
-		checkBandwidth              bool
-		baseStreamName              string
-		streamInfo                  map[string]*streamInfo
-		producer                    event.AMQPProducer
-		nodeID                      string
-		ownRegion                   string
-		mistStreamSource            string
-		mistHardcodedBroadcasters   string
-		config                      *config.Cli
-		broker                      misttriggers.TriggerBroker
-		mist                        clients.MistAPIClient
-		reconcileMultistreamTrigger chan struct{}
+		ctx                       context.Context
+		cancel                    context.CancelFunc
+		lapi                      *api.Client
+		balancerHost              string
+		mu                        sync.RWMutex
+		mistHot                   string
+		checkBandwidth            bool
+		baseStreamName            string
+		streamInfo                map[string]*streamInfo
+		producer                  event.AMQPProducer
+		nodeID                    string
+		ownRegion                 string
+		mistStreamSource          string
+		mistHardcodedBroadcasters string
+		config                    *config.Cli
+		broker                    misttriggers.TriggerBroker
+		mist                      clients.MistAPIClient
+		multistreamUpdated        chan struct{}
 	}
 )
 
@@ -150,7 +150,7 @@ func (mc *mac) Start(ctx context.Context) error {
 		startMetricsCollector(ctx, statsCollectionPeriod, mc.nodeID, mc.ownRegion, mc.mist, lapi, producer, ownExchangeName, mc)
 	}
 
-	mc.reconcileMultistreamTrigger = make(chan struct{}, 1)
+	mc.multistreamUpdated = make(chan struct{}, 1)
 	go func() {
 		mc.reconcileMultistreamLoop(ctx)
 	}()
@@ -164,7 +164,7 @@ func (mc *mac) MetricsHandler() http.Handler {
 }
 
 func (mc *mac) RefreshMultistreamIfNeeded(playbackID string) {
-	if mc.hasStream(playbackID) {
+	if mc.streamExists(playbackID) {
 		mc.refreshMultistream(playbackID)
 	}
 }
@@ -274,11 +274,11 @@ func (mc *mac) handleLiveTrackList(ctx context.Context, payload *misttriggers.Li
 	return nil
 }
 
-func (mc *mac) hasStream(playbackID string) bool {
+func (mc *mac) streamExists(playbackID string) bool {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
-	_, hasStream := mc.streamInfo[playbackID]
-	return hasStream
+	_, streamExists := mc.streamInfo[playbackID]
+	return streamExists
 }
 
 func (mc *mac) refreshMultistream(playbackID string) {
@@ -288,7 +288,7 @@ func (mc *mac) refreshMultistream(playbackID string) {
 		return
 	}
 	select {
-	case mc.reconcileMultistreamTrigger <- struct{}{}:
+	case mc.multistreamUpdated <- struct{}{}:
 		// trigger reconcile multistream
 	default:
 		// do not block if reconcile multistream already triggered
@@ -412,9 +412,7 @@ func (mc *mac) removeInfoDelayed(playbackID string, done chan struct{}) {
 func (mc *mac) removeInfo(playbackID string) {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
-	//fmt.Printf("\n\n##### \nRemoving stream info for playbackID=%s\n\n", playbackID)
 	mc.removeInfoLocked(playbackID)
-	//fmt.Printf("Current stream infos: %s\n", mc.streamInfo)
 }
 
 // must be called inside mc.mu.Lock
@@ -448,40 +446,42 @@ func (mc *mac) shouldEnableAudio(stream *api.Stream) bool {
 }
 
 func (mc *mac) reconcileMultistreamLoop(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
 	for {
-		tick := time.NewTicker(1 * time.Minute)
 		select {
 		case <-ctx.Done():
 			return
-		case <-tick.C:
-		case <-mc.reconcileMultistreamTrigger:
+		case <-ticker.C:
+		case <-mc.multistreamUpdated:
 		}
 		mc.reconcileMultistream()
 	}
 }
 
-type MapKey struct {
-	stream string
-	target string
-}
-
-func toKey(stream, target string) MapKey {
-	return MapKey{stream: stream, target: target}
-}
-
 func (mc *mac) reconcileMultistream() {
+	type key struct {
+		stream string
+		target string
+	}
+	toKey := func(stream, target string) key {
+		return key{stream: stream, target: target}
+	}
+
+	// Get the existing PUSH_AUTO from Mist
 	mistPushAutoList, err := mc.mist.PushAutoList()
 	if err != nil {
 		glog.Errorf("error executing PUSH_AUTO_LIST on Mist, cannot reconcile multistream err=%v", err)
 		return
 	}
 	filteredMistPushAutoList := filterMultistream(mistPushAutoList)
-	mistMap := map[MapKey]bool{}
+	mistMap := map[key]bool{}
 	for _, e := range filteredMistPushAutoList {
 		mistMap[toKey(e.Stream, e.Target)] = true
 	}
 
-	cachedMap := map[MapKey]bool{}
+	// Get the expected multistreams from cached streamInfo
+	cachedMap := map[key]bool{}
 	mc.mu.Lock()
 	for _, si := range mc.streamInfo {
 		for target, v := range si.pushStatus {
@@ -569,6 +569,19 @@ func (mc *mac) getStreamInfoLogged(playbackID string) (*streamInfo, bool) {
 	return info, true
 }
 
+func (mc *mac) getStreamInfo(playbackID string) (*streamInfo, error) {
+	playbackID = mistStreamName2playbackID(playbackID)
+
+	mc.mu.RLock()
+	info := mc.streamInfo[playbackID]
+	mc.mu.RUnlock()
+
+	if info == nil {
+		return mc.refreshStreamInfo(playbackID)
+	}
+	return info, nil
+}
+
 func (mc *mac) refreshStreamInfo(playbackID string) (*streamInfo, error) {
 	glog.Infof("Refreshing stream info for playbackID=%s", playbackID)
 	mc.mu.Lock()
@@ -620,19 +633,6 @@ func (mc *mac) refreshStreamInfo(playbackID string) (*streamInfo, error) {
 	mc.streamInfo[playbackID] = newInfo
 	mc.mu.Unlock()
 
-	return info, nil
-}
-
-func (mc *mac) getStreamInfo(playbackID string) (*streamInfo, error) {
-	playbackID = mistStreamName2playbackID(playbackID)
-
-	mc.mu.RLock()
-	info := mc.streamInfo[playbackID]
-	mc.mu.RUnlock()
-
-	if info == nil {
-		return mc.refreshStreamInfo(playbackID)
-	}
 	return info, nil
 }
 

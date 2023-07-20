@@ -196,8 +196,8 @@ func parsePushAutoList(mistResponse string) ([]MistPushAuto, error) {
 	if err := json.Unmarshal([]byte(mistResponse), &parsed); err != nil {
 		return nil, err
 	}
-	var res []MistPushAuto
 
+	var res []MistPushAuto
 	for _, e := range parsed.PushAutoList {
 		if len(e) < 2 {
 			return res, errors.New("invalid Mist auto_push_list entry, less than 2 params, expected at least [stream, target, ...]")
