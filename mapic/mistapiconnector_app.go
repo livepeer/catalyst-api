@@ -445,6 +445,7 @@ func (mc *mac) shouldEnableAudio(stream *api.Stream) bool {
 	return audio
 }
 
+// reconcileMultistreamLoop calls reconcileMultistream periodically or when multistreamUpdated is triggered on demand.
 func (mc *mac) reconcileMultistreamLoop(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
@@ -459,6 +460,11 @@ func (mc *mac) reconcileMultistreamLoop(ctx context.Context) {
 	}
 }
 
+// reconcileMultistream makes sure that Mist contains the multistream pushes exactly as specified in streamInfo cache.
+// There may be multiple reasons why Mist is not in sync with streamInfo cache:
+// - streamInfo cache has changed (multistream target was turned on/off or multistream target was added/removed)
+// - Mist removed its push for some reason
+// Note that we use Mist AUTO_PUSH (which in turn makes sure that the PUSH is always available).
 func (mc *mac) reconcileMultistream() {
 	type key struct {
 		stream string
@@ -539,7 +545,7 @@ func (mc *mac) reconcileMultistream() {
 	}
 
 	// Add AUTO_PUSH that exists streamInfo cache, but not in Mist
-	for k, _ := range cachedMap {
+	for k := range cachedMap {
 		if !mistMap[toKey(k.stream, k.target)] {
 			glog.Infof("adding AUTO_PUSH for stream=%s target=%s", k.stream, k.target)
 			if err := mc.mist.PushAutoAdd(k.stream, k.target); err != nil {

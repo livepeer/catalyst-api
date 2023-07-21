@@ -28,10 +28,17 @@ type Cluster interface {
 }
 
 type ClusterImpl struct {
-	config   *config.Cli
-	serf     *serf.Serf
-	serfCh   chan serf.Event
-	eventCh  chan serf.UserEvent
+	config *config.Cli
+	serf   *serf.Serf
+	// serfCh is an internal channel to receive all events in the Serf cluster.
+	// Events from this channel later ends up in either one of the following channels:
+	// - `eventCh` (for custom user events)
+	// - `memberCh` (for internal membership events)
+	serfCh chan serf.Event
+	// eventCh is used to receive custom user events
+	// This channel is intended to be used by the user of the ClusterImpl struct
+	eventCh chan serf.UserEvent
+	// membersCh is an internal channel to update the current membership list
 	memberCh chan []Member
 }
 
