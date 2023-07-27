@@ -6,14 +6,17 @@ import (
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/metrics"
 	mockbalancer "github.com/livepeer/catalyst-api/mocks/balancer"
 	mockcluster "github.com/livepeer/catalyst-api/mocks/cluster"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -325,6 +328,44 @@ func TestNodeHostPortRedirect(t *testing.T) {
 		result(n).
 		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", "https://right-host/any/path")
+}
+
+func TestCdnRedirect(t *testing.T) {
+	n := mockHandlers(t)
+	CdnRedirectedPlaybackId := "def_ZXY-999"
+	n.Config.NodeHost = "someurl.com"
+	n.Config.CdnRedirectPrefix, _ = url.Parse("https://external-cdn.com/mist")
+	n.Config.CdnRedirectPlaybackIDs = []string{CdnRedirectedPlaybackId}
+
+	// this one to be redirected to the closest node
+	requireReq(t, fmt.Sprintf("/hls/%s/index.m3u8", playbackID)).
+		result(n).
+		hasStatus(http.StatusTemporaryRedirect).
+		hasHeader("Location", fmt.Sprintf("http://%s/hls/%s/index.m3u8", closestNodeAddr, playbackID))
+
+	require.Equal(t, testutil.CollectAndCount(metrics.Metrics.CDNRedirectCount), 0)
+
+	// this playbackID is configured to be redirected to CDN
+	requireReq(t, fmt.Sprintf("/hls/%s/index.m3u8", CdnRedirectedPlaybackId)).
+		result(n).
+		hasStatus(http.StatusTemporaryRedirect).
+		hasHeader("Location", fmt.Sprintf("http://external-cdn.com/mist/hls/%s/index.m3u8", CdnRedirectedPlaybackId))
+
+	require.Equal(t, testutil.CollectAndCount(metrics.Metrics.CDNRedirectCount), 1)
+	require.Equal(t, testutil.ToFloat64(metrics.Metrics.CDNRedirectCount.WithLabelValues("unknown")), float64(0))
+	require.Equal(t, testutil.ToFloat64(metrics.Metrics.CDNRedirectCount.WithLabelValues(CdnRedirectedPlaybackId)), float64(1))
+
+}
+
+func TestCdnRedirectIncorrectPlaybackID(t *testing.T) {
+	n := mockHandlers(t)
+	n.Config.CdnRedirectPrefix, _ = url.Parse("https://external-cdn.com/mist")
+
+	// incorrect playbackID
+	requireReq(t, "/hls/index.m3u8/").
+		result(n).
+		hasStatus(http.StatusNotFound)
+
 }
 
 type httpReq struct {
