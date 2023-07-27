@@ -14,6 +14,7 @@ import (
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
+	"github.com/livepeer/catalyst-api/metrics"
 )
 
 type GeolocationHandlersCollection struct {
@@ -24,31 +25,52 @@ type GeolocationHandlersCollection struct {
 
 // this package handles geolocation for playback and origin discovery for node replication
 
-// redirect an incoming user to a node for playback or 404 handling
+// Redirect an incoming user to the CDN, closest node (geolocate)
+// or another service (like mist HLS) on the current host for playback.
+// nodeHost logic is related 404 handling.
 func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		nodeHost := c.Config.NodeHost
-		redirectPrefixes := c.Config.RedirectPrefixes
+	return func(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+		host := r.Host
+		prefix, playbackID, pathTmpl, isValid := parsePlaybackID(r.URL.Path)
 
-		if nodeHost != "" {
-			host := r.Host
-			if host != nodeHost {
-				newURL, err := url.Parse(r.URL.String())
-				if err != nil {
-					glog.Errorf("failed to parse incoming url for redirect url=%s err=%s", r.URL.String(), err)
-					w.WriteHeader(http.StatusInternalServerError)
-					return
-				}
+		if c.Config.CdnRedirectPrefix != nil {
+			if !isValid {
+				glog.Warningf("Can not parse playbackID from path %s", r.URL.Path)
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+
+			doCdnRedirect := contains(playbackID, c.Config.CdnRedirectPlaybackIDs)
+			if doCdnRedirect {
+				newURL, _ := url.Parse(r.URL.String())
 				newURL.Scheme = protocol(r)
-				newURL.Host = nodeHost
+				newURL.Host = c.Config.CdnRedirectPrefix.Host
+				newURL.Path, _ = url.JoinPath(c.Config.CdnRedirectPrefix.Path, newURL.Path)
 				http.Redirect(w, r, newURL.String(), http.StatusTemporaryRedirect)
-				glog.V(6).Infof("NodeHost redirect host=%s nodeHost=%s from=%s to=%s", host, nodeHost, r.URL, newURL)
+				glog.V(6).Infof("CDN redirect host=%s from=%s to=%s", r.Host, r.URL, newURL)
+				metrics.Metrics.CDNRedirectCount.WithLabelValues(playbackID).Inc()
 				return
 			}
 		}
 
-		prefix, playbackID, pathTmpl, isValid := parsePlaybackID(r.URL.Path)
+		nodeHost := c.Config.NodeHost
+
+		if nodeHost != "" && nodeHost != host {
+			newURL, err := url.Parse(r.URL.String())
+			if err != nil {
+				glog.Errorf("failed to parse incoming url for redirect url=%s err=%s", r.URL.String(), err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			newURL.Scheme = protocol(r)
+			newURL.Host = nodeHost
+			http.Redirect(w, r, newURL.String(), http.StatusTemporaryRedirect)
+			glog.V(6).Infof("NodeHost redirect host=%s nodeHost=%s from=%s to=%s", host, nodeHost, r.URL, newURL)
+			return
+		}
+
 		if !isValid {
+			glog.Warningf("Can not parse playbackID from path %s", r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -56,6 +78,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 		lat := r.Header.Get("X-Latitude")
 		lon := r.Header.Get("X-Longitude")
 
+		redirectPrefixes := c.Config.RedirectPrefixes
 		bestNode, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix)
 		if err != nil {
 			glog.Errorf("failed to find either origin or fallback server for playbackID=%s err=%s", playbackID, err)
@@ -178,4 +201,13 @@ func protocol(r *http.Request) string {
 		return "https"
 	}
 	return "http"
+}
+
+func contains[T comparable](v T, list []T) bool {
+	for _, elm := range list {
+		if elm == v {
+			return true
+		}
+	}
+	return false
 }
