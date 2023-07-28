@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	//	"fmt"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/grafov/m3u8"
@@ -131,6 +132,20 @@ func TestItCanGenerateAndWriteManifests(t *testing.T) {
 				Height:        720,
 				BitsPerSecond: 1,
 			},
+			{
+				Name:          "bit-more-super-high-def",
+				FPS:           30,
+				Width:         2560,
+				Height:        1440,
+				BitsPerSecond: 1,
+			},
+			{
+				Name:          "super-duper-high-def",
+				FPS:           30,
+				Width:         3840,
+				Height:        2160,
+				BitsPerSecond: 1,
+			},
 		},
 	)
 	require.NoError(t, err)
@@ -144,9 +159,13 @@ func TestItCanGenerateAndWriteManifests(t *testing.T) {
 
 	const expectedMasterManifest = `#EXTM3U
 #EXT-X-VERSION:3
-#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=1080x720,NAME="0-super-high-def",FRAME-RATE=30.000
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=2560x1440,NAME="0-bit-more-super-high-def",FRAME-RATE=30.000
+bit-more-super-high-def/index.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=3840x2160,NAME="1-super-duper-high-def",FRAME-RATE=30.000
+super-duper-high-def/index.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=1080x720,NAME="2-super-high-def",FRAME-RATE=30.000
 super-high-def/index.m3u8
-#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=800x600,NAME="1-lowlowlow",FRAME-RATE=60.000
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=800x600,NAME="3-lowlowlow",FRAME-RATE=60.000
 lowlowlow/index.m3u8
 `
 	require.Equal(t, expectedMasterManifest, string(masterManifestContents))
@@ -200,7 +219,6 @@ func TestCompliantMasterManifestOrdering(t *testing.T) {
 	masterManifest := filepath.Join(outputDir, "index.m3u8")
 	masterManifestContents, err := os.ReadFile(masterManifest)
 	require.NoError(t, err)
-
 	const expectedMasterManifest = `#EXTM3U
 #EXT-X-VERSION:3
 #EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=2000000,RESOLUTION=1080x720,NAME="0-super-high-def",FRAME-RATE=30.000

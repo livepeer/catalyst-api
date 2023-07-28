@@ -94,7 +94,6 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL string, transcodedStats []*video.RenditionStats) (string, error) {
 	// Generate the master + rendition output manifests
 	masterPlaylist := m3u8.NewMasterPlaylist()
-
 	sort.Slice(transcodedStats, func(a, b int) bool {
 		if transcodedStats[a].BitsPerSecond > transcodedStats[b].BitsPerSecond {
 			return true
@@ -107,6 +106,13 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 			return resolutionA > resolutionB
 		}
 	})
+
+	// If the first rendition is 4k or greater resolution, then swap with the second rendition. HLS players
+	// typically load the first rendition in a master playlist and this can result in long downloads (and
+	// hence long TTFF) for high-res video segments.
+	if len(transcodedStats) >= 2 && (transcodedStats[0].Width >= 3840 || transcodedStats[0].Height >= 3840) {
+		transcodedStats[0], transcodedStats[1] = transcodedStats[1], transcodedStats[0]
+	}
 
 	for i, profile := range transcodedStats {
 		// For each profile, add a new entry to the master manifest
