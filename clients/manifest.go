@@ -108,6 +108,13 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		}
 	})
 
+	// If the first rendition is 4k or greater resolution, then swap with the second rendition. HLS players
+	// typically load the first rendition in a master playlist and this can result in long downloads (and
+	// hence long TTFF) for high-res video segments.
+	if len(transcodedStats) >= 2 && (transcodedStats[0].Width >= 3840 || transcodedStats[0].Height >= 3840) {
+		transcodedStats[0], transcodedStats[1] = transcodedStats[1], transcodedStats[0]
+	}
+
 	for i, profile := range transcodedStats {
 		// For each profile, add a new entry to the master manifest
 		masterPlaylist.Append(
