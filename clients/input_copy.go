@@ -70,23 +70,29 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 		return
 	}
 	log.Log(requestID, "probe succeeded", "source", inputFile.String(), "dest", osTransferURL.String())
-	videoTrack, err := inputVideoProbe.GetTrack(video.TrackTypeVideo)
-	if err != nil {
-		err = fmt.Errorf("no video track found in input video: %w", err)
-		return
+
+	videoTrack, videoTrackErr := inputVideoProbe.GetTrack(video.TrackTypeVideo)
+	if videoTrack != nil && videoTrackErr == nil {
+		if videoTrack.FPS <= 0 {
+			// unsupported, includes things like motion jpegs
+			err = fmt.Errorf("invalid framerate: %f", videoTrack.FPS)
+			return
+		}
+		log.Log(requestID, "probed video track:", "container", inputVideoProbe.Format, "codec", videoTrack.Codec, "bitrate", videoTrack.Bitrate, "duration", videoTrack.DurationSec, "w", videoTrack.Width, "h", videoTrack.Height, "pix-format", videoTrack.PixelFormat, "FPS", videoTrack.FPS)
+	} else {
+		log.Log(requestID, "probed video track: error (probably an audio-only file)", "error", videoTrackErr)
 	}
-	audioTrack, _ := inputVideoProbe.GetTrack(video.TrackTypeAudio)
-	if videoTrack.FPS <= 0 {
-		// unsupported, includes things like motion jpegs
-		err = fmt.Errorf("invalid framerate: %f", videoTrack.FPS)
-		return
+
+	audioTrack, audioTrackErr := inputVideoProbe.GetTrack(video.TrackTypeAudio)
+	if audioTrack != nil && audioTrackErr == nil {
+		log.Log(requestID, "probed audio track", "codec", audioTrack.Codec, "bitrate", audioTrack.Bitrate, "duration", audioTrack.DurationSec, "channels", audioTrack.Channels)
 	}
+
 	if inputVideoProbe.SizeBytes > config.MaxInputFileSizeBytes {
 		err = fmt.Errorf("input file %d bytes was greater than %d bytes", inputVideoProbe.SizeBytes, config.MaxInputFileSizeBytes)
 		return
 	}
-	log.Log(requestID, "probed video track:", "container", inputVideoProbe.Format, "codec", videoTrack.Codec, "bitrate", videoTrack.Bitrate, "duration", videoTrack.DurationSec, "w", videoTrack.Width, "h", videoTrack.Height, "pix-format", videoTrack.PixelFormat, "FPS", videoTrack.FPS)
-	log.Log(requestID, "probed audio track", "codec", audioTrack.Codec, "bitrate", audioTrack.Bitrate, "duration", audioTrack.DurationSec, "channels", audioTrack.Channels)
+
 	return
 }
 

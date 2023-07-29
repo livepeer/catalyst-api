@@ -346,6 +346,11 @@ func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 // checkLivepeerCompatible checks if the input codecs are compatible with our Livepeer pipeline and overrides the pipeline strategy
 // to external if they are incompatible
 func checkLivepeerCompatible(requestID string, strategy Strategy, iv video.InputVideo) (bool, Strategy) {
+	if len(iv.Tracks) == 1 && iv.Tracks[0].Type == video.TrackTypeAudio {
+		log.Log(requestID, "audio-only files not supported by Livepeer pipeline")
+		return livepeerNotSupported(strategy)
+	}
+
 	for _, track := range iv.Tracks {
 		// if the codecs are not compatible then override to external pipeline to avoid sending to Livepeer
 		if (track.Type == video.TrackTypeVideo && strings.ToLower(track.Codec) != "h264") ||
@@ -432,13 +437,13 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 	// Codecs are parsed here primarily to write codec stats for each job
 	var videoCodec, audioCodec string
 	videoTrack, err := p.InputFileInfo.GetTrack(video.TrackTypeVideo)
-	if err != nil {
+	if videoTrack == nil || err != nil {
 		videoCodec = "n/a"
 	} else {
 		videoCodec = videoTrack.Codec
 	}
 	audioTrack, err := p.InputFileInfo.GetTrack(video.TrackTypeAudio)
-	if err != nil {
+	if audioTrack == nil || err != nil {
 		audioCodec = "n/a"
 	} else {
 		audioCodec = audioTrack.Codec
@@ -461,18 +466,23 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 		catalystRegion:        os.Getenv("MY_REGION"),
 		sourceCodecVideo:      videoCodec,
 		sourceCodecAudio:      audioCodec,
-		sourceWidth:           videoTrack.Width,
-		sourceHeight:          videoTrack.Height,
-		sourceFPS:             videoTrack.FPS,
-		sourceBitrateVideo:    videoTrack.Bitrate,
-		sourceBitrateAudio:    audioTrack.Bitrate,
-		sourceChannels:        audioTrack.Channels,
-		sourceSampleRate:      audioTrack.SampleRate,
-		sourceSampleBits:      audioTrack.SampleBits,
 		sourceBytes:           p.InputFileInfo.SizeBytes,
 		sourceDurationMs:      int64(math.Round(p.InputFileInfo.Duration) * 1000),
 		DownloadDone:          time.Now(),
 	}
+	if videoTrack != nil {
+		si.sourceWidth = videoTrack.Width
+		si.sourceHeight = videoTrack.Height
+		si.sourceFPS = videoTrack.FPS
+		si.sourceBitrateVideo = videoTrack.Bitrate
+	}
+	if audioTrack != nil {
+		si.sourceBitrateAudio = audioTrack.Bitrate
+		si.sourceChannels = audioTrack.Channels
+		si.sourceSampleRate = audioTrack.SampleRate
+		si.sourceSampleBits = audioTrack.SampleBits
+	}
+
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 
 	c.Jobs.Store(streamName, si)
@@ -652,7 +662,7 @@ func recovered[T any](f func() (T, error)) (t T, err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			log.LogNoRequestID("panic in pipeline handler background goroutine, recovering", "err", err, "trace", debug.Stack())
-			err = fmt.Errorf("panic in pipeline handler: %v", rec)
+			err = fmt.Errorf("panic in pipeline handler: %v\n%s", rec, string(debug.Stack()))
 		}
 	}()
 	return f()

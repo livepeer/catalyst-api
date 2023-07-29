@@ -136,7 +136,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 	}
 
 	var mcMp4OutputRelPath string
-	if args.GenerateMP4 {
+	if mcArgs.GenerateMP4 {
 		// sets the mp4 path to be the same as HLS except for the suffix being "static"
 		// resulting files look something like https://storage.googleapis.com/bucket/25afy0urw3zu2476/static360p0.mp4
 		mcMp4OutputRelPath = path.Join("output", getTargetDir(mp4Target, args.RequestID, "mp4"), mp4OutFilePrefix)
@@ -159,7 +159,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 		}
 	}
 
-	if args.GenerateMP4 {
+	if mcArgs.GenerateMP4 {
 		mcMp4OutputBaseDir := mc.osTransferBucketURL.JoinPath(mcMp4OutputRelPath, "..")
 		log.Log(args.RequestID, "Copying MP4 output files from S3", "source", mcMp4OutputBaseDir, "dest", mp4Target)
 		if err := copyDir(mcMp4OutputBaseDir, mp4Target, args); err != nil {
@@ -306,6 +306,13 @@ func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, acce
 		}
 	}
 
+	var videoSelector *mediaconvert.VideoSelector
+	if len(profiles) > 0 {
+		videoSelector = &mediaconvert.VideoSelector{
+			Rotate: aws.String(mediaconvert.InputRotateAuto),
+		}
+	}
+
 	return &mediaconvert.CreateJobInput{
 		Settings: &mediaconvert.JobSettings{
 			Inputs: []*mediaconvert.Input{
@@ -317,9 +324,7 @@ func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, acce
 					},
 					FileInput:      aws.String(inputFile),
 					TimecodeSource: aws.String("ZEROBASED"),
-					VideoSelector: &mediaconvert.VideoSelector{
-						Rotate: aws.String(mediaconvert.InputRotateAuto),
-					},
+					VideoSelector:  videoSelector,
 				},
 			},
 			OutputGroups: outputGroups(hlsOutputFile, mp4OutputFile, profiles, segmentSizeSecs),
@@ -369,11 +374,43 @@ func outputGroups(hlsOutputFile, mp4OutputFile string, profiles []video.EncodedP
 }
 
 func outputs(container string, profiles []video.EncodedProfile) []*mediaconvert.Output {
-	outs := make([]*mediaconvert.Output, 0, len(profiles))
-	for _, profile := range profiles {
-		outs = append(outs, output(container, profile.Name, profile.Height, profile.Bitrate))
+	// If we don't have any video profiles, it means we're in audio-only mode
+	if len(profiles) == 0 {
+		return audioOnlyOutputs(container, "audioonly")
+	} else {
+		outs := make([]*mediaconvert.Output, 0, len(profiles))
+		for _, profile := range profiles {
+			outs = append(outs, output(container, profile.Name, profile.Height, profile.Bitrate))
+		}
+		return outs
 	}
-	return outs
+}
+
+func audioOnlyOutputs(container, name string) []*mediaconvert.Output {
+	if container == "M3U8" {
+		return []*mediaconvert.Output{
+			{
+				AudioDescriptions: []*mediaconvert.AudioDescription{
+					{
+						CodecSettings: &mediaconvert.AudioCodecSettings{
+							Codec: aws.String("AAC"),
+							AacSettings: &mediaconvert.AacSettings{
+								Bitrate:    aws.Int64(96000),
+								CodingMode: aws.String("CODING_MODE_2_0"),
+								SampleRate: aws.Int64(48000),
+							},
+						},
+					},
+				},
+				ContainerSettings: &mediaconvert.ContainerSettings{
+					Container: aws.String(container),
+				},
+				NameModifier: aws.String(name),
+			},
+		}
+	} else {
+		return []*mediaconvert.Output{}
+	}
 }
 
 func output(container, name string, height, maxBitrate int64) *mediaconvert.Output {

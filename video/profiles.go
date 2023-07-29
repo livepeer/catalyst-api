@@ -24,16 +24,16 @@ type InputVideo struct {
 // Finds the video track from the list of input video tracks
 // If multiple video tracks present, returns the first one
 // If no video tracks present, returns an error
-func (i InputVideo) GetTrack(trackType string) (InputTrack, error) {
+func (i InputVideo) GetTrack(trackType string) (*InputTrack, error) {
 	if trackType != TrackTypeVideo && trackType != TrackTypeAudio {
-		return InputTrack{}, fmt.Errorf("invalid track type - must be '%s' or '%s'", TrackTypeVideo, TrackTypeAudio)
+		return nil, fmt.Errorf("invalid track type - must be '%s' or '%s'", TrackTypeVideo, TrackTypeAudio)
 	}
 	for _, t := range i.Tracks {
 		if t.Type == trackType {
-			return t, nil
+			return &t, nil
 		}
 	}
-	return InputTrack{}, fmt.Errorf("no '%s' tracks found", trackType)
+	return nil, fmt.Errorf("no '%s' tracks found", trackType)
 }
 
 type VideoTrack struct {
@@ -87,8 +87,8 @@ var DefaultTranscodeProfiles = []EncodedProfile{DefaultProfile360p, DefaultProfi
 
 func GetPlaybackProfiles(iv InputVideo) ([]EncodedProfile, error) {
 	video, err := iv.GetTrack(TrackTypeVideo)
-	if err != nil {
-		return nil, fmt.Errorf("no video track found in input video: %w", err)
+	if video == nil || err != nil {
+		return []EncodedProfile{}, nil
 	}
 	videoBitrate := video.Bitrate
 	if videoBitrate > MaxVideoBitrate {
@@ -107,7 +107,7 @@ func GetPlaybackProfiles(iv InputVideo) ([]EncodedProfile, error) {
 		}
 	}
 	if len(profiles) == 0 {
-		profiles = []EncodedProfile{lowBitrateProfile(video)}
+		profiles = []EncodedProfile{lowBitrateProfile(*video)}
 	}
 	profiles = append(profiles, EncodedProfile{
 		Name:    strconv.FormatInt(nearestEven(video.Height), 10) + "p0",

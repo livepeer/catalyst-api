@@ -98,8 +98,8 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// ProbeFile will return err for various reasons so we use the subsequent GetTrack method to check for video tracks
 	lastSegmentProbe, _ := p.ProbeFile(transcodeRequest.RequestID, lastSegmentURL)
 	// GetTrack will return an err if TrackTypeVideo was not found
-	_, err = lastSegmentProbe.GetTrack(video.TrackTypeVideo)
-	if err != nil {
+	videoTrack, err := lastSegmentProbe.GetTrack(video.TrackTypeVideo)
+	if videoTrack == nil || err != nil {
 		var lastSegmentIdx int
 		for i, entry := range sourceManifest.Segments {
 			if entry == nil {

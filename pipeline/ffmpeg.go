@@ -181,7 +181,7 @@ func sendSourcePlayback(job *JobInfo) {
 
 	sourceMaster := m3u8.NewMasterPlaylist()
 	videoTrack, err := job.InputFileInfo.GetTrack(video.TrackTypeVideo)
-	if err != nil {
+	if videoTrack == nil || err != nil {
 		log.LogError(job.RequestID, "unable to find a video track for source playback", err)
 		return
 	}

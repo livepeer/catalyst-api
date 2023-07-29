@@ -22,6 +22,7 @@ type TranscodeJobArgs struct {
 	InputFileInfo video.InputVideo
 	Profiles      []video.EncodedProfile
 	GenerateMP4   bool
+	AudioOnly     bool
 
 	// Collect size of an asset
 	CollectSourceSize        func(size int64)
