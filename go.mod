@@ -16,20 +16,20 @@ require (
 	github.com/hashicorp/serf v0.10.1
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/lib/pq v1.10.9
-	github.com/livepeer/go-api-client v0.4.7
+	github.com/livepeer/go-api-client v0.4.8
 	github.com/livepeer/go-tools v0.3.2
 	github.com/livepeer/joy4 v0.1.1
 	github.com/livepeer/livepeer-data v0.7.2
 	github.com/livepeer/m3u8 v0.11.1
 	github.com/minio/madmin-go v1.7.5
-	github.com/peterbourgon/ff/v3 v3.3.1
+	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/pquerna/cachecontrol v0.2.0
-	github.com/prometheus/client_golang v1.15.1
+	github.com/prometheus/client_golang v1.16.0
 	github.com/stretchr/testify v1.8.4
 	github.com/u2takey/ffmpeg-go v0.4.1
 	github.com/xeipuuv/gojsonschema v1.2.0
 	go.opencensus.io v0.24.0
-	golang.org/x/sync v0.2.0
+	golang.org/x/sync v0.3.0
 	golang.org/x/text v0.10.0
 	gopkg.in/vansante/go-ffprobe.v2 v2.1.2-0.20230412093356-81f7fcbea828
 	sigs.k8s.io/yaml v1.3.0
@@ -123,7 +123,7 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20220216144756-c35f1ee13d7c // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.42.0 // indirect
-	github.com/prometheus/procfs v0.9.0 // indirect
+	github.com/prometheus/procfs v0.10.1 // indirect
 	github.com/prometheus/statsd_exporter v0.22.7 // indirect
 	github.com/rabbitmq/amqp091-go v1.8.0 // indirect
 	github.com/rabbitmq/rabbitmq-stream-go-client v1.1.1 // indirect

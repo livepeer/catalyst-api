@@ -32,6 +32,7 @@ type Cli struct {
 	MistLoadBalancerPort      int
 	MistLoadBalancerTemplate  string
 	MistCleanup               bool
+	LogSysUsage               bool
 	AMQPURL                   string
 	OwnRegion                 string
 	APIToken                  string
@@ -84,6 +85,11 @@ func (cli *Cli) ShouldMapic() bool {
 // Should we enable mist-cleanup script to run periodically and delete leaky shm?
 func (cli *Cli) ShouldMistCleanup() bool {
 	return cli.MistCleanup
+}
+
+// Should we enable pod-mon script to run periodically and log system usage stats?
+func (cli *Cli) ShouldLogSysUsage() bool {
+	return cli.LogSysUsage
 }
 
 // Handle some legacy environment variables for zero-downtime catalyst-node migration
