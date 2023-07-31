@@ -132,8 +132,8 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *streamMetrics) *data.MediaServerMetricsEvent {
 	info.mu.Lock()
 	defer info.mu.Unlock()
-	multistream := make([]*data.MultistreamTargetMetrics, len(metrics.pushes))
-	for i, push := range metrics.pushes {
+	multistream := []*data.MultistreamTargetMetrics{}
+	for _, push := range metrics.pushes {
 		pushInfo := info.pushStatus[push.OriginalURL]
 		if pushInfo == nil {
 			glog.Infof("Mist exported metrics from unknown push. streamId=%q pushURL=%q", info.id, push.OriginalURL)
@@ -157,10 +157,10 @@ func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *stream
 			}
 			pushInfo.metrics = metrics
 		}
-		multistream[i] = &data.MultistreamTargetMetrics{
+		multistream = append(multistream, &data.MultistreamTargetMetrics{
 			Target:  pushToMultistreamTargetInfo(pushInfo),
 			Metrics: metrics,
-		}
+		})
 	}
 	var stream *data.StreamMetrics
 	if ss := metrics.stream; ss != nil {
