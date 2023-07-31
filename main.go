@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/rsa"
 	"database/sql"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/hashicorp/serf/serf"
 	"log"
 	"math/rand"
 	"os"
@@ -275,6 +277,10 @@ func main() {
 		return reconcileBalancer(ctx, bal, c)
 	})
 
+	group.Go(func() error {
+		return handleClusterEvents(ctx, mapic, c)
+	})
+
 	err = group.Wait()
 	glog.Infof("Shutdown complete. Reason for shutdown: %s", err)
 }
@@ -293,6 +299,40 @@ func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Clu
 			}
 		}
 	}
+}
+
+func handleClusterEvents(ctx context.Context, mapic mistapiconnector.IMac, c cluster.Cluster) error {
+	eventCh := c.EventChan()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case e := <-eventCh:
+			processClusterEvent(mapic, e)
+		}
+	}
+}
+
+func processClusterEvent(mapic mistapiconnector.IMac, e serf.UserEvent) {
+	type EventPayload struct {
+		Resource   string `json:"resource"`
+		PlaybackID string `json:"playback_id"`
+	}
+
+	go func() {
+		var eventPayload EventPayload
+		err := json.Unmarshal(e.Payload, &eventPayload)
+		if err != nil {
+			glog.Errorf("cannot unmarshall received serf event: %v", e)
+		}
+		switch eventPayload.Resource {
+		case "stream":
+			mapic.RefreshMultistreamIfNeeded(eventPayload.PlaybackID)
+			return
+		default:
+			glog.Errorf("unsupported serf event: %v", e)
+		}
+	}()
 }
 
 func handleSignals(ctx context.Context) error {

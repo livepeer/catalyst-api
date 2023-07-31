@@ -41,6 +41,7 @@ type (
 	IMac interface {
 		Start(ctx context.Context) error
 		MetricsHandler() http.Handler
+		RefreshMultistreamIfNeeded(playbackID string)
 	}
 
 	pushStatus struct {
@@ -88,7 +89,7 @@ type (
 		mistHot                   string
 		checkBandwidth            bool
 		baseStreamName            string
-		streamInfo                map[string]*streamInfo // public key to info
+		streamInfo                map[string]*streamInfo
 		producer                  event.AMQPProducer
 		nodeID                    string
 		ownRegion                 string
@@ -97,6 +98,7 @@ type (
 		config                    *config.Cli
 		broker                    misttriggers.TriggerBroker
 		mist                      clients.MistAPIClient
+		multistreamUpdated        chan struct{}
 	}
 )
 
@@ -147,12 +149,24 @@ func (mc *mac) Start(ctx context.Context) error {
 	if producer != nil && mc.config.MistScrapeMetrics {
 		startMetricsCollector(ctx, statsCollectionPeriod, mc.nodeID, mc.ownRegion, mc.mist, lapi, producer, ownExchangeName, mc)
 	}
+
+	mc.multistreamUpdated = make(chan struct{}, 1)
+	go func() {
+		mc.reconcileMultistreamLoop(ctx)
+	}()
+
 	<-ctx.Done()
 	return nil
 }
 
 func (mc *mac) MetricsHandler() http.Handler {
 	return metrics.Exporter
+}
+
+func (mc *mac) RefreshMultistreamIfNeeded(playbackID string) {
+	if mc.streamExists(playbackID) {
+		mc.refreshMultistream(playbackID)
+	}
 }
 
 func (mc *mac) handleStreamBuffer(ctx context.Context, payload *misttriggers.StreamBufferPayload) error {
@@ -183,7 +197,6 @@ func (mc *mac) handleStreamBuffer(ctx context.Context, payload *misttriggers.Str
 }
 
 func (mc *mac) handlePushRewrite(ctx context.Context, payload *misttriggers.PushRewritePayload) (string, error) {
-	// glog.V(model.INSANE).Infof("Parsed request (%d):\n%+v", len(lines), lines)
 	streamKey := payload.StreamName
 	var responseName string
 	if payload.URL.Scheme == "rtmp" {
@@ -241,7 +254,6 @@ func (mc *mac) handlePushRewrite(ctx context.Context, payload *misttriggers.Push
 		}
 	} else {
 		glog.Errorf("Shouldn't happen streamID=%s", stream.ID)
-		// streamKey = strings.ReplaceAll(streamKey, "-", "")
 	}
 	go mc.emitStreamStateEvent(stream, data.StreamState{Active: true})
 	metrics.StartStream()
@@ -255,21 +267,32 @@ func (mc *mac) handleLiveTrackList(ctx context.Context, payload *misttriggers.Li
 		playbackID := mistStreamName2playbackID(payload.StreamName)
 		glog.Infof("for video %s got %d video tracks", playbackID, videoTracksNum)
 
-		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
-			info.mu.Lock()
-			shouldStart := !info.multistreamStarted &&
-				len(info.stream.Multistream.Targets) > 0 && videoTracksNum > 1
-			if shouldStart {
-				info.multistreamStarted = true
-			}
-			info.mu.Unlock()
-
-			if shouldStart {
-				mc.startMultistream(payload.StreamName, playbackID, info)
-			}
+		if videoTracksNum > 1 {
+			mc.refreshMultistream(playbackID)
 		}
 	}()
 	return nil
+}
+
+func (mc *mac) streamExists(playbackID string) bool {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	_, streamExists := mc.streamInfo[playbackID]
+	return streamExists
+}
+
+func (mc *mac) refreshMultistream(playbackID string) {
+	_, err := mc.refreshStreamInfo(playbackID)
+	if err != nil {
+		glog.Errorf("Error refreshing stream info for playbackID=%s", playbackID)
+		return
+	}
+	select {
+	case mc.multistreamUpdated <- struct{}{}:
+		// trigger reconcile multistream
+	default:
+		// do not block if reconcile multistream already triggered
+	}
 }
 
 func (mc *mac) handlePushOutStart(ctx context.Context, payload *misttriggers.PushOutStartPayload) (string, error) {
@@ -355,7 +378,6 @@ func (mc *mac) emitAmqpEvent(exchange, key string, evt data.Event) {
 func (mc *mac) handlePushEnd(ctx context.Context, payload *misttriggers.PushEndPayload) error {
 	go func() {
 		playbackID := mistStreamName2playbackID(payload.StreamName)
-		// glog.Infof("for video %s got %d video tracks", playbackID, videoTracksNum)
 		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
 			info.mu.Lock()
 			defer info.mu.Unlock()
@@ -423,38 +445,113 @@ func (mc *mac) shouldEnableAudio(stream *api.Stream) bool {
 	return audio
 }
 
-func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *streamInfo) {
-	for i := range info.stream.Multistream.Targets {
-		go func(targetRef api.MultistreamTargetRef) {
-			glog.Infof("==> starting multistream %s", targetRef.ID)
-			target, pushURL, err := mc.getPushUrl(info.stream, &targetRef)
-			if err != nil {
-				glog.Errorf("Error building multistream target push URL. targetId=%s stream=%s err=%v",
-					targetRef.ID, wildcardPlaybackID, err)
-				return
-			} else if target.Disabled {
-				glog.Infof("Ignoring disabled multistream target. targetId=%s stream=%s",
-					targetRef.ID, wildcardPlaybackID)
-				return
-			}
+// reconcileMultistreamLoop calls reconcileMultistream periodically or when multistreamUpdated is triggered on demand.
+func (mc *mac) reconcileMultistreamLoop(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		case <-mc.multistreamUpdated:
+		}
+		mc.reconcileMultistream()
+	}
+}
 
-			info.mu.Lock()
-			info.pushStatus[pushURL] = &pushStatus{
-				target:  target,
-				profile: targetRef.Profile,
-				metrics: &data.MultistreamMetrics{},
+// reconcileMultistream makes sure that Mist contains the multistream pushes exactly as specified in streamInfo cache.
+// There may be multiple reasons why Mist is not in sync with streamInfo cache:
+// - streamInfo cache has changed (multistream target was turned on/off or multistream target was added/removed)
+// - Mist removed its push for some reason
+// Note that we use Mist AUTO_PUSH (which in turn makes sure that the PUSH is always available).
+func (mc *mac) reconcileMultistream() {
+	type key struct {
+		stream string
+		target string
+	}
+	toKey := func(stream, target string) key {
+		return key{stream: stream, target: target}
+	}
+	isMultistream := func(k key) bool {
+		return (strings.HasPrefix(k.stream, "video+") || strings.HasPrefix(k.stream, "videorec+")) &&
+			(strings.HasPrefix(strings.ToLower(k.target), "rtmp:") || strings.HasPrefix(strings.ToLower(k.target), "srt:"))
+	}
+
+	// Get the existing PUSH_AUTO from Mist
+	mistPushAutoList, err := mc.mist.PushAutoList()
+	if err != nil {
+		glog.Errorf("error executing PUSH_AUTO_LIST on Mist, cannot reconcile multistream err=%v", err)
+		return
+	}
+	var filteredMistPushAutoList []clients.MistPushAuto
+	mistMap := map[key]bool{}
+	for _, e := range mistPushAutoList {
+		k := toKey(e.Stream, e.Target)
+		if isMultistream(k) {
+			filteredMistPushAutoList = append(filteredMistPushAutoList, e)
+			mistMap[toKey(e.Stream, e.Target)] = true
+		}
+	}
+
+	// Get the existing PUSH from Mist
+	stats, err := mc.mist.GetStats()
+	if err != nil {
+		glog.Errorf("error executing PUSH_LIST on Mist, cannot reconcile multistream err=%v", err)
+		return
+	}
+	var filteredMistPushList []*clients.MistPush
+	mistPushMap := map[key]int64{}
+	for _, e := range stats.PushList {
+		k := toKey(e.Stream, e.OriginalURL)
+		if isMultistream(k) {
+			filteredMistPushList = append(filteredMistPushList, e)
+			mistPushMap[toKey(e.Stream, e.OriginalURL)] = e.ID
+		}
+	}
+
+	// Get the expected multistreams from cached streamInfo
+	cachedMap := map[key]bool{}
+	mc.mu.Lock()
+	for _, si := range mc.streamInfo {
+		for target, v := range si.pushStatus {
+			if v.target != nil && !v.target.Disabled {
+				stream := mc.wildcardPlaybackID(si.stream)
+				cachedMap[toKey(stream, target)] = true
 			}
-			info.mu.Unlock()
-			err = mc.mist.PushStart(wildcardPlaybackID, pushURL)
-			if err != nil {
-				glog.Errorf("Error starting multistream to target. targetId=%s stream=%s err=%v", targetRef.ID, wildcardPlaybackID, err)
-				info.mu.Lock()
-				delete(info.pushStatus, pushURL)
-				info.mu.Unlock()
-				return
+		}
+	}
+	mc.mu.Unlock()
+
+	// Remove AUTO_PUSH that exists in Mist, but is not in streamInfo cache
+	for _, e := range filteredMistPushAutoList {
+		if !cachedMap[toKey(e.Stream, e.Target)] {
+			glog.Infof("removing AUTO_PUSH for stream=%s target=%s", e.Stream, e.Target)
+			if err := mc.mist.PushAutoRemove(e.StreamParams); err != nil {
+				glog.Errorf("cannot remove AUTO_PUSH for stream=%s target=%s err=%v", e.Stream, e.Target, err)
 			}
-			glog.Infof("Started multistream to target. targetId=%s stream=%s url=%s", wildcardPlaybackID, targetRef.ID, pushURL)
-		}(info.stream.Multistream.Targets[i])
+		}
+	}
+
+	// Remove PUSH that exists in Mist, but is not in streamInfo cache
+	// Deleted AUTO_PUSH does not automatically delete the related PUSH
+	for _, e := range filteredMistPushList {
+		if !cachedMap[toKey(e.Stream, e.OriginalURL)] {
+			glog.Infof("stopping PUSH for stream=%s target=%s id=%d", e.Stream, e.OriginalURL, e.ID)
+			if err := mc.mist.PushStop(e.ID); err != nil {
+				glog.Errorf("cannot stop PUSH for stream=%s target=%s id=%d err=%v", e.Stream, e.OriginalURL, e.ID, err)
+			}
+		}
+	}
+
+	// Add AUTO_PUSH that exists streamInfo cache, but not in Mist
+	for k := range cachedMap {
+		if !mistMap[toKey(k.stream, k.target)] {
+			glog.Infof("adding AUTO_PUSH for stream=%s target=%s", k.stream, k.target)
+			if err := mc.mist.PushAutoAdd(k.stream, k.target); err != nil {
+				glog.Errorf("cannot add AUTO_PUSH for stream=%s target=%s err=%v", k.stream, k.target, err)
+			}
+		}
 	}
 }
 
@@ -509,43 +606,62 @@ func (mc *mac) getStreamInfo(playbackID string) (*streamInfo, error) {
 	info := mc.streamInfo[playbackID]
 	mc.mu.RUnlock()
 
-	if info != nil {
-		return info, nil
+	if info == nil {
+		return mc.refreshStreamInfo(playbackID)
 	}
+	return info, nil
+}
 
-	glog.Infof("getStreamInfo: Fetching stream not found in memory. playbackID=%s", playbackID)
+func (mc *mac) refreshStreamInfo(playbackID string) (*streamInfo, error) {
+	glog.Infof("Refreshing stream info for playbackID=%s", playbackID)
+	mc.mu.Lock()
+	info, infoExists := mc.streamInfo[playbackID]
+	mc.mu.Unlock()
+
 	stream, err := mc.lapi.GetStreamByPlaybackID(playbackID)
 	if err != nil {
 		return nil, fmt.Errorf("error getting stream by playback ID %s: %w", playbackID, err)
 	}
 
-	pushes := make(map[string]*pushStatus)
+	newPushes := make(map[string]*pushStatus)
 	for _, ref := range stream.Multistream.Targets {
 		target, pushURL, err := mc.getPushUrl(stream, &ref)
 		if err != nil {
-			return nil, err
+			glog.Errorf("error fetching multistream target, err=%v", err)
+			continue
 		}
-		pushes[pushURL] = &pushStatus{
+		newPushes[pushURL] = &pushStatus{
 			target:  target,
 			profile: ref.Profile,
 			// Assume setup was all successful
 			pushStartEmitted: true,
+			metrics:          &data.MultistreamMetrics{},
+		}
+		if infoExists {
+			info.mu.Lock()
+			push, pushExists := info.pushStatus[pushURL]
+			info.mu.Unlock()
+			if pushExists {
+				newPushes[pushURL].metrics = push.metrics
+				newPushes[pushURL].pushStopped = push.pushStopped
+				newPushes[pushURL].pushStartEmitted = push.pushStartEmitted
+			}
 		}
 	}
 
-	info = &streamInfo{
+	newInfo := &streamInfo{
 		id:         stream.ID,
 		stream:     stream,
 		isLazy:     true, // flag it as a lazy stream info to avoid sending metrics
 		done:       make(chan struct{}),
-		pushStatus: pushes,
+		pushStatus: newPushes,
 		// Assume setup was all successful
 		multistreamStarted: true,
 	}
-	glog.Infof("getStreamInfo: Created info lazily for stream. playbackID=%s id=%s numPushes=%d", playbackID, stream.ID, len(pushes))
+	glog.Infof("Refreshed stream info for playbackID=%s id=%s numPushes=%d", playbackID, stream.ID, len(newPushes))
 
 	mc.mu.Lock()
-	mc.streamInfo[playbackID] = info
+	mc.streamInfo[playbackID] = newInfo
 	mc.mu.Unlock()
 
 	return info, nil
