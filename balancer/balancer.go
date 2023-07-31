@@ -18,6 +18,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/cluster"
+	"golang.org/x/sync/errgroup"
 )
 
 var mistUtilLoadSingleRequestTimeout = 15 * time.Second
@@ -46,7 +47,8 @@ type BalancerImpl struct {
 	cmd      *exec.Cmd
 	endpoint string
 	// Blocks until initial startup
-	startupOnce sync.Once
+	startupOnce  sync.Once
+	startupError error
 }
 
 // create a new load balancer instance
@@ -65,27 +67,49 @@ func NewBalancer(config *Config) Balancer {
 
 // start this load balancer instance, execing MistUtilLoad if necessary
 func (b *BalancerImpl) Start(ctx context.Context) error {
-	go b.waitForStartup(ctx)
-	return b.execBalancer(ctx, b.config.Args)
+	group, ctx := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		return b.execBalancer(ctx, b.config.Args)
+	})
+	group.Go(func() error {
+		return b.waitForStartup(ctx)
+	})
+	return group.Wait()
 }
 
 // wait for the mist LB to be available. can be called multiple times.
-func (b *BalancerImpl) waitForStartup(ctx context.Context) {
+func (b *BalancerImpl) waitForStartup(ctx context.Context) error {
 	b.startupOnce.Do(func() {
+		i := 0
 		for {
 			_, err := b.getMistLoadBalancerServers(ctx)
 			if err == nil {
 				return
 			}
-			time.Sleep(250 * time.Millisecond)
+			i += 1
+			if i > 10 {
+				b.startupError = fmt.Errorf("could not contact mist load balancer after %d tries", i)
+				return
+			}
+			select {
+			case <-time.After(250 * time.Millisecond):
+				continue
+			case <-ctx.Done():
+				b.startupError = ctx.Err()
+				return
+			}
 		}
 	})
+	return b.startupError
 }
 
 func (b *BalancerImpl) UpdateMembers(ctx context.Context, members []cluster.Member) error {
 	ctx, cancel := context.WithTimeout(ctx, mistUtilLoadLoopTimeout)
 	defer cancel()
-	b.waitForStartup(ctx)
+	err := b.waitForStartup(ctx)
+	if err != nil {
+		return fmt.Errorf("mist load balancer did not start properly: %w", err)
+	}
 	balancedServers, err := b.getMistLoadBalancerServers(ctx)
 
 	if err != nil {
