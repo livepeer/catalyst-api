@@ -24,12 +24,22 @@ type Cluster interface {
 	Member(filter map[string]string, status, name string) (Member, error)
 	MemberChan() chan []Member
 	ResolveNodeURL(streamURL string) (string, error)
+	EventChan() <-chan serf.UserEvent
+	BroadcastEvent(serf.UserEvent) error
 }
 
 type ClusterImpl struct {
-	config   *config.Cli
-	serf     *serf.Serf
-	eventCh  chan serf.Event
+	config *config.Cli
+	serf   *serf.Serf
+	// serfCh is an internal channel to receive all events in the Serf cluster.
+	// Events from this channel later ends up in either one of the following channels:
+	// - `eventCh` (for custom user events)
+	// - `memberCh` (for internal membership events)
+	serfCh chan serf.Event
+	// eventCh is used to receive custom user events
+	// This channel is intended to be used by the user of the ClusterImpl struct
+	eventCh chan serf.UserEvent
+	// membersCh is an internal channel to update the current membership list
 	memberCh chan []Member
 }
 
@@ -44,8 +54,9 @@ var mediaFilter = map[string]string{"node": "media"}
 func NewCluster(config *config.Cli) Cluster {
 	c := ClusterImpl{
 		config:   config,
-		eventCh:  make(chan serf.Event, 64),
+		serfCh:   make(chan serf.Event, 64),
 		memberCh: make(chan []Member),
+		eventCh:  make(chan serf.UserEvent, 64),
 	}
 	return &c
 }
@@ -90,7 +101,7 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	serfConfig.MemberlistConfig = memberlistConfig
 	serfConfig.NodeName = c.config.NodeName
 	serfConfig.Tags = c.config.Tags
-	serfConfig.EventCh = c.eventCh
+	serfConfig.EventCh = c.serfCh
 	serfConfig.ProtocolVersion = 5
 
 	c.serf, err = serf.Create(serfConfig)
@@ -235,6 +246,15 @@ func ResolveNodeURL(c Cluster, streamURL string) (string, error) {
 	return u2.String(), nil
 }
 
+// Subscribe to events broadcaster in the serf cluster. Please only call me once. I only have one channel internally.
+func (c *ClusterImpl) EventChan() <-chan serf.UserEvent {
+	return c.eventCh
+}
+
+func (c *ClusterImpl) BroadcastEvent(event serf.UserEvent) error {
+	return c.serf.UserEvent(event.Name, event.Payload, event.Coalesce)
+}
+
 func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 	inbox := make(chan serf.Event, 1)
 	go func() {
@@ -242,14 +262,26 @@ func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return
-			case e := <-c.eventCh:
-				select {
-				case <-ctx.Done():
-					return
-				case inbox <- e:
-					// Event is now in the inbox
-				default:
-					// Overflow event gets dropped
+			case e := <-c.serfCh:
+				switch evt := e.(type) {
+				case serf.UserEvent:
+					select {
+					case <-ctx.Done():
+						return
+					case c.eventCh <- evt:
+						// Event moved to eventCh
+					default:
+						// Overflow event gets dropped
+					}
+				case serf.MemberEvent:
+					select {
+					case <-ctx.Done():
+						return
+					case inbox <- e:
+						// Event is now in the inbox
+					default:
+						// Overflow event gets dropped
+					}
 				}
 			}
 		}
