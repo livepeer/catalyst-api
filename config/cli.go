@@ -19,6 +19,7 @@ type Cli struct {
 	ClusterAddress            string
 	ClusterAdvertiseAddress   string
 	MistEnabled               bool
+	MistTriggerSetup          bool
 	MistHost                  string
 	MistUser                  string
 	MistPassword              string

@@ -7,13 +7,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/hashicorp/serf/serf"
 	"log"
 	"math/rand"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/hashicorp/serf/serf"
 
 	"github.com/golang/glog"
 	_ "github.com/lib/pq"
@@ -96,6 +97,7 @@ func main() {
 	fs.StringVar(&cli.VodDecryptPublicKey, "catalyst-public-key", "", "Public key of the catalyst node for encryption")
 	fs.StringVar(&cli.VodDecryptPrivateKey, "catalyst-private-key", "", "Private key of the catalyst node for encryption")
 	fs.StringVar(&cli.GateURL, "gate-url", "http://localhost:3004/api/access-control/gate", "Address to contact playback gating API for access control verification")
+	config.InvertedBoolFlag(fs, &cli.MistTriggerSetup, "mist-trigger-setup", true, "Overwrite Mist triggers with the ones built into catalyst-api")
 	pprofPort := fs.Int("pprof-port", 6061, "Pprof listen port")
 
 	// special parameters
@@ -217,11 +219,13 @@ func main() {
 	if cli.MistEnabled {
 		ownURL := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
 		mist = clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort, ownURL)
-		err := broker.SetupMistTriggers(mist)
-		if err != nil {
-			glog.Error("catalyst-api was unable to communicate with MistServer to set up its triggers.")
-			glog.Error("hint: are you trying to boot catalyst-api without Mist for development purposes? use the flag -no-mist")
-			glog.Fatalf("error setting up Mist triggers err=%s", err)
+		if cli.MistTriggerSetup {
+			err := broker.SetupMistTriggers(mist)
+			if err != nil {
+				glog.Error("catalyst-api was unable to communicate with MistServer to set up its triggers.")
+				glog.Error("hint: are you trying to boot catalyst-api without Mist for development purposes? use the flag -no-mist")
+				glog.Fatalf("error setting up Mist triggers err=%s", err)
+			}
 		}
 	} else {
 		glog.Info("-no-mist flag detected, not initializing Mist stream triggers")
