@@ -75,6 +75,14 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 		err = fmt.Errorf("no video track found in input video: %w", err)
 		return
 	}
+	// Catching a very specific case where we receive audio-only input with a single frame video track, but also in general if the video track is this short
+	// then something is probably wrong with the input. Do the > 0 check to try and avoid cases with legit video that we haven't managed to parse the
+	// duration for.
+	if videoTrack.DurationSec > 0 && videoTrack.DurationSec < 1 {
+		err = fmt.Errorf("too short video track found in input video: %fs", videoTrack.DurationSec)
+		return
+	}
+
 	audioTrack, _ := inputVideoProbe.GetTrack(video.TrackTypeAudio)
 	if videoTrack.FPS <= 0 {
 		// unsupported, includes things like motion jpegs
