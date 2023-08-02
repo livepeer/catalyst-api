@@ -142,7 +142,7 @@ func TestItCanGenerateAndWriteManifests(t *testing.T) {
 			{
 				Name:          "super-duper-high-def",
 				FPS:           30,
-				Width:         3840,
+				Width:         3240,
 				Height:        2160,
 				BitsPerSecond: 1,
 			},
@@ -161,7 +161,7 @@ func TestItCanGenerateAndWriteManifests(t *testing.T) {
 #EXT-X-VERSION:3
 #EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=2560x1440,NAME="0-bit-more-super-high-def",FRAME-RATE=30.000
 bit-more-super-high-def/index.m3u8
-#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=3840x2160,NAME="1-super-duper-high-def",FRAME-RATE=30.000
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=3240x2160,NAME="1-super-duper-high-def",FRAME-RATE=30.000
 super-duper-high-def/index.m3u8
 #EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1,RESOLUTION=1080x720,NAME="2-super-high-def",FRAME-RATE=30.000
 super-high-def/index.m3u8
