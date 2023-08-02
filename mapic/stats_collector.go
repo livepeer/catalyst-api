@@ -77,9 +77,6 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if streamID == "" {
-			continue
-		}
 		streamID, metrics := streamID, metrics
 
 		info, err := c.getStreamInfo(streamID)
