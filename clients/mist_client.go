@@ -15,14 +15,9 @@ import (
 	"github.com/livepeer/catalyst-api/metrics"
 )
 
-//go:generate mockgen -source=./mist_client.go -destination=../mocks/clients/mist_client.go
-
 type MistAPIClient interface {
 	AddStream(streamName, sourceUrl string) error
-	PushAutoAdd(streamName, targetURL string) error
-	PushAutoRemove(streamParams []interface{}) error
-	PushAutoList() ([]MistPushAuto, error)
-	PushStop(id int64) error
+	PushStart(streamName, targetURL string) error
 	DeleteStream(streamName string) error
 	AddTrigger(streamName []string, triggerName string, sync bool) error
 	DeleteTrigger(streamName []string, triggerName string) error
@@ -161,72 +156,9 @@ func (mc *MistClient) AddStream(streamName, sourceUrl string) error {
 	return wrapErr(validateAddStream(mc.sendCommand(c)), streamName)
 }
 
-func (mc *MistClient) PushAutoAdd(streamName, targetURL string) error {
-	c := commandPushAutoAdd(streamName, targetURL)
-	return wrapErr(validatePushAutoAdd(mc.sendCommand(c)), streamName)
-}
-
-func (mc *MistClient) PushAutoRemove(streamParams []interface{}) error {
-	if len(streamParams) == 0 {
-		return errors.New("streamParams cannot be empty")
-	}
-	streamName, ok := streamParams[0].(string)
-	if !ok {
-		return errors.New("first param in streamParams must be the stream name")
-	}
-	c := commandPushAutoRemove(streamParams)
-	return wrapErr(validatePushAutoRemove(mc.sendCommand(c)), streamName)
-}
-
-func (mc *MistClient) PushAutoList() ([]MistPushAuto, error) {
-	c := commandPushAutoList()
-	resp, err := mc.sendCommand(c)
-	if err := validateAuth(resp, err); err != nil {
-		return nil, err
-	}
-
-	return parsePushAutoList(resp)
-}
-
-func parsePushAutoList(mistResponse string) ([]MistPushAuto, error) {
-	type MistPushAutoList struct {
-		PushAutoList [][]interface{} `json:"push_auto_list"`
-	}
-
-	parsed := MistPushAutoList{}
-	if err := json.Unmarshal([]byte(mistResponse), &parsed); err != nil {
-		return nil, err
-	}
-
-	var res []MistPushAuto
-	for _, e := range parsed.PushAutoList {
-		if len(e) < 2 {
-			return res, errors.New("invalid Mist auto_push_list entry, less than 2 params, expected at least [stream, target, ...]")
-		}
-		stream, ok := e[0].(string)
-		if !ok {
-			return res, fmt.Errorf("invalid Mist auto_push_list entry, expected first param as 'stream', but got %s", e[0])
-		}
-		target, ok := e[1].(string)
-		if !ok {
-			return res, fmt.Errorf("invalid Mist auto_push_list entry, expected second param as 'target', but got %s", e[1])
-		}
-		res = append(res, MistPushAuto{
-			Stream:       stream,
-			Target:       target,
-			StreamParams: e,
-		})
-	}
-
-	return res, nil
-}
-
-func (mc *MistClient) PushStop(id int64) error {
-	c := commandPushStop(id)
-	if err := validatePushAutoRemove(mc.sendCommand(c)); err != nil {
-		return err
-	}
-	return nil
+func (mc *MistClient) PushStart(streamName, targetURL string) error {
+	c := commandPushStart(streamName, targetURL)
+	return wrapErr(validatePushStart(mc.sendCommand(c)), streamName)
 }
 
 func (mc *MistClient) DeleteStream(streamName string) error {
@@ -427,57 +359,21 @@ func commandNukeStream(name string) nukeStreamCommand {
 	}
 }
 
-type pushAutoAddCommand struct {
-	PushAutoAdd PushAutoAdd `json:"push_auto_add"`
+type pushStartCommand struct {
+	PushStart PushStart `json:"push_start"`
 }
 
-type PushAutoAdd struct {
+type PushStart struct {
 	Stream string `json:"stream"`
 	Target string `json:"target"`
 }
 
-type pushAutoRemoveCommand struct {
-	PushAutoRemove [][]interface{} `json:"push_auto_remove"`
-}
-
-type pushAutoListCommand struct {
-	PushAutoList bool `json:"push_auto_list"`
-}
-
-type MistPushAuto struct {
-	Stream       string
-	Target       string
-	StreamParams []interface{}
-}
-
-func commandPushAutoAdd(streamName, target string) pushAutoAddCommand {
-	return pushAutoAddCommand{
-		PushAutoAdd: PushAutoAdd{
+func commandPushStart(streamName, target string) pushStartCommand {
+	return pushStartCommand{
+		PushStart: PushStart{
 			Stream: streamName,
 			Target: target,
 		},
-	}
-}
-
-func commandPushAutoList() pushAutoListCommand {
-	return pushAutoListCommand{
-		PushAutoList: true,
-	}
-}
-
-func commandPushAutoRemove(streamParams []interface{}) pushAutoRemoveCommand {
-	return pushAutoRemoveCommand{
-		PushAutoRemove: [][]interface{}{streamParams},
-	}
-}
-
-type pushStopCommand struct {
-	PushStop []int64 `json:"push_stop"`
-}
-
-func commandPushStop(id int64) pushStopCommand {
-	return pushStopCommand{
-		PushStop: []int64{id},
 	}
 }
 
@@ -576,12 +472,7 @@ func validateAddStream(resp string, err error) error {
 	return nil
 }
 
-func validatePushAutoAdd(resp string, err error) error {
-	// nothing other than auth to validate, Mist always returns the same response
-	return validateAuth(resp, err)
-}
-
-func validatePushAutoRemove(resp string, err error) error {
+func validatePushStart(resp string, err error) error {
 	// nothing other than auth to validate, Mist always returns the same response
 	return validateAuth(resp, err)
 }
