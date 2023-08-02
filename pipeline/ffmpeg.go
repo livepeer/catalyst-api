@@ -56,6 +56,14 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	log.AddContext(job.RequestID, "segmented_url", job.SegmentingTargetURL)
 	job.ReportProgress(clients.TranscodeStatusPreparing, 0.3)
 
+
+	//XXX: do the clipping here - check if request has start/end populated
+	//1. newSegs := ClipManifest("url where segmented output lies")
+	//2. ReTranscode(seg) -- download locally, ffmpeg, upload to same folder
+	//3. generate-new-manifest(newSegs, outputDir)
+
+
+	
 	// Segment only for non-HLS inputs
 	if job.InputFileInfo.Format != "hls" {
 		if err := copyFileToLocalTmpAndSegment(job); err != nil {
@@ -252,6 +260,53 @@ func (f *ffmpeg) probeSourceSegment(requestID string, seg *m3u8.MediaSegment, so
 	}
 	return nil
 }
+
+func copyFileToLocalTmp(job *JobInfo, job.StreamName) error {
+
+	// Create a temporary local file to write to
+	localSourceFile, err := os.CreateTemp(os.TempDir(), LocalSourceFilePattern)
+	if err != nil {
+		return fmt.Errorf("failed to create local file (%s) for segmenting: %s", localSourceFile.Name(), err)
+	}
+	defer localSourceFile.Close()
+	defer os.Remove(localSourceFile.Name()) // Clean up the file as soon as we're done segmenting
+
+	// Copy the file locally because of issues with ffmpeg segmenting and remote files
+	// We can be aggressive with the timeout because we're copying from cloud storage
+	timeout, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+	_, err = clients.CopyFile(timeout, job.SignedSourceURL, localSourceFile.Name(), "", job.RequestID)
+	if err != nil {
+		return fmt.Errorf("failed to copy file (%s) locally: %s", job.SignedSourceURL, err)
+	}
+
+	// FFMPEG fails when presented with a raw IP + Path type URL, so we prepend "http://" to it
+	internalAddress := config.HTTPInternalAddress
+	if !strings.HasPrefix(internalAddress, "http") {
+		internalAddress = "http://" + internalAddress
+	}
+
+	destinationURL := fmt.Sprintf("%s/api/ffmpeg/%s/index.m3u8", internalAddress, job.StreamName)
+	if err := video.Segment(localSourceFile.Name(), destinationURL, job.TargetSegmentSizeSecs); err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
+func copyFileToLocalTmpAndClip(job *JobInfo) error {
+
+	file, err := copyFileToLocalTmp(job)
+	
+	if err := video.EncodeSegment(); err != nil {
+		return err
+	}
+
+
+}
+
+
 
 func copyFileToLocalTmpAndSegment(job *JobInfo) error {
 	// Create a temporary local file to write to
