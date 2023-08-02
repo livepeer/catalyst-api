@@ -4,7 +4,16 @@ import (
 	"fmt"
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/log"
+	ffmpeg "github.com/u2takey/ffmpeg-go"
+	"time"
 )
+
+// format time in secs to be copatible with ffmpeg's expected time syntax
+func formatTime(seconds float64) string {
+	duration := time.Duration(seconds * float64(time.Second))
+	timeObj := time.Date(0, 0, 0, 0, 0, 0, 0, time.UTC).Add(duration)
+	return timeObj.Format("15:04:05")
+}
 
 func getTotalDurationAndSegments(manifest *m3u8.MediaPlaylist) (float64, uint64) {
 	if manifest == nil {
@@ -84,4 +93,33 @@ func ClipManifest(requestID string, manifest *m3u8.MediaPlaylist, startTime, end
 	log.Log(requestID, "Clipping segments", "from", startSegIdx, "to", endSegIdx)
 
 	return relevantSegments, nil
+}
+
+// Clips a segment by re-encoding so that I-frames are placed at the right intervals
+// Currently using these settings for the encode step:
+//
+//	"c:v": "libx264": Specifies H.264 video codec.
+//	"r": "24": Sets video frame rate to 24 FPS.
+//	"g": "48": Inserts keyframe every 48 frames (GOP size).
+//	"keyint_min": "48": Minimum keyframe interval.
+//	"sc_threshold": 50: Detects scene changes with threshold 50.
+//	"bf": "0": Disables B-frames for bidirectional prediction.
+//	"c:a": "copy": Copies audio stream without re-encoding.
+func ClipSegment(tsInputFile, tsOutputFile string, startTime, endTime float64) error {
+	start := formatTime(startTime)
+	end := formatTime(endTime)
+	err := ffmpeg.Input(tsInputFile).
+		Output(tsOutputFile, ffmpeg.KwArgs{"ss": start, "to": end,
+			"c:v":          "libx264",
+			"r":            "24",
+			"g":            "48",
+			"keyint_min":   "48",
+			"sc_threshold": 50,
+			"bf":           "0",
+			"c:a":          "copy"}).
+		OverWriteOutput().ErrorToStdOut().Run()
+	if err != nil {
+		return fmt.Errorf("failed to transmux concatenated mpeg-ts file (%s) into a mp4 file: %s", tsInputFile, err)
+	}
+	return nil
 }
