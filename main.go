@@ -13,8 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hashicorp/serf/serf"
-
 	"github.com/golang/glog"
 	_ "github.com/lib/pq"
 	"github.com/livepeer/catalyst-api/api"
