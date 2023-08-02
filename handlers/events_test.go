@@ -42,6 +42,12 @@ func TestEventHandler(t *testing.T) {
 		},
 		{
 			requestBody: `{
+				"resource": "unknown"
+			}`,
+			wantHttpCode: 400,
+		},
+		{
+			requestBody: `{
 				"resource": "stream",
 				"playback_id": "123456789",
 				"additional": "field"

@@ -45,11 +45,12 @@ type (
 	}
 
 	pushStatus struct {
-		target           *api.MultistreamTarget
-		profile          string
-		pushStartEmitted bool
-		pushStopped      bool
-		metrics          *data.MultistreamMetrics
+		target      *api.MultistreamTarget
+		profile     string
+		lastEvent   string
+		lastEventAt time.Time
+		metrics     *data.MultistreamMetrics
+		mu          sync.RWMutex
 	}
 
 	streamInfo struct {
@@ -58,12 +59,11 @@ type (
 		stream    *api.Stream
 		startedAt time.Time
 
-		mu                 sync.Mutex
-		done               chan struct{}
-		stopped            bool
-		multistreamStarted bool
-		pushStatus         map[string]*pushStatus
-		lastSeenBumpedAt   time.Time
+		mu               sync.Mutex
+		done             chan struct{}
+		stopped          bool
+		pushStatus       map[string]*pushStatus
+		lastSeenBumpedAt time.Time
 	}
 
 	// MacOptions configuration object
@@ -164,7 +164,7 @@ func (mc *mac) MetricsHandler() http.Handler {
 }
 
 func (mc *mac) RefreshMultistreamIfNeeded(playbackID string) {
-	if mc.streamExists(playbackID) {
+	if mc.ingestStreamExists(playbackID) {
 		mc.refreshMultistream(playbackID)
 	}
 }
@@ -274,11 +274,13 @@ func (mc *mac) handleLiveTrackList(ctx context.Context, payload *misttriggers.Li
 	return nil
 }
 
-func (mc *mac) streamExists(playbackID string) bool {
+func (mc *mac) ingestStreamExists(playbackID string) bool {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
-	_, streamExists := mc.streamInfo[playbackID]
-	return streamExists
+	if stream, streamExists := mc.streamInfo[playbackID]; streamExists {
+		return !stream.isLazy
+	}
+	return false
 }
 
 func (mc *mac) refreshMultistream(playbackID string) {
@@ -323,12 +325,29 @@ func (mc *mac) waitPush(info *streamInfo, pushInfo *pushStatus) {
 		if info.stopped {
 			return
 		}
-		if !pushInfo.pushStopped {
-			// there was no error starting RTMP push, so no we can send 'multistream.connected' webhook event
-			pushInfo.pushStartEmitted = true
-			mc.emitWebhookEvent(info.stream, pushInfo, eventMultistreamConnected)
+		pushInfo.mu.Lock()
+		defer pushInfo.mu.Unlock()
+		if pushInfo.target.Disabled ||
+			// push was already disabled in the meantime
+			pushInfo.lastEvent == eventMultistreamConnected ||
+			// connected event already sent, no need to send it again
+			time.Now().Add(-waitForPushError).Before(pushInfo.lastEventAt) {
+			// there was another event after PUSH_OUT, no need to send connected event
+			return
 		}
+		pushInfo.lastEvent = eventMultistreamConnected
+		pushInfo.lastEventAt = time.Now()
+		mc.emitWebhookEventAsync(info.stream, pushInfo, eventMultistreamConnected)
 	}
+}
+
+func (mc *mac) emitMultistreamDisconnectedEvent(stream *streamInfo, status *pushStatus) {
+	status.mu.Lock()
+	defer status.mu.Unlock()
+	status.lastEvent = eventMultistreamDisconnected
+	status.lastEventAt = time.Now()
+	mc.emitWebhookEventAsync(stream.stream, status, eventMultistreamDisconnected)
+
 }
 
 func (mc *mac) emitStreamStateEvent(stream *api.Stream, state data.StreamState) {
@@ -340,20 +359,23 @@ func (mc *mac) emitStreamStateEvent(stream *api.Stream, state data.StreamState) 
 	mc.emitAmqpEvent(ownExchangeName, "stream.state."+streamID, stateEvt)
 }
 
-func (mc *mac) emitWebhookEvent(stream *api.Stream, pushInfo *pushStatus, eventKey string) {
-	streamID, sessionID := stream.ParentID, stream.ID
-	if streamID == "" {
-		streamID = sessionID
-	}
-	payload := data.MultistreamWebhookPayload{
-		Target: pushToMultistreamTargetInfo(pushInfo),
-	}
-	hookEvt, err := data.NewWebhookEvent(streamID, eventKey, stream.UserID, sessionID, payload)
-	if err != nil {
-		glog.Errorf("Error creating webhook event err=%v", err)
-		return
-	}
-	mc.emitAmqpEvent(webhooksExchangeName, "events."+eventKey, hookEvt)
+func (mc *mac) emitWebhookEventAsync(stream *api.Stream, pushInfo *pushStatus, eventKey string) {
+	go func() {
+		streamID, sessionID := stream.ParentID, stream.ID
+		if streamID == "" {
+			streamID = sessionID
+		}
+		payload := data.MultistreamWebhookPayload{
+			Target: pushToMultistreamTargetInfo(pushInfo),
+		}
+		hookEvt, err := data.NewWebhookEvent(streamID, eventKey, stream.UserID, sessionID, payload)
+
+		if err != nil {
+			glog.Errorf("Error creating webhook event err=%v", err)
+			return
+		}
+		mc.emitAmqpEvent(webhooksExchangeName, "events."+eventKey, hookEvt)
+	}()
 }
 
 func (mc *mac) emitAmqpEvent(exchange, key string, evt data.Event) {
@@ -381,14 +403,23 @@ func (mc *mac) handlePushEnd(ctx context.Context, payload *misttriggers.PushEndP
 		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
 			info.mu.Lock()
 			defer info.mu.Unlock()
+			if info.stopped {
+				// stream stopped, no need to send any events
+				return
+			}
 			if pushInfo, ok := info.pushStatus[payload.Destination]; ok {
-				if pushInfo.pushStartEmitted {
-					// emit normal push.end
-					mc.emitWebhookEvent(info.stream, pushInfo, eventMultistreamDisconnected)
-				} else {
-					pushInfo.pushStopped = true
-					//  emit push error
-					mc.emitWebhookEvent(info.stream, pushInfo, eventMultistreamError)
+				pushInfo.mu.Lock()
+				defer pushInfo.mu.Unlock()
+				pushInfo.lastEventAt = time.Now()
+				switch pushInfo.lastEvent {
+				case eventMultistreamError:
+					// error already sent, just update the last error time
+				case eventMultistreamDisconnected:
+					// push was disconnected, reset the lastEvent state
+					pushInfo.lastEvent = ""
+				default:
+					pushInfo.lastEvent = eventMultistreamError
+					mc.emitWebhookEventAsync(info.stream, pushInfo, eventMultistreamError)
 				}
 			} else {
 				glog.Errorf("For stream playbackID=%s got unknown RTMP push %s", playbackID, payload.StreamName)
@@ -511,13 +542,20 @@ func (mc *mac) reconcileMultistream() {
 	}
 
 	// Get the expected multistreams from cached streamInfo
-	cachedMap := map[key]bool{}
+	type pushInfo struct {
+		status  *pushStatus
+		stream  *streamInfo
+		enabled bool
+	}
+	cachedMap := map[key]*pushInfo{}
 	mc.mu.Lock()
 	for _, si := range mc.streamInfo {
-		for target, v := range si.pushStatus {
-			if v.target != nil && !v.target.Disabled {
-				stream := mc.wildcardPlaybackID(si.stream)
-				cachedMap[toKey(stream, target)] = true
+		if !si.isLazy {
+			for target, v := range si.pushStatus {
+				if v.target != nil {
+					stream := mc.wildcardPlaybackID(si.stream)
+					cachedMap[toKey(stream, target)] = &pushInfo{status: v, stream: si, enabled: !v.target.Disabled}
+				}
 			}
 		}
 	}
@@ -525,7 +563,11 @@ func (mc *mac) reconcileMultistream() {
 
 	// Remove AUTO_PUSH that exists in Mist, but is not in streamInfo cache
 	for _, e := range filteredMistPushAutoList {
-		if !cachedMap[toKey(e.Stream, e.Target)] {
+		pi, exist := cachedMap[toKey(e.Stream, e.Target)]
+		if !exist || !pi.enabled {
+			if pi != nil {
+				mc.emitMultistreamDisconnectedEvent(pi.stream, pi.status)
+			}
 			glog.Infof("removing AUTO_PUSH for stream=%s target=%s", e.Stream, e.Target)
 			if err := mc.mist.PushAutoRemove(e.StreamParams); err != nil {
 				glog.Errorf("cannot remove AUTO_PUSH for stream=%s target=%s err=%v", e.Stream, e.Target, err)
@@ -536,7 +578,8 @@ func (mc *mac) reconcileMultistream() {
 	// Remove PUSH that exists in Mist, but is not in streamInfo cache
 	// Deleted AUTO_PUSH does not automatically delete the related PUSH
 	for _, e := range filteredMistPushList {
-		if !cachedMap[toKey(e.Stream, e.OriginalURL)] {
+		pi, exist := cachedMap[toKey(e.Stream, e.OriginalURL)]
+		if !exist || !pi.enabled {
 			glog.Infof("stopping PUSH for stream=%s target=%s id=%d", e.Stream, e.OriginalURL, e.ID)
 			if err := mc.mist.PushStop(e.ID); err != nil {
 				glog.Errorf("cannot stop PUSH for stream=%s target=%s id=%d err=%v", e.Stream, e.OriginalURL, e.ID, err)
@@ -545,8 +588,8 @@ func (mc *mac) reconcileMultistream() {
 	}
 
 	// Add AUTO_PUSH that exists streamInfo cache, but not in Mist
-	for k := range cachedMap {
-		if !mistMap[toKey(k.stream, k.target)] {
+	for k, v := range cachedMap {
+		if v.enabled && !mistMap[toKey(k.stream, k.target)] {
 			glog.Infof("adding AUTO_PUSH for stream=%s target=%s", k.stream, k.target)
 			if err := mc.mist.PushAutoAdd(k.stream, k.target); err != nil {
 				glog.Errorf("cannot add AUTO_PUSH for stream=%s target=%s err=%v", k.stream, k.target, err)
@@ -614,9 +657,6 @@ func (mc *mac) getStreamInfo(playbackID string) (*streamInfo, error) {
 
 func (mc *mac) refreshStreamInfo(playbackID string) (*streamInfo, error) {
 	glog.Infof("Refreshing stream info for playbackID=%s", playbackID)
-	mc.mu.Lock()
-	info, infoExists := mc.streamInfo[playbackID]
-	mc.mu.Unlock()
 
 	stream, err := mc.lapi.GetStreamByPlaybackID(playbackID)
 	if err != nil {
@@ -633,36 +673,46 @@ func (mc *mac) refreshStreamInfo(playbackID string) (*streamInfo, error) {
 		newPushes[pushURL] = &pushStatus{
 			target:  target,
 			profile: ref.Profile,
-			// Assume setup was all successful
-			pushStartEmitted: true,
-			metrics:          &data.MultistreamMetrics{},
-		}
-		if infoExists {
-			info.mu.Lock()
-			push, pushExists := info.pushStatus[pushURL]
-			info.mu.Unlock()
-			if pushExists {
-				newPushes[pushURL].metrics = push.metrics
-				newPushes[pushURL].pushStopped = push.pushStopped
-				newPushes[pushURL].pushStartEmitted = push.pushStartEmitted
-			}
+			metrics: &data.MultistreamMetrics{},
 		}
 	}
-
-	newInfo := &streamInfo{
-		id:         stream.ID,
-		stream:     stream,
-		isLazy:     true, // flag it as a lazy stream info to avoid sending metrics
-		done:       make(chan struct{}),
-		pushStatus: newPushes,
-		// Assume setup was all successful
-		multistreamStarted: true,
-	}
-	glog.Infof("Refreshed stream info for playbackID=%s id=%s numPushes=%d", playbackID, stream.ID, len(newPushes))
 
 	mc.mu.Lock()
-	mc.streamInfo[playbackID] = newInfo
-	mc.mu.Unlock()
+	defer mc.mu.Unlock()
+	info, exists := mc.streamInfo[playbackID]
+	if !exists {
+		info = &streamInfo{
+			id:         stream.ID,
+			stream:     stream,
+			isLazy:     true, // flag it as a lazy stream info to avoid sending metrics
+			done:       make(chan struct{}),
+			pushStatus: newPushes,
+		}
+		mc.streamInfo[playbackID] = info
+	} else {
+		info.id = stream.ID
+		info.stream = stream
+	}
+	info.mu.Lock()
+	defer info.mu.Unlock()
+
+	for newPushURL, newPush := range newPushes {
+		if push, exists := info.pushStatus[newPushURL]; exists {
+			push.mu.Lock()
+			push.target = newPush.target
+			push.profile = newPush.profile
+			push.mu.Unlock()
+		} else {
+			info.pushStatus[newPushURL] = newPush
+		}
+	}
+	for oldPushURL := range info.pushStatus {
+		if _, exists := newPushes[oldPushURL]; !exists {
+			delete(info.pushStatus, oldPushURL)
+		}
+	}
+
+	glog.Infof("Refreshed stream info for playbackID=%s id=%s numPushes=%d", playbackID, stream.ID, len(info.pushStatus))
 
 	return info, nil
 }
@@ -675,6 +725,8 @@ func mistStreamName2playbackID(msn string) string {
 }
 
 func pushToMultistreamTargetInfo(pushInfo *pushStatus) data.MultistreamTargetInfo {
+	pushInfo.mu.RLock()
+	defer pushInfo.mu.RUnlock()
 	return data.MultistreamTargetInfo{
 		ID:      pushInfo.target.ID,
 		Name:    pushInfo.target.Name,

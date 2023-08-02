@@ -309,123 +309,115 @@ func TestItFailsWhenMaxRetriesReached(t *testing.T) {
 }
 
 func TestItCanGetStreamStats(t *testing.T) {
-	mistStatsResponse := `
-  {
-	"LTS": 1,
-	"authorize": {
-	  "local": true,
-	  "status": "OK"
-	},
-	"push_list": [
-	  [
-		3116,
-		"video+c447r0acdmqhhhpb",
-		"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
-		"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
-		[
-		  [
-			1688680237,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680242,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680247,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680252,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680257,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680262,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680267,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680272,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680277,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ],
-		  [
-			1688680282,
-			"INFO",
-			"Switching UDP socket from IPv6 to IPv4",
-			"video+c447r0acdmqhhhpb"
-		  ]
-		],
+	tests := []struct {
+		name         string
+		mistResponse string
+	}{
 		{
-		  "active_seconds": 259,
-		  "bytes": 24887717,
-		  "mediatime": 260982,
-		  "tracks": [
-			0,
-			1
-		  ]
-		}
-	  ]
-	],
-	"stats_streams": {
-	  "video+c447r0acdmqhhhpb": [
-		0,
-		265458
-	  ]
+			name: "With PUSH_LIST stats",
+			mistResponse: `
+			  {
+				"LTS": 1,
+				"authorize": {
+				  "local": true,
+				  "status": "OK"
+				},
+				"push_list": [
+				  [
+					3116,
+					"video+c447r0acdmqhhhpb",
+					"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
+					"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
+					[
+					  [
+						1688680282,
+						"INFO",
+						"Switching UDP socket from IPv6 to IPv4",
+						"video+c447r0acdmqhhhpb"
+					  ]
+					],
+					{
+					  "active_seconds": 259,
+					  "bytes": 24887717,
+					  "mediatime": 260982,
+					  "tracks": [
+						0,
+						1
+					  ]
+					}
+				  ]
+				],
+				"stats_streams": {
+				  "video+c447r0acdmqhhhpb": [
+					0,
+					265458
+				  ]
+				}
+			  }
+			`,
+		},
+		{
+			name: "Without PUSH_LIST stats",
+			mistResponse: `
+			  {
+				"LTS": 1,
+				"authorize": {
+				  "local": true,
+				  "status": "OK"
+				},
+				"push_list": [
+				  [
+					3116,
+					"video+c447r0acdmqhhhpb",
+					"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
+					"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
+					[
+					  [
+						1688680282,
+						"INFO",
+						"Switching UDP socket from IPv6 to IPv4",
+						"video+c447r0acdmqhhhpb"
+					  ]
+					]
+				  ]
+				],
+				"stats_streams": {
+				  "video+c447r0acdmqhhhpb": [
+					0,
+					265458
+				  ]
+				}
+			  }
+			`,
+		},
 	}
-  }
-`
-	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
-		require.Equal(t, string(body), "command="+url.QueryEscape(`{"stats_streams":["clients","lastms"],"push_list":true}`))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, err := io.ReadAll(r.Body)
+				require.NoError(t, err)
+				require.Equal(t, string(body), "command="+url.QueryEscape(`{"stats_streams":["clients","lastms"],"push_list":true}`))
 
-		_, err = w.Write([]byte(mistStatsResponse))
-		require.NoError(t, err)
-	}))
-	defer svr.Close()
+				_, err = w.Write([]byte(tt.mistResponse))
+				require.NoError(t, err)
+			}))
+			defer svr.Close()
 
-	mc := &MistClient{
-		ApiUrl: svr.URL,
+			mc := &MistClient{
+				ApiUrl: svr.URL,
+			}
+
+			stats, err := mc.GetStats()
+			require.NoError(t, err)
+
+			require.Len(t, stats.PushList, 1)
+			require.Equal(t, stats.PushList[0].Stream, "video+c447r0acdmqhhhpb")
+			require.Len(t, stats.StreamsStats, 1)
+			streamStats, ok := stats.StreamsStats["video+c447r0acdmqhhhpb"]
+			require.Equal(t, ok, true)
+			require.Equal(t, streamStats.MediaTimeMs, int64(265458))
+		})
 	}
-
-	stats, err := mc.GetStats()
-	require.NoError(t, err)
-
-	require.Len(t, stats.PushList, 1)
-	require.Equal(t, stats.PushList[0].Stream, "video+c447r0acdmqhhhpb")
-	require.Len(t, stats.StreamsStats, 1)
-	streamStats, ok := stats.StreamsStats["video+c447r0acdmqhhhpb"]
-	require.Equal(t, ok, true)
-	require.Equal(t, streamStats.MediaTimeMs, int64(265458))
 }
 
 func TestUnmarshalJSONArray(t *testing.T) {
@@ -446,11 +438,13 @@ func TestUnmarshalJSONArray(t *testing.T) {
 
 	// too many args
 	err = unmarshalJSONArray([]byte(`[173]`), &num, &num, &num)
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.Equal(t, num, 173)
 
 	// too much json
 	err = unmarshalJSONArray([]byte(`[173, 173, 173]`), &num)
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.Equal(t, num, 173)
 }
 
 func TestMistPushUnmarshal(t *testing.T) {

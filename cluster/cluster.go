@@ -272,6 +272,7 @@ func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 						// Event moved to eventCh
 					default:
 						// Overflow event gets dropped
+						glog.V(3).Infof("Overflow UserEvent, dropped: %v", evt)
 					}
 				case serf.MemberEvent:
 					select {
@@ -281,6 +282,7 @@ func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 						// Event is now in the inbox
 					default:
 						// Overflow event gets dropped
+						glog.V(3).Infof("Overflow MemberEvent, dropped: %v", evt)
 					}
 				}
 			}

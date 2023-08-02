@@ -327,6 +327,7 @@ func processClusterEvent(mapic mistapiconnector.IMac, e serf.UserEvent) {
 		err := json.Unmarshal(e.Payload, &eventPayload)
 		if err != nil {
 			glog.Errorf("cannot unmarshall received serf event: %v", e)
+			return
 		}
 		switch eventPayload.Resource {
 		case "stream":

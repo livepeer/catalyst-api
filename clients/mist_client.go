@@ -136,10 +136,11 @@ func unmarshalJSONArray(data []byte, values ...interface{}) error {
 	if err := json.Unmarshal(data, &valuesData); err != nil {
 		return err
 	}
-	if len(values) != len(valuesData) {
-		return fmt.Errorf("error parsing json array; incorrect length wanted=%d got=%d", len(values), len(valuesData))
+	min := len(values)
+	if len(valuesData) < min {
+		min = len(valuesData)
 	}
-	for i := 0; i < len(values); i++ {
+	for i := 0; i < min; i++ {
 		if err := json.Unmarshal(valuesData[i], values[i]); err != nil {
 			return err
 		}
