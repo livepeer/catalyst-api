@@ -2,20 +2,16 @@ package pipeline
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
-	"net/url"
-	"os/exec"
-	"path"
-	"strings"
-	"syscall"
-
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/crypto"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/video"
+	"net/http"
+	"net/url"
+	"path"
+	"strings"
 )
 
 // These probe errors were found in the past on mist recordings but still process fine so we are ignoring them
@@ -58,28 +54,19 @@ func (s *InputCopy) CopyInputToS3(job *UploadJobPayload, inputFile, osTransferUR
 		return
 	}
 
-	log.Log(requestID, "starting probe", "source", inputFile.String(), "dest", osTransferURL.String())
-	inputVideoProbe, err = s.Probe.ProbeFile(requestID, job.SignedSourceURL)
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && syscall.Signal(exitErr.ExitCode()) == syscall.SIGKILL ||
-			errors.Is(err, context.Canceled) {
-			// probe timed out, copy to local disk and try again
-			if err = job.CopySourceToDisk(); err != nil {
-				return
-			}
-			log.LogNoRequestID("probing local", job.localSourceFile.Name())
-			inputVideoProbe, err = s.Probe.ProbeFile(requestID, job.localSourceFile.Name())
-			if err != nil {
-				log.Log(requestID, "probe failed", "err", err, "source", inputFile.String(), "dest", osTransferURL.String())
-				err = fmt.Errorf("error probing MP4 input file from S3: %w", err)
-				return
-			}
-		} else {
-			log.Log(requestID, "probe failed", "err", err, "source", inputFile.String(), "dest", osTransferURL.String())
-			err = fmt.Errorf("error probing MP4 input file from S3: %w", err)
+	probeUrl := job.SignedSourceURL
+	if !clients.IsHLSInput(inputFile) {
+		if err = job.CopySourceToDisk(); err != nil {
 			return
 		}
+		probeUrl = job.localSourceFile.Name()
+	}
+	log.Log(requestID, "starting probe", "source", inputFile.String(), "dest", osTransferURL.String())
+	inputVideoProbe, err = s.Probe.ProbeFile(requestID, probeUrl)
+	if err != nil {
+		log.Log(requestID, "probe failed", "err", err, "source", inputFile.String(), "dest", osTransferURL.String())
+		err = fmt.Errorf("error probing MP4 input file from S3: %w", err)
+		return
 	}
 	log.Log(requestID, "probe succeeded", "source", inputFile.String(), "dest", osTransferURL.String())
 	videoTrack, err := inputVideoProbe.GetTrack(video.TrackTypeVideo)

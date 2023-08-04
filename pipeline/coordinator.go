@@ -101,11 +101,11 @@ func (p *UploadJobPayload) CopySourceToDisk() error {
 		}
 	}
 
-	log.Log(p.RequestID, "copying to local disk")
 	localSourceFile, err := os.CreateTemp(os.TempDir(), localSourceFilePattern)
 	if err != nil {
 		return fmt.Errorf("failed to create local file (%s): %w", localSourceFile.Name(), err)
 	}
+	log.Log(p.RequestID, "copying to local disk", "local_file", localSourceFile.Name())
 	// Copy the file locally because of issues with ffmpeg segmenting and remote files
 	// We can be aggressive with the timeout because we're copying from cloud storage
 	timeout, cancel := context.WithTimeout(context.Background(), 30*time.Minute)

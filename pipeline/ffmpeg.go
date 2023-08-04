@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"path"
@@ -45,7 +46,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	// Segment only for non-HLS inputs
 	if job.InputFileInfo.Format != "hls" {
-		if err := copyFileToLocalTmpAndSegment(job); err != nil {
+		if err := segmentFromLocal(job); err != nil {
 			return nil, err
 		}
 	} else {
@@ -240,9 +241,9 @@ func (f *ffmpeg) probeSourceSegment(requestID string, seg *m3u8.MediaSegment, so
 	return nil
 }
 
-func copyFileToLocalTmpAndSegment(job *JobInfo) error {
-	if err := job.CopySourceToDisk(); err != nil {
-		return err
+func segmentFromLocal(job *JobInfo) error {
+	if job.localSourceFile == nil {
+		return errors.New("localSourceFile was nil when trying to segment")
 	}
 
 	defer job.DeleteLocalSource() // Clean up the file as soon as we're done segmenting
