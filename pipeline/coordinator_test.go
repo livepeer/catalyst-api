@@ -565,14 +565,6 @@ func allFailingHandler(t *testing.T) Handler {
 			require.Fail(t, "Unexpected handleStartUploadJob")
 			panic("unreachable")
 		},
-		handleRecordingEndTrigger: func(job *JobInfo, p RecordingEndPayload) (*HandlerOutput, error) {
-			require.Fail(t, "Unexpected handleRecordingEndTrigger")
-			panic("unreachable")
-		},
-		handlePushEndTrigger: func(job *JobInfo, p PushEndPayload) (*HandlerOutput, error) {
-			require.Fail(t, "Unexpected handlePushEndTrigger")
-			panic("unreachable")
-		},
 	}
 }
 
