@@ -27,6 +27,7 @@ const audioAlways = "always"
 const audioRecord = "record"
 const audioEnabledStreamSuffix = "rec"
 const waitForPushError = 7 * time.Second
+const waitForPushErrorIncreased = 2 * time.Minute
 const keepStreamAfterEnd = 15 * time.Second
 const statsCollectionPeriod = 10 * time.Second
 
@@ -35,6 +36,7 @@ const webhooksExchangeName = "webhook_default_exchange"
 const eventMultistreamConnected = "multistream.connected"
 const eventMultistreamError = "multistream.error"
 const eventMultistreamDisconnected = "multistream.disconnected"
+const eventMultistreamErrorTolerance = 2
 
 type (
 	// IMac creates new Mist API Connector application
@@ -45,12 +47,13 @@ type (
 	}
 
 	pushStatus struct {
-		target      *api.MultistreamTarget
-		profile     string
-		lastEvent   string
-		lastEventAt time.Time
-		metrics     *data.MultistreamMetrics
-		mu          sync.RWMutex
+		target              *api.MultistreamTarget
+		profile             string
+		lastEvent           string
+		lastEventAt         time.Time
+		lastEventErrorCount int
+		metrics             *data.MultistreamMetrics
+		mu                  sync.RWMutex
 	}
 
 	streamInfo struct {
@@ -311,10 +314,21 @@ func (mc *mac) handlePushOutStart(ctx context.Context, payload *misttriggers.Pus
 
 // waits for RTMP push error
 func (mc *mac) waitPush(info *streamInfo, pushInfo *pushStatus) {
+	waitForPushEvent := waitForPushError
+	var waitForPushEventWasIncreased bool
+	pushInfo.mu.Lock()
+	if pushInfo.lastEventErrorCount > eventMultistreamErrorTolerance {
+		// Most probably there is an issue with the multistream target; increase the wait time between PUSH_OUT_START
+		// and PUSH_END to avoid flickering between 'connected' and 'error' events
+		waitForPushEvent = waitForPushErrorIncreased
+		waitForPushEventWasIncreased = true
+	}
+	pushInfo.mu.Unlock()
+
 	select {
 	case <-info.done:
 		return
-	case <-time.After(waitForPushError):
+	case <-time.After(waitForPushEvent):
 		info.mu.Lock()
 		defer info.mu.Unlock()
 		if info.stopped {
@@ -326,12 +340,16 @@ func (mc *mac) waitPush(info *streamInfo, pushInfo *pushStatus) {
 			// push was already disabled in the meantime
 			pushInfo.lastEvent == eventMultistreamConnected ||
 			// connected event already sent, no need to send it again
-			time.Now().Add(-waitForPushError).Before(pushInfo.lastEventAt) {
+			time.Now().Add(-waitForPushEvent).Before(pushInfo.lastEventAt) {
 			// there was another event after PUSH_OUT, no need to send connected event
 			return
 		}
 		pushInfo.lastEvent = eventMultistreamConnected
 		pushInfo.lastEventAt = time.Now()
+		if waitForPushEventWasIncreased {
+			// Reset error count, because most probably the multistream target started to work
+			pushInfo.lastEventErrorCount = 0
+		}
 		mc.emitWebhookEventAsync(info.stream, pushInfo, eventMultistreamConnected)
 	}
 }
@@ -407,14 +425,19 @@ func (mc *mac) handlePushEnd(ctx context.Context, payload *misttriggers.PushEndP
 				defer pushInfo.mu.Unlock()
 				pushInfo.lastEventAt = time.Now()
 				switch pushInfo.lastEvent {
-				case eventMultistreamError:
-					// error already sent, just update the last error time
 				case eventMultistreamDisconnected:
 					// push was disconnected, reset the lastEvent state
 					pushInfo.lastEvent = ""
+					pushInfo.lastEventErrorCount = 0
 				default:
 					pushInfo.lastEvent = eventMultistreamError
-					mc.emitWebhookEventAsync(info.stream, pushInfo, eventMultistreamError)
+					if pushInfo.lastEventErrorCount <= eventMultistreamErrorTolerance {
+						pushInfo.lastEventErrorCount++
+					}
+					if pushInfo.lastEventErrorCount == eventMultistreamErrorTolerance {
+						// Trigger error event only after a few errors
+						mc.emitWebhookEventAsync(info.stream, pushInfo, eventMultistreamError)
+					}
 				}
 			} else {
 				glog.Errorf("For stream playbackID=%s got unknown RTMP push %s", playbackID, payload.StreamName)
