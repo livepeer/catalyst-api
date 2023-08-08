@@ -348,7 +348,8 @@ func (c *Coordinator) startUploadJob(p UploadJobPayload) {
 func checkLivepeerCompatible(requestID string, strategy Strategy, iv video.InputVideo) (bool, Strategy) {
 	for _, track := range iv.Tracks {
 		// if the codecs are not compatible then override to external pipeline to avoid sending to Livepeer
-		if track.Type == video.TrackTypeVideo && strings.ToLower(track.Codec) != "h264" {
+		if (track.Type == video.TrackTypeVideo && strings.ToLower(track.Codec) != "h264") ||
+			(track.Type == video.TrackTypeAudio && strings.ToLower(track.Codec) != "aac") {
 			log.Log(requestID, "codec not supported by Livepeer pipeline", "trackType", track.Type, "codec", track.Codec)
 			return livepeerNotSupported(strategy)
 		}
