@@ -91,20 +91,6 @@ type UploadJobResult struct {
 	Outputs    []video.OutputVideo
 }
 
-// RecordingEndPayload is the required payload from a recording end trigger.
-type RecordingEndPayload struct {
-	StreamName                string
-	StreamMediaDurationMillis int64
-	WrittenBytes              int
-}
-
-// PushsEndPayload is the required payload from a push end trigger.
-type PushEndPayload struct {
-	StreamName     string
-	PushStatus     string
-	Last10LogLines string
-}
-
 // JobInfo represents the state of a single upload job.
 type JobInfo struct {
 	mu sync.Mutex
