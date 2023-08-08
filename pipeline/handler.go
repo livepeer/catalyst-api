@@ -41,10 +41,8 @@ var ContinuePipeline = &HandlerOutput{Continue: true}
 
 // Used for testing
 type StubHandler struct {
-	name                      string
-	handleStartUploadJob      func(job *JobInfo) (*HandlerOutput, error)
-	handleRecordingEndTrigger func(job *JobInfo, p RecordingEndPayload) (*HandlerOutput, error)
-	handlePushEndTrigger      func(job *JobInfo, p PushEndPayload) (*HandlerOutput, error)
+	name                 string
+	handleStartUploadJob func(job *JobInfo) (*HandlerOutput, error)
 }
 
 func NewBlockingStubHandler() (blockedHandler *StubHandler, release func()) {
@@ -70,18 +68,4 @@ func (h *StubHandler) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error)
 		return nil, errors.New("not implemented")
 	}
 	return h.handleStartUploadJob(job)
-}
-
-func (h *StubHandler) HandleRecordingEndTrigger(job *JobInfo, p RecordingEndPayload) (*HandlerOutput, error) {
-	if h.handleRecordingEndTrigger == nil {
-		return nil, errors.New("not implemented")
-	}
-	return h.handleRecordingEndTrigger(job, p)
-}
-
-func (h *StubHandler) HandlePushEndTrigger(job *JobInfo, p PushEndPayload) (*HandlerOutput, error) {
-	if h.handlePushEndTrigger == nil {
-		return nil, errors.New("not implemented")
-	}
-	return h.handlePushEndTrigger(job, p)
 }
