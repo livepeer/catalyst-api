@@ -57,13 +57,6 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	job.ReportProgress(clients.TranscodeStatusPreparing, 0.3)
 
 
-	//XXX: do the clipping here - check if request has start/end populated
-	//1. newSegs := ClipManifest("url where segmented output lies")
-	//2. ReTranscode(seg) -- download locally, ffmpeg, upload to same folder
-	//3. generate-new-manifest(newSegs, outputDir)
-
-
-	
 	// Segment only for non-HLS inputs
 	if job.InputFileInfo.Format != "hls" {
 		if err := copyFileToLocalTmpAndSegment(job); err != nil {
@@ -75,6 +68,26 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	job.SegmentingDone = time.Now()
 	sendSourcePlayback(job)
 	job.ReportProgress(clients.TranscodeStatusPreparingCompleted, 1)
+
+
+
+	// Clipping Beginning
+	sourceManifest, err := clients.DownloadRenditionManifest(job.RequestID, job.SegmentingTargetURL)
+	clippedSegmentList, err := ClipManifest(job.requestID, sourceManifest, 1, 4) 
+	// make a new manifest that only contains the clipped segments (i.e. everything between start to end timestamps) 
+	clippedManifest 
+	// upload the new manifest
+
+	// clip first and last segments
+	// upload the first and last segments
+
+
+	job.SegmentingTargetURL = location of clipped manifest? 
+
+	
+
+
+
 
 	// Transcode Beginning
 	log.Log(job.RequestID, "Beginning transcoding via FFMPEG/Livepeer pipeline")
