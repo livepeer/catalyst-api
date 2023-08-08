@@ -309,115 +309,91 @@ func TestItFailsWhenMaxRetriesReached(t *testing.T) {
 }
 
 func TestItCanGetStreamStats(t *testing.T) {
-	tests := []struct {
-		name         string
-		mistResponse string
-	}{
-		{
-			name: "With PUSH_LIST stats",
-			mistResponse: `
-			  {
-				"LTS": 1,
-				"authorize": {
-				  "local": true,
-				  "status": "OK"
-				},
-				"push_list": [
-				  [
-					3116,
-					"video+c447r0acdmqhhhpb",
-					"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
-					"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
-					[
-					  [
-						1688680282,
-						"INFO",
-						"Switching UDP socket from IPv6 to IPv4",
-						"video+c447r0acdmqhhhpb"
-					  ]
-					],
-					{
-					  "active_seconds": 259,
-					  "bytes": 24887717,
-					  "mediatime": 260982,
-					  "tracks": [
-						0,
-						1
-					  ]
-					}
-				  ]
-				],
-				"stats_streams": {
-				  "video+c447r0acdmqhhhpb": [
-					0,
-					265458
-				  ]
-				}
-			  }
-			`,
+	mistResponse := `
+	  {
+		"LTS": 1,
+		"authorize": {
+		  "local": true,
+		  "status": "OK"
 		},
-		{
-			name: "Without PUSH_LIST stats",
-			mistResponse: `
-			  {
-				"LTS": 1,
-				"authorize": {
-				  "local": true,
-				  "status": "OK"
-				},
-				"push_list": [
-				  [
-					3116,
-					"video+c447r0acdmqhhhpb",
-					"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
-					"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
-					[
-					  [
-						1688680282,
-						"INFO",
-						"Switching UDP socket from IPv6 to IPv4",
-						"video+c447r0acdmqhhhpb"
-					  ]
-					]
-				  ]
-				],
-				"stats_streams": {
-				  "video+c447r0acdmqhhhpb": [
-					0,
-					265458
-				  ]
-				}
-			  }
-			`,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				body, err := io.ReadAll(r.Body)
-				require.NoError(t, err)
-				require.Equal(t, string(body), "command="+url.QueryEscape(`{"stats_streams":["clients","lastms"],"push_list":true}`))
-
-				_, err = w.Write([]byte(tt.mistResponse))
-				require.NoError(t, err)
-			}))
-			defer svr.Close()
-
-			mc := &MistClient{
-				ApiUrl: svr.URL,
+		"push_list": [
+		  [
+			3116,
+			"video+c447r0acdmqhhhpb",
+			"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
+			"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
+			[
+			  [
+				1688680282,
+				"INFO",
+				"Switching UDP socket from IPv6 to IPv4",
+				"video+c447r0acdmqhhhpb"
+			  ]
+			],
+			{
+			  "active_seconds": 259,
+			  "bytes": 24887717,
+			  "mediatime": 260982,
+			  "tracks": [
+				0,
+				1
+			  ]
 			}
+		  ]
+		],
+		"stats_streams": {
+		  "video+c447r0acdmqhhhpb": [
+			0,
+			265458
+		  ]
+		},
+		"active_streams": {
+          "video+c447r0acdmqhhhpb": [
+             "push://"
+          ]
+		},
+        "push_auto_list": [
+          [
+            "videorec+",
+            "s3+https://***:***@storage.googleapis.com/target",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null]
+          ]
+	  }
+	`
 
-			stats, err := mc.GetStats()
-			require.NoError(t, err)
+	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.Equal(t, string(body), "command="+url.QueryEscape(`{"active_streams":["source"],"stats_streams":["clients","lastms"],"push_list":true,"push_auto_list":true}`))
 
-			require.Len(t, stats.PushList, 1)
-			require.Equal(t, stats.PushList[0].Stream, "video+c447r0acdmqhhhpb")
-			require.Len(t, stats.StreamsStats, 1)
-			streamStats, ok := stats.StreamsStats["video+c447r0acdmqhhhpb"]
-			require.Equal(t, ok, true)
-			require.Equal(t, streamStats.MediaTimeMs, int64(265458))
-		})
+		_, err = w.Write([]byte(mistResponse))
+		require.NoError(t, err)
+	}))
+	defer svr.Close()
+
+	mc := &MistClient{
+		ApiUrl: svr.URL,
 	}
+
+	status, err := mc.GetState()
+	require.NoError(t, err)
+
+	require.Len(t, status.PushList, 1)
+	require.Equal(t, status.PushList[0].Stream, "video+c447r0acdmqhhhpb")
+	require.Len(t, status.StreamsStats, 1)
+	streamStats, ok := status.StreamsStats["video+c447r0acdmqhhhpb"]
+	require.Equal(t, ok, true)
+	require.Equal(t, streamStats.MediaTimeMs, int64(265458))
+	require.Len(t, status.PushAutoList, 1)
+	require.Equal(t, status.PushAutoList[0].Stream, "videorec+")
+	require.Equal(t, status.PushAutoList[0].Target, "s3+https://***:***@storage.googleapis.com/target")
+	require.Len(t, status.ActiveStreams, 1)
+	require.Equal(t, status.ActiveStreams["video+c447r0acdmqhhhpb"].Source, "push://")
 }
 
 func TestUnmarshalJSONArray(t *testing.T) {
@@ -448,46 +424,79 @@ func TestUnmarshalJSONArray(t *testing.T) {
 }
 
 func TestMistPushUnmarshal(t *testing.T) {
-	mistPushBody := `
-	[
-		3116,
-		"video+c447r0acdmqhhhpb",
-		"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
-		"rtmp://new-rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
-		[
-			[
-				1688680237,
-				"INFO",
-				"Switching UDP socket from IPv6 to IPv4",
-				"video+c447r0acdmqhhhpb"
-			]
-		],
+	tests := []struct {
+		name          string
+		statsIncluded bool
+		mistPushBody  string
+	}{
 		{
-			"active_seconds": 259,
-			"bytes": 24887717,
-			"mediatime": 260982,
-			"tracks": [
-			    0,
-			    1
-			]
-		}
-	]
-`
-	var push MistPush
-	err := json.Unmarshal([]byte(mistPushBody), &push)
-	require.NoError(t, err)
-	require.Equal(t, push.ID, int64(3116))
-	require.Equal(t, push.Stream, "video+c447r0acdmqhhhpb")
-	require.Equal(t, push.OriginalURL, "rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps")
-	require.Equal(t, push.EffectiveURL, "rtmp://new-rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps")
-	stats := push.Stats
-	require.Equal(t, stats.ActiveSeconds, int64(259))
-	require.Equal(t, stats.Bytes, int64(24887717))
-	require.Equal(t, stats.MediaTime, int64(260982))
-	require.Equal(t, stats.Tracks, []int{0, 1})
-
-	err = json.Unmarshal([]byte("{}"), &push)
-	require.Error(t, err)
+			name:          "With PUSH_LIST stats",
+			statsIncluded: true,
+			mistPushBody: `
+				[
+					3116,
+					"video+c447r0acdmqhhhpb",
+					"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
+					"rtmp://new-rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
+					[
+						[
+							1688680237,
+							"INFO",
+							"Switching UDP socket from IPv6 to IPv4",
+							"video+c447r0acdmqhhhpb"
+						]
+					],
+					{
+						"active_seconds": 259,
+						"bytes": 24887717,
+						"mediatime": 260982,
+						"tracks": [
+							0,
+							1
+						]
+					}
+				]
+			`,
+		},
+		{
+			name:          "Without PUSH_LIST stats",
+			statsIncluded: false,
+			mistPushBody: `
+				[
+					3116,
+					"video+c447r0acdmqhhhpb",
+					"rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
+					"rtmp://new-rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps",
+					[
+						[
+							1688680237,
+							"INFO",
+							"Switching UDP socket from IPv6 to IPv4",
+							"video+c447r0acdmqhhhpb"
+						]
+					]
+				]
+			`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var push MistPush
+			err := json.Unmarshal([]byte(tt.mistPushBody), &push)
+			require.NoError(t, err)
+			require.Equal(t, push.ID, int64(3116))
+			require.Equal(t, push.Stream, "video+c447r0acdmqhhhpb")
+			require.Equal(t, push.OriginalURL, "rtmp://rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps")
+			require.Equal(t, push.EffectiveURL, "rtmp://new-rtmp.livepeer.com/live/stream-key?video=maxbps&audio=maxbps")
+			if tt.statsIncluded {
+				stats := push.Stats
+				require.Equal(t, stats.ActiveSeconds, int64(259))
+				require.Equal(t, stats.Bytes, int64(24887717))
+				require.Equal(t, stats.MediaTime, int64(260982))
+				require.Equal(t, stats.Tracks, []int{0, 1})
+			}
+		})
+	}
 }
 
 func TestMistStreamStatsUnmarshal(t *testing.T) {
@@ -505,6 +514,106 @@ func TestMistStreamStatsUnmarshal(t *testing.T) {
 
 	err = json.Unmarshal([]byte("{}"), &stats)
 	require.Error(t, err)
+}
+
+func TestMistPushAutoUnmarshal(t *testing.T) {
+	tests := []struct {
+		mistPushAutoBody string
+		wantError        bool
+		wantStream       string
+		wantTarget       string
+	}{
+		{
+			mistPushAutoBody: `
+				[
+					"videorec+",
+					"s3+https://***:***@storage.googleapis.com/lp-us-catalyst-recordings-monster/hls/$wildcard/$uuid/source/$segmentCounter.ts?m3u8=../output.m3u8&split=5&video=source&audio=source",
+					null,
+					null,
+					null,
+					null,
+					null,
+					null
+				]
+			`,
+			wantStream: "videorec+",
+			wantTarget: "s3+https://***:***@storage.googleapis.com/lp-us-catalyst-recordings-monster/hls/$wildcard/$uuid/source/$segmentCounter.ts?m3u8=../output.m3u8&split=5&video=source&audio=source",
+		},
+		{
+			mistPushAutoBody: `
+				[
+			  		"video+6736xac7u1hj36pa",
+					"rtmp://localhost/live/4783-4xpf-hced-2k4o?video=maxbps&audio=maxbps",
+					0,
+					0,
+					"",
+					0,
+					"",
+					"",
+					0,
+					""
+				]
+			`,
+			wantStream: "video+6736xac7u1hj36pa",
+			wantTarget: "rtmp://localhost/live/4783-4xpf-hced-2k4o?video=maxbps&audio=maxbps",
+		},
+		{
+			mistPushAutoBody: `
+				[
+					"videorec+",
+					null,
+					null,
+					null,
+					null,
+					null,
+					null,
+					null
+				]
+			`,
+			wantError: true,
+		},
+		{
+			mistPushAutoBody: `
+				[
+					null,
+					""rtmp://localhost/live/4783-4xpf-hced-2k4o?video=maxbps&audio=maxbps"",
+					null,
+					null,
+					null,
+					null,
+					null,
+					null
+				]
+			`,
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		var pushAuto MistPushAuto
+		err := json.Unmarshal([]byte(tt.mistPushAutoBody), &pushAuto)
+		if tt.wantError {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+			require.Equal(t, tt.wantStream, pushAuto.Stream)
+			require.Equal(t, tt.wantTarget, pushAuto.Target)
+			require.NotEmpty(t, pushAuto.StreamParams)
+		}
+	}
+}
+
+func TestMistActiveStreamsUnmarshal(t *testing.T) {
+	mistActiveStreamsBody := `
+		[
+			"push://some-string"
+		]
+	`
+
+	var activeStream ActiveStream
+	err := json.Unmarshal([]byte(mistActiveStreamsBody), &activeStream)
+	require.NoError(t, err)
+	require.Equal(t, "push://some-string", activeStream.Source)
 }
 
 var mistResponse = `{
@@ -681,129 +790,37 @@ func TestSameStringSlice(t *testing.T) {
 	}
 }
 
-func TestParsePushAutoListValid(t *testing.T) {
-	mistPushAutoListBody := `
-	{
-	  "LTS": 1,
-	  "authorize": {
-		"local": true,
-		"status": "OK"
-	  },
-	  "push_auto_list": [
-		[
-		  "videorec+",
-		  "s3+https://***:***@storage.googleapis.com/lp-us-catalyst-recordings-monster/hls/$wildcard/$uuid/source/$segmentCounter.ts?m3u8=../output.m3u8&split=5&video=source&audio=source",
-		  null,
-		  null,
-		  null,
-		  null,
-		  null,
-		  null
-		],
-		[
-		  "video+6736xac7u1hj36pa",
-		  "rtmp://localhost/live/4783-4xpf-hced-2k4o?video=maxbps&audio=maxbps",
-		  0,
-		  0,
-		  "",
-		  0,
-		  "",
-		  "",
-		  0,
-		  ""
-		]
-	  ]
-	}
-	`
-
-	res, err := parsePushAutoList(mistPushAutoListBody)
-	require.NoError(t, err)
-	require.Len(t, res, 2)
-	require.Equal(t, "videorec+", res[0].Stream)
-	require.Equal(t, "s3+https://***:***@storage.googleapis.com/lp-us-catalyst-recordings-monster/hls/$wildcard/$uuid/source/$segmentCounter.ts?m3u8=../output.m3u8&split=5&video=source&audio=source", res[0].Target)
-	require.Equal(t, "video+6736xac7u1hj36pa", res[1].Stream)
-	require.Equal(t, "rtmp://localhost/live/4783-4xpf-hced-2k4o?video=maxbps&audio=maxbps", res[1].Target)
-}
-
-func TestParsePushAutoListInvalid(t *testing.T) {
+func TestIsIngestStream(t *testing.T) {
 	tests := []struct {
-		mistPushAutoListBody string
+		stream       string
+		wantIsIngest bool
 	}{
 		{
-			mistPushAutoListBody: `
-			{
-			  "LTS": 1,
-			  "authorize": {
-				"local": true,
-				"status": "OK"
-			  },
-			  "push_auto_list": [
-				[
-				  "videorec+",
-				  null,
-				  null,
-				  null,
-				  null,
-				  null,
-				  null,
-				  null
-				],
-				[
-				  "video+6736xac7u1hj36pa",
-				  null,
-				  0,
-				  0,
-				  "",
-				  0,
-				  "",
-				  "",
-				  0,
-				  ""
-				]
-			  ]
-			}
-		`},
+			stream:       "video+123456789",
+			wantIsIngest: true,
+		},
 		{
-			mistPushAutoListBody: `
-			{
-			  "LTS": 1,
-			  "authorize": {
-				"local": true,
-				"status": "OK"
-			  },
-			  "push_auto_list": [
-				[
-				  null,
-				  ""rtmp://localhost/live/4783-4xpf-hced-2k4o?video=maxbps&audio=maxbps"",
-				  null,
-				  null,
-				  null,
-				  null,
-				  null,
-				  null
-				],
-				[
-				  null,
-				  null,
-				  0,
-				  0,
-				  "",
-				  0,
-				  "",
-				  "",
-				  0,
-				  ""
-				]
-			  ]
-			}
-		`},
+			stream:       "video+playback",
+			wantIsIngest: false,
+		},
 		{
-			mistPushAutoListBody: "invalid payload",
+			stream:       "",
+			wantIsIngest: false,
+		},
+	}
+
+	state := MistState{
+		ActiveStreams: map[string]*ActiveStream{
+			"video+123456789": {
+				Source: "push://",
+			},
+			"video+playback": {
+				Source: "push://INTERNAL_ONLY:dtsc://mdw-staging-staging-catalyst-0.livepeer.monster:4200",
+			},
 		},
 	}
 
 	for _, tt := range tests {
-		_, err := parsePushAutoList(tt.mistPushAutoListBody)
-		require.Error(t, err)
+		require.Equal(t, tt.wantIsIngest, state.IsIngestStream(tt.stream))
 	}
 }

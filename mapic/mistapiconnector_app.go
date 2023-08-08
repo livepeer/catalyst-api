@@ -164,7 +164,7 @@ func (mc *mac) MetricsHandler() http.Handler {
 }
 
 func (mc *mac) RefreshMultistreamIfNeeded(playbackID string) {
-	if mc.ingestStreamExists(playbackID) {
+	if mc.streamExists(playbackID) {
 		mc.refreshMultistream(playbackID)
 	}
 }
@@ -266,21 +266,16 @@ func (mc *mac) handleLiveTrackList(ctx context.Context, payload *misttriggers.Li
 		videoTracksNum := payload.CountVideoTracks()
 		playbackID := mistStreamName2playbackID(payload.StreamName)
 		glog.Infof("for video %s got %d video tracks", playbackID, videoTracksNum)
-
-		if videoTracksNum > 1 {
-			mc.refreshMultistream(playbackID)
-		}
+		mc.refreshMultistream(playbackID)
 	}()
 	return nil
 }
 
-func (mc *mac) ingestStreamExists(playbackID string) bool {
+func (mc *mac) streamExists(playbackID string) bool {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
-	if stream, streamExists := mc.streamInfo[playbackID]; streamExists {
-		return !stream.isLazy
-	}
-	return false
+	_, streamExists := mc.streamInfo[playbackID]
+	return streamExists
 }
 
 func (mc *mac) refreshMultistream(playbackID string) {
@@ -496,6 +491,7 @@ func (mc *mac) reconcileMultistreamLoop(ctx context.Context) {
 // - streamInfo cache has changed (multistream target was turned on/off or multistream target was added/removed)
 // - Mist removed its push for some reason
 // Note that we use Mist AUTO_PUSH (which in turn makes sure that the PUSH is always available).
+// Note also that we only create AUTO_PUSH for active streams which are ingest (not playback).
 func (mc *mac) reconcileMultistream() {
 	type key struct {
 		stream string
@@ -509,15 +505,16 @@ func (mc *mac) reconcileMultistream() {
 			(strings.HasPrefix(strings.ToLower(k.target), "rtmp:") || strings.HasPrefix(strings.ToLower(k.target), "srt:"))
 	}
 
-	// Get the existing PUSH_AUTO from Mist
-	mistPushAutoList, err := mc.mist.PushAutoList()
+	mistState, err := mc.mist.GetState()
 	if err != nil {
-		glog.Errorf("error executing PUSH_AUTO_LIST on Mist, cannot reconcile multistream err=%v", err)
+		glog.Errorf("error executing query on Mist, cannot reconcile multistream err=%v", err)
 		return
 	}
-	var filteredMistPushAutoList []clients.MistPushAuto
+
+	// Get the existing PUSH_AUTO from Mist
+	var filteredMistPushAutoList []*clients.MistPushAuto
 	mistMap := map[key]bool{}
-	for _, e := range mistPushAutoList {
+	for _, e := range mistState.PushAutoList {
 		k := toKey(e.Stream, e.Target)
 		if isMultistream(k) {
 			filteredMistPushAutoList = append(filteredMistPushAutoList, e)
@@ -526,18 +523,11 @@ func (mc *mac) reconcileMultistream() {
 	}
 
 	// Get the existing PUSH from Mist
-	stats, err := mc.mist.GetStats()
-	if err != nil {
-		glog.Errorf("error executing PUSH_LIST on Mist, cannot reconcile multistream err=%v", err)
-		return
-	}
 	var filteredMistPushList []*clients.MistPush
-	mistPushMap := map[key]int64{}
-	for _, e := range stats.PushList {
+	for _, e := range mistState.PushList {
 		k := toKey(e.Stream, e.OriginalURL)
 		if isMultistream(k) {
 			filteredMistPushList = append(filteredMistPushList, e)
-			mistPushMap[toKey(e.Stream, e.OriginalURL)] = e.ID
 		}
 	}
 
@@ -550,10 +540,10 @@ func (mc *mac) reconcileMultistream() {
 	cachedMap := map[key]*pushInfo{}
 	mc.mu.Lock()
 	for _, si := range mc.streamInfo {
-		if !si.isLazy {
-			for target, v := range si.pushStatus {
-				if v.target != nil {
-					stream := mc.wildcardPlaybackID(si.stream)
+		for target, v := range si.pushStatus {
+			if v.target != nil {
+				stream := mc.wildcardPlaybackID(si.stream)
+				if isIngestStream(stream, si, mistState) {
 					cachedMap[toKey(stream, target)] = &pushInfo{status: v, stream: si, enabled: !v.target.Disabled}
 				}
 			}
@@ -732,4 +722,15 @@ func pushToMultistreamTargetInfo(pushInfo *pushStatus) data.MultistreamTargetInf
 		Name:    pushInfo.target.Name,
 		Profile: pushInfo.profile,
 	}
+}
+
+// isIngestStream checks if the given stream is ingest (push) as opposed to the playback (pull) stream.
+// We do need to check it in both streamInfo and MistState, because:
+//   - streamInfo: isLazy is set to false in the PUSH_REWRITE trigger, which is present only for ingest streams; checking
+//     this condition only is not good enough, because catalyst-api might be restarted and have isLazy set to true for
+//     the ingest stream
+//   - MistState: active_streams have source "push://" for ingest streams; checking this condition only is not good
+//     enough, because a freshly started stream may not be yet visible in Mist (though it's already started).
+func isIngestStream(stream string, si *streamInfo, mistState clients.MistState) bool {
+	return !si.isLazy || mistState.IsIngestStream(stream)
 }

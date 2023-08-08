@@ -64,7 +64,7 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 		}
 	}()
 
-	mistStats, err := c.mist.GetStats()
+	mistStats, err := c.mist.GetState()
 	if err != nil {
 		return err
 	}
@@ -182,7 +182,7 @@ type streamMetrics struct {
 	pushes []*clients.MistPush
 }
 
-func compileStreamMetrics(mistStats *clients.MistStats) map[string]*streamMetrics {
+func compileStreamMetrics(mistStats *clients.MistState) map[string]*streamMetrics {
 	streamsMetrics := map[string]*streamMetrics{}
 	getOrCreate := func(stream string) *streamMetrics {
 		if metrics, ok := streamsMetrics[stream]; ok {

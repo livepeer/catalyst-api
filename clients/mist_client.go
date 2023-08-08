@@ -21,13 +21,12 @@ type MistAPIClient interface {
 	AddStream(streamName, sourceUrl string) error
 	PushAutoAdd(streamName, targetURL string) error
 	PushAutoRemove(streamParams []interface{}) error
-	PushAutoList() ([]MistPushAuto, error)
 	PushStop(id int64) error
 	DeleteStream(streamName string) error
 	AddTrigger(streamName []string, triggerName string, sync bool) error
 	DeleteTrigger(streamName []string, triggerName string) error
 	GetStreamInfo(streamName string) (MistStreamInfo, error)
-	GetStats() (MistStats, error)
+	GetState() (MistState, error)
 }
 
 type MistClient struct {
@@ -96,7 +95,21 @@ type MistStreamInfo struct {
 	Error  string                 `json:"error,omitempty"`
 }
 
-// MistStreamStats and MistPush have a custom JSON unmarshaller, parsed from array.
+type MistState struct {
+	ActiveStreams map[string]*ActiveStream    `json:"active_streams"`
+	StreamsStats  map[string]*MistStreamStats `json:"stats_streams"`
+	PushList      []*MistPush                 `json:"push_list"`
+	PushAutoList  []*MistPushAuto             `json:"push_auto_list"`
+}
+
+func (ms MistState) IsIngestStream(stream string) bool {
+	if ms.ActiveStreams == nil {
+		return false
+	}
+	as, ok := ms.ActiveStreams[stream]
+	return ok && as.Source == "push://"
+}
+
 type MistPush struct {
 	ID           int64
 	Stream       string
@@ -114,9 +127,46 @@ func (p *MistPush) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-type MistStats struct {
-	StreamsStats map[string]*MistStreamStats `json:"stats_streams"`
-	PushList     []*MistPush                 `json:"push_list"`
+type MistPushAuto struct {
+	Stream       string
+	Target       string
+	StreamParams []interface{}
+}
+
+func (p *MistPushAuto) UnmarshalJSON(data []byte) error {
+	var parsed []interface{}
+	if err := json.Unmarshal([]byte(data), &parsed); err != nil {
+		return err
+	}
+
+	if len(parsed) < 2 {
+		return errors.New("invalid Mist auto_push_list entry, less than 2 params, expected at least [stream, target, ...]")
+	}
+	stream, ok := parsed[0].(string)
+	if !ok {
+		return fmt.Errorf("invalid Mist auto_push_list entry, expected first param as 'stream', but got %s", parsed[0])
+	}
+	target, ok := parsed[1].(string)
+	if !ok {
+		return fmt.Errorf("invalid Mist auto_push_list entry, expected second param as 'target', but got %s", parsed[1])
+	}
+
+	p.Stream = stream
+	p.Target = target
+	p.StreamParams = parsed
+
+	return nil
+}
+
+type ActiveStream struct {
+	Source string
+}
+
+func (p *ActiveStream) UnmarshalJSON(data []byte) error {
+	if err := unmarshalJSONArray(data, &p.Source); err != nil {
+		return err
+	}
+	return nil
 }
 
 type MistStreamStats struct {
@@ -177,49 +227,6 @@ func (mc *MistClient) PushAutoRemove(streamParams []interface{}) error {
 	}
 	c := commandPushAutoRemove(streamParams)
 	return wrapErr(validatePushAutoRemove(mc.sendCommand(c)), streamName)
-}
-
-func (mc *MistClient) PushAutoList() ([]MistPushAuto, error) {
-	c := commandPushAutoList()
-	resp, err := mc.sendCommand(c)
-	if err := validateAuth(resp, err); err != nil {
-		return nil, err
-	}
-
-	return parsePushAutoList(resp)
-}
-
-func parsePushAutoList(mistResponse string) ([]MistPushAuto, error) {
-	type MistPushAutoList struct {
-		PushAutoList [][]interface{} `json:"push_auto_list"`
-	}
-
-	parsed := MistPushAutoList{}
-	if err := json.Unmarshal([]byte(mistResponse), &parsed); err != nil {
-		return nil, err
-	}
-
-	var res []MistPushAuto
-	for _, e := range parsed.PushAutoList {
-		if len(e) < 2 {
-			return res, errors.New("invalid Mist auto_push_list entry, less than 2 params, expected at least [stream, target, ...]")
-		}
-		stream, ok := e[0].(string)
-		if !ok {
-			return res, fmt.Errorf("invalid Mist auto_push_list entry, expected first param as 'stream', but got %s", e[0])
-		}
-		target, ok := e[1].(string)
-		if !ok {
-			return res, fmt.Errorf("invalid Mist auto_push_list entry, expected second param as 'target', but got %s", e[1])
-		}
-		res = append(res, MistPushAuto{
-			Stream:       stream,
-			Target:       target,
-			StreamParams: e,
-		})
-	}
-
-	return res, nil
 }
 
 func (mc *MistClient) PushStop(id int64) error {
@@ -375,16 +382,16 @@ func (mc *MistClient) GetStreamInfo(streamName string) (MistStreamInfo, error) {
 	return msi, nil
 }
 
-func (mc *MistClient) GetStats() (MistStats, error) {
-	c := commandStatsStreams()
+func (mc *MistClient) GetState() (MistState, error) {
+	c := commandState()
 	resp, err := mc.sendCommand(c)
 	if err := validateAuth(resp, err); err != nil {
-		return MistStats{}, err
+		return MistState{}, err
 	}
 
-	stats := MistStats{}
+	stats := MistState{}
 	if err := json.Unmarshal([]byte(resp), &stats); err != nil {
-		return MistStats{}, err
+		return MistState{}, err
 	}
 
 	return stats, nil
@@ -441,28 +448,12 @@ type pushAutoRemoveCommand struct {
 	PushAutoRemove [][]interface{} `json:"push_auto_remove"`
 }
 
-type pushAutoListCommand struct {
-	PushAutoList bool `json:"push_auto_list"`
-}
-
-type MistPushAuto struct {
-	Stream       string
-	Target       string
-	StreamParams []interface{}
-}
-
 func commandPushAutoAdd(streamName, target string) pushAutoAddCommand {
 	return pushAutoAddCommand{
 		PushAutoAdd: PushAutoAdd{
 			Stream: streamName,
 			Target: target,
 		},
-	}
-}
-
-func commandPushAutoList() pushAutoListCommand {
-	return pushAutoListCommand{
-		PushAutoList: true,
 	}
 }
 
@@ -548,15 +539,19 @@ func commandGetTriggers() MistConfig {
 	return MistConfig{}
 }
 
-type statsStreamsCommand struct {
-	StatsStreams []string `json:"stats_streams"`
-	PushList     bool     `json:"push_list"`
+type stateCommand struct {
+	ActiveStreams []string `json:"active_streams"`
+	StatsStreams  []string `json:"stats_streams"`
+	PushList      bool     `json:"push_list"`
+	PushAutoList  bool     `json:"push_auto_list"`
 }
 
-func commandStatsStreams() statsStreamsCommand {
-	return statsStreamsCommand{
-		StatsStreams: []string{"clients", "lastms"},
-		PushList:     true,
+func commandState() stateCommand {
+	return stateCommand{
+		ActiveStreams: []string{"source"},
+		StatsStreams:  []string{"clients", "lastms"},
+		PushList:      true,
+		PushAutoList:  true,
 	}
 }
 
