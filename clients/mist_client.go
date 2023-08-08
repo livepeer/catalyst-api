@@ -135,7 +135,7 @@ type MistPushAuto struct {
 
 func (p *MistPushAuto) UnmarshalJSON(data []byte) error {
 	var parsed []interface{}
-	if err := json.Unmarshal([]byte(data), &parsed); err != nil {
+	if err := json.Unmarshal(data, &parsed); err != nil {
 		return err
 	}
 
@@ -181,6 +181,10 @@ func (s *MistStreamStats) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// unmarshalJSONArray parses data (which is a JSON array) into the provided values.
+// If data JSON array is longer than values, then the excessive items are ignored (Mist returned irrelevant data)
+// If values are longer than data, then the excessive values are left unfilled (Mist may return different array length
+// depending on its status, e.g., push_list may not include the last element (stats) if the push has never succeeded.
 func unmarshalJSONArray(data []byte, values ...interface{}) error {
 	var valuesData []json.RawMessage
 	if err := json.Unmarshal(data, &valuesData); err != nil {
