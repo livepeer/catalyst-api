@@ -336,12 +336,10 @@ func (mc *mac) waitPush(info *streamInfo, pushInfo *pushStatus) {
 		}
 		pushInfo.mu.Lock()
 		defer pushInfo.mu.Unlock()
-		if pushInfo.target.Disabled ||
-			// push was already disabled in the meantime
-			pushInfo.lastEvent == eventMultistreamConnected ||
-			// connected event already sent, no need to send it again
-			time.Now().Add(-waitForPushEvent).Before(pushInfo.lastEventAt) {
-			// there was another event after PUSH_OUT, no need to send connected event
+                 pushDisabled := pushInfo.target.Disabled // push disabled in the meantime
+                 eventAlreadySent := pushInfo.lastEvent == eventMultistreamConnected // no need to send it again
+                 staleWait := time.Now().Add(-waitForPushEvent).Before(pushInfo.lastEventAt) // there was another event after PUSH_OUT, no need to send connected event
+		if pushDisabled || eventAlreadySent || staleWait {
 			return
 		}
 		pushInfo.lastEvent = eventMultistreamConnected
