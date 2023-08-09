@@ -53,7 +53,7 @@ type (
 		lastEventAt         time.Time
 		lastEventErrorCount int
 		metrics             *data.MultistreamMetrics
-		mu                  sync.RWMutex
+		mu                  sync.Mutex
 	}
 
 	streamInfo struct {
@@ -738,8 +738,8 @@ func mistStreamName2playbackID(msn string) string {
 }
 
 func pushToMultistreamTargetInfo(pushInfo *pushStatus) data.MultistreamTargetInfo {
-	pushInfo.mu.RLock()
-	defer pushInfo.mu.RUnlock()
+	pushInfo.mu.Lock()
+	defer pushInfo.mu.Unlock()
 	return data.MultistreamTargetInfo{
 		ID:      pushInfo.target.ID,
 		Name:    pushInfo.target.Name,

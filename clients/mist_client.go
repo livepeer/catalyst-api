@@ -107,6 +107,8 @@ func (ms MistState) IsIngestStream(stream string) bool {
 		return false
 	}
 	as, ok := ms.ActiveStreams[stream]
+	// Mist returns "push://" for ingest streams and "push://INTERNAL_ONLY*" for playback streams, e.g.,
+	// "push://INTERNAL_ONLY:dtsc://mdw-staging-staging-catalyst-0.livepeer.monster:4200".
 	return ok && as.Source == "push://"
 }
 
