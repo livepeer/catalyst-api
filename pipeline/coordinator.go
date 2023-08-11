@@ -287,7 +287,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 func ShouldGenerateMP4(sourceURL, mp4TargetUrl *url.URL, mp4OnlyShort bool, durationSecs float64) bool {
 	// We're currently memory-bound for generating MP4s above a certain file size
 	// This has been hitting us for long recordings, so do a crude "is it longer than 3 hours?" check and skip the MP4 if it is
-	const maxRecordingMP4Duration = 3 * time.Hour
+	const maxRecordingMP4Duration = 12 * time.Hour
 	if clients.IsHLSInput(sourceURL) && durationSecs > maxRecordingMP4Duration.Seconds() {
 		return false
 	}

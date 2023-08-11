@@ -895,7 +895,7 @@ func TestMP4Generation(t *testing.T) {
 
 	require.False(
 		t,
-		ShouldGenerateMP4(hlsSourceURL, mp4TargetURL, false, 60*60*4),
+		ShouldGenerateMP4(hlsSourceURL, mp4TargetURL, false, 60*60*13),
 		"SHOULD NOT generate an MP4 for a VERY long source HLS input even if 'only short MP4s' mode is disabled",
 	)
 }
