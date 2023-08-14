@@ -56,7 +56,12 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create a source file: %s", err)
 	}
-	sourceBytes, err := os.ReadFile("fixtures/tiny.mp4")
+
+	var sourceFixture = "fixtures/tiny.mp4"
+	if payload == "a valid upload vod request (audio-only)" {
+		sourceFixture = "fixtures/audio.mp4"
+	}
+	sourceBytes, err := os.ReadFile(sourceFixture)
 	if err != nil {
 		return fmt.Errorf("failed to read example source file: %s", err)
 	}
@@ -89,14 +94,13 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
 	}
 	s.TranscodedOutputDir = destinationDir
 
-	if payload == "a valid upload vod request" {
+	if strings.HasPrefix(payload, "a valid upload vod request") {
 		req := DefaultUploadRequest
 		req.URL = "file://" + sourceFile.Name()
 		if payload, err = req.ToJSON(); err != nil {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}
-	}
-	if strings.HasPrefix(payload, "a valid ffmpeg upload vod request with a custom segment size") {
+	} else if strings.HasPrefix(payload, "a valid ffmpeg upload vod request with a custom segment size") {
 		req := DefaultUploadRequest
 		req.URL = "file://" + sourceFile.Name()
 		req.PipelineStrategy = "catalyst_ffmpeg"
@@ -114,8 +118,7 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
 		if payload, err = req.ToJSON(); err != nil {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}
-	}
-	if strings.HasPrefix(payload, "a valid ffmpeg upload vod request with a source manifest") {
+	} else if strings.HasPrefix(payload, "a valid ffmpeg upload vod request with a source manifest") {
 		req := DefaultUploadRequest
 		req.URL = "file://" + filepath.Join(sourceManifestDir, "tiny.m3u8")
 		req.PipelineStrategy = "catalyst_ffmpeg"
@@ -132,8 +135,7 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
 		if payload, err = req.ToJSON(); err != nil {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}
-	}
-	if payload == "an invalid upload vod request" {
+	} else if payload == "an invalid upload vod request" {
 		payload = "{}"
 	}
 

@@ -64,83 +64,90 @@ func (p Probe) runProbe(url string, ffProbeOptions ...string) (iv InputVideo, er
 }
 
 func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
-	// check for a valid video stream
-	videoStream := probeData.FirstVideoStream()
-	if videoStream == nil {
-		return InputVideo{}, errors.New("error checking for video: no video stream found")
-	}
-	// check for unsupported video stream(s)
-	for _, codec := range unsupportedVideoCodecList {
-		if strings.ToLower(videoStream.CodecName) == codec {
-			return InputVideo{}, fmt.Errorf("error checking for video: %s is not supported", videoStream.CodecName)
-		}
-	}
-	if strings.ToLower(videoStream.CodecName) == "vp9" && strings.Contains(probeData.Format.FormatName, "mp4") {
-		return InputVideo{}, fmt.Errorf("error checking for video: VP9 in an MP4 container is not supported")
-	}
-	// We rely on this being present to get required information about the input video, so error out if it isn't
+	// format file stats into InputVideo
+	iv := InputVideo{}
+
+	// We rely on this being present to get required information about the input, so error out if it isn't
 	if probeData.Format == nil {
 		return InputVideo{}, fmt.Errorf("error parsing input video: format information missing")
 	}
-	// parse bitrate
-	bitRateValue := videoStream.BitRate
-	if bitRateValue == "" {
-		bitRateValue = probeData.Format.BitRate
-	}
-	var (
-		bitrate int64
-		err     error
-	)
-	if bitRateValue == "" {
-		bitrate = DefaultProfile720p.Bitrate
-	} else {
-		bitrate, err = strconv.ParseInt(bitRateValue, 10, 64)
-		if err != nil {
-			return InputVideo{}, fmt.Errorf("error parsing bitrate from probed data: %w", err)
-		}
-	}
-	fileFormat := probeData.Format.FormatName
-	if fileFormat == "hls" {
-		// correct bitrates cannot be probed for hls manifests, so override with default bitrate
-		bitrate = DefaultProfile720p.Bitrate
-	}
+
 	// parse filesize
 	size, err := strconv.ParseInt(probeData.Format.Size, 10, 64)
 	if err != nil {
 		return InputVideo{}, fmt.Errorf("error parsing filesize from probed data: %w", err)
 	}
-	// parse fps
-	fps, err := parseFps(videoStream.AvgFrameRate)
-	if err != nil {
-		return InputVideo{}, fmt.Errorf("error parsing avg fps numerator from probed data: %w", err)
-	}
-	// if fps is 0, try parsing the RFrameRate in the probed data which can be valid for hls files
-	if fps == 0 {
-		fps, err = parseFps(videoStream.RFrameRate)
-		if err != nil {
-			return InputVideo{}, fmt.Errorf("error parsing real fps numerator from probed data: %w", err)
+	iv.SizeBytes = size
+
+	// check for a valid video stream
+	videoStream := probeData.FirstVideoStream()
+	if videoStream != nil {
+		// check for unsupported video stream(s)
+		for _, codec := range unsupportedVideoCodecList {
+			if strings.ToLower(videoStream.CodecName) == codec {
+				return InputVideo{}, fmt.Errorf("error checking for video: %s is not supported", videoStream.CodecName)
+			}
 		}
-	}
+		if strings.ToLower(videoStream.CodecName) == "vp9" && strings.Contains(probeData.Format.FormatName, "mp4") {
+			return InputVideo{}, fmt.Errorf("error checking for video: VP9 in an MP4 container is not supported")
+		}
 
-	duration, err := strconv.ParseFloat(videoStream.Duration, 64)
-	if err != nil {
-		duration = probeData.Format.DurationSeconds
-	}
-
-	var rotation int64
-	displaySideData, err := videoStream.SideDataList.GetSideData("Display Matrix")
-	if err == nil {
-		r, err := displaySideData.GetInt("rotation")
+		var rotation int64
+		displaySideData, err := videoStream.SideDataList.GetSideData("Display Matrix")
 		if err == nil {
-			rotation = r
+			r, err := displaySideData.GetInt("rotation")
+			if err == nil {
+				rotation = r
+			}
 		}
-	}
 
-	// format file stats into InputVideo
-	iv := InputVideo{
-		Format: probeData.Format.FormatName,
-		Tracks: []InputTrack{
-			{
+		duration, err := strconv.ParseFloat(videoStream.Duration, 64)
+		if err != nil {
+			duration = probeData.Format.DurationSeconds
+		}
+		iv.Duration = duration
+		iv.Format = probeData.Format.FormatName
+
+		// parse bitrate
+		bitRateValue := videoStream.BitRate
+		if bitRateValue == "" {
+			bitRateValue = probeData.Format.BitRate
+		}
+		var (
+			bitrate int64
+		)
+		if bitRateValue == "" {
+			bitrate = DefaultProfile720p.Bitrate
+		} else {
+			bitrate, err = strconv.ParseInt(bitRateValue, 10, 64)
+			if err != nil {
+				return InputVideo{}, fmt.Errorf("error parsing bitrate from probed data: %w", err)
+			}
+		}
+
+		fileFormat := probeData.Format.FormatName
+		if fileFormat == "hls" {
+			// correct bitrates cannot be probed for hls manifests, so override with default bitrate
+			bitrate = DefaultProfile720p.Bitrate
+		}
+
+		// parse fps
+		fps, err := parseFps(videoStream.AvgFrameRate)
+		if err != nil {
+			return InputVideo{}, fmt.Errorf("error parsing avg fps numerator from probed data: %w", err)
+		}
+
+		// if fps is 0, try parsing the RFrameRate in the probed data which can be valid for hls files
+		if fps == 0 {
+			fps, err = parseFps(videoStream.RFrameRate)
+			if err != nil {
+				return InputVideo{}, fmt.Errorf("error parsing real fps numerator from probed data: %w", err)
+			}
+		}
+
+		iv.Tracks = append(
+			iv.Tracks,
+			InputTrack{
 				Type:    TrackTypeVideo,
 				Codec:   videoStream.CodecName,
 				Bitrate: bitrate,
@@ -153,10 +160,9 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 					PixelFormat:        videoStream.PixFmt,
 				},
 			},
-		},
-		Duration:  duration,
-		SizeBytes: size,
+		)
 	}
+
 	iv, err = addAudioTrack(probeData, iv)
 	if err != nil {
 		return InputVideo{}, err
