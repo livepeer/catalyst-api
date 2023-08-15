@@ -851,51 +851,66 @@ func TestMP4Generation(t *testing.T) {
 	mp4TargetURL, err := url.Parse("http://not-a-real-domain.lol/target/target.mp4")
 	require.NoError(t, err)
 
+	fragMp4TargetURL, err := url.Parse("http://not-a-real-domain.lol/target/target.m3u8")
+	require.NoError(t, err)
+
 	require.False(
 		t,
-		ShouldGenerateMP4(mp4SourceURL, nil, true, 60),
+		ShouldGenerateMP4(mp4SourceURL, nil, nil, true, 60),
 		"Should NOT generate an MP4 if the MP4 target URL isn't present",
 	)
 
 	require.True(
 		t,
-		ShouldGenerateMP4(mp4SourceURL, mp4TargetURL, true, 60),
+		ShouldGenerateMP4(mp4SourceURL, mp4TargetURL, fragMp4TargetURL, true, 60),
 		"SHOULD generate an MP4 for a short source MP4 input even if 'only short MP4s' mode is enabled",
 	)
 
 	require.True(
 		t,
-		ShouldGenerateMP4(hlsSourceURL, mp4TargetURL, true, 60),
+		ShouldGenerateMP4(hlsSourceURL, mp4TargetURL, nil, true, 60),
 		"SHOULD generate an MP4 for a short source HLS input even if 'only short MP4s' mode is enabled",
 	)
 
 	require.False(
 		t,
-		ShouldGenerateMP4(mp4SourceURL, mp4TargetURL, true, 60*10),
+		ShouldGenerateMP4(mp4SourceURL, mp4TargetURL, nil, true, 60*10),
 		"Should NOT generate an MP4 for a long source MP4 input if 'only short MP4s' mode is enabled",
 	)
 
 	require.False(
 		t,
-		ShouldGenerateMP4(hlsSourceURL, mp4TargetURL, true, 60*10),
+		ShouldGenerateMP4(hlsSourceURL, mp4TargetURL, nil, true, 60*10),
 		"Should NOT generate an MP4 for a long source HLS input if 'only short MP4s' mode is enabled",
 	)
 
 	require.True(
 		t,
-		ShouldGenerateMP4(mp4SourceURL, mp4TargetURL, false, 60*10),
+		ShouldGenerateMP4(mp4SourceURL, mp4TargetURL, nil, false, 60*10),
 		"SHOULD generate an MP4 for a long source MP4 input if 'only short MP4s' mode is disabled",
 	)
 
 	require.True(
 		t,
-		ShouldGenerateMP4(hlsSourceURL, mp4TargetURL, false, 60*10),
+		ShouldGenerateMP4(hlsSourceURL, mp4TargetURL, nil, false, 60*10),
 		"SHOULD generate an MP4 for a long source HLS input if 'only short MP4s' mode is disabled",
 	)
 
 	require.False(
 		t,
-		ShouldGenerateMP4(hlsSourceURL, mp4TargetURL, false, 60*60*13),
+		ShouldGenerateMP4(hlsSourceURL, mp4TargetURL, nil, false, 60*60*13),
 		"SHOULD NOT generate an MP4 for a VERY long source HLS input even if 'only short MP4s' mode is disabled",
+	)
+
+	require.True(
+		t,
+		ShouldGenerateMP4(hlsSourceURL, nil, fragMp4TargetURL, false, 60*60*1),
+		"SHOULD generate an MP4 for a fragmented Mp4 regardless of 'only short MP4s' mode",
+	)
+
+	require.False(
+		t,
+		ShouldGenerateMP4(hlsSourceURL, nil, nil, false, 60*60*13),
+		"SHOULD NOT generate an MP4 if no valid mp4 or fmp4 URL was provided",
 	)
 }

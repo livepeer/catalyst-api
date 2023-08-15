@@ -12,6 +12,7 @@ func TestGetTargetOutputs(t *testing.T) {
 		req                  UploadVODRequest
 		expectedHlsURL       string
 		expectedMp4URL       string
+		expectedFragMp4URL   string
 		expectedMp4ShortOnly bool
 	}{
 		{
@@ -21,8 +22,9 @@ func TestGetTargetOutputs(t *testing.T) {
 				Outputs: UploadVODRequestOutputLocationOutputs{
 					HLS: "enabled",
 				}}}},
-			expectedHlsURL: "s3+https://user:pass@bucket",
-			expectedMp4URL: "",
+			expectedHlsURL:     "s3+https://user:pass@bucket",
+			expectedMp4URL:     "",
+			expectedFragMp4URL: "",
 		},
 		{
 			name: "no location with HLS",
@@ -31,8 +33,9 @@ func TestGetTargetOutputs(t *testing.T) {
 				Outputs: UploadVODRequestOutputLocationOutputs{
 					MP4: "enabled",
 				}}}},
-			expectedHlsURL: "",
-			expectedMp4URL: "s3+https://user:pass@bucket",
+			expectedHlsURL:     "",
+			expectedMp4URL:     "s3+https://user:pass@bucket",
+			expectedFragMp4URL: "",
 		},
 		{
 			name: "multiple output locations, one with source segments",
@@ -49,9 +52,16 @@ func TestGetTargetOutputs(t *testing.T) {
 						MP4: "only_short",
 					},
 				},
+				{
+					URL: "s3+https://third:third@bucket",
+					Outputs: UploadVODRequestOutputLocationOutputs{
+						FragmentedMP4: "enabled",
+					},
+				},
 			}},
 			expectedHlsURL:       "s3+https://first:first@bucket",
 			expectedMp4URL:       "s3+https://second:second@bucket",
+			expectedFragMp4URL:   "s3+https://third:third@bucket",
 			expectedMp4ShortOnly: true,
 		},
 	}
@@ -61,8 +71,10 @@ func TestGetTargetOutputs(t *testing.T) {
 			gotHls := tt.req.getTargetHlsOutput()
 			require.Equal(t, tt.expectedHlsURL, gotHls.URL)
 			gotMp4, gotShortOnly := tt.req.getTargetMp4Output()
+			gotFragMp4 := tt.req.getTargetFragMp4Output()
 			require.Equal(t, tt.expectedMp4URL, gotMp4.URL)
 			require.Equal(t, tt.expectedMp4ShortOnly, gotShortOnly)
+			require.Equal(t, tt.expectedFragMp4URL, gotFragMp4.URL)
 		})
 	}
 }

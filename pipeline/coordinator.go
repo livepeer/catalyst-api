@@ -62,6 +62,7 @@ type UploadJobPayload struct {
 	CallbackURL           string
 	HlsTargetURL          *url.URL
 	Mp4TargetURL          *url.URL
+	FragMp4TargetURL      *url.URL
 	Mp4OnlyShort          bool
 	AccessToken           string
 	TranscodeAPIUrl       string
@@ -274,7 +275,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		p.SourceFile = osTransferURL.String()  // OS URL used by mist
 		p.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert
 		p.InputFileInfo = inputVideoProbe
-		p.GenerateMP4 = ShouldGenerateMP4(sourceURL, p.Mp4TargetURL, p.Mp4OnlyShort, p.InputFileInfo.Duration)
+		p.GenerateMP4 = ShouldGenerateMP4(sourceURL, p.Mp4TargetURL, p.FragMp4TargetURL, p.Mp4OnlyShort, p.InputFileInfo.Duration)
 
 		log.AddContext(p.RequestID, "new_source_url", p.SourceFile)
 		log.AddContext(p.RequestID, "signed_url", p.SignedSourceURL)
@@ -284,7 +285,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 	})
 }
 
-func ShouldGenerateMP4(sourceURL, mp4TargetUrl *url.URL, mp4OnlyShort bool, durationSecs float64) bool {
+func ShouldGenerateMP4(sourceURL, mp4TargetUrl *url.URL, fragMp4TargetUrl *url.URL, mp4OnlyShort bool, durationSecs float64) bool {
 	// We're currently memory-bound for generating MP4s above a certain file size
 	// This has been hitting us for long recordings, so do a crude "is it longer than 3 hours?" check and skip the MP4 if it is
 	const maxRecordingMP4Duration = 12 * time.Hour
@@ -295,6 +296,11 @@ func ShouldGenerateMP4(sourceURL, mp4TargetUrl *url.URL, mp4OnlyShort bool, dura
 	if mp4TargetUrl != nil && (!mp4OnlyShort || durationSecs <= maxMP4OutDuration.Seconds()) {
 		return true
 	}
+
+	if fragMp4TargetUrl != nil {
+		return true
+	}
+
 	return false
 }
 

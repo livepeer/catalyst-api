@@ -81,6 +81,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		SourceOutputURL:   job.SourceOutputURL,
 		HlsTargetURL:      toStr(job.HlsTargetURL),
 		Mp4TargetUrl:      toStr(job.Mp4TargetURL),
+		FragMp4TargetUrl:  toStr(job.FragMp4TargetURL),
 		RequestID:         job.RequestID,
 		ReportProgress:    job.ReportProgress,
 		GenerateMP4:       job.GenerateMP4,

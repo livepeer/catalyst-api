@@ -23,9 +23,10 @@ import (
 )
 
 type UploadVODRequestOutputLocationOutputs struct {
-	HLS       string `json:"hls"`
-	MP4       string `json:"mp4"`
-	SourceMp4 bool   `json:"source_mp4"`
+	HLS           string `json:"hls"`
+	MP4           string `json:"mp4"`
+	FragmentedMP4 string `json:"fragmented_mp4"`
+	SourceMp4     bool   `json:"source_mp4"`
 }
 
 type UploadVODRequestOutputLocation struct {
@@ -91,6 +92,15 @@ func (r UploadVODRequest) getTargetMp4Output() (UploadVODRequestOutputLocation, 
 		}
 	}
 	return UploadVODRequestOutputLocation{}, false
+}
+
+func (r UploadVODRequest) getTargetFragMp4Output() UploadVODRequestOutputLocation {
+	for _, o := range r.OutputLocations {
+		if o.Outputs.FragmentedMP4 == "enabled" {
+			return o
+		}
+	}
+	return UploadVODRequestOutputLocation{}
 }
 
 func (r UploadVODRequest) getSourceCopyEnabled() bool {
@@ -165,9 +175,14 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	if err != nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 	}
+	fragMp4TargetOutput := uploadVODRequest.getTargetFragMp4Output()
+	fragMp4TargetURL, err := toTargetURL(fragMp4TargetOutput, requestID)
+	if err != nil {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+	}
 
-	if hlsTargetURL == nil && mp4TargetURL == nil {
-		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", errors2.New("none of output enabled: hls or mp4"))
+	if hlsTargetURL == nil && mp4TargetURL == nil && fragMp4TargetURL == nil {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", errors2.New("none of output enabled: hls or mp4 or f-mp4"))
 	}
 
 	if strat := uploadVODRequest.PipelineStrategy; strat != "" && !strat.IsValid() {
@@ -184,6 +199,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		CallbackURL:           uploadVODRequest.CallbackUrl,
 		HlsTargetURL:          hlsTargetURL,
 		Mp4TargetURL:          mp4TargetURL,
+		FragMp4TargetURL:      fragMp4TargetURL,
 		Mp4OnlyShort:          mp4OnlyShort,
 		AccessToken:           uploadVODRequest.AccessToken,
 		TranscodeAPIUrl:       uploadVODRequest.TranscodeAPIUrl,

@@ -29,6 +29,7 @@ type TranscodeSegmentRequest struct {
 	SourceOutputURL   string                 `json:"source_output_url"`
 	HlsTargetURL      string                 `json:"target_url"`
 	Mp4TargetUrl      string                 `json:"mp4_target_url"`
+	FragMp4TargetUrl  string                 `json:"fragmented_mp4_target_url"`
 	StreamKey         string                 `json:"streamKey"`
 	AccessToken       string                 `json:"accessToken"`
 	TranscodeAPIUrl   string                 `json:"transcodeAPIUrl"`
@@ -119,7 +120,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	transcodedStats := statsFromProfiles(transcodeProfiles)
 
 	renditionList := video.TRenditionList{RenditionSegmentTable: make(map[string]*video.TSegmentList)}
-	// Only populate video.TRenditionList map if MP4 is enabled via override or short-form video detection.
+        // Only populate video.TRenditionList map if MP4/FragmentedMP4 is enabled or short-form video detection.
 	// And if the original input file was an HLS video, then only generate an MP4 for the highest bitrate profile.
 	var maxBitrate int64
 	var maxProfile video.EncodedProfile
