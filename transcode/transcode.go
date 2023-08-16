@@ -120,7 +120,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	transcodedStats := statsFromProfiles(transcodeProfiles)
 
 	renditionList := video.TRenditionList{RenditionSegmentTable: make(map[string]*video.TSegmentList)}
-        // Only populate video.TRenditionList map if MP4/FragmentedMP4 is enabled or short-form video detection.
+	// Only populate video.TRenditionList map if MP4/FragmentedMP4 is enabled or short-form video detection.
 	// And if the original input file was an HLS video, then only generate an MP4 for the highest bitrate profile.
 	var maxBitrate int64
 	var maxProfile video.EncodedProfile
@@ -175,10 +175,19 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	var mp4OutputsPre []video.OutputVideoFile
 	// Transmux received segments from T into a single mp4
 	if transcodeRequest.GenerateMP4 {
-		mp4TargetUrlBase, err := url.Parse(transcodeRequest.Mp4TargetUrl)
+		// Check if we should generate a standard MP4, fragmented MP4, or both.
+		mp4TargetUrlBase, enableStandardMp4, err := getMp4OutputType(transcodeRequest.Mp4TargetUrl)
 		if err != nil {
 			return outputs, segmentsCount, err
 		}
+		fragMp4TargetUrlBase, enableFragMp4, err := getMp4OutputType(transcodeRequest.FragMp4TargetUrl)
+		if err != nil {
+			return outputs, segmentsCount, err
+		}
+		if !(enableStandardMp4 || enableFragMp4) {
+			return outputs, segmentsCount, fmt.Errorf("a valid mp4 or fragmented-mp4 URL must be provided since MP4 output was requested")
+		}
+
 		for rendition, segments := range renditionList.RenditionSegmentTable {
 			// a. create folder to hold transmux-ed files in local storage temporarily
 			err := os.MkdirAll(TRANSMUX_STORAGE_DIR, 0700)
@@ -299,6 +308,21 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	outputs = []video.OutputVideo{output}
 	// Return outputs for .dtsh file creation
 	return outputs, segmentsCount, nil
+}
+
+// getMp4OutputType checks the target url of the MP4 or Fragmented-MP4
+// output location and returns an *url.URL along with a boolean to
+// indicate that specific output type (mp4 or f-mp4) has been enabled.
+func getMp4OutputType(targetUrl string) (*url.URL, bool, error) {
+	if len(targetUrl) != 0 {
+		targetUrlBase, err := url.Parse(targetUrl)
+		if err != nil {
+			return nil, false, err
+		} else {
+			return targetUrlBase, true, nil
+		}
+	}
+	return nil, false, fmt.Errorf("mp4 output url is not set")
 }
 
 // getHlsTargetURL extracts URL for storing rendition HLS segments.
