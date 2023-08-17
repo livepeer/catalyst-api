@@ -262,7 +262,9 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		}
 
 		osTransferURL := c.SourceOutputURL.JoinPath(p.RequestID, "transfer", path.Base(sourceURL.Path))
-		if !clients.IsHLSInput(sourceURL) && p.SourceCopy {
+		if clients.IsHLSInput(sourceURL) {
+			osTransferURL = sourceURL
+		} else if p.SourceCopy {
 			log.Log(p.RequestID, "source copy enabled")
 			osTransferURL = p.HlsTargetURL.JoinPath("video")
 		}

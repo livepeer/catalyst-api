@@ -186,7 +186,8 @@ func sendSourcePlayback(job *JobInfo) {
 		log.LogError(job.RequestID, "unable to find a video track for source playback", err)
 		return
 	}
-	sourceMaster.Append("/"+path.Join(segmentingPath[2:]...), &m3u8.MediaPlaylist{}, m3u8.VariantParams{
+	prefix := "//recordings-cdn.lp-playback.monster/hls"
+	sourceMaster.Append(prefix+"/"+path.Join(segmentingPath[2:]...), &m3u8.MediaPlaylist{}, m3u8.VariantParams{
 		Bandwidth:  uint32(videoTrack.Bitrate),
 		Resolution: fmt.Sprintf("%dx%d", videoTrack.Width, videoTrack.Height),
 		Name:       fmt.Sprintf("%dp", videoTrack.Height),
