@@ -46,16 +46,11 @@ func NewInputCopy() *InputCopy {
 
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
 func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL, decryptor *crypto.DecryptionKeys) (inputVideoProbe video.InputVideo, signedURL string, err error) {
-	var (
-		size int64
-	)
-
-	size, err = CopyAllInputFiles(requestID, inputFile, osTransferURL, decryptor)
+	err = CopyAllInputFiles(requestID, inputFile, osTransferURL, decryptor)
 	if err != nil {
 		err = fmt.Errorf("failed to copy file(s): %w", err)
 		return
 	}
-	log.Log(requestID, "Copied", "bytes", size, "source", inputFile.String(), "dest", osTransferURL.String())
 
 	signedURL, err = getSignedURL(osTransferURL)
 	if err != nil {
@@ -153,26 +148,26 @@ func getSegmentTransferLocation(srcManifestUrl, dstTransferUrl *url.URL, srcSegm
 
 // CopyAllInputFiles will copy the m3u8 manifest and all ts segments for HLS input whereas
 // it will copy just the single video file for MP4/MOV input
-func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, decryptor *crypto.DecryptionKeys) (size int64, err error) {
+func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, decryptor *crypto.DecryptionKeys) (err error) {
 	fileList := make(map[string]string)
 	if IsHLSInput(srcInputUrl) {
 		// Download the m3u8 manifest using the input url
 		playlist, err := DownloadRenditionManifest(requestID, srcInputUrl.String())
 		if err != nil {
-			return 0, fmt.Errorf("error downloading HLS input manifest: %s", err)
+			return fmt.Errorf("error downloading HLS input manifest: %s", err)
 		}
 		// Save the mapping between the input m3u8 manifest file to its corresponding OS-transfer destination url
 		fileList[srcInputUrl.String()] = dstOutputUrl.String()
 		// Now get a list of the OS-compatible segment URLs from the input manifest file
 		sourceSegmentUrls, err := GetSourceSegmentURLs(srcInputUrl.String(), playlist)
 		if err != nil {
-			return 0, fmt.Errorf("error generating source segment URLs for HLS input manifest: %s", err)
+			return fmt.Errorf("error generating source segment URLs for HLS input manifest: %s", err)
 		}
 		// Then save the mapping between the OS-compatible segment URLs to its OS-transfer destination url
 		for _, srcSegmentUrl := range sourceSegmentUrls {
 			u, err := getSegmentTransferLocation(srcInputUrl, dstOutputUrl, srcSegmentUrl.URL.String())
 			if err != nil {
-				return 0, fmt.Errorf("error generating an OS compatible transfer location for each segment: %s", err)
+				return fmt.Errorf("error generating an OS compatible transfer location for each segment: %s", err)
 			}
 			fileList[srcSegmentUrl.URL.String()] = u
 		}
@@ -185,19 +180,23 @@ func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, dec
 	for inFile, outFile := range fileList {
 		log.Log(requestID, "Copying input file to S3", "source", inFile, "dest", outFile)
 
-		size, err = CopyFileWithDecryption(context.Background(), inFile, outFile, "", requestID, decryptor)
+		size, err := CopyFileWithDecryption(context.Background(), inFile, outFile, "", requestID, decryptor)
 
 		if err != nil {
 			err = fmt.Errorf("error copying input file to S3: %w", err)
-			return size, err
+			return err
 		}
 		if size <= 0 {
-			err = fmt.Errorf("zero bytes found for source: %s", inFile)
-			return size, err
+			if len(fileList) <= 1 {
+				return fmt.Errorf("zero bytes found for source: %s", inFile)
+			} else {
+				log.Log(requestID, "zero bytes found for file", "file", inFile)
+			}
 		}
-		byteCount = size + byteCount
+		byteCount += size
 	}
-	return size, nil
+	log.Log(requestID, "Copied", "bytes", byteCount, "source", srcInputUrl.String(), "dest", dstOutputUrl.String())
+	return nil
 }
 
 func isDirectUpload(inputFile *url.URL) bool {
