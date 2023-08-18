@@ -110,9 +110,6 @@ properties:
       additionalProperties: false
       required:
       -  "name"
-      - "width"
-      -  "height"
-      - "bitrate"
 required:
   - "url"
   - "callback_url"

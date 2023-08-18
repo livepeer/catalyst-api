@@ -85,11 +85,45 @@ var DefaultProfile720p = EncodedProfile{
 // DefaultTranscodeProfiles defines the default set of encoding profiles to use when none are specified
 var DefaultTranscodeProfiles = []EncodedProfile{DefaultProfile360p, DefaultProfile720p}
 
-func GetPlaybackProfiles(iv InputVideo) ([]EncodedProfile, error) {
-	video, err := iv.GetTrack(TrackTypeVideo)
+func SetTranscodeProfiles(inputVideoStats InputVideo, reqTranscodeProfiles []EncodedProfile) ([]EncodedProfile, error) {
+
+	var transcodeProfiles []EncodedProfile
+	videoTrack, err := inputVideoStats.GetTrack(TrackTypeVideo)
 	if err != nil {
 		return nil, fmt.Errorf("no video track found in input video: %w", err)
 	}
+	// If Profiles haven't been overridden, use the default set
+	if len(reqTranscodeProfiles) == 0 {
+		transcodeProfiles, err = GetDefaultPlaybackProfiles(videoTrack)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get default transcode profiles: %w", err)
+		}
+		return transcodeProfiles, nil
+		// Otherwise, if it's a special case where only the bitrate is set, then we generate
+		// a single profile that matches the input video's specs with the target bitrate
+	} else if len(reqTranscodeProfiles) == 1 {
+		if reqTranscodeProfiles[0].Width == 0 && reqTranscodeProfiles[0].Height == 0 && reqTranscodeProfiles[0].Bitrate != 0 {
+			transcodeProfiles = GenerateSingleProfileWithTargetBitrate(videoTrack, reqTranscodeProfiles[0].Bitrate)
+			return transcodeProfiles, nil
+		}
+	}
+	return reqTranscodeProfiles, nil
+}
+
+func GenerateSingleProfileWithTargetBitrate(videoTrack InputTrack, videoBitrate int64) []EncodedProfile {
+	profiles := make([]EncodedProfile, 0)
+
+	profiles = append(profiles, EncodedProfile{
+		Name:    strconv.FormatInt(videoTrack.Height, 10) + "p0",
+		Bitrate: videoBitrate,
+		FPS:     0,
+		Width:   videoTrack.Width,
+		Height:  videoTrack.Height,
+	})
+	return profiles
+}
+
+func GetDefaultPlaybackProfiles(video InputTrack) ([]EncodedProfile, error) {
 	videoBitrate := video.Bitrate
 	if videoBitrate > MaxVideoBitrate {
 		videoBitrate = MaxVideoBitrate
