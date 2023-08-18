@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetPlaybackProfiles(t *testing.T) {
+func TestGetDefaultPlaybackProfiles(t *testing.T) {
 	tests := []struct {
 		name  string
 		track InputTrack
@@ -140,9 +140,7 @@ func TestGetPlaybackProfiles(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetPlaybackProfiles(InputVideo{
-				Tracks: []InputTrack{tt.track},
-			})
+			got, err := GetDefaultPlaybackProfiles(tt.track)
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
 		})
@@ -182,7 +180,9 @@ func TestCheckUpdatedAlgo(t *testing.T) {
 				}},
 			}
 			oldAlgorithmOutput := testCase.ExpectedOutput
-			current, err := GetPlaybackProfiles(iv)
+			vt, err := iv.GetTrack(TrackTypeVideo)
+			require.NoError(t, err)
+			current, err := GetDefaultPlaybackProfiles(vt)
 			require.NoError(t, err)
 			require.Equal(t, testCase.CurrentOutput, current)
 			require.Equal(t, len(oldAlgorithmOutput), len(current))
