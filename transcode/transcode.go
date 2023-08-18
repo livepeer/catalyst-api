@@ -62,15 +62,11 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	// Grab some useful parameters to be used later from the TranscodeSegmentRequest
 	sourceManifestOSURL := transcodeRequest.SourceManifestURL
-	// transcodeProfiles are desired constraints for transcoding process
-	transcodeProfiles := transcodeRequest.Profiles
 
-	// If Profiles haven't been overridden, use the default set
-	if len(transcodeProfiles) == 0 {
-		transcodeProfiles, err = video.GetPlaybackProfiles(inputInfo)
-		if err != nil {
-			return outputs, segmentsCount, fmt.Errorf("failed to get playback profiles: %w", err)
-		}
+	// transcodeProfiles are desired constraints for transcoding process
+	transcodeProfiles, err := video.SetTranscodeProfiles(inputInfo, transcodeRequest.Profiles)
+	if err != nil || len(transcodeProfiles) == 0 {
+		return outputs, segmentsCount, fmt.Errorf("failed to set playback profiles: %w", err)
 	}
 
 	// Download the "source" manifest that contains all the segments we'll be transcoding

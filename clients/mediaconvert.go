@@ -121,8 +121,13 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 		mp4Target = args.MP4OutputLocation
 	)
 
+	videoTrack, err := mcArgs.InputFileInfo.GetTrack(video.TrackTypeVideo)
+	if err != nil {
+		return nil, fmt.Errorf("no video track found in input video: %w", err)
+	}
+
 	if len(mcArgs.Profiles) == 0 {
-		mcArgs.Profiles, err = video.GetPlaybackProfiles(mcArgs.InputFileInfo)
+		mcArgs.Profiles, err = video.GetDefaultPlaybackProfiles(videoTrack)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get playback profiles: %w", err)
 		}
