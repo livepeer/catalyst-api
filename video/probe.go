@@ -141,9 +141,10 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 		Format: probeData.Format.FormatName,
 		Tracks: []InputTrack{
 			{
-				Type:    TrackTypeVideo,
-				Codec:   videoStream.CodecName,
-				Bitrate: bitrate,
+				Type:        TrackTypeVideo,
+				Codec:       videoStream.CodecName,
+				Bitrate:     bitrate,
+				DurationSec: parseAssetDuration(videoStream.Duration),
 				VideoTrack: VideoTrack{
 					Width:              int64(videoStream.Width),
 					Height:             int64(videoStream.Height),
@@ -182,9 +183,10 @@ func addAudioTrack(probeData *ffprobe.ProbeData, iv InputVideo) (InputVideo, err
 
 	bitrate, _ := strconv.ParseInt(audioTrack.BitRate, 10, 64)
 	iv.Tracks = append(iv.Tracks, InputTrack{
-		Type:    TrackTypeAudio,
-		Codec:   audioTrack.CodecName,
-		Bitrate: bitrate,
+		Type:        TrackTypeAudio,
+		Codec:       audioTrack.CodecName,
+		Bitrate:     bitrate,
+		DurationSec: parseAssetDuration(audioTrack.Duration),
 		AudioTrack: AudioTrack{
 			Channels:   audioTrack.Channels,
 			SampleBits: audioTrack.BitsPerSample,
@@ -194,6 +196,11 @@ func addAudioTrack(probeData *ffprobe.ProbeData, iv InputVideo) (InputVideo, err
 	})
 
 	return iv, nil
+}
+
+func parseAssetDuration(duration string) float64 {
+	d, _ := strconv.ParseFloat(duration, 64)
+	return d
 }
 
 // function taken from task-runner task/probe.go

@@ -80,9 +80,10 @@ func TestProbe(t *testing.T) {
 		Duration: 16.2,
 		Tracks: []InputTrack{
 			{
-				Type:    TrackTypeVideo,
-				Codec:   "h264",
-				Bitrate: 1234521,
+				Type:        TrackTypeVideo,
+				Codec:       "h264",
+				Bitrate:     1234521,
+				DurationSec: 16.2,
 				VideoTrack: VideoTrack{
 					Width:       576,
 					Height:      1024,
@@ -91,9 +92,10 @@ func TestProbe(t *testing.T) {
 				},
 			},
 			{
-				Type:    TrackTypeAudio,
-				Codec:   "aac",
-				Bitrate: 128248,
+				Type:        TrackTypeAudio,
+				Codec:       "aac",
+				Bitrate:     128248,
+				DurationSec: 16.207007,
 				AudioTrack: AudioTrack{
 					Channels:   2,
 					SampleRate: 44100,
