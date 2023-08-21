@@ -59,6 +59,10 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	if err != nil {
 		return outputs, segmentsCount, err
 	}
+	fmp4TargetURL, err := getFmp4TargetURL(transcodeRequest)
+	if err != nil {
+		return outputs, segmentsCount, err
+	}
 
 	// Grab some useful parameters to be used later from the TranscodeSegmentRequest
 	sourceManifestOSURL := transcodeRequest.SourceManifestURL
@@ -188,6 +192,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			return outputs, segmentsCount, fmt.Errorf("a valid mp4 or fragmented-mp4 URL must be provided since MP4 output was requested")
 		}
 
+		fmp4Manifests := make(map[string]string)
 		for rendition, segments := range renditionList.RenditionSegmentTable {
 			// a. create folder to hold transmux-ed files in local storage temporarily
 			err := os.MkdirAll(TRANSMUX_STORAGE_DIR, 0700)
@@ -250,12 +255,28 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 				// Upload the fragmented-mp4 file(s) and related manifests
 				fragMp4TargetBaseOutput := *fragMp4TargetUrlBase
-				fragMp4TargetBaseOutput.Path = filepath.Join(fragMp4TargetUrlBase.Path, "fmp4", rendition)
+				fragMp4TargetBaseOutput.Path = filepath.Join(fragMp4TargetUrlBase.Path, clients.FMP4_POSTFIX_DIR, rendition)
 				mp4Out, err := uploadMp4Files(transcodeRequest.RequestID, &fragMp4TargetBaseOutput, fMp4HlsOutputFiles, rendition)
 				if err != nil {
 					return outputs, segmentsCount, fmt.Errorf("error uploading transmuxed fragmented mp4 file(s): %s", err)
 				}
+
+				// Create a list of rendition to playlist manifest file that will be used
+				// to consolidate with transcoded renditions
+				for _, pl := range mp4Out {
+					if filepath.Ext(pl.Location) == ".m3u8" {
+						fmp4Manifests[rendition] = filepath.Base(pl.Location)
+					}
+				}
 				mp4OutputsPre = append(mp4OutputsPre, mp4Out...)
+			}
+		}
+		// If fmp4s were generated, then create a master fmp4 playlist
+		if len(fmp4Manifests) > 0 {
+			err := clients.GenerateAndUploadFragMp4Manifests(fmp4TargetURL.String(), fmp4Manifests, transcodedStats)
+			if err != nil {
+				return outputs, segmentsCount, fmt.Errorf("error uploading master playlist for fragmented mp4 file(s): %s", err)
+
 			}
 		}
 	}
@@ -383,6 +404,17 @@ func getHlsTargetURL(tsr TranscodeSegmentRequest) (*url.URL, error) {
 		}
 		return sourceOutputURL.JoinPath("rendition"), nil
 	}
+}
+
+func getFmp4TargetURL(tsr TranscodeSegmentRequest) (*url.URL, error) {
+	if tsr.FragMp4TargetUrl != "" {
+		fmp4TargetURL, err := url.Parse(tsr.FragMp4TargetUrl)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse transcodeRequest.FragMp4TargetURL: %s", err)
+		}
+		return fmp4TargetURL, nil
+	}
+	return nil, nil
 }
 
 func transcodeSegment(
