@@ -186,7 +186,7 @@ func TestItCanGenerateAndWriteFmp4Manifests(t *testing.T) {
 	}
 
 	// Do the thing
-	err = GenerateAndUploadFragMp4Manifests(
+	_, err = GenerateAndUploadFragMp4Manifests(
 		outputDir,
 		fmp4Manifests,
 		[]*video.RenditionStats{

@@ -208,7 +208,7 @@ type OutputVideoFile struct {
 }
 
 func PopulateOutput(requestID string, probe Prober, outputURL string, videoFile OutputVideoFile) (OutputVideoFile, error) {
-	outputVideoProbe, err := probe.ProbeFile(requestID, outputURL)
+	outputVideoProbe, err := probe.ProbeFile(requestID, outputURL, "-analyzeduration", "15000000")
 	if err != nil {
 		return OutputVideoFile{}, fmt.Errorf("error probing output file from S3: %w", err)
 	}
