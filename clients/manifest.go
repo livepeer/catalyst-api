@@ -17,6 +17,7 @@ import (
 const (
 	MASTER_MANIFEST_FILENAME = "index.m3u8"
 	MANIFEST_UPLOAD_TIMEOUT  = 5 * time.Minute
+	FMP4_POSTFIX_DIR         = "fmp4"
 )
 
 func DownloadRetryBackoffLong() backoff.BackOff {
@@ -167,7 +168,6 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 			transcodedStats[i].ManifestLocation = ""
 		}
 	}
-
 	err := backoff.Retry(func() error {
 		return UploadToOSURL(targetOSURL, MASTER_MANIFEST_FILENAME, strings.NewReader(masterPlaylist.String()), MANIFEST_UPLOAD_TIMEOUT)
 	}, UploadRetryBackoff())
@@ -181,6 +181,55 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 	}
 
 	return res, nil
+}
+
+// Generate a Master manifest for the FMP4 media playlists then write them to storage
+func GenerateAndUploadFragMp4Manifests(targetOSURL string, fmp4Manifests map[string]string, transcodedStats []*video.RenditionStats) error {
+
+	masterPlaylist := m3u8.NewMasterPlaylist()
+
+	//sort transcoded Stats and loop in order.
+	sort.Slice(transcodedStats, func(a, b int) bool {
+		if transcodedStats[a].BitsPerSecond > transcodedStats[b].BitsPerSecond {
+			return true
+		} else if transcodedStats[a].BitsPerSecond < transcodedStats[b].BitsPerSecond {
+			return false
+		} else {
+			var resolutionA = transcodedStats[a].Width * transcodedStats[a].Height
+			var resolutionB = transcodedStats[b].Width * transcodedStats[b].Height
+
+			return resolutionA > resolutionB
+		}
+	})
+
+	// For each profile, add a new entry to the master manifest
+	for i, profile := range transcodedStats {
+		// only add profile if the transcoded profile has a matching fmp4 file
+		profileManifestFileName, exists := fmp4Manifests[profile.Name]
+		if exists {
+
+			masterPlaylist.Append(
+				path.Join(profile.Name, profileManifestFileName),
+				&m3u8.MediaPlaylist{
+					TargetDuration: profile.DurationMs,
+				},
+				m3u8.VariantParams{
+					Name:       fmt.Sprintf("%d-%s", i, profile.Name),
+					Bandwidth:  profile.BitsPerSecond,
+					FrameRate:  float64(profile.FPS),
+					Resolution: fmt.Sprintf("%dx%d", profile.Width, profile.Height),
+				},
+			)
+		}
+	}
+	targetOSURL += "/" + FMP4_POSTFIX_DIR
+	err := backoff.Retry(func() error {
+		return UploadToOSURL(targetOSURL, MASTER_MANIFEST_FILENAME, strings.NewReader(masterPlaylist.String()), MANIFEST_UPLOAD_TIMEOUT)
+	}, UploadRetryBackoff())
+	if err != nil {
+		return fmt.Errorf("failed to upload master fmp4 playlist: %s", err)
+	}
+	return nil
 }
 
 func ManifestURLToSegmentURL(manifestURL, segmentFilename string) (*url.URL, error) {
