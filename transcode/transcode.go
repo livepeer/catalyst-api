@@ -289,12 +289,18 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	var mp4Outputs []video.OutputVideoFile
 	if transcodeRequest.GenerateMP4 {
 		for _, mp4Out := range mp4OutputsPre {
+			fmt.Println("XXX: mp4Out", transcodeRequest.RequestID, mp4Out)
+			fmt.Println("XXX: replacing", mp4Out.Location, transcodeRequest.Mp4TargetUrl, mp4PlaybackBaseURL)
 			mp4Out.Location = strings.ReplaceAll(mp4Out.Location, transcodeRequest.Mp4TargetUrl, mp4PlaybackBaseURL)
+			fmt.Println("XXX: mp4Out.Location", transcodeRequest.RequestID, mp4Out.Location)
 
 			// TODO: Ignore f-mp4 output files for now. A follow-on PR will be used to address f-mp4 files in response to Studio
-			if filepath.Ext(mp4Out.Location) != ".mp4" {
+			fileExt := filepath.Ext(mp4Out.Location)
+			fmt.Println("XXX: fileExt: ", fileExt)
+			if fileExt != ".mp4" && fileExt != ".m4s" {
 				continue
 			}
+			fmt.Println("XXX: here... ")
 
 			mp4TargetUrl, err := url.Parse(mp4Out.Location)
 			if err != nil {
@@ -313,6 +319,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				}
 			}
 
+			fmt.Println("XXX: populating", transcodeRequest.RequestID, probeURL)
 			mp4Out, err = video.PopulateOutput(transcodeRequest.RequestID, video.Probe{}, probeURL, mp4Out)
 			if err != nil {
 				return outputs, segmentsCount, fmt.Errorf("failed to populate output for %v: %s", mp4Out, err)
@@ -324,13 +331,16 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	var manifest string
 	if transcodeRequest.HlsTargetURL != "" {
+		fmt.Println("XXX: replacing hls 1", manifestURL, hlsTargetURL.String(), hlsPlaybackBaseURL)
 		manifest = strings.ReplaceAll(manifestURL, hlsTargetURL.String(), hlsPlaybackBaseURL)
 	} else {
+		fmt.Println("XXX: replacing hls 2", manifestURL, hlsTargetURL.String(), mp4PlaybackBaseURL)
 		manifest = strings.ReplaceAll(manifestURL, hlsTargetURL.String(), mp4PlaybackBaseURL)
 	}
 	output := video.OutputVideo{Type: "object_store", Manifest: manifest}
 	if transcodeRequest.HlsTargetURL != "" {
 		for _, rendition := range transcodedStats {
+			fmt.Println("XXX: replacing hls", rendition.ManifestLocation, hlsTargetURL.String(), hlsPlaybackBaseURL)
 			videoManifestURL := strings.ReplaceAll(rendition.ManifestLocation, hlsTargetURL.String(), hlsPlaybackBaseURL)
 			output.Videos = append(output.Videos, video.OutputVideoFile{Location: videoManifestURL, SizeBytes: rendition.Bytes})
 		}
@@ -363,8 +373,17 @@ func uploadMp4Files(requestID string, basePath *url.URL, mp4OutputFiles []string
 		if err != nil {
 			return []video.OutputVideoFile{}, fmt.Errorf("failed to upload %s: %s", mp4OutputFile.Name(), err)
 		}
+
+		var mp4Type string
+		if ext == ".mp4" {
+			mp4Type = "mp4"
+		} else if ext == ".m4s" {
+			mp4Type = "f-mp4"
+		} else {
+			mp4Type = "Unknown"
+		}
 		mp4Out := video.OutputVideoFile{
-			Type:     "mp4",
+			Type:     mp4Type,
 			Location: basePath.JoinPath(filename).String(),
 		}
 		mp4OutputsPre = append(mp4OutputsPre, mp4Out)

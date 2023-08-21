@@ -69,6 +69,7 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 	if videoStream == nil {
 		return InputVideo{}, errors.New("error checking for video: no video stream found")
 	}
+	fmt.Println("XXX : ", videoStream)
 	// check for unsupported video stream(s)
 	for _, codec := range unsupportedVideoCodecList {
 		if strings.ToLower(videoStream.CodecName) == codec {
