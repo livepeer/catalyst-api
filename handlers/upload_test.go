@@ -3,6 +3,7 @@ package handlers
 import (
 	"testing"
 
+	"github.com/livepeer/catalyst-api/video"
 	"github.com/stretchr/testify/require"
 )
 
@@ -94,4 +95,77 @@ func TestItAcceptsValidSourceURLs(t *testing.T) {
 	require.NoError(t, CheckSourceURLValid("http://www.google.com:8080/123/asdsdf"))
 	require.NoError(t, CheckSourceURLValid("ipfs://sfsdf234fdsdfsd"))
 	require.NoError(t, CheckSourceURLValid("ar://123456"))
+}
+
+func TestIsProfileValid(t *testing.T) {
+	tests := []struct {
+		name     string
+		request  UploadVODRequest
+		expected bool
+	}{
+		{
+			name: "ValidProfiles",
+			request: UploadVODRequest{
+				Profiles: []video.EncodedProfile{
+					{Width: 1920, Height: 1080, Bitrate: 5000, FPS: 30},
+					{Width: 1280, Height: 720, Bitrate: 2000, FPS: 24},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "InvalidProfileWidthWithoutHeight",
+			request: UploadVODRequest{
+				Profiles: []video.EncodedProfile{
+					{Width: 0, Height: 720, Bitrate: 2000, FPS: 24},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "InvalidProfileHeightWithoutWidth",
+			request: UploadVODRequest{
+				Profiles: []video.EncodedProfile{
+					{Width: 1920, Height: 0, Bitrate: 5000, FPS: 30},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "InvalidProfileWidthHeightWithoutBitrate",
+			request: UploadVODRequest{
+				Profiles: []video.EncodedProfile{
+					{Width: 1920, Height: 1080, Bitrate: 0, FPS: 30},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "SingleProfileWithNonZeroBitrate",
+			request: UploadVODRequest{
+				Profiles: []video.EncodedProfile{
+					{Bitrate: 2000},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "SingleProfileWithZeroBitrate",
+			request: UploadVODRequest{
+				Profiles: []video.EncodedProfile{
+					{Bitrate: 0},
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := test.request.IsProfileValid()
+			if result != test.expected {
+				t.Errorf("Expected %v, but got %v", test.expected, result)
+			}
+		})
+	}
 }
