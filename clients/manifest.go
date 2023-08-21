@@ -96,18 +96,8 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 	// Generate the master + rendition output manifests
 	masterPlaylist := m3u8.NewMasterPlaylist()
 
-	sort.Slice(transcodedStats, func(a, b int) bool {
-		if transcodedStats[a].BitsPerSecond > transcodedStats[b].BitsPerSecond {
-			return true
-		} else if transcodedStats[a].BitsPerSecond < transcodedStats[b].BitsPerSecond {
-			return false
-		} else {
-			var resolutionA = transcodedStats[a].Width * transcodedStats[a].Height
-			var resolutionB = transcodedStats[b].Width * transcodedStats[b].Height
-
-			return resolutionA > resolutionB
-		}
-	})
+	//sort transcoded Stats and loop in order.
+	SortTranscodedStats(transcodedStats)
 
 	// If the first rendition is greater than 2k resolution, then swap with the second rendition. HLS players
 	// typically load the first rendition in a master playlist and this can result in long downloads (and
@@ -184,23 +174,14 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 }
 
 // Generate a Master manifest for the FMP4 media playlists then write them to storage
-func GenerateAndUploadFragMp4Manifests(targetOSURL string, fmp4Manifests map[string]string, transcodedStats []*video.RenditionStats) error {
+// This function returns a slice of fmp4 manifest urls that is packaged with HLS or DASH
+func GenerateAndUploadFragMp4Manifests(targetOSURL string, fmp4Manifests map[string]string, transcodedStats []*video.RenditionStats) ([]string, error) {
 
+	var fmp4ManifestUrls []string
 	masterPlaylist := m3u8.NewMasterPlaylist()
 
 	//sort transcoded Stats and loop in order.
-	sort.Slice(transcodedStats, func(a, b int) bool {
-		if transcodedStats[a].BitsPerSecond > transcodedStats[b].BitsPerSecond {
-			return true
-		} else if transcodedStats[a].BitsPerSecond < transcodedStats[b].BitsPerSecond {
-			return false
-		} else {
-			var resolutionA = transcodedStats[a].Width * transcodedStats[a].Height
-			var resolutionB = transcodedStats[b].Width * transcodedStats[b].Height
-
-			return resolutionA > resolutionB
-		}
-	})
+	SortTranscodedStats(transcodedStats)
 
 	// For each profile, add a new entry to the master manifest
 	for i, profile := range transcodedStats {
@@ -227,9 +208,16 @@ func GenerateAndUploadFragMp4Manifests(targetOSURL string, fmp4Manifests map[str
 		return UploadToOSURL(targetOSURL, MASTER_MANIFEST_FILENAME, strings.NewReader(masterPlaylist.String()), MANIFEST_UPLOAD_TIMEOUT)
 	}, UploadRetryBackoff())
 	if err != nil {
-		return fmt.Errorf("failed to upload master fmp4 playlist: %s", err)
+		return []string{}, fmt.Errorf("failed to upload master fmp4 playlist: %s", err)
 	}
-	return nil
+
+	fmp4HlsManifest, err := url.JoinPath(targetOSURL, MASTER_MANIFEST_FILENAME)
+	if err != nil {
+		return []string{}, fmt.Errorf("failed to create URL for master fmp4 playlist: %s", err)
+	}
+	fmp4ManifestUrls = append(fmp4ManifestUrls, fmp4HlsManifest)
+
+	return fmp4ManifestUrls, nil
 }
 
 func ManifestURLToSegmentURL(manifestURL, segmentFilename string) (*url.URL, error) {
@@ -244,4 +232,18 @@ func ManifestURLToSegmentURL(manifestURL, segmentFilename string) (*url.URL, err
 	}
 
 	return base.ResolveReference(relative), nil
+}
+
+func SortTranscodedStats(transcodedStats []*video.RenditionStats) {
+	sort.Slice(transcodedStats, func(a, b int) bool {
+		if transcodedStats[a].BitsPerSecond > transcodedStats[b].BitsPerSecond {
+			return true
+		} else if transcodedStats[a].BitsPerSecond < transcodedStats[b].BitsPerSecond {
+			return false
+		} else {
+			resolutionA := transcodedStats[a].Width * transcodedStats[a].Height
+			resolutionB := transcodedStats[b].Width * transcodedStats[b].Height
+			return resolutionA > resolutionB
+		}
+	})
 }

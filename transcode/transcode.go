@@ -173,6 +173,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	var mp4OutputsPre []video.OutputVideoFile
+	var fmp4ManifestUrls []string
 	// Transmux received segments from T into a single mp4
 	if transcodeRequest.GenerateMP4 {
 		// Check if we should generate a standard MP4, fragmented MP4, or both.
@@ -269,10 +270,9 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		}
 		// If fmp4s were generated, then create a master fmp4 playlist
 		if len(fmp4Manifests) > 0 {
-			err := clients.GenerateAndUploadFragMp4Manifests(fmp4TargetURL.String(), fmp4Manifests, transcodedStats)
+			fmp4ManifestUrls, err = clients.GenerateAndUploadFragMp4Manifests(fmp4TargetURL.String(), fmp4Manifests, transcodedStats)
 			if err != nil {
 				return outputs, segmentsCount, fmt.Errorf("error uploading master playlist for fragmented mp4 file(s): %s", err)
-
 			}
 		}
 	}
@@ -286,17 +286,17 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	if transcodeRequest.GenerateMP4 {
 		for _, mp4Out := range mp4OutputsPre {
 			mp4Out.Location = strings.ReplaceAll(mp4Out.Location, transcodeRequest.Mp4TargetUrl, mp4PlaybackBaseURL)
-
-			// TODO: Ignore f-mp4 output files for now. A follow-on PR will be used to address f-mp4 files in response to Studio
-			if filepath.Ext(mp4Out.Location) != ".mp4" {
+			// Ignore fmp4 manifest files (also ends in .m3u8) since probing these files doesn't reveal much
+			// and ffprobe can either fail or take a long time instead.
+			fileExt := filepath.Ext(mp4Out.Location)
+			if fileExt != ".mp4" && fileExt != ".m4s" {
 				continue
 			}
-
+			// Generate signed URLs of all mp4 and fmp4 files to probe
 			mp4TargetUrl, err := url.Parse(mp4Out.Location)
 			if err != nil {
 				return outputs, segmentsCount, fmt.Errorf("failed to parse mp4Out.Location %s: %w", mp4Out.Location, err)
 			}
-
 			var probeURL string
 			if mp4TargetUrl.Scheme == "ipfs" {
 				// probe IPFS with web3.storage URL, since ffprobe does not support "ipfs://"
@@ -308,13 +308,18 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 					return outputs, segmentsCount, fmt.Errorf("failed to create signed url for %s: %w", mp4TargetUrl, err)
 				}
 			}
-
+			// Populate OutputVideo structs with results from probing step to send back in final response to Studio
 			mp4Out, err = video.PopulateOutput(transcodeRequest.RequestID, video.Probe{}, probeURL, mp4Out)
 			if err != nil {
 				return outputs, segmentsCount, fmt.Errorf("failed to populate output for %v: %s", mp4Out, err)
 			}
-
 			mp4Outputs = append(mp4Outputs, mp4Out)
+		}
+		// If fmp4 manifest urls were generated in the fmp4 generation stage, then append the master playlist as an additional output
+		if len(fmp4ManifestUrls) > 0 {
+			for _, u := range fmp4ManifestUrls {
+				mp4Outputs = append(mp4Outputs, video.OutputVideoFile{Type: "fmp4-master-playlist", Location: u})
+			}
 		}
 	}
 
@@ -359,8 +364,17 @@ func uploadMp4Files(requestID string, basePath *url.URL, mp4OutputFiles []string
 		if err != nil {
 			return []video.OutputVideoFile{}, fmt.Errorf("failed to upload %s: %s", mp4OutputFile.Name(), err)
 		}
+
+		var mp4Type string
+		if ext == ".mp4" {
+			mp4Type = "mp4"
+		} else if ext == ".m4s" {
+			mp4Type = "fmp4"
+		} else {
+			mp4Type = "Unknown"
+		}
 		mp4Out := video.OutputVideoFile{
-			Type:     "mp4",
+			Type:     mp4Type,
 			Location: basePath.JoinPath(filename).String(),
 		}
 		mp4OutputsPre = append(mp4OutputsPre, mp4Out)
