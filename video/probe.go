@@ -13,7 +13,10 @@ import (
 	"gopkg.in/vansante/go-ffprobe.v2"
 )
 
-var unsupportedVideoCodecList = []string{"mjpeg", "jpeg", "png"}
+var (
+	unsupportedVideoCodecList = []string{"mjpeg", "jpeg", "png"}
+	supportedFormats          = []string{"mp4", "mov", "hls"}
+)
 
 type Prober interface {
 	ProbeFile(requestID, url string, ffProbeOptions ...string) (InputVideo, error)
@@ -138,7 +141,7 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 
 	// format file stats into InputVideo
 	iv := InputVideo{
-		Format: probeData.Format.FormatName,
+		Format: findFormat(probeData.Format.FormatName),
 		Tracks: []InputTrack{
 			{
 				Type:        TrackTypeVideo,
@@ -237,4 +240,23 @@ func parseFps(framerate string) (float64, error) {
 	}
 
 	return float64(num) / float64(den), nil
+}
+
+func findFormat(format string) string {
+	actualFormats := strings.Split(format, ",")
+	for _, f := range supportedFormats {
+		if containsStr(actualFormats, f) {
+			return f
+		}
+	}
+	return actualFormats[0]
+}
+
+func containsStr(slc []string, val string) bool {
+	for _, v := range slc {
+		if v == val {
+			return true
+		}
+	}
+	return false
 }
