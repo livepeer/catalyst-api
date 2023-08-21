@@ -73,6 +73,33 @@ func HasContentType(r *http.Request, mimetype string) bool {
 	return false
 }
 
+func (r UploadVODRequest) IsProfileValid() bool {
+	// an empty profile is valid and tells us to use the default ABR ladder
+	if len(r.Profiles) == 0 {
+		return true
+	}
+
+	// a special case where only the bitrate is set which tells us to
+	// generate a profile that matches the input video's specs with the
+	// user specified target bitrate
+	if len(r.Profiles) == 1 {
+		profile := r.Profiles[0]
+		if profile.Width == 0 && profile.Height == 0 {
+			return profile.Bitrate > 0
+		}
+	}
+
+	// verify that width/height/bitrate is provided in cases where the
+	// user wants to use their own transcode profile
+	for _, profile := range r.Profiles {
+		if profile.Width == 0 || profile.Height == 0 || profile.Bitrate == 0 {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (r UploadVODRequest) getTargetHlsOutput() UploadVODRequestOutputLocation {
 	for _, o := range r.OutputLocations {
 		if o.Outputs.HLS == "enabled" {
@@ -143,6 +170,10 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 
 	if err := CheckSourceURLValid(uploadVODRequest.Url); err != nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+	}
+
+	if !uploadVODRequest.IsProfileValid() {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("invalid transcode profile requested"))
 	}
 
 	// If the segment size isn't being overridden then use the default
