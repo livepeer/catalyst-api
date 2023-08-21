@@ -2,16 +2,22 @@ package video
 
 import (
 	"fmt"
-	ffmpeg "github.com/u2takey/ffmpeg-go"
 	"os"
 	"path/filepath"
+
+	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
 func MuxTStoMP4(tsInputFile, mp4OutputFile string) ([]string, error) {
 	var transmuxOutputFiles []string
 	// transmux the .ts file into a standalone MP4 file
 	err := ffmpeg.Input(tsInputFile).
-		Output(mp4OutputFile, ffmpeg.KwArgs{"movflags": "faststart", "c": "copy", "bsf:a": "aac_adtstoasc"}).
+		Output(mp4OutputFile, ffmpeg.KwArgs{
+			"analyzeduration": "15M",       // Analyze up to 15s of video to figure out the format. We saw failures to detect the video codec without this
+			"movflags":        "faststart", // Need this for progressive playback and probing
+			"c":               "copy",      // Don't accidentally transcode
+			"bsf:a":           "aac_adtstoasc",
+		}).
 		OverWriteOutput().ErrorToStdOut().Run()
 	if err != nil {
 		return nil, fmt.Errorf("failed to transmux concatenated mpeg-ts file (%s) into a mp4 file: %s", tsInputFile, err)
