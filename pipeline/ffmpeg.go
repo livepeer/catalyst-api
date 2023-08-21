@@ -186,6 +186,9 @@ func sendSourcePlayback(job *JobInfo) {
 		log.LogError(job.RequestID, "unable to find a video track for source playback", err)
 		return
 	}
+	// TODO switch the public url in the recording data store to the new cdn host. then use the host from the input url for hls inputs
+	// TODO add vhost like ~/Downloads/asset-cdn-conf.json
+	// TODO check against prod cdn config
 	prefix := "//recordings-cdn.lp-playback.monster/hls"
 	sourceMaster.Append(prefix+"/"+path.Join(segmentingPath[2:]...), &m3u8.MediaPlaylist{}, m3u8.VariantParams{
 		Bandwidth:  uint32(videoTrack.Bitrate),
