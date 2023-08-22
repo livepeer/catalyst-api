@@ -156,7 +156,7 @@ type Coordinator struct {
 	SourceOutputURL      *url.URL
 }
 
-func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB, VodDecryptPrivateKey *rsa.PrivateKey, broadcasterURL string) (*Coordinator, error) {
+func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB, VodDecryptPrivateKey *rsa.PrivateKey, broadcasterURL string, sourcePlaybackHosts map[string]string) (*Coordinator, error) {
 	if !strategy.IsValid() {
 		return nil, fmt.Errorf("invalid strategy: %s", strategy)
 	}
@@ -185,9 +185,10 @@ func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string,
 		strategy:     strategy,
 		statusClient: statusClient,
 		pipeFfmpeg: &ffmpeg{
-			SourceOutputUrl: sourceOutputURL,
-			Broadcaster:     broadcaster,
-			probe:           video.Probe{},
+			SourceOutputUrl:     sourceOutputURL,
+			Broadcaster:         broadcaster,
+			probe:               video.Probe{},
+			sourcePlaybackHosts: sourcePlaybackHosts,
 		},
 		pipeExternal:         &external{extTranscoder},
 		Jobs:                 cache.New[*JobInfo](),
