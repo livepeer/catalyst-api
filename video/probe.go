@@ -13,7 +13,10 @@ import (
 	"gopkg.in/vansante/go-ffprobe.v2"
 )
 
-var unsupportedVideoCodecList = []string{"mjpeg", "jpeg", "png"}
+var (
+	unsupportedVideoCodecList = []string{"mjpeg", "jpeg", "png"}
+	supportedFormats          = []string{"mp4", "mov", "hls"}
+)
 
 type Prober interface {
 	ProbeFile(requestID, url string, ffProbeOptions ...string) (InputVideo, error)
@@ -138,12 +141,13 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 
 	// format file stats into InputVideo
 	iv := InputVideo{
-		Format: probeData.Format.FormatName,
+		Format: findFormat(probeData.Format.FormatName),
 		Tracks: []InputTrack{
 			{
-				Type:    TrackTypeVideo,
-				Codec:   videoStream.CodecName,
-				Bitrate: bitrate,
+				Type:        TrackTypeVideo,
+				Codec:       videoStream.CodecName,
+				Bitrate:     bitrate,
+				DurationSec: parseAssetDuration(videoStream.Duration),
 				VideoTrack: VideoTrack{
 					Width:              int64(videoStream.Width),
 					Height:             int64(videoStream.Height),
@@ -182,9 +186,10 @@ func addAudioTrack(probeData *ffprobe.ProbeData, iv InputVideo) (InputVideo, err
 
 	bitrate, _ := strconv.ParseInt(audioTrack.BitRate, 10, 64)
 	iv.Tracks = append(iv.Tracks, InputTrack{
-		Type:    TrackTypeAudio,
-		Codec:   audioTrack.CodecName,
-		Bitrate: bitrate,
+		Type:        TrackTypeAudio,
+		Codec:       audioTrack.CodecName,
+		Bitrate:     bitrate,
+		DurationSec: parseAssetDuration(audioTrack.Duration),
 		AudioTrack: AudioTrack{
 			Channels:   audioTrack.Channels,
 			SampleBits: audioTrack.BitsPerSample,
@@ -194,6 +199,11 @@ func addAudioTrack(probeData *ffprobe.ProbeData, iv InputVideo) (InputVideo, err
 	})
 
 	return iv, nil
+}
+
+func parseAssetDuration(duration string) float64 {
+	d, _ := strconv.ParseFloat(duration, 64)
+	return d
 }
 
 // function taken from task-runner task/probe.go
@@ -230,4 +240,23 @@ func parseFps(framerate string) (float64, error) {
 	}
 
 	return float64(num) / float64(den), nil
+}
+
+func findFormat(format string) string {
+	actualFormats := strings.Split(format, ",")
+	for _, f := range supportedFormats {
+		if containsStr(actualFormats, f) {
+			return f
+		}
+	}
+	return actualFormats[0]
+}
+
+func containsStr(slc []string, val string) bool {
+	for _, v := range slc {
+		if v == val {
+			return true
+		}
+	}
+	return false
 }
