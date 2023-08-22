@@ -19,6 +19,7 @@ const lastSeenBumpPeriod = 30 * time.Second
 
 type infoProvider interface {
 	getStreamInfo(mistID string) (*streamInfo, error)
+	wildcardPlaybackID(stream *api.Stream) string
 }
 
 type metricsCollector struct {
@@ -30,45 +31,27 @@ type metricsCollector struct {
 	infoProvider
 }
 
-func startMetricsCollector(ctx context.Context, period time.Duration, nodeID, ownRegion string, mapi clients.MistAPIClient, lapi *api.Client, producer event.AMQPProducer, amqpExchange string, infop infoProvider) {
+func createMetricsCollector(ctx context.Context, period time.Duration, nodeID, ownRegion string, mapi clients.MistAPIClient, lapi *api.Client, producer event.AMQPProducer, amqpExchange string, infop infoProvider) *metricsCollector {
 	mc := &metricsCollector{nodeID, ownRegion, mapi, lapi, producer, amqpExchange, infop}
-	mc.collectMetricsLogged(ctx, period)
-	go mc.mainLoop(ctx, period)
+	return mc
 }
 
-func (c *metricsCollector) mainLoop(loopCtx context.Context, period time.Duration) {
-	ticker := time.NewTicker(period)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-loopCtx.Done():
-			return
-		case <-ticker.C:
-			c.collectMetricsLogged(loopCtx, period)
-		}
-	}
-}
-
-func (c *metricsCollector) collectMetricsLogged(ctx context.Context, timeout time.Duration) {
+func (c *metricsCollector) collectMetricsLogged(ctx context.Context, timeout time.Duration, mistState clients.MistState) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	if err := c.collectMetrics(ctx); err != nil {
+	if err := c.collectMetrics(ctx, mistState); err != nil {
 		glog.Errorf("Error collecting mist metrics. err=%v", err)
 	}
 }
 
-func (c *metricsCollector) collectMetrics(ctx context.Context) error {
+func (c *metricsCollector) collectMetrics(ctx context.Context, mistState clients.MistState) error {
 	defer func() {
 		if rec := recover(); rec != nil {
 			glog.Errorf("Panic in metrics collector. value=%v", rec)
 		}
 	}()
 
-	mistStats, err := c.mist.GetState()
-	if err != nil {
-		return err
-	}
-	streamsMetrics := compileStreamMetrics(&mistStats)
+	streamsMetrics := compileStreamMetrics(&mistState)
 
 	eg := errgroup.Group{}
 	eg.SetLimit(5)
@@ -87,11 +70,11 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 			glog.Errorf("Error getting stream info for streamId=%s err=%q", streamID, err)
 			continue
 		}
-		if info.isLazy {
-			// avoid spamming metrics for playback-only catalyst instances. This means
-			// that if mapic restarts we will stop sending metrics from previous
-			// streams as well, but that's a minor issue (curr stream health is dying).
-			glog.Infof("Skipping metrics for lazily created stream info. streamId=%q metrics=%+v", streamID, metrics)
+
+		stream := c.infoProvider.wildcardPlaybackID(info.stream)
+		isIngest := isIngestStream(stream, info, mistState)
+
+		if !isIngest {
 			continue
 		}
 

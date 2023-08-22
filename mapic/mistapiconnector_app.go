@@ -102,6 +102,7 @@ type (
 		broker                    misttriggers.TriggerBroker
 		mist                      clients.MistAPIClient
 		multistreamUpdated        chan struct{}
+		metricsCollector          *metricsCollector
 	}
 )
 
@@ -150,12 +151,12 @@ func (mc *mac) Start(ctx context.Context) error {
 		glog.Infof("AMQP url is empty!")
 	}
 	if producer != nil && mc.config.MistScrapeMetrics {
-		startMetricsCollector(ctx, statsCollectionPeriod, mc.nodeID, mc.ownRegion, mc.mist, lapi, producer, ownExchangeName, mc)
+		mc.metricsCollector = createMetricsCollector(ctx, statsCollectionPeriod, mc.nodeID, mc.ownRegion, mc.mist, lapi, producer, ownExchangeName, mc)
 	}
 
 	mc.multistreamUpdated = make(chan struct{}, 1)
 	go func() {
-		mc.reconcileMultistreamLoop(ctx)
+		mc.reconcileLoop(ctx)
 	}()
 
 	<-ctx.Done()
@@ -497,8 +498,8 @@ func (mc *mac) shouldEnableAudio(stream *api.Stream) bool {
 	return audio
 }
 
-// reconcileMultistreamLoop calls reconcileMultistream periodically or when multistreamUpdated is triggered on demand.
-func (mc *mac) reconcileMultistreamLoop(ctx context.Context) {
+// reconcileLoop calls reconcileMultistream and processStats periodically or when multistreamUpdated is triggered on demand.
+func (mc *mac) reconcileLoop(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 	for {
@@ -508,7 +509,13 @@ func (mc *mac) reconcileMultistreamLoop(ctx context.Context) {
 		case <-ticker.C:
 		case <-mc.multistreamUpdated:
 		}
-		mc.reconcileMultistream()
+		mistState, err := mc.mist.GetState()
+		if err != nil {
+			glog.Errorf("error executing query on Mist, cannot reconcile err=%v", err)
+			continue
+		}
+		mc.reconcileMultistream(mistState)
+		mc.processStats(mistState)
 	}
 }
 
@@ -518,7 +525,7 @@ func (mc *mac) reconcileMultistreamLoop(ctx context.Context) {
 // - Mist removed its push for some reason
 // Note that we use Mist AUTO_PUSH (which in turn makes sure that the PUSH is always available).
 // Note also that we only create AUTO_PUSH for active streams which are ingest (not playback).
-func (mc *mac) reconcileMultistream() {
+func (mc *mac) reconcileMultistream(mistState clients.MistState) {
 	type key struct {
 		stream string
 		target string
@@ -529,12 +536,6 @@ func (mc *mac) reconcileMultistream() {
 	isMultistream := func(k key) bool {
 		return (strings.HasPrefix(k.stream, "video+") || strings.HasPrefix(k.stream, "videorec+")) &&
 			(strings.HasPrefix(strings.ToLower(k.target), "rtmp:") || strings.HasPrefix(strings.ToLower(k.target), "srt:"))
-	}
-
-	mistState, err := mc.mist.GetState()
-	if err != nil {
-		glog.Errorf("error executing query on Mist, cannot reconcile multistream err=%v", err)
-		return
 	}
 
 	// Get the existing PUSH_AUTO from Mist
@@ -611,6 +612,12 @@ func (mc *mac) reconcileMultistream() {
 				glog.Errorf("cannot add AUTO_PUSH for stream=%s target=%s err=%v", k.stream, k.target, err)
 			}
 		}
+	}
+}
+
+func (mc *mac) processStats(mistState clients.MistState) {
+	if mc.metricsCollector != nil {
+		mc.metricsCollector.collectMetricsLogged(mc.ctx, 60*time.Second, mistState)
 	}
 }
 
