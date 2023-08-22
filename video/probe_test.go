@@ -76,13 +76,14 @@ func TestProbe(t *testing.T) {
 	require.NoError(err)
 
 	expectedInput := InputVideo{
-		Format:   "mov,mp4,m4a,3gp,3g2,mj2",
+		Format:   "mp4",
 		Duration: 16.2,
 		Tracks: []InputTrack{
 			{
-				Type:    TrackTypeVideo,
-				Codec:   "h264",
-				Bitrate: 1234521,
+				Type:        TrackTypeVideo,
+				Codec:       "h264",
+				Bitrate:     1234521,
+				DurationSec: 16.2,
 				VideoTrack: VideoTrack{
 					Width:       576,
 					Height:      1024,
@@ -91,9 +92,10 @@ func TestProbe(t *testing.T) {
 				},
 			},
 			{
-				Type:    TrackTypeAudio,
-				Codec:   "aac",
-				Bitrate: 128248,
+				Type:        TrackTypeAudio,
+				Codec:       "aac",
+				Bitrate:     128248,
+				DurationSec: 16.207007,
 				AudioTrack: AudioTrack{
 					Channels:   2,
 					SampleRate: 44100,
@@ -129,4 +131,35 @@ func TestProbe_IgnoreSomeErrors(t *testing.T) {
 	require.NoError(t, err)
 	_, err = Probe{IgnoreErrMessages: []string{"non-existing pps 0 referenced"}}.ProbeFile("requestID", "./fixtures/non-existing-pps.ts")
 	require.NoError(t, err)
+}
+
+func Test_findFormat(t *testing.T) {
+	tests := []struct {
+		name   string
+		format string
+		want   string
+	}{
+		{
+			name:   "single format",
+			format: "mp4",
+			want:   "mp4",
+		},
+		{
+			name:   "empty format",
+			format: "",
+			want:   "",
+		},
+		{
+			name:   "multiple format",
+			format: "mov,hello",
+			want:   "mov",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := findFormat(tt.format); got != tt.want {
+				t.Errorf("findFormat() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
