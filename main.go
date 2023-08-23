@@ -63,7 +63,7 @@ func main() {
 	fs.BoolVar(&cli.LogSysUsage, "run-pod-mon", true, "Run pod-mon script to monitor sys usage")
 	fs.StringVar(&cli.BroadcasterURL, "broadcaster-url", config.DefaultBroadcasterURL, "URL of local broadcaster")
 	config.InvertedBoolFlag(fs, &cli.MistEnabled, "mist", true, "Disable all Mist integrations. Should only be used for development and CI")
-	config.CommaMapFlag(fs, &cli.SourcePlaybackHosts, "sourcePlaybackHosts", map[string]string{}, "Bucket to hostname mappings for source playback")
+	config.CommaMapFlag(fs, &cli.SourcePlaybackHosts, "sourcePlaybackHosts", map[string]string{}, "Hostname to prefix mappings for source playback URLs")
 
 	// mist-api-connector parameters
 	fs.IntVar(&cli.MistPort, "mist-port", 4242, "Port to connect to Mist")
