@@ -46,20 +46,15 @@ func NewInputCopy() *InputCopy {
 
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
 func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL, decryptor *crypto.DecryptionKeys) (inputVideoProbe video.InputVideo, signedURL string, err error) {
-	if IsHLSInput(inputFile) {
-		log.Log(requestID, "skipping copy for hls")
-		signedURL = inputFile.String()
-	} else {
-		err = CopyAllInputFiles(requestID, inputFile, osTransferURL, decryptor)
-		if err != nil {
-			err = fmt.Errorf("failed to copy file(s): %w", err)
-			return
-		}
+	err = CopyAllInputFiles(requestID, inputFile, osTransferURL, decryptor)
+	if err != nil {
+		err = fmt.Errorf("failed to copy file(s): %w", err)
+		return
+	}
 
-		signedURL, err = getSignedURL(osTransferURL)
-		if err != nil {
-			return
-		}
+	signedURL, err = getSignedURL(osTransferURL)
+	if err != nil {
+		return
 	}
 
 	log.Log(requestID, "starting probe", "source", inputFile.String(), "dest", osTransferURL.String())
