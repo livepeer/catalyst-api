@@ -195,6 +195,11 @@ func (f *ffmpeg) sendSourcePlayback(job *JobInfo) {
 	}
 
 	prefix := f.sourcePlaybackHosts[sourceURL.Host]
+	if clients.IsHLSInput(sourceURL) && prefix == "" {
+		log.Log(job.RequestID, "no source playback prefix found", "host", sourceURL.Host)
+		return
+	}
+
 	sourceMaster.Append(prefix+"/"+path.Join(segmentingPath[2:]...), &m3u8.MediaPlaylist{}, m3u8.VariantParams{
 		Bandwidth:  uint32(videoTrack.Bitrate),
 		Resolution: fmt.Sprintf("%dx%d", videoTrack.Width, videoTrack.Height),
