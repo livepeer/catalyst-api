@@ -141,7 +141,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 	}
 
 	var mcMp4OutputRelPath string
-	if args.GenerateMP4 {
+	if mp4Target != nil {
 		// sets the mp4 path to be the same as HLS except for the suffix being "static"
 		// resulting files look something like https://storage.googleapis.com/bucket/25afy0urw3zu2476/static360p0.mp4
 		mcMp4OutputRelPath = path.Join("output", getTargetDir(mp4Target, args.RequestID, "mp4"), mp4OutFilePrefix)
