@@ -59,6 +59,7 @@ type Cli struct {
 	GateURL                   string
 	StreamHealthHookURL       string
 	BroadcasterURL            string
+	SourcePlaybackHosts       map[string]string
 }
 
 // Return our own URL for callback trigger purposes

@@ -134,10 +134,11 @@ func (s *StepContext) BroadcasterReceivesSegmentsWithinSeconds(numSegmentsExpect
 func (s *StepContext) TranscodedSegmentsWrittenToDiskWithinSeconds(numSegmentsExpected int, profiles string, secs int) error {
 	// Master manifest is written last, so we only need to do the timeout here and then can assume that all the other files are already written
 	masterManifestPath := filepath.Join(s.TranscodedOutputDir, "index.m3u8")
+	profileNames := strings.Split(profiles, ",")
 	var err error
 	for t := 0; t < secs*2; t++ {
 		if contents, err := os.ReadFile(masterManifestPath); err == nil {
-			if !strings.Contains(string(contents), "/source/") { // ignore fast TTR source playback manifest
+			if strings.Contains(string(contents), profileNames[0]) { // the final manifest should contain the profile name
 				break
 			}
 		}
@@ -147,7 +148,6 @@ func (s *StepContext) TranscodedSegmentsWrittenToDiskWithinSeconds(numSegmentsEx
 		return err
 	}
 
-	profileNames := strings.Split(profiles, ",")
 	for _, profile := range profileNames {
 		for segNum := 0; segNum < numSegmentsExpected; segNum++ {
 			segPath := filepath.Join(s.TranscodedOutputDir, profile, fmt.Sprintf("%d.ts", segNum))
