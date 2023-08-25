@@ -29,7 +29,6 @@ const audioEnabledStreamSuffix = "rec"
 const waitForPushError = 7 * time.Second
 const waitForPushErrorIncreased = 2 * time.Minute
 const keepStreamAfterEnd = 15 * time.Second
-const statsCollectionPeriod = 10 * time.Second
 
 const ownExchangeName = "lp_mist_api_connector"
 const webhooksExchangeName = "webhook_default_exchange"
@@ -500,7 +499,7 @@ func (mc *mac) shouldEnableAudio(stream *api.Stream) bool {
 
 // reconcileLoop calls reconcileMultistream and processStats periodically or when multistreamUpdated is triggered on demand.
 func (mc *mac) reconcileLoop(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
