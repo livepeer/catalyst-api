@@ -20,6 +20,7 @@ const (
 	TRIGGER_STREAM_BUFFER   = "STREAM_BUFFER"
 	TRIGGER_LIVE_TRACK_LIST = "LIVE_TRACK_LIST"
 	TRIGGER_USER_NEW        = "USER_NEW"
+	TRIGGER_USER_END        = "USER_END"
 	TRIGGER_STREAM_SOURCE   = "STREAM_SOURCE"
 )
 
@@ -72,6 +73,8 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 			d.TriggerLiveTrackList(ctx, w, req, body)
 		case TRIGGER_USER_NEW:
 			d.TriggerUserNew(ctx, w, req, body)
+		case TRIGGER_USER_END:
+			d.TriggerUserEnd(ctx, w, req, body)
 		case TRIGGER_STREAM_SOURCE:
 			d.TriggerStreamSource(ctx, w, req, body)
 		default:

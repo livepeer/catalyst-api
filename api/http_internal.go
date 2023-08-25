@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/handlers/accesscontrol"
 	"github.com/livepeer/catalyst-api/handlers/admin"
+	"github.com/livepeer/catalyst-api/handlers/analytics"
 	"github.com/livepeer/catalyst-api/handlers/ffmpeg"
 	"github.com/livepeer/catalyst-api/handlers/geolocation"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
@@ -26,8 +28,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker) error {
-	router := NewCatalystAPIRouterInternal(cli, vodEngine, mapic, bal, c, broker)
+func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker, metricsDB *sql.DB) error {
+	router := NewCatalystAPIRouterInternal(cli, vodEngine, mapic, bal, c, broker, metricsDB)
 	server := http.Server{Addr: cli.HTTPInternalAddress, Handler: router}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -53,7 +55,7 @@ func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipe
 	return server.Shutdown(ctx)
 }
 
-func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker) *httprouter.Router {
+func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker, metricsDB *sql.DB) *httprouter.Router {
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
 	withAuth := middleware.IsAuthorized
@@ -71,6 +73,7 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	eventsHandler := &handlers.EventsHandlersCollection{Cluster: c}
 	ffmpegSegmentingHandlers := &ffmpeg.HandlersCollection{VODEngine: vodEngine}
 	accessControlHandlers := accesscontrol.NewAccessControlHandlersCollection(cli)
+	analyticsHandlers := analytics.NewAnalyticsHandler(metricsDB)
 	encryptionHandlers := accesscontrol.NewEncryptionHandlersCollection(cli, spkiPublicKey)
 	adminHandlers := &admin.AdminHandlersCollection{Cluster: c}
 	mistCallbackHandlers := misttriggers.NewMistCallbackHandlersCollection(cli, broker)
@@ -112,6 +115,9 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 
 	// Handler for USER_NEW triggers
 	broker.OnUserNew(accessControlHandlers.HandleUserNew)
+
+	// Handler for USER_END triggers.
+	broker.OnUserEnd(analyticsHandlers.HandleUserEnd)
 
 	// Endpoint to receive segments and manifests that ffmpeg produces
 	router.PUT("/api/ffmpeg/:id/:filename", withLogging(ffmpegSegmentingHandlers.NewFile()))

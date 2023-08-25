@@ -47,6 +47,7 @@ func init() {
 }
 
 func startApp() error {
+
 	sourceOutputDir = fmt.Sprintf("file://%s/%s/", os.TempDir(), "livepeer/source")
 	app = exec.Command(
 		"./app",
@@ -54,6 +55,7 @@ func startApp() error {
 		"-http-internal-addr=127.0.0.1:17979",
 		"-cluster-addr=127.0.0.1:19935",
 		"-broadcaster-url=http://127.0.0.1:18935",
+		`-metrics-db-connection-string=`+steps.DB_CONNECTION_STRING,
 		"-private-bucket",
 		"fixtures/playback-bucket",
 		"-gate-url=http://localhost:13000/api/access-control/gate",
@@ -92,16 +94,18 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^Studio API server is running at "([^"]*)"$`, stepContext.StartStudioAPI)
 	ctx.Step(`^ffmpeg is available$`, stepContext.CheckFfmpeg)
 	ctx.Step(`^a Broadcaster is running at "([^"]*)"$`, stepContext.StartBroadcaster)
+	ctx.Step(`^a Postgres database is running$`, stepContext.StartDatabase)
 	ctx.Step(`^a callback server is running at "([^"]*)"$`, stepContext.StartCallbackHandler)
 
 	ctx.Step(`^I query the "([^"]*)" endpoint( with "([^"]*)")?$`, stepContext.CreateRequest)
 	ctx.Step(`^I query the internal "([^"]*)" endpoint$`, stepContext.CreateGetRequestInternal)
 	ctx.Step(`^I submit to the "([^"]*)" endpoint with "([^"]*)"$`, stepContext.CreatePostRequest)
 	ctx.Step(`^I submit to the internal "([^"]*)" endpoint with "([^"]*)"$`, stepContext.CreatePostRequestInternal)
-	ctx.Step(`^receive a response within "(\d+)" seconds$`, stepContext.CallAPI)
+	ctx.Step(`^receive[s]? a response within "(\d+)" seconds$`, stepContext.CallAPI)
 	ctx.Step(`^we wait for 5 seconds$`, stepContext.Wait)
-	ctx.Step(`^I get an HTTP response with code "([^"]*)"$`, stepContext.CheckHTTPResponseCode)
+	ctx.Step(`^(?:I|Mist) get[s]? an HTTP response with code "([^"]*)"$`, stepContext.CheckHTTPResponseCode)
 	ctx.Step(`^I get an HTTP response with code "([^"]*)" and the following body "([^"]*)"$`, stepContext.CheckHTTPResponseCodeAndBody)
+	ctx.Step(`^Mist calls the "([^"]*)" trigger with "([^"]*)"$`, stepContext.CreateTriggerRequest)
 	ctx.Step(`^my "(failed|successful)" (vod|playback) request metrics get recorded$`, stepContext.CheckRecordedMetrics)
 	ctx.Step(`^the body matches file "([^"]*)"$`, stepContext.CheckHTTPResponseBodyFromFile)
 	ctx.Step(`^the gate API will (allow|deny) playback$`, stepContext.SetGateAPIResponse)
@@ -116,6 +120,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^the source playback manifest is written to storage within "(\d+)" seconds$`, stepContext.SourcePlaybackManifestWrittenToDisk)
 	ctx.Step(`^I receive a "([^"]*)" callback within "(\d+)" seconds$`, stepContext.CheckCallback)
 	ctx.Step(`^a source copy (has|has not) been written to disk$`, stepContext.SourceCopyWrittenToDisk)
+	ctx.Step(`^a row is written to the database containing the following values$`, stepContext.CheckDatabase)
 
 	ctx.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
 		if app != nil && app.Process != nil {
@@ -135,6 +140,9 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 		}
 		_ = stepContext.Broadcaster.Shutdown(ctx)
 		_ = stepContext.CallbackHandler.Shutdown(ctx)
+		if stepContext.Database != nil {
+			_ = stepContext.Database.Stop()
+		}
 		return ctx, nil
 	})
 }

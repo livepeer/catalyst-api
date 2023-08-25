@@ -50,12 +50,15 @@ type TriggerBroker interface {
 	OnUserNew(func(context.Context, *UserNewPayload) (bool, error))
 	TriggerUserNew(context.Context, *UserNewPayload) (string, error)
 
+	OnUserEnd(func(context.Context, *UserEndPayload) error)
+	TriggerUserEnd(context.Context, *UserEndPayload)
+
 	OnStreamSource(func(context.Context, *StreamSourcePayload) (string, error))
 	TriggerStreamSource(context.Context, *StreamSourcePayload) (string, error)
 }
 
 type TriggerPayload interface {
-	StreamBufferPayload | PushEndPayload | PushRewritePayload | LiveTrackListPayload | PushOutStartPayload | UserNewPayload | StreamSourcePayload
+	StreamBufferPayload | PushEndPayload | PushRewritePayload | LiveTrackListPayload | PushOutStartPayload | UserNewPayload | UserEndPayload | StreamSourcePayload
 }
 
 func NewTriggerBroker() TriggerBroker {
@@ -69,6 +72,7 @@ type triggerBroker struct {
 	pushOutStartFuncs  funcGroup[PushOutStartPayload]
 	pushEndFuncs       funcGroup[PushEndPayload]
 	userNewFuncs       funcGroup[UserNewPayload]
+	userEndFuncs       funcGroup[UserEndPayload]
 	streamSourceFuncs  funcGroup[StreamSourcePayload]
 }
 
@@ -79,6 +83,7 @@ var triggers = map[string]bool{
 	TRIGGER_STREAM_BUFFER:   false,
 	TRIGGER_LIVE_TRACK_LIST: false,
 	TRIGGER_USER_NEW:        true,
+	TRIGGER_USER_END:        false,
 	TRIGGER_STREAM_SOURCE:   true,
 }
 
@@ -143,6 +148,17 @@ func (b *triggerBroker) OnUserNew(cb func(context.Context, *UserNewPayload) (boo
 
 func (b *triggerBroker) TriggerUserNew(ctx context.Context, payload *UserNewPayload) (string, error) {
 	return b.userNewFuncs.Trigger(ctx, payload)
+}
+
+func (b *triggerBroker) OnUserEnd(cb func(context.Context, *UserEndPayload) error) {
+	b.userEndFuncs.RegisterNoResponse(cb)
+}
+
+func (b *triggerBroker) TriggerUserEnd(ctx context.Context, payload *UserEndPayload) {
+	_, err := b.userEndFuncs.Trigger(ctx, payload)
+	if err != nil {
+		glog.Errorf("error handling USER_END trigger: %s", err)
+	}
 }
 
 func (b *triggerBroker) OnStreamSource(cb func(context.Context, *StreamSourcePayload) (string, error)) {

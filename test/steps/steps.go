@@ -3,6 +3,7 @@ package steps
 import (
 	"net/http"
 
+	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
 	"github.com/minio/madmin-go"
 )
 
@@ -21,6 +22,7 @@ type StepContext struct {
 	Studio                      http.Server
 	Broadcaster                 http.Server
 	CallbackHandler             http.Server
+	Database                    *embeddedpostgres.EmbeddedPostgres
 	BroadcasterSegmentsReceived map[string]int // Map of ManifestID -> Num Segments
 	CallbacksReceived           []Callback
 	MinioAdmin                  *madmin.AdminClient

@@ -43,14 +43,23 @@ func (s *StepContext) request(baseURL, endpoint, method string) error {
 }
 
 func (s *StepContext) CreatePostRequest(endpoint, payload string) error {
-	return s.postRequest(s.BaseURL, endpoint, payload)
+	return s.postRequest(s.BaseURL, endpoint, payload, map[string]string{})
 }
 
 func (s *StepContext) CreatePostRequestInternal(endpoint, payload string) error {
-	return s.postRequest(s.BaseInternalURL, endpoint, payload)
+	return s.postRequest(s.BaseInternalURL, endpoint, payload, map[string]string{})
 }
 
-func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
+func (s *StepContext) CreateTriggerRequest(trigger, payloadFile string) error {
+	triggerFile := filepath.Join("fixtures", "trigger-payloads", payloadFile)
+	payloadBytes, err := os.ReadFile(triggerFile)
+	if err != nil {
+		return fmt.Errorf("failed to read trigger payload file %q: %s", triggerFile, err)
+	}
+	return s.postRequest(s.BaseInternalURL, "/api/mist/trigger", string(payloadBytes), map[string]string{"X-TRIGGER": trigger})
+}
+
+func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map[string]string) error {
 	// Copy our source MP4 to somewhere we can ingest it from
 	sourceFile, err := os.CreateTemp(os.TempDir(), "source*.mp4")
 	if err != nil {
@@ -140,6 +149,9 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string) error {
 	r, err := http.NewRequest(http.MethodPost, baseURL+endpoint, strings.NewReader(payload))
 	r.Header.Set("Authorization", s.authHeaders)
 	r.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		r.Header.Set(k, v)
+	}
 	if err != nil {
 		return err
 	}
