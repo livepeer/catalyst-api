@@ -35,7 +35,8 @@ var userEndPayloadBadLines = MistTriggerBody(`
 func TestItCanParseAValidUserEndPayload(t *testing.T) {
 	p, err := ParseUserEndPayload(userEndPayload)
 	require.NoError(t, err)
-	require.Equal(t, "video+788dip9jqar876kl", p.StreamNames)
+	require.Equal(t, 1, len(p.StreamNames))
+	require.Equal(t, "video+788dip9jqar876kl", p.StreamNames[0])
 }
 
 func TestItCanRejectABadUserEndPayload(t *testing.T) {
@@ -56,7 +57,8 @@ func doUserEndRequest(t *testing.T, payload MistTriggerBody, cb func(ctx context
 
 func TestItCanHandleUserEndRequests(t *testing.T) {
 	rr := doUserEndRequest(t, userEndPayload, func(ctx context.Context, p *UserEndPayload) error {
-		require.Equal(t, p.StreamNames, "video+788dip9jqar876kl")
+		require.Equal(t, 1, len(p.StreamNames))
+		require.Equal(t, "video+788dip9jqar876kl", p.StreamNames[0])
 		return nil
 	})
 	require.Equal(t, rr.Result().StatusCode, 200)

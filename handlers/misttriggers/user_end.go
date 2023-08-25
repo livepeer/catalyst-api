@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/golang/glog"
 )
@@ -11,16 +12,16 @@ import (
 // We only pass these on to the analytics pipeline, so leave as strings for now
 type UserEndPayload struct {
 	ConnectionToken string
-	StreamNames     string
-	Protocols       string
-	IPs             string
+	StreamNames     []string
+	Protocols       []string
+	IPs             []string
 	TimeActiveSecs  string
 	UploadedBytes   string
 	DownloadedBytes string
-	Tags            string
-	PerIPSecs       string
-	PerProtocolSecs string
-	PerStreamSecs   string
+	Tags            []string
+	PerIPSecs       []string
+	PerProtocolSecs []string
+	PerStreamSecs   []string
 	SessionID       string
 }
 
@@ -44,16 +45,16 @@ func ParseUserEndPayload(payload MistTriggerBody) (UserEndPayload, error) {
 
 	return UserEndPayload{
 		ConnectionToken: lines[0],
-		StreamNames:     lines[1],
-		Protocols:       lines[2],
-		IPs:             lines[3],
+		StreamNames:     strings.Split(lines[1], ","),
+		Protocols:       strings.Split(lines[2], ","),
+		IPs:             strings.Split(lines[3], ","),
 		TimeActiveSecs:  lines[4],
 		UploadedBytes:   lines[5],
 		DownloadedBytes: lines[6],
-		Tags:            lines[7],
-		PerIPSecs:       lines[8],
-		PerProtocolSecs: lines[9],
-		PerStreamSecs:   lines[10],
+		Tags:            strings.Split(lines[7], ","),
+		PerIPSecs:       strings.Split(lines[8], ","),
+		PerProtocolSecs: strings.Split(lines[9], ","),
+		PerStreamSecs:   strings.Split(lines[10], ","),
 		SessionID:       lines[11],
 	}, nil
 }

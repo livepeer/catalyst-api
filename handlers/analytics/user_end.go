@@ -3,7 +3,6 @@ package analytics
 import (
 	"context"
 	"database/sql"
-	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -26,14 +25,6 @@ func (a *AnalyticsHandler) HandleUserEnd(ctx context.Context, payload *misttrigg
 		return nil
 	}
 
-	streamNames := strings.Split(payload.StreamNames, ",")
-	perStreamSecs := strings.Split(payload.PerStreamSecs, ",")
-	protocols := strings.Split(payload.Protocols, ",")
-	perProtocolSecs := strings.Split(payload.PerProtocolSecs, ",")
-	ips := strings.Split(payload.IPs, ",")
-	perIPSecs := strings.Split(payload.PerIPSecs, ",")
-	tags := strings.Split(payload.Tags, ",")
-
 	insertDynStmt := `insert into "` + USER_END_TABLE_NAME + `"(
 		"timestamp_ms",
 		"connection_token",
@@ -51,19 +42,20 @@ func (a *AnalyticsHandler) HandleUserEnd(ctx context.Context, payload *misttrigg
 		) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
 	_, err := a.db.Exec(
 		insertDynStmt,
-		time.Now().UnixMilli(),               // timestamp_ms
-		payload.ConnectionToken,         // connection_token
-		payload.DownloadedBytes,         // delivered_bytes
-		payload.UploadedBytes,           // uploaded_bytes
-		payload.TimeActiveSecs,          // session_duration_s
-		streamNames[len(streamNames)-1], // stream_id
-		pq.Array(streamNames),           // streams_viewed
-		pq.Array(perStreamSecs),         // stream_id_duration_s
-		pq.Array(protocols),             // protocol
-		pq.Array(perProtocolSecs),       // protocol_duration_s
-		pq.Array(ips),                   // ip_address
-		pq.Array(perIPSecs),             // ip_address_duration_s
-		pq.Array(tags),                  // tags
+		time.Now().UnixMilli(),                          // timestamp_ms
+		payload.ConnectionToken,                         // connection_token
+		payload.DownloadedBytes,                         // delivered_bytes
+		payload.UploadedBytes,                           // uploaded_bytes
+		payload.TimeActiveSecs,                          // session_duration_s
+		payload.StreamNames[len(payload.StreamNames)-1], // stream_id
+		pq.Array(payload.StreamNames),                   // streams_viewed
+		pq.Array(payload.PerStreamSecs),                 // stream_id_duration_s
+		pq.Array(payload.Protocols),                     // protocol
+		pq.Array(payload.PerProtocolSecs),               // protocol_duration_s
+		pq.Array(payload.IPs),                           // ip_address
+		pq.Array(payload.PerIPSecs),                     // ip_address_duration_s
+		pq.Array(payload.Tags),                          // tags
+
 	)
 	if err != nil {
 		return err
