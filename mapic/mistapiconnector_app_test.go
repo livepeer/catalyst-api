@@ -158,7 +158,8 @@ func TestReconcileMultistream(t *testing.T) {
 		return nil
 	}).AnyTimes()
 
-	mistState := mm.GetState()
+	mistState, err := mm.GetState()
+	require.NoError(t, err)
 	mc.reconcileMultistream(mistState)
 
 	expectedAutoToAdd := []streamTarget{
