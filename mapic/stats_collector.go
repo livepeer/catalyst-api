@@ -31,7 +31,7 @@ type metricsCollector struct {
 	infoProvider
 }
 
-func createMetricsCollector(ctx context.Context, period time.Duration, nodeID, ownRegion string, mapi clients.MistAPIClient, lapi *api.Client, producer event.AMQPProducer, amqpExchange string, infop infoProvider) *metricsCollector {
+func createMetricsCollector(nodeID, ownRegion string, mapi clients.MistAPIClient, lapi *api.Client, producer event.AMQPProducer, amqpExchange string, infop infoProvider) *metricsCollector {
 	mc := &metricsCollector{nodeID, ownRegion, mapi, lapi, producer, amqpExchange, infop}
 	return mc
 }
@@ -75,6 +75,7 @@ func (c *metricsCollector) collectMetrics(ctx context.Context, mistState clients
 		isIngest := isIngestStream(stream, info, mistState)
 
 		if !isIngest {
+			glog.V(8).Infof("Skipping non-ingest stream. streamId=%q", streamID)
 			continue
 		}
 

@@ -151,7 +151,7 @@ func (mc *mac) Start(ctx context.Context) error {
 		glog.Infof("AMQP url is empty!")
 	}
 	if producer != nil && mc.config.MistScrapeMetrics {
-		mc.metricsCollector = createMetricsCollector(ctx, statsCollectionPeriod, mc.nodeID, mc.ownRegion, mc.mist, lapi, producer, ownExchangeName, mc)
+		mc.metricsCollector = createMetricsCollector(mc.nodeID, mc.ownRegion, mc.mist, lapi, producer, ownExchangeName, mc)
 	}
 
 	mc.multistreamUpdated = make(chan struct{}, 1)
