@@ -116,7 +116,7 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	// Handler for USER_NEW triggers
 	broker.OnUserNew(accessControlHandlers.HandleUserNew)
 
-	// Handler for USER_END triggers. Only do this if we have a database
+	// Handler for USER_END triggers.
 	broker.OnUserEnd(analyticsHandlers.HandleUserEnd)
 
 	// Endpoint to receive segments and manifests that ffmpeg produces
