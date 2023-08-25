@@ -16,6 +16,7 @@ import (
 	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/handlers/accesscontrol"
 	"github.com/livepeer/catalyst-api/handlers/admin"
+	"github.com/livepeer/catalyst-api/handlers/analytics"
 	"github.com/livepeer/catalyst-api/handlers/ffmpeg"
 	"github.com/livepeer/catalyst-api/handlers/geolocation"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
@@ -112,6 +113,9 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 
 	// Handler for USER_NEW triggers
 	broker.OnUserNew(accessControlHandlers.HandleUserNew)
+
+	// Handler for USER_END triggers
+	broker.OnUserEnd(analytics.HandleUserEnd)
 
 	// Endpoint to receive segments and manifests that ffmpeg produces
 	router.PUT("/api/ffmpeg/:id/:filename", withLogging(ffmpegSegmentingHandlers.NewFile()))
