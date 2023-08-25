@@ -51,7 +51,7 @@ func (a *AnalyticsHandler) HandleUserEnd(ctx context.Context, payload *misttrigg
 		) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
 	_, err := a.db.Exec(
 		insertDynStmt,
-		time.Now().Unix(),               // timestamp_ms
+		time.Now().UnixMilli(),               // timestamp_ms
 		payload.ConnectionToken,         // connection_token
 		payload.DownloadedBytes,         // delivered_bytes
 		payload.UploadedBytes,           // uploaded_bytes
