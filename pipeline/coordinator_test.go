@@ -587,10 +587,8 @@ func recordingHandler(err error) (Handler, <-chan *JobInfo) {
 		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
 			jobs <- job
 			if err != nil {
-				fmt.Println("WROTE TO CHANNEL " + err.Error())
 				return nil, err
 			}
-			fmt.Println("WROTE TO CHANNEL")
 			return testHandlerResult, nil
 		},
 	}

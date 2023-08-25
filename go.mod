@@ -9,6 +9,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cucumber/godog v0.12.5
 	github.com/d1str0/pkcs7 v0.0.0-20200424205038-d65c16a5759a
+	github.com/fergusstrange/embedded-postgres v1.24.0
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/golang/glog v1.1.1
 	github.com/golang/mock v1.6.0
@@ -140,6 +141,7 @@ require (
 	github.com/tomnomnom/linkheader v0.0.0-20180905144013-02ca5825eb80 // indirect
 	github.com/u2takey/go-utils v0.3.1 // indirect
 	github.com/whyrusleeping/cbor-gen v0.0.0-20230418232409-daab9ece03a0 // indirect
+	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	go.opentelemetry.io/otel v1.16.0 // indirect
 	go.opentelemetry.io/otel/metric v1.16.0 // indirect

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 )
 
@@ -26,11 +27,17 @@ func (a *AnalyticsHandler) HandleUserEnd(ctx context.Context, payload *misttrigg
 	}
 
 	streamNames := strings.Split(payload.StreamNames, ",")
+	perStreamSecs := strings.Split(payload.PerStreamSecs, ",")
+	protocols := strings.Split(payload.Protocols, ",")
+	perProtocolSecs := strings.Split(payload.PerProtocolSecs, ",")
+	ips := strings.Split(payload.IPs, ",")
+	perIPSecs := strings.Split(payload.PerIPSecs, ",")
+	tags := strings.Split(payload.Tags, ",")
 
 	insertDynStmt := `insert into "` + USER_END_TABLE_NAME + `"(
 		"timestamp_ms",
 		"connection_token",
-		"delivered_bytes",
+		"downloaded_bytes",
 		"uploaded_bytes",
 		"session_duration_s",
 		"stream_id",
@@ -50,13 +57,13 @@ func (a *AnalyticsHandler) HandleUserEnd(ctx context.Context, payload *misttrigg
 		payload.UploadedBytes,           // uploaded_bytes
 		payload.TimeActiveSecs,          // session_duration_s
 		streamNames[len(streamNames)-1], // stream_id
-		payload.StreamNames,             // streams_viewed
-		payload.PerStreamSecs,           // stream_id_duration_s
-		payload.Protocols,               // protocol
-		payload.PerProtocolSecs,         // protocol_duration_s
-		payload.IPs,                     // ip_address
-		payload.PerIPSecs,               // ip_address_duration_s
-		payload.Tags,                    // tags
+		pq.Array(streamNames),           // streams_viewed
+		pq.Array(perStreamSecs),         // stream_id_duration_s
+		pq.Array(protocols),             // protocol
+		pq.Array(perProtocolSecs),       // protocol_duration_s
+		pq.Array(ips),                   // ip_address
+		pq.Array(perIPSecs),             // ip_address_duration_s
+		pq.Array(tags),                  // tags
 	)
 	if err != nil {
 		return err
