@@ -7,13 +7,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/hashicorp/serf/serf"
 	"log"
 	"math/rand"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/hashicorp/serf/serf"
 
 	"github.com/golang/glog"
 	_ "github.com/lib/pq"
@@ -259,7 +260,7 @@ func main() {
 	})
 
 	group.Go(func() error {
-		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker)
+		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker, metricsDB)
 	})
 
 	if cli.ShouldMapic() {
