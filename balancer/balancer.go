@@ -335,10 +335,12 @@ func (b *BalancerImpl) GetBestNode(ctx context.Context, redirectPrefixes []strin
 	return fallbackNode(fallbackAddr, fallbackPrefix, playbackID, redirectPrefixes[0], err)
 }
 
+// `playbackID`s matching the pattern `....-....-.....-....`
+var regexpStreamKey = regexp.MustCompile(`^(?:\w{4}-){3}\w{4}$`)
+
 func fallbackNode(fallbackAddr, fallbackPrefix, playbackID, defaultPrefix string, err error) (string, string, error) {
 	// Check for `playbackID`s matching the pattern `....-....-.....-....`
-	r := regexp.MustCompile(`^(?:\w{4}-){3}\w{4}$`)
-	if r.MatchString(playbackID) {
+	if regexpStreamKey.MatchString(playbackID) {
 		return fallbackAddr, playbackID, nil
 	}
 
