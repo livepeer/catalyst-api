@@ -6,14 +6,17 @@ import (
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/metrics"
 	mockbalancer "github.com/livepeer/catalyst-api/mocks/balancer"
 	mockcluster "github.com/livepeer/catalyst-api/mocks/cluster"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,11 +54,12 @@ func TestPlaybackIDParserWithPrefix(t *testing.T) {
 	for i := 0; i < rand.Int()%16+1; i++ {
 		id := randomPlaybackID(rand.Int()%24 + 1)
 		path := fmt.Sprintf("/hls/%s+%s/index.m3u8", randomPrefix(), id)
-		_, playbackID, _, parsed := parsePlaybackID(path)
-		if !parsed {
+		pathType, _, playbackID, _ := parsePlaybackID(path)
+		if pathType == "" {
 			t.Fail()
 		}
 		require.Equal(t, id, playbackID)
+		require.Equal(t, pathType, "hls")
 	}
 }
 
@@ -64,8 +68,8 @@ func TestPlaybackIDParserWithSegment(t *testing.T) {
 		id := randomPlaybackID(rand.Int()%24 + 1)
 		seg := "2_1"
 		path := fmt.Sprintf("/hls/%s+%s/%s/index.m3u8", randomPrefix(), id, seg)
-		_, playbackID, suffix, parsed := parsePlaybackID(path)
-		if !parsed {
+		pathType, _, playbackID, suffix := parsePlaybackID(path)
+		if pathType == "" {
 			t.Fail()
 		}
 		require.Equal(t, id, playbackID)
@@ -77,8 +81,8 @@ func TestPlaybackIDParserWithoutPrefix(t *testing.T) {
 	for i := 0; i < rand.Int()%16+1; i++ {
 		id := randomPlaybackID(rand.Int()%24 + 1)
 		path := fmt.Sprintf("/hls/%s/index.m3u8", id)
-		_, playbackID, _, parsed := parsePlaybackID(path)
-		if !parsed {
+		pathType, _, playbackID, _ := parsePlaybackID(path)
+		if pathType == "" {
 			t.Fail()
 		}
 		require.Equal(t, id, playbackID)
@@ -325,6 +329,55 @@ func TestNodeHostPortRedirect(t *testing.T) {
 		result(n).
 		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", "https://right-host/any/path")
+}
+
+func TestCdnRedirect(t *testing.T) {
+	n := mockHandlers(t)
+	CdnRedirectedPlaybackId := "def_ZXY-999"
+	n.Config.NodeHost = "someurl.com"
+	n.Config.CdnRedirectPrefix, _ = url.Parse("https://external-cdn.com/mist")
+	n.Config.CdnRedirectPlaybackIDs = []string{CdnRedirectedPlaybackId}
+
+	// to be redirected to the closest node
+	requireReq(t, fmt.Sprintf("/hls/%s/index.m3u8", playbackID)).
+		result(n).
+		hasStatus(http.StatusTemporaryRedirect).
+		hasHeader("Location", fmt.Sprintf("http://%s/hls/%s/index.m3u8", closestNodeAddr, playbackID))
+
+	// playbackID is configured to be redirected to CDN but the path is /json_video... so redirect it to the closest node
+	requireReq(t, fmt.Sprintf("/json_video+%s.js", CdnRedirectedPlaybackId)).
+		result(n).
+		hasStatus(http.StatusTemporaryRedirect).
+		hasHeader("Location", fmt.Sprintf("http://%s/json_video+%s.js", closestNodeAddr, CdnRedirectedPlaybackId))
+
+	// playbackID is configured to be redirected to CDN but it's /webrtc
+	require.Equal(t, testutil.CollectAndCount(metrics.Metrics.CDNRedirectWebRTC406), 0)
+	requireReq(t, fmt.Sprintf("/webrtc/%s", CdnRedirectedPlaybackId)).
+		result(n).
+		hasStatus(http.StatusNotAcceptable)
+	require.Equal(t, testutil.CollectAndCount(metrics.Metrics.CDNRedirectWebRTC406), 1)
+	require.Equal(t, testutil.ToFloat64(metrics.Metrics.CDNRedirectWebRTC406.WithLabelValues("unknown")), float64(0))
+	require.Equal(t, testutil.ToFloat64(metrics.Metrics.CDNRedirectWebRTC406.WithLabelValues(CdnRedirectedPlaybackId)), float64(1))
+
+	// this playbackID is configured to be redirected to CDN
+	require.Equal(t, testutil.CollectAndCount(metrics.Metrics.CDNRedirectCount), 0)
+
+	requireReq(t, fmt.Sprintf("/hls/%s/index.m3u8", CdnRedirectedPlaybackId)).
+		result(n).
+		hasStatus(http.StatusTemporaryRedirect).
+		hasHeader("Location", fmt.Sprintf("http://external-cdn.com/mist/hls/%s/index.m3u8", CdnRedirectedPlaybackId))
+
+	require.Equal(t, testutil.CollectAndCount(metrics.Metrics.CDNRedirectCount), 1)
+	require.Equal(t, testutil.ToFloat64(metrics.Metrics.CDNRedirectCount.WithLabelValues("unknown")), float64(0))
+	require.Equal(t, testutil.ToFloat64(metrics.Metrics.CDNRedirectCount.WithLabelValues(CdnRedirectedPlaybackId)), float64(1))
+
+	// don't redirect if `CdnRedirectPrefix` is not configured
+	n.Config.CdnRedirectPrefix = nil
+	requireReq(t, fmt.Sprintf("/hls/%s/index.m3u8", CdnRedirectedPlaybackId)).
+		result(n).
+		hasStatus(http.StatusTemporaryRedirect).
+		hasHeader("Location", fmt.Sprintf("http://%s/hls/%s/index.m3u8", closestNodeAddr, CdnRedirectedPlaybackId))
+
 }
 
 type httpReq struct {
