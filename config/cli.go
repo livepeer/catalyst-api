@@ -59,8 +59,6 @@ type Cli struct {
 	GateURL                   string
 	StreamHealthHookURL       string
 	BroadcasterURL            string
-	CdnRedirectPrefix         *url.URL
-	CdnRedirectPlaybackIDs    []string
 }
 
 // Return our own URL for callback trigger purposes
