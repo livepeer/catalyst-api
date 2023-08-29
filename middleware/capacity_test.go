@@ -90,7 +90,8 @@ func TestItTakesIntoAccountInFlightHTTPRequests(t *testing.T) {
 	handler := cm.HasCapacity(coordinator, next)
 
 	// Call the handler
-	timeout, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	timeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	g, _ := errgroup.WithContext(timeout)
 	var responseCodes []int = make([]int, 100)
 	for i := 0; i < 100; i++ {
