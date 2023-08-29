@@ -12,6 +12,7 @@ const (
 	MaxVideoBitrate         = 288_000_000
 	TrackTypeVideo          = "video"
 	TrackTypeAudio          = "audio"
+	defaultCRF              = 23
 )
 
 type InputVideo struct {
@@ -73,6 +74,7 @@ var DefaultProfile360p = EncodedProfile{
 	Bitrate: 1_000_000,
 	Width:   640,
 	Height:  360,
+	CRF:     defaultCRF,
 }
 var DefaultProfile720p = EncodedProfile{
 	Name:    "720p0",
@@ -80,6 +82,7 @@ var DefaultProfile720p = EncodedProfile{
 	Bitrate: 4_000_000,
 	Width:   1280,
 	Height:  720,
+	CRF:     defaultCRF,
 }
 
 // DefaultTranscodeProfiles defines the default set of encoding profiles to use when none are specified
@@ -119,6 +122,7 @@ func GenerateSingleProfileWithTargetBitrate(videoTrack InputTrack, videoBitrate 
 		FPS:     0,
 		Width:   videoTrack.Width,
 		Height:  videoTrack.Height,
+		CRF:     defaultCRF,
 	})
 	return profiles
 }
@@ -149,6 +153,7 @@ func GetDefaultPlaybackProfiles(video InputTrack) ([]EncodedProfile, error) {
 		FPS:     0,
 		Width:   nearestEven(video.Width),
 		Height:  nearestEven(video.Height),
+		CRF:     defaultCRF,
 	})
 	return profiles, nil
 }
@@ -170,6 +175,7 @@ func lowBitrateProfile(video InputTrack) EncodedProfile {
 		Bitrate: bitrate,
 		Width:   nearestEven(video.Width),
 		Height:  nearestEven(video.Height),
+		CRF:     defaultCRF,
 	}
 }
 
@@ -189,6 +195,7 @@ type EncodedProfile struct {
 	Encoder      string `json:"encoder,omitempty"`
 	ColorDepth   int64  `json:"colorDepth,omitempty"`
 	ChromaFormat int64  `json:"chromaFormat,omitempty"`
+	CRF          uint   `json:"crf"`
 }
 
 type OutputVideo struct {
