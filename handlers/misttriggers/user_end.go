@@ -11,6 +11,7 @@ import (
 
 // We only pass these on to the analytics pipeline, so leave as strings for now
 type UserEndPayload struct {
+	TriggerID       string
 	ConnectionToken string
 	StreamNames     []string
 	Protocols       []string
@@ -37,13 +38,14 @@ type UserEndPayload struct {
 // comma-separated list of seconds spend connected to each protocol, same order as protocol list, string
 // comma-separated list of seconds spend connected to each stream, same order as stream list, string
 // the session ID, string
-func ParseUserEndPayload(payload MistTriggerBody) (UserEndPayload, error) {
+func ParseUserEndPayload(payload MistTriggerBody, TriggerID string) (UserEndPayload, error) {
 	lines := payload.Lines()
 	if len(lines) != 12 {
 		return UserEndPayload{}, fmt.Errorf("expected 12 lines in USER_NEW payload but got lines=%d payload=%s", len(lines), payload)
 	}
 
 	return UserEndPayload{
+		TriggerID:       TriggerID,
 		ConnectionToken: lines[0],
 		StreamNames:     strings.Split(lines[1], ","),
 		Protocols:       strings.Split(lines[2], ","),
@@ -60,7 +62,7 @@ func ParseUserEndPayload(payload MistTriggerBody) (UserEndPayload, error) {
 }
 
 func (d *MistCallbackHandlersCollection) TriggerUserEnd(ctx context.Context, w http.ResponseWriter, req *http.Request, body MistTriggerBody) {
-	payload, err := ParseUserEndPayload(body)
+	payload, err := ParseUserEndPayload(body, req.Header.Get("X-Trigger-UUID"))
 	if err != nil {
 		glog.Infof("Error parsing USER_END payload error=%q payload=%q", err, string(body))
 		w.WriteHeader(http.StatusBadRequest)

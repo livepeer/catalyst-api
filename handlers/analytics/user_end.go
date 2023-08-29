@@ -26,6 +26,7 @@ func (a *AnalyticsHandler) HandleUserEnd(ctx context.Context, payload *misttrigg
 	}
 
 	insertDynStmt := `insert into "` + USER_END_TABLE_NAME + `"(
+		"id",
 		"timestamp_ms",
 		"connection_token",
 		"downloaded_bytes",
@@ -39,9 +40,10 @@ func (a *AnalyticsHandler) HandleUserEnd(ctx context.Context, payload *misttrigg
 		"ip_address",
 		"ip_address_duration_s",
 		"tags"
-		) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
+		) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
 	_, err := a.db.Exec(
 		insertDynStmt,
+		payload.TriggerID,                               // id
 		time.Now().UnixMilli(),                          // timestamp_ms
 		payload.ConnectionToken,                         // connection_token
 		payload.DownloadedBytes,                         // delivered_bytes

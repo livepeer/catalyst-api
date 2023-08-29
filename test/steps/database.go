@@ -27,6 +27,7 @@ func (s *StepContext) StartDatabase() error {
 	// Create the table we'll be writing to
 	_, err = metricsDB.Exec(`
 		CREATE table user_end (
+			id varchar,
 			timestamp_ms bigint,
 			connection_token varchar,
 			downloaded_bytes int,

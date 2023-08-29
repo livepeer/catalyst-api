@@ -50,13 +50,21 @@ func (s *StepContext) CreatePostRequestInternal(endpoint, payload string) error 
 	return s.postRequest(s.BaseInternalURL, endpoint, payload, map[string]string{})
 }
 
-func (s *StepContext) CreateTriggerRequest(trigger, payloadFile string) error {
+func (s *StepContext) CreateTriggerRequest(trigger, payloadFile, id string) error {
 	triggerFile := filepath.Join("fixtures", "trigger-payloads", payloadFile)
 	payloadBytes, err := os.ReadFile(triggerFile)
 	if err != nil {
 		return fmt.Errorf("failed to read trigger payload file %q: %s", triggerFile, err)
 	}
-	return s.postRequest(s.BaseInternalURL, "/api/mist/trigger", string(payloadBytes), map[string]string{"X-TRIGGER": trigger})
+	return s.postRequest(
+		s.BaseInternalURL,
+		"/api/mist/trigger",
+		string(payloadBytes),
+		map[string]string{
+			"X-TRIGGER":      trigger,
+			"X-Trigger-UUID": id,
+		},
+	)
 }
 
 func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map[string]string) error {
