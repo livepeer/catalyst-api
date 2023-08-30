@@ -10,7 +10,9 @@ Feature: Mist trigger handling
         Then Mist gets an HTTP response with code "200"
         And a row is written to the database containing the following values
             | column           | value                  |
-            | id               | abc-123                |
+            | uuid             | abc-123                |
             | stream_id        | video+111dip9jqar876kl |
-            | protocol         | WebRTC                 |
+            | stream_id_count  | 1                      |
+            | protocol         | HLS                    |
+            | protocol_count   | 2                      |
             | downloaded_bytes | 812                    |
