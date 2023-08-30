@@ -234,18 +234,22 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 // This has the main logic regarding the pipeline strategy. It starts jobs and
 // handles processing the response and triggering a fallback if appropriate.
 func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
-	// A bit hacky - this is effectively a dummy job object to allow us to reuse the runHandlerAsync and
-	// progress reporting logic. The real job objects still get created in startOneUploadJob().
+	streamName := config.SegmentingStreamName(p.RequestID)
+	log.AddContext(p.RequestID, "stream_name", streamName)
 	si := &JobInfo{
 		UploadJobPayload: p,
 		statusClient:     c.statusClient,
 		startTime:        time.Now(),
+		StreamName:       streamName,
+		result:           make(chan bool, 1),
 
 		numProfiles:    len(p.Profiles),
 		state:          "segmenting",
 		catalystRegion: os.Getenv("MY_REGION"),
 	}
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
+	c.Jobs.Store(streamName, si)
+	log.Log(si.RequestID, "Wrote to jobs cache")
 
 	c.runHandlerAsync(si, func() (*HandlerOutput, error) {
 		sourceURL, err := url.Parse(p.SourceFile)
@@ -275,15 +279,15 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 			return nil, fmt.Errorf("error copying input to storage: %w", err)
 		}
 
-		p.SourceFile = osTransferURL.String()  // OS URL used by mist
-		p.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert
-		p.InputFileInfo = inputVideoProbe
-		p.GenerateMP4 = ShouldGenerateMP4(sourceURL, p.Mp4TargetURL, p.FragMp4TargetURL, p.Mp4OnlyShort, p.InputFileInfo.Duration)
+		si.SourceFile = osTransferURL.String()  // OS URL used by mist
+		si.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert
+		si.InputFileInfo = inputVideoProbe
+		si.GenerateMP4 = ShouldGenerateMP4(sourceURL, p.Mp4TargetURL, p.FragMp4TargetURL, p.Mp4OnlyShort, p.InputFileInfo.Duration)
 
 		log.AddContext(p.RequestID, "new_source_url", p.SourceFile)
 		log.AddContext(p.RequestID, "signed_url", p.SignedSourceURL)
 
-		c.startUploadJob(p)
+		c.startUploadJob(si)
 		return nil, nil
 	})
 }
@@ -307,7 +311,7 @@ func ShouldGenerateMP4(sourceURL, mp4TargetUrl *url.URL, fragMp4TargetUrl *url.U
 	return false
 }
 
-func (c *Coordinator) startUploadJob(p UploadJobPayload) {
+func (c *Coordinator) startUploadJob(p *JobInfo) {
 	strategy := c.strategy
 	if p.PipelineStrategy.IsValid() {
 		strategy = p.PipelineStrategy
@@ -406,18 +410,16 @@ func checkDisplayAspectRatio(track video.InputTrack, requestID string) bool {
 // The `hasFallback` argument means the caller has a special logic to handle
 // failures (today this means re-running the job in another pipeline). If it's
 // set to true, error callbacks from this job will not be sent.
-func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, foreground, hasFallback bool) <-chan bool {
+func (c *Coordinator) startOneUploadJob(si *JobInfo, handler Handler, foreground, hasFallback bool) <-chan bool {
 	if !foreground {
-		p.RequestID = fmt.Sprintf("bg_%s", p.RequestID)
-		if p.HlsTargetURL != nil {
-			p.HlsTargetURL = p.HlsTargetURL.JoinPath("..", handler.Name(), path.Base(p.HlsTargetURL.Path))
+		si.RequestID = fmt.Sprintf("bg_%s", si.RequestID)
+		if si.HlsTargetURL != nil {
+			si.HlsTargetURL = si.HlsTargetURL.JoinPath("..", handler.Name(), path.Base(si.HlsTargetURL.Path))
 		}
 		// this will prevent the callbacks for this job from actually being sent
-		p.CallbackURL = ""
+		si.CallbackURL = ""
 	}
-	streamName := config.SegmentingStreamName(p.RequestID)
-	log.AddContext(p.RequestID, "stream_name", streamName)
-	log.AddContext(p.RequestID, "handler", handler.Name())
+	log.AddContext(si.RequestID, "handler", handler.Name())
 
 	var pipeline = handler.Name()
 	if pipeline == "external" {
@@ -426,52 +428,42 @@ func (c *Coordinator) startOneUploadJob(p UploadJobPayload, handler Handler, for
 
 	// Codecs are parsed here primarily to write codec stats for each job
 	var videoCodec, audioCodec string
-	videoTrack, err := p.InputFileInfo.GetTrack(video.TrackTypeVideo)
+	videoTrack, err := si.InputFileInfo.GetTrack(video.TrackTypeVideo)
 	if err != nil {
 		videoCodec = "n/a"
 	} else {
 		videoCodec = videoTrack.Codec
 	}
-	audioTrack, err := p.InputFileInfo.GetTrack(video.TrackTypeAudio)
+	audioTrack, err := si.InputFileInfo.GetTrack(video.TrackTypeAudio)
 	if err != nil {
 		audioCodec = "n/a"
 	} else {
 		audioCodec = audioTrack.Codec
 	}
 
-	si := &JobInfo{
-		UploadJobPayload: p,
-		StreamName:       streamName,
-		handler:          handler,
-		hasFallback:      hasFallback,
-		statusClient:     c.statusClient,
-		startTime:        time.Now(),
-		result:           make(chan bool, 1),
+	si.handler = handler
+	si.hasFallback = hasFallback
+	si.pipeline = pipeline
+	si.numProfiles = len(si.Profiles)
+	si.state = "segmenting"
+	si.transcodedSegments = 0
+	si.targetSegmentSizeSecs = si.TargetSegmentSizeSecs
+	si.catalystRegion = os.Getenv("MY_REGION")
+	si.sourceCodecVideo = videoCodec
+	si.sourceCodecAudio = audioCodec
+	si.sourceWidth = videoTrack.Width
+	si.sourceHeight = videoTrack.Height
+	si.sourceFPS = videoTrack.FPS
+	si.sourceBitrateVideo = videoTrack.Bitrate
+	si.sourceBitrateAudio = audioTrack.Bitrate
+	si.sourceChannels = audioTrack.Channels
+	si.sourceSampleRate = audioTrack.SampleRate
+	si.sourceSampleBits = audioTrack.SampleBits
+	si.sourceBytes = si.InputFileInfo.SizeBytes
+	si.sourceDurationMs = int64(math.Round(si.InputFileInfo.Duration) * 1000)
+	si.DownloadDone = time.Now()
 
-		pipeline:              pipeline,
-		numProfiles:           len(p.Profiles),
-		state:                 "segmenting",
-		transcodedSegments:    0,
-		targetSegmentSizeSecs: p.TargetSegmentSizeSecs,
-		catalystRegion:        os.Getenv("MY_REGION"),
-		sourceCodecVideo:      videoCodec,
-		sourceCodecAudio:      audioCodec,
-		sourceWidth:           videoTrack.Width,
-		sourceHeight:          videoTrack.Height,
-		sourceFPS:             videoTrack.FPS,
-		sourceBitrateVideo:    videoTrack.Bitrate,
-		sourceBitrateAudio:    audioTrack.Bitrate,
-		sourceChannels:        audioTrack.Channels,
-		sourceSampleRate:      audioTrack.SampleRate,
-		sourceSampleBits:      audioTrack.SampleBits,
-		sourceBytes:           p.InputFileInfo.SizeBytes,
-		sourceDurationMs:      int64(math.Round(p.InputFileInfo.Duration) * 1000),
-		DownloadDone:          time.Now(),
-	}
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
-
-	c.Jobs.Store(streamName, si)
-	log.Log(si.RequestID, "Wrote to jobs cache")
 
 	c.runHandlerAsync(si, func() (*HandlerOutput, error) {
 		return si.handler.HandleStartUploadJob(si)
