@@ -15,4 +15,6 @@ Feature: Mist trigger handling
             | stream_id_count  | 1                      |
             | protocol         | HLS                    |
             | protocol_count   | 2                      |
+            | ip_address       | 123.456.789.190        |
+            | ip_address_count | 1                      |
             | downloaded_bytes | 812                    |
