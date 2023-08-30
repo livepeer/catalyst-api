@@ -33,14 +33,14 @@ var userEndPayloadBadLines = MistTriggerBody(`
 `)
 
 func TestItCanParseAValidUserEndPayload(t *testing.T) {
-	p, err := ParseUserEndPayload(userEndPayload)
+	p, err := ParseUserEndPayload(userEndPayload, "example-uuid")
 	require.NoError(t, err)
 	require.Equal(t, 1, len(p.StreamNames))
 	require.Equal(t, "video+788dip9jqar876kl", p.StreamNames[0])
 }
 
 func TestItCanRejectABadUserEndPayload(t *testing.T) {
-	_, err := ParseUserEndPayload(userEndPayloadBadLines)
+	_, err := ParseUserEndPayload(userEndPayloadBadLines, "example-uuid")
 	require.ErrorContains(t, err, "expected 12 lines in USER_NEW payload")
 }
 

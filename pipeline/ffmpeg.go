@@ -25,8 +25,9 @@ type ffmpeg struct {
 	// The base of where to output source segments to
 	SourceOutputUrl string
 	// Broadcaster for local transcoding
-	Broadcaster clients.BroadcasterClient
-	probe       video.Prober
+	Broadcaster         clients.BroadcasterClient
+	probe               video.Prober
+	sourcePlaybackHosts map[string]string
 }
 
 func init() {
@@ -65,7 +66,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		job.SegmentingTargetURL = job.SourceFile
 	}
 	job.SegmentingDone = time.Now()
-	sendSourcePlayback(job)
+	f.sendSourcePlayback(job)
 	job.ReportProgress(clients.TranscodeStatusPreparingCompleted, 1)
 
 	// Transcode Beginning
@@ -153,7 +154,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 var sourcePlaybackBucketBlocklist = []string{"lp-us-catalyst-vod-pvt-monster", "lp-us-catalyst-vod-pvt-com"}
 
-func sendSourcePlayback(job *JobInfo) {
+func (f *ffmpeg) sendSourcePlayback(job *JobInfo) {
 	segmentingTargetURL, err := url.Parse(job.SegmentingTargetURL)
 	if err != nil {
 		log.LogError(job.RequestID, "unable to parse url for source playback", err)
@@ -186,7 +187,20 @@ func sendSourcePlayback(job *JobInfo) {
 		log.LogError(job.RequestID, "unable to find a video track for source playback", err)
 		return
 	}
-	sourceMaster.Append("/"+path.Join(segmentingPath[2:]...), &m3u8.MediaPlaylist{}, m3u8.VariantParams{
+
+	sourceURL, err := url.Parse(job.SourceFile)
+	if err != nil {
+		log.LogError(job.RequestID, "unable to parse source url for source playback", err)
+		return
+	}
+
+	prefix := f.sourcePlaybackHosts[sourceURL.Host]
+	if clients.IsHLSInput(sourceURL) && prefix == "" {
+		log.Log(job.RequestID, "no source playback prefix found", "host", sourceURL.Host)
+		return
+	}
+
+	sourceMaster.Append(prefix+"/"+path.Join(segmentingPath[2:]...), &m3u8.MediaPlaylist{}, m3u8.VariantParams{
 		Bandwidth:  uint32(videoTrack.Bitrate),
 		Resolution: fmt.Sprintf("%dx%d", videoTrack.Width, videoTrack.Height),
 		Name:       fmt.Sprintf("%dp", videoTrack.Height),

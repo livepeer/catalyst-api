@@ -105,7 +105,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^we wait for 5 seconds$`, stepContext.Wait)
 	ctx.Step(`^(?:I|Mist) get[s]? an HTTP response with code "([^"]*)"$`, stepContext.CheckHTTPResponseCode)
 	ctx.Step(`^I get an HTTP response with code "([^"]*)" and the following body "([^"]*)"$`, stepContext.CheckHTTPResponseCodeAndBody)
-	ctx.Step(`^Mist calls the "([^"]*)" trigger with "([^"]*)"$`, stepContext.CreateTriggerRequest)
+	ctx.Step(`^Mist calls the "([^"]*)" trigger with "([^"]*)" and ID "([^"]*)"$`, stepContext.CreateTriggerRequest)
 	ctx.Step(`^my "(failed|successful)" (vod|playback) request metrics get recorded$`, stepContext.CheckRecordedMetrics)
 	ctx.Step(`^the body matches file "([^"]*)"$`, stepContext.CheckHTTPResponseBodyFromFile)
 	ctx.Step(`^the gate API will (allow|deny) playback$`, stepContext.SetGateAPIResponse)
