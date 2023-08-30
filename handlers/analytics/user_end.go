@@ -53,7 +53,7 @@ func (a *AnalyticsHandler) HandleUserEnd(ctx context.Context, payload *misttrigg
 		payload.Protocols[len(payload.Protocols)-1],     // protocol
 		len(payload.Protocols),                          // protocol_count
 		payload.IPs[len(payload.IPs)-1],                 // ip_address
-		len(payload.IPs)-1,                              // ip_address_count
+		len(payload.IPs),                                // ip_address_count
 		strings.Join(payload.Tags, ","),                 // tags
 
 	)
