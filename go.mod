@@ -27,7 +27,7 @@ require (
 	github.com/pquerna/cachecontrol v0.2.0
 	github.com/prometheus/client_golang v1.16.0
 	github.com/stretchr/testify v1.8.4
-	github.com/u2takey/ffmpeg-go v0.4.1
+	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xeipuuv/gojsonschema v1.2.0
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.3.0
