@@ -59,6 +59,7 @@ func startApp() error {
 		"-private-bucket",
 		"fixtures/playback-bucket",
 		"-gate-url=http://localhost:13000/api/access-control/gate",
+		"-external-transcoder=mediaconvert://examplekey:examplepass@127.0.0.1:11111?region=us-east-1&role=arn:aws:iam::exampleaccountid:examplerole&s3_aux_bucket=s3://example-bucket",
 		"-source-output",
 		sourceOutputDir,
 		"-no-mist",

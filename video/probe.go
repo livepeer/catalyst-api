@@ -67,10 +67,29 @@ func (p Probe) runProbe(url string, ffProbeOptions ...string) (iv InputVideo, er
 }
 
 func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
+	// parse filesize
+	size, err := strconv.ParseInt(probeData.Format.Size, 10, 64)
+	if err != nil {
+		return InputVideo{}, fmt.Errorf("error parsing filesize from probed data: %w", err)
+	}
+
 	// check for a valid video stream
 	videoStream := probeData.FirstVideoStream()
 	if videoStream == nil {
-		return InputVideo{}, errors.New("error checking for video: no video stream found")
+		audioStream := probeData.FirstAudioStream()
+		if audioStream == nil {
+			return InputVideo{}, errors.New("error checking for video: no video or audio stream found")
+		}
+
+		// Audio-only stream
+		iv := InputVideo{
+			Format:    findFormat(probeData.Format.FormatName),
+			Tracks:    []InputTrack{},
+			Duration:  float64(audioStream.DurationTs),
+			SizeBytes: size,
+		}
+		return addAudioTrack(probeData, iv)
+
 	}
 	// check for unsupported video stream(s)
 	for _, codec := range unsupportedVideoCodecList {
@@ -92,7 +111,6 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 	}
 	var (
 		bitrate int64
-		err     error
 	)
 	if bitRateValue == "" {
 		bitrate = DefaultProfile720p.Bitrate
@@ -107,11 +125,7 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 		// correct bitrates cannot be probed for hls manifests, so override with default bitrate
 		bitrate = DefaultProfile720p.Bitrate
 	}
-	// parse filesize
-	size, err := strconv.ParseInt(probeData.Format.Size, 10, 64)
-	if err != nil {
-		return InputVideo{}, fmt.Errorf("error parsing filesize from probed data: %w", err)
-	}
+
 	// parse fps
 	fps, err := parseFps(videoStream.AvgFrameRate)
 	if err != nil {

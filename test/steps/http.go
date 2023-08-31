@@ -112,6 +112,7 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 
 	if strings.HasPrefix(payload, "a valid upload vod request") {
 		req := DefaultUploadRequest
+		req.PipelineStrategy = "fallback_external"
 		req.URL = "file://" + sourceFile.Name()
 		if payload, err = req.ToJSON(); err != nil {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
