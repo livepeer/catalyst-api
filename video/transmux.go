@@ -60,13 +60,17 @@ func MuxTStoFMP4(fmp4ManifestOutputFile string, inputs ...string) error {
 		"-hls_time", "10",
 		"-hls_playlist_type", "vod",
 		"-hls_segment_type", "fmp4",
+		// unfortunately I had to hard-code these, ffmpeg throws an error with our ts input otherwise
+		// similar to https://stackoverflow.com/questions/48005093/ffmpeg-incompatible-with-output-codec-id
+		// there doesn't seem to be a way for ffmpeg to work out the tags automatically,
+		// if our codecs change we'll need to update these
 		"-vtag", "avc1",
 		"-atag", "mp4a",
 	)
 	args = append(args, mapArgs...)
 	args = append(args, fmp4ManifestOutputFile)
 
-	timeout, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	timeout, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(timeout, "ffmpeg", args...)
 
