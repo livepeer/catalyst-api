@@ -14,7 +14,6 @@ type UserEndPayload struct {
 	TriggerID       string
 	ConnectionToken string
 	StreamNames     []string
-	Protocols       []string
 	IPs             []string
 	TimeActiveSecs  string
 	UploadedBytes   string
@@ -24,6 +23,20 @@ type UserEndPayload struct {
 	PerProtocolSecs []string
 	PerStreamSecs   []string
 	SessionID       string
+
+	/*
+		Protocols is a list of the protocols in use for the "user" session. Values can be (not exhaustive):
+
+		"HLS" / "WebRTC" 	= viewers of a stream
+		"INPUT:RTMP" 		= data received over RTMP ingest, the INPUT:TSSRT ones are data received over SRT ingest, the INPUT:WebRTC ones are data received over WebRTC ingest.
+		"OUTPUT:DTSC" 		= inter-server replication (does cost us bandwidth, but not related to specific viewers).
+		"OUTPUT:EBML" 		= the Opus/AAC transcodes (ignore, internal-only traffic).
+		"OUTPUT:HTTPTS" 	= our recordings (ignore, internal/S3 traffic)
+		"OUTPUT:Livepeer" 	= transcodes (byte count is wrong from the looks of it...).
+		"OUTPUT:RTMP" 		= outgoing RTMP pushes (e.g. multistreaming).
+		"OUTPUT:TSSRT" 		= outgoing SRT pushes (e.g. multistreaming).
+	*/
+	Protocols []string
 }
 
 // connection token ("tkn" param), string
