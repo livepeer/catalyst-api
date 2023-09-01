@@ -35,8 +35,6 @@ const (
 	StrategyExternalDominance Strategy = "external"
 	// Only execute the FFMPEG / Livepeer pipeline
 	StrategyCatalystFfmpegDominance Strategy = "catalyst_ffmpeg"
-	// Execute the FFMPEG / Livepeer pipeline in foreground and the external transcoder in background.
-	StrategyBackgroundExternal Strategy = "background_external"
 	// Execute the FFMPEG pipeline first and fallback to the external transcoding
 	// provider on errors.
 	StrategyFallbackExternal Strategy = "fallback_external"
@@ -49,7 +47,7 @@ const (
 
 func (s Strategy) IsValid() bool {
 	switch s {
-	case StrategyExternalDominance, StrategyCatalystFfmpegDominance, StrategyBackgroundExternal, StrategyFallbackExternal:
+	case StrategyExternalDominance, StrategyCatalystFfmpegDominance, StrategyFallbackExternal:
 		return true
 	default:
 		return false
@@ -75,9 +73,6 @@ type UploadJobPayload struct {
 	GenerateMP4           bool
 	Encryption            *EncryptionPayload
 	InputFileInfo         video.InputVideo
-	SignedSourceURL       string
-	InFallbackMode        bool
-	LivepeerSupported     bool
 	SourceCopy            bool
 }
 
@@ -96,16 +91,12 @@ type UploadJobResult struct {
 type JobInfo struct {
 	mu sync.Mutex
 	UploadJobPayload
+	PipelineInfo
 	StreamName string
 	// this is only set&used internally in the mist pipeline
 	SegmentingTargetURL string
-	SourceOutputURL     string
 
-	handler      Handler
-	hasFallback  bool
 	statusClient clients.TranscodeStatusClient
-	startTime    time.Time
-	result       chan bool
 
 	SourcePlaybackDone time.Time
 	DownloadDone       time.Time
@@ -126,12 +117,24 @@ type JobInfo struct {
 	sourceSampleRate   int
 	sourceSampleBits   int
 
-	transcodedSegments    int
 	targetSegmentSizeSecs int64
-	pipeline              string
 	catalystRegion        string
 	numProfiles           int
-	state                 string
+	inFallbackMode        bool
+	SignedSourceURL       string
+	LivepeerSupported     bool
+}
+
+// PipelineInfo represents the state of an individual pipeline, i.e. ffmpeg or mediaconvert
+// These fields have been split out from JobInfo to ensure that they are zeroed out in startOneUploadJob() when a fallback pipeline runs
+type PipelineInfo struct {
+	startTime          time.Time
+	result             chan bool
+	handler            Handler
+	hasFallback        bool
+	transcodedSegments int
+	pipeline           string
+	state              string
 }
 
 func (j *JobInfo) ReportProgress(stage clients.TranscodeStatus, completionRatio float64) {
@@ -239,13 +242,14 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 	si := &JobInfo{
 		UploadJobPayload: p,
 		statusClient:     c.statusClient,
-		startTime:        time.Now(),
 		StreamName:       streamName,
-		result:           make(chan bool, 1),
 
 		numProfiles:    len(p.Profiles),
-		state:          "segmenting",
 		catalystRegion: os.Getenv("MY_REGION"),
+		PipelineInfo: PipelineInfo{
+			startTime: time.Now(),
+			state:     "segmenting",
+		},
 	}
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 	c.Jobs.Store(streamName, si)
@@ -283,9 +287,10 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		si.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert
 		si.InputFileInfo = inputVideoProbe
 		si.GenerateMP4 = ShouldGenerateMP4(sourceURL, p.Mp4TargetURL, p.FragMp4TargetURL, p.Mp4OnlyShort, p.InputFileInfo.Duration)
+		si.DownloadDone = time.Now()
 
-		log.AddContext(p.RequestID, "new_source_url", p.SourceFile)
-		log.AddContext(p.RequestID, "signed_url", p.SignedSourceURL)
+		log.AddContext(p.RequestID, "new_source_url", si.SourceFile)
+		log.AddContext(p.RequestID, "signed_url", si.SignedSourceURL)
 
 		c.startUploadJob(si)
 		return nil, nil
@@ -322,20 +327,17 @@ func (c *Coordinator) startUploadJob(p *JobInfo) {
 
 	switch strategy {
 	case StrategyExternalDominance:
-		c.startOneUploadJob(p, c.pipeExternal, true, false)
+		c.startOneUploadJob(p, c.pipeExternal, false)
 	case StrategyCatalystFfmpegDominance:
-		c.startOneUploadJob(p, c.pipeFfmpeg, true, false)
-	case StrategyBackgroundExternal:
-		c.startOneUploadJob(p, c.pipeFfmpeg, true, false)
-		c.startOneUploadJob(p, c.pipeExternal, false, false)
+		c.startOneUploadJob(p, c.pipeFfmpeg, false)
 	case StrategyFallbackExternal:
 		// nolint:errcheck
 		go recovered(func() (t bool, e error) {
-			success := <-c.startOneUploadJob(p, c.pipeFfmpeg, true, true)
+			success := <-c.startOneUploadJob(p, c.pipeFfmpeg, true)
 			if !success {
-				p.InFallbackMode = true
+				p.inFallbackMode = true
 				log.Log(p.RequestID, "Entering fallback pipeline")
-				c.startOneUploadJob(p, c.pipeExternal, true, false)
+				c.startOneUploadJob(p, c.pipeExternal, false)
 			}
 			return
 		})
@@ -410,15 +412,7 @@ func checkDisplayAspectRatio(track video.InputTrack, requestID string) bool {
 // The `hasFallback` argument means the caller has a special logic to handle
 // failures (today this means re-running the job in another pipeline). If it's
 // set to true, error callbacks from this job will not be sent.
-func (c *Coordinator) startOneUploadJob(si *JobInfo, handler Handler, foreground, hasFallback bool) <-chan bool {
-	if !foreground {
-		si.RequestID = fmt.Sprintf("bg_%s", si.RequestID)
-		if si.HlsTargetURL != nil {
-			si.HlsTargetURL = si.HlsTargetURL.JoinPath("..", handler.Name(), path.Base(si.HlsTargetURL.Path))
-		}
-		// this will prevent the callbacks for this job from actually being sent
-		si.CallbackURL = ""
-	}
+func (c *Coordinator) startOneUploadJob(si *JobInfo, handler Handler, hasFallback bool) <-chan bool {
 	log.AddContext(si.RequestID, "handler", handler.Name())
 
 	var pipeline = handler.Name()
@@ -441,14 +435,19 @@ func (c *Coordinator) startOneUploadJob(si *JobInfo, handler Handler, foreground
 		audioCodec = audioTrack.Codec
 	}
 
-	si.handler = handler
-	si.hasFallback = hasFallback
-	si.pipeline = pipeline
-	si.numProfiles = len(si.Profiles)
-	si.state = "segmenting"
-	si.transcodedSegments = 0
+	si.PipelineInfo = PipelineInfo{
+		startTime:          time.Now(),
+		result:             make(chan bool, 1),
+		handler:            handler,
+		hasFallback:        hasFallback,
+		transcodedSegments: 0,
+		pipeline:           pipeline,
+		state:              "segmenting",
+	}
+
 	si.targetSegmentSizeSecs = si.TargetSegmentSizeSecs
-	si.catalystRegion = os.Getenv("MY_REGION")
+	si.sourceBytes = si.InputFileInfo.SizeBytes
+	si.sourceDurationMs = int64(math.Round(si.InputFileInfo.Duration) * 1000)
 	si.sourceCodecVideo = videoCodec
 	si.sourceCodecAudio = audioCodec
 	si.sourceWidth = videoTrack.Width
@@ -459,11 +458,10 @@ func (c *Coordinator) startOneUploadJob(si *JobInfo, handler Handler, foreground
 	si.sourceChannels = audioTrack.Channels
 	si.sourceSampleRate = audioTrack.SampleRate
 	si.sourceSampleBits = audioTrack.SampleBits
-	si.sourceBytes = si.InputFileInfo.SizeBytes
-	si.sourceDurationMs = int64(math.Round(si.InputFileInfo.Duration) * 1000)
-	si.DownloadDone = time.Now()
 
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
+	c.Jobs.Store(si.StreamName, si)
+	log.Log(si.RequestID, "Wrote to jobs cache")
 
 	c.runHandlerAsync(si, func() (*HandlerOutput, error) {
 		return si.handler.HandleStartUploadJob(si)
@@ -525,7 +523,7 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 		fmt.Sprint(job.numProfiles),
 		job.state,
 		config.Version,
-		strconv.FormatBool(job.InFallbackMode),
+		strconv.FormatBool(job.inFallbackMode),
 		strconv.FormatBool(job.LivepeerSupported),
 	}
 
@@ -572,7 +570,7 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
 
 	// If it's a fallback, we want a unique Request ID so that it doesn't clash with the row that's already been created for the first pipeline
 	metricsRequestID := job.RequestID
-	if job.InFallbackMode {
+	if job.inFallbackMode {
 		metricsRequestID = "fb_" + metricsRequestID
 	}
 
@@ -623,7 +621,7 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
 		job.sourceDurationMs,
 		log.RedactURL(job.SourceFile),
 		targetURL,
-		job.InFallbackMode,
+		job.inFallbackMode,
 		job.SourcePlaybackDone.Unix(),
 		job.DownloadDone.Unix(),
 		job.SegmentingDone.Unix(),

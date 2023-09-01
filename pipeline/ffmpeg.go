@@ -52,7 +52,6 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	sourceOutputURL := sourceOutputBaseURL.JoinPath(job.RequestID)
 	segmentingTargetURL := sourceOutputURL.JoinPath(config.SEGMENTING_SUBDIR, config.SEGMENTING_TARGET_MANIFEST)
 
-	job.SourceOutputURL = sourceOutputURL.String()
 	job.SegmentingTargetURL = segmentingTargetURL.String()
 	log.AddContext(job.RequestID, "segmented_url", job.SegmentingTargetURL)
 	job.ReportProgress(clients.TranscodeStatusPreparing, 0.3)
@@ -79,7 +78,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		TranscodeAPIUrl:   job.TranscodeAPIUrl,
 		Profiles:          job.Profiles,
 		SourceManifestURL: job.SegmentingTargetURL,
-		SourceOutputURL:   job.SourceOutputURL,
+		SourceOutputURL:   sourceOutputURL.String(),
 		HlsTargetURL:      toStr(job.HlsTargetURL),
 		Mp4TargetUrl:      toStr(job.Mp4TargetURL),
 		FragMp4TargetUrl:  toStr(job.FragMp4TargetURL),
