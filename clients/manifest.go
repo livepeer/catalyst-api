@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	MASTER_MANIFEST_FILENAME = "index.m3u8"
-	MANIFEST_UPLOAD_TIMEOUT  = 5 * time.Minute
-	FMP4_POSTFIX_DIR         = "fmp4"
+	MasterManifestFilename = "index.m3u8"
+	DashManifestFilename   = "index.mpd"
+	ManifestUploadTimeout  = 5 * time.Minute
+	Fmp4PostfixDir         = "fmp4"
 )
 
 func DownloadRetryBackoffLong() backoff.BackOff {
@@ -146,7 +147,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		manifestFilename := "index.m3u8"
 		renditionManifestBaseURL := fmt.Sprintf("%s/%s", targetOSURL, profile.Name)
 		err = backoff.Retry(func() error {
-			return UploadToOSURL(renditionManifestBaseURL, manifestFilename, strings.NewReader(renditionPlaylist.String()), MANIFEST_UPLOAD_TIMEOUT)
+			return UploadToOSURL(renditionManifestBaseURL, manifestFilename, strings.NewReader(renditionPlaylist.String()), ManifestUploadTimeout)
 		}, UploadRetryBackoff())
 		if err != nil {
 			return "", fmt.Errorf("failed to upload rendition playlist: %s", err)
@@ -159,65 +160,18 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 		}
 	}
 	err := backoff.Retry(func() error {
-		return UploadToOSURL(targetOSURL, MASTER_MANIFEST_FILENAME, strings.NewReader(masterPlaylist.String()), MANIFEST_UPLOAD_TIMEOUT)
+		return UploadToOSURL(targetOSURL, MasterManifestFilename, strings.NewReader(masterPlaylist.String()), ManifestUploadTimeout)
 	}, UploadRetryBackoff())
 	if err != nil {
 		return "", fmt.Errorf("failed to upload master playlist: %s", err)
 	}
 
-	res, err := url.JoinPath(targetOSURL, MASTER_MANIFEST_FILENAME)
+	res, err := url.JoinPath(targetOSURL, MasterManifestFilename)
 	if err != nil {
 		return "", fmt.Errorf("failed to create URL for master playlist: %s", err)
 	}
 
 	return res, nil
-}
-
-// Generate a Master manifest for the FMP4 media playlists then write them to storage
-// This function returns a slice of fmp4 manifest urls that is packaged with HLS or DASH
-func GenerateAndUploadFragMp4Manifests(targetOSURL string, fmp4Manifests map[string]string, transcodedStats []*video.RenditionStats) ([]string, error) {
-
-	var fmp4ManifestUrls []string
-	masterPlaylist := m3u8.NewMasterPlaylist()
-
-	//sort transcoded Stats and loop in order.
-	SortTranscodedStats(transcodedStats)
-
-	// For each profile, add a new entry to the master manifest
-	for i, profile := range transcodedStats {
-		// only add profile if the transcoded profile has a matching fmp4 file
-		profileManifestFileName, exists := fmp4Manifests[profile.Name]
-		if exists {
-
-			masterPlaylist.Append(
-				path.Join(profile.Name, profileManifestFileName),
-				&m3u8.MediaPlaylist{
-					TargetDuration: profile.DurationMs,
-				},
-				m3u8.VariantParams{
-					Name:       fmt.Sprintf("%d-%s", i, profile.Name),
-					Bandwidth:  profile.BitsPerSecond,
-					FrameRate:  float64(profile.FPS),
-					Resolution: fmt.Sprintf("%dx%d", profile.Width, profile.Height),
-				},
-			)
-		}
-	}
-	targetOSURL += "/" + FMP4_POSTFIX_DIR
-	err := backoff.Retry(func() error {
-		return UploadToOSURL(targetOSURL, MASTER_MANIFEST_FILENAME, strings.NewReader(masterPlaylist.String()), MANIFEST_UPLOAD_TIMEOUT)
-	}, UploadRetryBackoff())
-	if err != nil {
-		return []string{}, fmt.Errorf("failed to upload master fmp4 playlist: %s", err)
-	}
-
-	fmp4HlsManifest, err := url.JoinPath(targetOSURL, MASTER_MANIFEST_FILENAME)
-	if err != nil {
-		return []string{}, fmt.Errorf("failed to create URL for master fmp4 playlist: %s", err)
-	}
-	fmp4ManifestUrls = append(fmp4ManifestUrls, fmp4HlsManifest)
-
-	return fmp4ManifestUrls, nil
 }
 
 func ManifestURLToSegmentURL(manifestURL, segmentFilename string) (*url.URL, error) {
