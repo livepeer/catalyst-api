@@ -67,6 +67,10 @@ func (p Probe) runProbe(url string, ffProbeOptions ...string) (iv InputVideo, er
 }
 
 func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
+	// We rely on this being present to get required information about the input video, so error out if it isn't
+	if probeData.Format == nil {
+		return InputVideo{}, fmt.Errorf("error parsing input video: format information missing")
+	}
 	// parse filesize
 	size, err := strconv.ParseInt(probeData.Format.Size, 10, 64)
 	if err != nil {
@@ -99,10 +103,6 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 	}
 	if strings.ToLower(videoStream.CodecName) == "vp9" && strings.Contains(probeData.Format.FormatName, "mp4") {
 		return InputVideo{}, fmt.Errorf("error checking for video: VP9 in an MP4 container is not supported")
-	}
-	// We rely on this being present to get required information about the input video, so error out if it isn't
-	if probeData.Format == nil {
-		return InputVideo{}, fmt.Errorf("error parsing input video: format information missing")
 	}
 	// parse bitrate
 	bitRateValue := videoStream.BitRate

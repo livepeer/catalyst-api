@@ -59,7 +59,7 @@ func startApp() error {
 		"-private-bucket",
 		"fixtures/playback-bucket",
 		"-gate-url=http://localhost:13000/api/access-control/gate",
-		"-external-transcoder=mediaconvert://examplekey:examplepass@127.0.0.1:11111?region=us-east-1&role=arn:aws:iam::exampleaccountid:examplerole&s3_aux_bucket=s3://example-bucket",
+		"-external-transcoder=mediaconverthttp://examplekey:examplepass@127.0.0.1:11111?region=us-east-1&role=arn:aws:iam::exampleaccountid:examplerole&s3_aux_bucket=s3://example-bucket",
 		"-source-output",
 		sourceOutputDir,
 		"-no-mist",
@@ -97,7 +97,6 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^a Broadcaster is running at "([^"]*)"$`, stepContext.StartBroadcaster)
 	ctx.Step(`^a Postgres database is running$`, stepContext.StartDatabase)
 	ctx.Step(`^a callback server is running at "([^"]*)"$`, stepContext.StartCallbackHandler)
-
 	ctx.Step(`^I query the "([^"]*)" endpoint( with "([^"]*)")?$`, stepContext.CreateRequest)
 	ctx.Step(`^I query the internal "([^"]*)" endpoint$`, stepContext.CreateGetRequestInternal)
 	ctx.Step(`^I submit to the "([^"]*)" endpoint with "([^"]*)"$`, stepContext.CreatePostRequest)
@@ -123,6 +122,10 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^a source copy (has|has not) been written to disk$`, stepContext.SourceCopyWrittenToDisk)
 	ctx.Step(`^a row is written to the database containing the following values$`, stepContext.CheckDatabase)
 
+	// Mediaconvert Steps
+	ctx.Step(`^Mediaconvert is running at "([^"]*)"$`, stepContext.StartMediaconvert)
+	ctx.Step(`^Mediaconvert receives a valid job creation request within "([^"]*)" seconds$`, stepContext.MediaconvertReceivesAValidRequestJobCreationRequest)
+
 	ctx.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
 		if app != nil && app.Process != nil {
 			if err := app.Process.Kill(); err != nil {
@@ -140,6 +143,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 			_ = stepContext.MinioAdmin.ServiceStop(ctx)
 		}
 		_ = stepContext.Broadcaster.Shutdown(ctx)
+		_ = stepContext.Mediaconvert.Shutdown(ctx)
 		_ = stepContext.CallbackHandler.Shutdown(ctx)
 		if stepContext.Database != nil {
 			_ = stepContext.Database.Stop()

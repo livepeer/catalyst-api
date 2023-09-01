@@ -9,6 +9,7 @@ Feature: VOD Streaming
     And an object store is available
     And Studio API server is running at "localhost:13000"
     And a Broadcaster is running at "localhost:18935"
+    And Mediaconvert is running at "localhost:11111"
     And a callback server is running at "localhost:3333"
     And ffmpeg is available
 
@@ -69,12 +70,7 @@ Feature: VOD Streaming
     And receive a response within "3" seconds
     Then I get an HTTP response with code "200"
     And I receive a Request ID in the response body
-    And the source playback manifest is written to storage within "5" seconds
-    And my "successful" vod request metrics get recorded
-    And "4" source segments are written to storage within "5" seconds
-    And the source manifest is written to storage within "3" seconds and contains "4" segments
-    And the Broadcaster receives "4" segments for transcoding within "10" seconds
-    And I receive a "success" callback within "20" seconds
+    And Mediaconvert receives a valid job creation request within "5" seconds
 
     Examples:
       | payload                                 |
