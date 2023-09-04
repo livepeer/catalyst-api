@@ -26,20 +26,20 @@ func (s *StepContext) StartDatabase() error {
 
 	// Create the table we'll be writing to
 	_, err = metricsDB.Exec(`
-		CREATE table user_end (
+		CREATE table user_end_trigger (
+			uuid varchar,
 			timestamp_ms bigint,
 			connection_token varchar,
 			downloaded_bytes int,
 			uploaded_bytes int,
 			session_duration_s int,
 			stream_id varchar,
-			streams_viewed varchar[],
-			stream_id_duration_s int[],
-			protocol varchar[],
-			protocol_duration_s int[],
-			ip_address varchar[],
-			ip_address_duration_s int[],
-			tags varchar[]
+			stream_id_count int,
+			protocol varchar,
+			protocol_count int,
+			ip_address varchar,
+			ip_address_count int,
+			tags varchar
 		)
 	`)
 	if err != nil {
@@ -53,7 +53,7 @@ func (s *StepContext) CheckDatabase(keyValues *godog.Table) error {
 	if err != nil {
 		return err
 	}
-	queryRows, err := metricsDB.Query("SELECT * FROM user_end")
+	queryRows, err := metricsDB.Query("SELECT * FROM user_end_trigger")
 	if err != nil {
 		return err
 	}
@@ -108,8 +108,10 @@ func (s *StepContext) CheckDatabase(keyValues *godog.Table) error {
 			actualValueString = actualValueS
 		} else if actualValueI, ok := actualValue.(int64); ok {
 			actualValueString = strconv.Itoa(int(actualValueI))
+		} else if actualValue == nil {
+			return fmt.Errorf("field %s not found in database", key)
 		} else {
-			return fmt.Errorf("unsupported type returned from DB: %s", reflect.TypeOf(actualValue))
+			return fmt.Errorf("unsupported type returned from DB for field %s: %s", key, reflect.TypeOf(actualValue))
 		}
 
 		if actualValueString != value {

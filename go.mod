@@ -11,7 +11,7 @@ require (
 	github.com/d1str0/pkcs7 v0.0.0-20200424205038-d65c16a5759a
 	github.com/fergusstrange/embedded-postgres v1.24.0
 	github.com/golang-jwt/jwt/v4 v4.5.0
-	github.com/golang/glog v1.1.1
+	github.com/golang/glog v1.1.2
 	github.com/golang/mock v1.6.0
 	github.com/hashicorp/memberlist v0.5.0
 	github.com/hashicorp/serf v0.10.1
@@ -20,18 +20,18 @@ require (
 	github.com/livepeer/go-api-client v0.4.8
 	github.com/livepeer/go-tools v0.3.2
 	github.com/livepeer/joy4 v0.1.1
-	github.com/livepeer/livepeer-data v0.7.2
+	github.com/livepeer/livepeer-data v0.7.4
 	github.com/livepeer/m3u8 v0.11.1
 	github.com/minio/madmin-go v1.7.5
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/pquerna/cachecontrol v0.2.0
 	github.com/prometheus/client_golang v1.16.0
 	github.com/stretchr/testify v1.8.4
-	github.com/u2takey/ffmpeg-go v0.4.1
+	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xeipuuv/gojsonschema v1.2.0
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.3.0
-	golang.org/x/text v0.10.0
+	golang.org/x/text v0.12.0
 	gopkg.in/vansante/go-ffprobe.v2 v2.1.2-0.20230412093356-81f7fcbea828
 	sigs.k8s.io/yaml v1.3.0
 )

@@ -55,6 +55,11 @@ func Test_sendSourcePlayback(t *testing.T) {
 		require.NoError(t, err)
 		return parsed
 	}
+	ff := ffmpeg{
+		sourcePlaybackHosts: map[string]string{
+			"lp-us-catalyst-recordings-monster.storage.googleapis.com": "//recordings-cdn.lp-playback.monster/hls",
+		},
+	}
 
 	const (
 		requestID           = "requestID"
@@ -78,6 +83,7 @@ func Test_sendSourcePlayback(t *testing.T) {
 		name                      string
 		job                       *JobInfo
 		shouldWriteSourcePlaylist bool
+		expectedRendition         string
 	}{
 		{
 			name: "happy",
@@ -88,6 +94,19 @@ func Test_sendSourcePlayback(t *testing.T) {
 				},
 			},
 			shouldWriteSourcePlaylist: true,
+			expectedRendition:         "/path",
+		},
+		{
+			name: "host mapping",
+			job: &JobInfo{
+				SegmentingTargetURL: segmentingTargetURL,
+				UploadJobPayload: UploadJobPayload{
+					SourceFile:   "http://lp-us-catalyst-recordings-monster.storage.googleapis.com/foo/bar",
+					HlsTargetURL: mustParseUrl("/bucket/foo", t),
+				},
+			},
+			shouldWriteSourcePlaylist: true,
+			expectedRendition:         "//recordings-cdn.lp-playback.monster/hls/path",
 		},
 		{
 			name: "not standard bucket - no source playback",
@@ -121,7 +140,7 @@ func Test_sendSourcePlayback(t *testing.T) {
 			tt.job.InputFileInfo = inputVideo
 			callbackClient := &mockCallbackClient{}
 			tt.job.statusClient = callbackClient
-			sendSourcePlayback(tt.job)
+			ff.sendSourcePlayback(tt.job)
 
 			if tt.shouldWriteSourcePlaylist {
 				hlsTarget := tt.job.HlsTargetURL.JoinPath("index.m3u8")
@@ -129,7 +148,7 @@ func Test_sendSourcePlayback(t *testing.T) {
 				require.NoError(t, err)
 				contentsString := string(contents)
 				require.Contains(t, contentsString, "#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=123,RESOLUTION=10x10,NAME=\"10p\"\n")
-				require.Contains(t, contentsString, "/path")
+				require.Contains(t, contentsString, tt.expectedRendition)
 
 				require.Equal(t, hlsTarget.String(), callbackClient.tsm.SourcePlayback.Manifest)
 			} else {

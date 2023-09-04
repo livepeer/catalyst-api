@@ -19,8 +19,10 @@ import (
 	"github.com/livepeer/catalyst-api/video"
 )
 
-const UPLOAD_TIMEOUT = 5 * time.Minute
-const TRANSMUX_STORAGE_DIR = "/tmp/transmux_stage"
+const (
+	UploadTimeout      = 5 * time.Minute
+	TransmuxStorageDir = "/tmp/transmux_stage"
+)
 
 type TranscodeSegmentRequest struct {
 	SourceFile        string                 `json:"source_location"`
@@ -56,10 +58,6 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	var outputs []video.OutputVideo
 
 	hlsTargetURL, err := getHlsTargetURL(transcodeRequest)
-	if err != nil {
-		return outputs, segmentsCount, err
-	}
-	fmp4TargetURL, err := getFmp4TargetURL(transcodeRequest)
 	if err != nil {
 		return outputs, segmentsCount, err
 	}
@@ -189,12 +187,12 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			return outputs, segmentsCount, fmt.Errorf("a valid mp4 or fragmented-mp4 URL must be provided since MP4 output was requested")
 		}
 
-		fmp4Manifests := make(map[string]string)
+		var concatFiles []string
 		for rendition, segments := range renditionList.RenditionSegmentTable {
 			// a. create folder to hold transmux-ed files in local storage temporarily
-			err := os.MkdirAll(TRANSMUX_STORAGE_DIR, 0700)
+			err := os.MkdirAll(TransmuxStorageDir, 0700)
 			if err != nil && !os.IsExist(err) {
-				log.Log(transcodeRequest.RequestID, "failed to create temp dir for transmuxing", "dir", TRANSMUX_STORAGE_DIR, "err", err)
+				log.Log(transcodeRequest.RequestID, "failed to create temp dir for transmuxing", "dir", TransmuxStorageDir, "err", err)
 				return outputs, segmentsCount, err
 			}
 
@@ -203,7 +201,8 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				// skip mp4 generation for low-bitrate profile
 				continue
 			}
-			concatTsFileName := filepath.Join(TRANSMUX_STORAGE_DIR, transcodeRequest.RequestID+"_"+rendition+".ts")
+			concatTsFileName := filepath.Join(TransmuxStorageDir, transcodeRequest.RequestID+"_"+rendition+".ts")
+			concatFiles = append(concatFiles, concatTsFileName)
 			defer os.Remove(concatTsFileName)
 			totalBytes, err := video.ConcatTS(concatTsFileName, segments)
 			if err != nil {
@@ -234,46 +233,40 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 					continue
 				}
 				// Upload the mp4 file
-				mp4Out, err := uploadMp4Files(transcodeRequest.RequestID, mp4TargetUrlBase, standardMp4OutputFiles, rendition)
+				mp4Out, err := uploadMp4Files(mp4TargetUrlBase, standardMp4OutputFiles, rendition)
 				if err != nil {
 					return outputs, segmentsCount, fmt.Errorf("error uploading transmuxed standard mp4 file: %s", err)
 				}
 				mp4OutputsPre = append(mp4OutputsPre, mp4Out...)
 			}
-
-			if enableFragMp4 {
-				fmp4ManifestOutputFile := filepath.Join(TRANSMUX_STORAGE_DIR, transcodeRequest.RequestID+"_fmp4", rendition+".m3u8")
-				// Transmux the single .ts file into an fmp4 file packaged with HLS
-				fMp4HlsOutputFiles, err := video.MuxTStoFMP4WithHLS(concatTsFileName, fmp4ManifestOutputFile)
-				if err != nil {
-					log.Log(transcodeRequest.RequestID, "error transmuxing to fmp4 with HLS", "file", fmp4ManifestOutputFile, "err", err)
-					continue
-				}
-
-				// Upload the fragmented-mp4 file(s) and related manifests
-				fragMp4TargetBaseOutput := *fragMp4TargetUrlBase
-				fragMp4TargetBaseOutput.Path = filepath.Join(fragMp4TargetUrlBase.Path, clients.FMP4_POSTFIX_DIR, rendition)
-				mp4Out, err := uploadMp4Files(transcodeRequest.RequestID, &fragMp4TargetBaseOutput, fMp4HlsOutputFiles, rendition)
-				if err != nil {
-					return outputs, segmentsCount, fmt.Errorf("error uploading transmuxed fragmented mp4 file(s): %s", err)
-				}
-
-				// Create a list of rendition to playlist manifest file that will be used
-				// to consolidate with transcoded renditions
-				for _, pl := range mp4Out {
-					if filepath.Ext(pl.Location) == ".m3u8" {
-						fmp4Manifests[rendition] = filepath.Base(pl.Location)
-					}
-				}
-				mp4OutputsPre = append(mp4OutputsPre, mp4Out...)
-			}
 		}
-		// If fmp4s were generated, then create a master fmp4 playlist
-		if len(fmp4Manifests) > 0 {
-			fmp4ManifestUrls, err = clients.GenerateAndUploadFragMp4Manifests(fmp4TargetURL.String(), fmp4Manifests, transcodedStats)
+
+		if enableFragMp4 {
+			fmp4OutputDir := filepath.Join(TransmuxStorageDir, transcodeRequest.RequestID+"_fmp4")
+			fmp4ManifestOutputFile := filepath.Join(fmp4OutputDir, clients.DashManifestFilename)
+			err := video.MuxTStoFMP4(fmp4ManifestOutputFile, concatFiles...)
 			if err != nil {
-				return outputs, segmentsCount, fmt.Errorf("error uploading master playlist for fragmented mp4 file(s): %s", err)
+				return outputs, segmentsCount, fmt.Errorf("error transmuxing to fmp4: %w", err)
 			}
+			// Upload the fragmented-mp4 file(s) and related manifests
+			fragMp4TargetBaseOutput := fragMp4TargetUrlBase.JoinPath(clients.Fmp4PostfixDir)
+			entries, err := os.ReadDir(fmp4OutputDir)
+			if err != nil {
+				return outputs, segmentsCount, fmt.Errorf("error listing dir for fragmented mp4 file(s): %w", err)
+			}
+			var files []string
+			for _, entry := range entries {
+				files = append(files, filepath.Join(fmp4OutputDir, entry.Name()))
+			}
+			_, err = uploadMp4Files(fragMp4TargetBaseOutput, files, "")
+			if err != nil {
+				return outputs, segmentsCount, fmt.Errorf("error uploading transmuxed fragmented mp4 file(s): %w", err)
+			}
+
+			fmp4ManifestUrls = append(fmp4ManifestUrls,
+				fragMp4TargetBaseOutput.JoinPath(clients.DashManifestFilename).String(),
+				fragMp4TargetBaseOutput.JoinPath("master.m3u8").String(),
+			)
 		}
 	}
 
@@ -342,39 +335,30 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	return outputs, segmentsCount, nil
 }
 
-func uploadMp4Files(requestID string, basePath *url.URL, mp4OutputFiles []string, rendition string) ([]video.OutputVideoFile, error) {
+func uploadMp4Files(basePath *url.URL, mp4OutputFiles []string, prefix string) ([]video.OutputVideoFile, error) {
 	var mp4OutputsPre []video.OutputVideoFile
 	// e. Upload all mp4 related output files
 	for _, o := range mp4OutputFiles {
 		var filename string
 		mp4OutputFile, err := os.Open(o)
-		defer os.Remove(mp4OutputFile.Name())
+		defer os.Remove(o)
 		if err != nil {
 			return []video.OutputVideoFile{}, fmt.Errorf("failed to open %s to upload: %s", o, err)
 		}
-		ext := filepath.Ext(mp4OutputFile.Name())
-		if ext == ".mp4" {
-			filename = fmt.Sprintf("%s.mp4", rendition)
+		if prefix != "" {
+			filename = fmt.Sprintf("%s.mp4", prefix)
 		} else {
 			filename = filepath.Base(mp4OutputFile.Name())
 		}
 		err = backoff.Retry(func() error {
-			return clients.UploadToOSURL(basePath.String(), filename, bufio.NewReader(mp4OutputFile), UPLOAD_TIMEOUT)
+			return clients.UploadToOSURL(basePath.String(), filename, bufio.NewReader(mp4OutputFile), UploadTimeout)
 		}, clients.UploadRetryBackoff())
 		if err != nil {
 			return []video.OutputVideoFile{}, fmt.Errorf("failed to upload %s: %s", mp4OutputFile.Name(), err)
 		}
 
-		var mp4Type string
-		if ext == ".mp4" {
-			mp4Type = "mp4"
-		} else if ext == ".m4s" {
-			mp4Type = "fmp4"
-		} else {
-			mp4Type = "Unknown"
-		}
 		mp4Out := video.OutputVideoFile{
-			Type:     mp4Type,
+			Type:     "mp4",
 			Location: basePath.JoinPath(filename).String(),
 		}
 		mp4OutputsPre = append(mp4OutputsPre, mp4Out)
@@ -414,17 +398,6 @@ func getHlsTargetURL(tsr TranscodeSegmentRequest) (*url.URL, error) {
 		}
 		return sourceOutputURL.JoinPath("rendition"), nil
 	}
-}
-
-func getFmp4TargetURL(tsr TranscodeSegmentRequest) (*url.URL, error) {
-	if tsr.FragMp4TargetUrl != "" {
-		fmp4TargetURL, err := url.Parse(tsr.FragMp4TargetUrl)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse transcodeRequest.FragMp4TargetURL: %s", err)
-		}
-		return fmp4TargetURL, nil
-	}
-	return nil, nil
 }
 
 func transcodeSegment(
@@ -500,7 +473,7 @@ func transcodeSegment(
 		}
 
 		err = backoff.Retry(func() error {
-			return clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), UPLOAD_TIMEOUT)
+			return clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), UploadTimeout)
 		}, clients.UploadRetryBackoff())
 		if err != nil {
 			return fmt.Errorf("failed to upload master playlist: %s", err)
