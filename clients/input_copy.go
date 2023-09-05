@@ -45,49 +45,47 @@ func NewInputCopy() *InputCopy {
 }
 
 // CopyInputToS3 copies the input video to our S3 transfer bucket and probes the file.
-func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL, decryptor *crypto.DecryptionKeys) (inputVideoProbe video.InputVideo, signedURL string, err error) {
+func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL, decryptor *crypto.DecryptionKeys) (video.InputVideo, string, error) {
+	var signedURL string
+	var err error
 	if IsHLSInput(inputFile) {
 		log.Log(requestID, "skipping copy for hls")
 		signedURL = inputFile.String()
 	} else {
-		err = CopyAllInputFiles(requestID, inputFile, osTransferURL, decryptor)
-		if err != nil {
-			err = fmt.Errorf("failed to copy file(s): %w", err)
-			return
+		if err := CopyAllInputFiles(requestID, inputFile, osTransferURL, decryptor); err != nil {
+			return video.InputVideo{}, "", fmt.Errorf("failed to copy file(s): %w", err)
 		}
 
 		signedURL, err = getSignedURL(osTransferURL)
 		if err != nil {
-			return
+			return video.InputVideo{}, "", err
 		}
 	}
 
 	log.Log(requestID, "starting probe", "source", inputFile.String(), "dest", osTransferURL.String())
-	inputVideoProbe, err = s.Probe.ProbeFile(requestID, signedURL)
+	inputFileProbe, err := s.Probe.ProbeFile(requestID, signedURL)
 	if err != nil {
 		log.Log(requestID, "probe failed", "err", err, "source", inputFile.String(), "dest", osTransferURL.String())
-		err = fmt.Errorf("error probing MP4 input file from S3: %w", err)
-		return
+		return video.InputVideo{}, "", fmt.Errorf("error probing MP4 input file from S3: %w", err)
 	}
+
 	log.Log(requestID, "probe succeeded", "source", inputFile.String(), "dest", osTransferURL.String())
-	videoTrack, err := inputVideoProbe.GetTrack(video.TrackTypeVideo)
-	if err != nil {
-		err = fmt.Errorf("no video track found in input video: %w", err)
-		return
+	videoTrack, err := inputFileProbe.GetTrack(video.TrackTypeVideo)
+	hasVideoTrack := err == nil
+	if hasVideoTrack {
+		log.Log(requestID, "probed video track:", "container", inputFileProbe.Format, "codec", videoTrack.Codec, "bitrate", videoTrack.Bitrate, "duration", videoTrack.DurationSec, "w", videoTrack.Width, "h", videoTrack.Height, "pix-format", videoTrack.PixelFormat, "FPS", videoTrack.FPS)
 	}
-	audioTrack, _ := inputVideoProbe.GetTrack(video.TrackTypeAudio)
-	if videoTrack.FPS <= 0 {
+	if hasVideoTrack && videoTrack.FPS <= 0 {
 		// unsupported, includes things like motion jpegs
-		err = fmt.Errorf("invalid framerate: %f", videoTrack.FPS)
-		return
+		return video.InputVideo{}, "", fmt.Errorf("invalid framerate: %f", videoTrack.FPS)
 	}
-	if inputVideoProbe.SizeBytes > config.MaxInputFileSizeBytes {
-		err = fmt.Errorf("input file %d bytes was greater than %d bytes", inputVideoProbe.SizeBytes, config.MaxInputFileSizeBytes)
-		return
+	if inputFileProbe.SizeBytes > config.MaxInputFileSizeBytes {
+		return video.InputVideo{}, "", fmt.Errorf("input file %d bytes was greater than %d bytes", inputFileProbe.SizeBytes, config.MaxInputFileSizeBytes)
 	}
-	log.Log(requestID, "probed video track:", "container", inputVideoProbe.Format, "codec", videoTrack.Codec, "bitrate", videoTrack.Bitrate, "duration", videoTrack.DurationSec, "w", videoTrack.Width, "h", videoTrack.Height, "pix-format", videoTrack.PixelFormat, "FPS", videoTrack.FPS)
+
+	audioTrack, _ := inputFileProbe.GetTrack(video.TrackTypeAudio)
 	log.Log(requestID, "probed audio track", "codec", audioTrack.Codec, "bitrate", audioTrack.Bitrate, "duration", audioTrack.DurationSec, "channels", audioTrack.Channels)
-	return
+	return inputFileProbe, signedURL, nil
 }
 
 func getSignedURL(osTransferURL *url.URL) (string, error) {

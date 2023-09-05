@@ -76,7 +76,11 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 	if err != nil {
 		return fmt.Errorf("failed to create a source file: %s", err)
 	}
-	sourceBytes, err := os.ReadFile("fixtures/tiny.mp4")
+	var sourceFixture = "fixtures/tiny.mp4"
+	if payload == "a valid upload vod request (audio-only)" {
+		sourceFixture = "fixtures/audio.mp4"
+	}
+	sourceBytes, err := os.ReadFile(sourceFixture)
 	if err != nil {
 		return fmt.Errorf("failed to read example source file: %s", err)
 	}
@@ -109,8 +113,9 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 	}
 	s.TranscodedOutputDir = destinationDir
 
-	if payload == "a valid upload vod request" {
+	if strings.HasPrefix(payload, "a valid upload vod request") {
 		req := DefaultUploadRequest
+		req.PipelineStrategy = "fallback_external"
 		req.URL = "file://" + sourceFile.Name()
 		if payload, err = req.ToJSON(); err != nil {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)

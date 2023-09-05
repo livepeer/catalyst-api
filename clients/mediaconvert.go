@@ -122,11 +122,9 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 	)
 
 	videoTrack, err := mcArgs.InputFileInfo.GetTrack(video.TrackTypeVideo)
-	if err != nil {
-		return nil, fmt.Errorf("no video track found in input video: %w", err)
-	}
+	hasVideoTrack := err == nil
 
-	if len(mcArgs.Profiles) == 0 {
+	if hasVideoTrack && len(mcArgs.Profiles) == 0 {
 		mcArgs.Profiles, err = video.GetDefaultPlaybackProfiles(videoTrack)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get playback profiles: %w", err)
@@ -148,6 +146,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 		mcArgs.MP4OutputLocation = mc.s3TransferBucket.JoinPath(mcMp4OutputRelPath)
 	}
 
+	// Do the actual transcode
 	err = mc.coreAwsTranscode(ctx, mcArgs, true)
 	if err == ErrJobAcceleration {
 		err = mc.coreAwsTranscode(ctx, mcArgs, false)
@@ -374,11 +373,39 @@ func outputGroups(hlsOutputFile, mp4OutputFile string, profiles []video.EncodedP
 }
 
 func outputs(container string, profiles []video.EncodedProfile) []*mediaconvert.Output {
-	outs := make([]*mediaconvert.Output, 0, len(profiles))
-	for _, profile := range profiles {
-		outs = append(outs, output(container, profile.Name, profile.Height, profile.Bitrate))
+	// If we don't have any video profiles, it means we're in audio-only mode
+	if len(profiles) == 0 {
+		return audioOnlyOutputs(container, "audioonly")
+	} else {
+		outs := make([]*mediaconvert.Output, 0, len(profiles))
+		for _, profile := range profiles {
+			outs = append(outs, output(container, profile.Name, profile.Height, profile.Bitrate))
+		}
+		return outs
 	}
-	return outs
+}
+
+func audioOnlyOutputs(container, name string) []*mediaconvert.Output {
+	return []*mediaconvert.Output{
+		{
+			AudioDescriptions: []*mediaconvert.AudioDescription{
+				{
+					CodecSettings: &mediaconvert.AudioCodecSettings{
+						Codec: aws.String("AAC"),
+						AacSettings: &mediaconvert.AacSettings{
+							Bitrate:    aws.Int64(96000),
+							CodingMode: aws.String("CODING_MODE_2_0"),
+							SampleRate: aws.Int64(48000),
+						},
+					},
+				},
+			},
+			ContainerSettings: &mediaconvert.ContainerSettings{
+				Container: aws.String(container),
+			},
+			NameModifier: aws.String(name),
+		},
+	}
 }
 
 func output(container, name string, height, maxBitrate int64) *mediaconvert.Output {

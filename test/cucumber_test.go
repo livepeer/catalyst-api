@@ -59,7 +59,6 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^a Broadcaster is running at "([^"]*)"$`, stepContext.StartBroadcaster)
 	ctx.Step(`^a Postgres database is running$`, stepContext.StartDatabase)
 	ctx.Step(`^a callback server is running at "([^"]*)"$`, stepContext.StartCallbackHandler)
-
 	ctx.Step(`^I query the "([^"]*)" endpoint( with "([^"]*)")?$`, stepContext.CreateRequest)
 	ctx.Step(`^I query the internal "([^"]*)" endpoint$`, stepContext.CreateGetRequestInternal)
 	ctx.Step(`^I submit to the "([^"]*)" endpoint with "([^"]*)"$`, stepContext.CreatePostRequest)
@@ -85,6 +84,10 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^a source copy (has|has not) been written to disk$`, stepContext.SourceCopyWrittenToDisk)
 	ctx.Step(`^a row is written to the database containing the following values$`, stepContext.CheckDatabase)
 
+	// Mediaconvert Steps
+	ctx.Step(`^Mediaconvert is running at "([^"]*)"$`, stepContext.StartMediaconvert)
+	ctx.Step(`^Mediaconvert receives a valid job creation request within "([^"]*)" seconds$`, stepContext.MediaconvertReceivesAValidRequestJobCreationRequest)
+
 	ctx.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
 		if steps.App != nil && steps.App.Process != nil {
 			if err := steps.App.Process.Kill(); err != nil {
@@ -102,6 +105,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 			_ = stepContext.MinioAdmin.ServiceStop(ctx)
 		}
 		_ = stepContext.Broadcaster.Shutdown(ctx)
+		_ = stepContext.Mediaconvert.Shutdown(ctx)
 		_ = stepContext.CallbackHandler.Shutdown(ctx)
 		if stepContext.Database != nil {
 			_ = stepContext.Database.Stop()

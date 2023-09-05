@@ -7,19 +7,11 @@ import (
 	"gopkg.in/vansante/go-ffprobe.v2"
 )
 
-func TestItRejectsWhenNoVideoTrackPresent(t *testing.T) {
-	_, err := parseProbeOutput(&ffprobe.ProbeData{
-		Streams: []*ffprobe.Stream{
-			{
-				CodecType: "audio",
-			},
-		},
-	})
-	require.ErrorContains(t, err, "no video stream found")
-}
-
 func TestItRejectsWhenMJPEGVideoTrackPresent(t *testing.T) {
 	_, err := parseProbeOutput(&ffprobe.ProbeData{
+		Format: &ffprobe.Format{
+			Size: "1",
+		},
 		Streams: []*ffprobe.Stream{
 			{
 				CodecType: "video",
@@ -30,6 +22,9 @@ func TestItRejectsWhenMJPEGVideoTrackPresent(t *testing.T) {
 	require.ErrorContains(t, err, "mjpeg is not supported")
 
 	_, err = parseProbeOutput(&ffprobe.ProbeData{
+		Format: &ffprobe.Format{
+			Size: "1",
+		},
 		Streams: []*ffprobe.Stream{
 			{
 				CodecType: "video",
