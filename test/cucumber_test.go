@@ -13,8 +13,6 @@ import (
 
 var baseURL = "http://127.0.0.1:18989"
 var baseInternalURL = "http://127.0.0.1:17979"
-var sourceOutputDir string
-var app *exec.Cmd
 
 func init() {
 	// Build the app
@@ -46,50 +44,14 @@ func init() {
 	}
 }
 
-func startApp() error {
-
-	sourceOutputDir = fmt.Sprintf("file://%s/%s/", os.TempDir(), "livepeer/source")
-	app = exec.Command(
-		"./app",
-		"-http-addr=127.0.0.1:18989",
-		"-http-internal-addr=127.0.0.1:17979",
-		"-cluster-addr=127.0.0.1:19935",
-		"-broadcaster-url=http://127.0.0.1:18935",
-		`-metrics-db-connection-string=`+steps.DB_CONNECTION_STRING,
-		"-private-bucket",
-		"fixtures/playback-bucket",
-		"-gate-url=http://localhost:13000/api/access-control/gate",
-		"-external-transcoder=mediaconverthttp://examplekey:examplepass@127.0.0.1:11111?region=us-east-1&role=arn:aws:iam::exampleaccountid:examplerole&s3_aux_bucket=s3://example-bucket",
-		"-source-output",
-		sourceOutputDir,
-		"-no-mist",
-	)
-	outfile, err := os.Create("logs/app.log")
-	if err != nil {
-		return err
-	}
-	defer outfile.Close()
-	app.Stdout = outfile
-	app.Stderr = outfile
-	if err := app.Start(); err != nil {
-		return err
-	}
-
-	// Wait for app to start
-	steps.WaitForStartup(baseURL + "/ok")
-
-	return nil
-}
-
 func InitializeScenario(ctx *godog.ScenarioContext) {
 	// Allows our steps to share data between themselves, e.g the response of the last HTTP call (which future steps can check is correct)
 	var stepContext = steps.StepContext{
 		BaseURL:         baseURL,
 		BaseInternalURL: baseInternalURL,
-		SourceOutputDir: sourceOutputDir,
 	}
 
-	ctx.Step(`^the VOD API is running$`, startApp)
+	ctx.Step(`^the VOD API is running$`, stepContext.StartApp)
 	ctx.Step(`^the Client app is authenticated$`, stepContext.SetAuthHeaders)
 	ctx.Step(`^an object store is available$`, stepContext.StartObjectStore)
 	ctx.Step(`^Studio API server is running at "([^"]*)"$`, stepContext.StartStudioAPI)
@@ -127,11 +89,11 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^Mediaconvert receives a valid job creation request within "([^"]*)" seconds$`, stepContext.MediaconvertReceivesAValidRequestJobCreationRequest)
 
 	ctx.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
-		if app != nil && app.Process != nil {
-			if err := app.Process.Kill(); err != nil {
+		if steps.App != nil && steps.App.Process != nil {
+			if err := steps.App.Process.Kill(); err != nil {
 				fmt.Println("Error while killing app process:", err.Error())
 			}
-			if err := app.Wait(); err != nil {
+			if err := steps.App.Wait(); err != nil {
 				if err.Error() != "signal: killed" {
 					fmt.Println("Error while waiting for app to exit:", err.Error())
 				}

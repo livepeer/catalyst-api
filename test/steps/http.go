@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -15,6 +16,8 @@ import (
 
 	"github.com/cucumber/godog"
 )
+
+var App *exec.Cmd
 
 type VODUploadResponse struct {
 	RequestID string `json:"request_id"`
@@ -133,6 +136,9 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 				},
 			},
 		}
+		if strings.Contains(payload, "and fmp4") {
+			req.OutputLocations[0].Outputs.FMP4 = "enabled"
+		}
 		if payload, err = req.ToJSON(); err != nil {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}
@@ -170,6 +176,41 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 	}
 
 	s.pendingRequest = r
+
+	return nil
+}
+
+func (s *StepContext) StartApp() error {
+	s.SourceOutputDir = fmt.Sprintf("file://%s/%s/", os.TempDir(), "livepeer/source")
+
+	App = exec.Command(
+		"./app",
+		"-http-addr=127.0.0.1:18989",
+		"-http-internal-addr=127.0.0.1:17979",
+		"-cluster-addr=127.0.0.1:19935",
+		"-broadcaster-url=http://127.0.0.1:18935",
+		`-metrics-db-connection-string=`+DB_CONNECTION_STRING,
+		"-private-bucket",
+		"fixtures/playback-bucket",
+		"-gate-url=http://localhost:13000/api/access-control/gate",
+		"-external-transcoder=mediaconverthttp://examplekey:examplepass@127.0.0.1:11111?region=us-east-1&role=arn:aws:iam::exampleaccountid:examplerole&s3_aux_bucket=s3://example-bucket",
+		"-source-output",
+		s.SourceOutputDir,
+		"-no-mist",
+	)
+	outfile, err := os.Create("logs/app.log")
+	if err != nil {
+		return err
+	}
+	defer outfile.Close()
+	App.Stdout = outfile
+	App.Stderr = outfile
+	if err := App.Start(); err != nil {
+		return err
+	}
+
+	// Wait for app to start
+	WaitForStartup(s.BaseURL + "/ok")
 
 	return nil
 }
