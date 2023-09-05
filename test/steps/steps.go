@@ -21,6 +21,8 @@ type StepContext struct {
 	TranscodedOutputDir         string
 	Studio                      http.Server
 	Broadcaster                 http.Server
+	Mediaconvert                http.Server
+	MediaconvertJobsReceived    []([]byte)
 	CallbackHandler             http.Server
 	Database                    *embeddedpostgres.EmbeddedPostgres
 	BroadcasterSegmentsReceived map[string]int // Map of ManifestID -> Num Segments

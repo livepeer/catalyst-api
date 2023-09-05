@@ -47,8 +47,14 @@ func ParseTranscodeProviderURL(input string) (TranscodeProvider, error) {
 		return nil, err
 	}
 	// mediaconvert://<key id>:<key secret>@<endpoint host>?region=<aws region>&role=<arn for role>&s3_aux_bucket=<s3 bucket url>
-	if u.Scheme == "mediaconvert" {
+	if u.Scheme == "mediaconvert" || u.Scheme == "mediaconverthttp" {
 		endpoint := fmt.Sprintf("https://%s", u.Host)
+
+		// Only used by integration tests to avoid having to stub a TLS server
+		if u.Scheme == "mediaconverthttp" {
+			endpoint = fmt.Sprintf("http://%s", u.Host)
+		}
+
 		if u.Host == "" {
 			return nil, fmt.Errorf("missing endpoint in url: %s", u.String())
 		}

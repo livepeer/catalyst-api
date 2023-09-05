@@ -9,6 +9,7 @@ Feature: VOD Streaming
     And an object store is available
     And Studio API server is running at "localhost:13000"
     And a Broadcaster is running at "localhost:18935"
+    And Mediaconvert is running at "localhost:11111"
     And a callback server is running at "localhost:3333"
     And ffmpeg is available
 
@@ -63,3 +64,14 @@ Feature: VOD Streaming
       | payload                                                                     |
       | a valid ffmpeg upload vod request with a source manifest                    |
       | a valid ffmpeg upload vod request with a source manifest and source copying |
+
+  Scenario Outline: Submit an audio-only asset for ingestion
+    When I submit to the internal "/api/vod" endpoint with "<payload>"
+    And receive a response within "3" seconds
+    Then I get an HTTP response with code "200"
+    And I receive a Request ID in the response body
+    And Mediaconvert receives a valid job creation request within "5" seconds
+
+    Examples:
+      | payload                                 |
+      | a valid upload vod request (audio-only) |

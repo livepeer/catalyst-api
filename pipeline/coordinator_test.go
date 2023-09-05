@@ -406,7 +406,7 @@ func Test_ProbeErrors(t *testing.T) {
 		{
 			name:        "audio only",
 			assetType:   "audio",
-			expectedErr: "error copying input to storage: no video track found in input video: no 'video' tracks found",
+			expectedErr: "",
 		},
 		{
 			name:        "filesize greater than max",
