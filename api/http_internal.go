@@ -59,7 +59,9 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
 	withAuth := middleware.IsAuthorized
-	withCapacityChecking := middleware.HasCapacity
+
+	capacityMiddleware := middleware.CapacityMiddleware{}
+	withCapacityChecking := capacityMiddleware.HasCapacity
 
 	geoHandlers := &geolocation.GeolocationHandlersCollection{
 		Config:   cli,
