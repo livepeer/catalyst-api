@@ -14,6 +14,7 @@ import (
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
+	"github.com/livepeer/catalyst-api/metrics"
 )
 
 type GeolocationHandlersCollection struct {
@@ -24,31 +25,53 @@ type GeolocationHandlersCollection struct {
 
 // this package handles geolocation for playback and origin discovery for node replication
 
-// redirect an incoming user to a node for playback or 404 handling
+// Redirect an incoming user to: CDN (only for /hls), closest node (geolocate)
+// or another service (like mist HLS) on the current host for playback.
 func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		nodeHost := c.Config.NodeHost
-		redirectPrefixes := c.Config.RedirectPrefixes
+	return func(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+		host := r.Host
+		pathType, prefix, playbackID, pathTmpl := parsePlaybackID(r.URL.Path)
 
-		if nodeHost != "" {
-			host := r.Host
-			if host != nodeHost {
-				newURL, err := url.Parse(r.URL.String())
-				if err != nil {
-					glog.Errorf("failed to parse incoming url for redirect url=%s err=%s", r.URL.String(), err)
-					w.WriteHeader(http.StatusInternalServerError)
+		if c.Config.CdnRedirectPrefix != nil && (pathType == "hls" || pathType == "webrtc") {
+			if contains(c.Config.CdnRedirectPlaybackIDs, playbackID) {
+				if pathType == "webrtc" {
+					// For webRTC streams on the `CdnRedirectPlaybackIDs` list we return `406`
+					// so the player can fallback to a new HLS request. For webRTC streams not
+					// on the CdnRedirectPlaybackIDs list we do regular geolocation.
+					w.WriteHeader(http.StatusNotAcceptable) // 406 error
+					metrics.Metrics.CDNRedirectWebRTC406.WithLabelValues(playbackID).Inc()
+					glog.V(6).Infof("%s not supported for CDN-redirected %s", r.URL.Path, playbackID)
 					return
 				}
+				newURL, _ := url.Parse(r.URL.String())
 				newURL.Scheme = protocol(r)
-				newURL.Host = nodeHost
+				newURL.Host = c.Config.CdnRedirectPrefix.Host
+				newURL.Path, _ = url.JoinPath(c.Config.CdnRedirectPrefix.Path, newURL.Path)
 				http.Redirect(w, r, newURL.String(), http.StatusTemporaryRedirect)
-				glog.V(6).Infof("NodeHost redirect host=%s nodeHost=%s from=%s to=%s", host, nodeHost, r.URL, newURL)
+				metrics.Metrics.CDNRedirectCount.WithLabelValues(playbackID).Inc()
+				glog.V(6).Infof("CDN redirect host=%s from=%s to=%s", host, r.URL, newURL)
 				return
 			}
 		}
 
-		prefix, playbackID, pathTmpl, isValid := parsePlaybackID(r.URL.Path)
-		if !isValid {
+		nodeHost := c.Config.NodeHost
+
+		if nodeHost != "" && nodeHost != host {
+			newURL, err := url.Parse(r.URL.String())
+			if err != nil {
+				glog.Errorf("failed to parse incoming url for redirect url=%s err=%s", r.URL.String(), err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			newURL.Scheme = protocol(r)
+			newURL.Host = nodeHost
+			http.Redirect(w, r, newURL.String(), http.StatusTemporaryRedirect)
+			glog.V(6).Infof("NodeHost redirect host=%s nodeHost=%s from=%s to=%s", host, nodeHost, r.URL, newURL)
+			return
+		}
+
+		if pathType == "" {
+			glog.Warningf("Can not parse playbackID from path %s", r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -56,6 +79,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 		lat := r.Header.Get("X-Latitude")
 		lon := r.Header.Get("X-Longitude")
 
+		redirectPrefixes := c.Config.RedirectPrefixes
 		bestNode, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix)
 		if err != nil {
 			glog.Errorf("failed to find either origin or fallback server for playbackID=%s err=%s", playbackID, err)
@@ -117,60 +141,63 @@ func parsePlus(plusString string) (string, string) {
 	return prefix, playbackID
 }
 
+var regexpHLSPath = regexp.MustCompile(`^/hls/([\w+-]+)/(.*index.m3u8.*)$`)
+
 // Incoming requests might come with some prefix attached to the
 // playback ID. We try to drop that here by splitting at `+` and
 // picking the last piece. For eg.
 // incoming path = '/hls/video+4712oox4msvs9qsf/index.m3u8'
 // playbackID = '4712oox4msvs9qsf'
-func parsePlaybackIDHLS(path string) (string, string, string, bool) {
-	r := regexp.MustCompile(`^/hls/([\w+-]+)/(.*index.m3u8.*)$`)
-	m := r.FindStringSubmatch(path)
+func parsePlaybackIDHLS(path string) (string, string, string, string) {
+	m := regexpHLSPath.FindStringSubmatch(path)
 	if len(m) < 3 {
-		return "", "", "", false
+		return "", "", "", ""
 	}
 	prefix, playbackID := parsePlus(m[1])
 	if playbackID == "" {
-		return "", "", "", false
+		return "", "", "", ""
 	}
 	pathTmpl := "/hls/%s/" + m[2]
-	return prefix, playbackID, pathTmpl, true
+	return "hls", prefix, playbackID, pathTmpl
 }
 
-func parsePlaybackIDJS(path string) (string, string, string, bool) {
-	r := regexp.MustCompile(`^/json_([\w+-]+).js$`)
-	m := r.FindStringSubmatch(path)
+var regexpJSONPath = regexp.MustCompile(`^/json_([\w+-]+).js$`)
+
+func parsePlaybackIDJS(path string) (string, string, string, string) {
+	m := regexpJSONPath.FindStringSubmatch(path)
 	if len(m) < 2 {
-		return "", "", "", false
+		return "", "", "", ""
 	}
 	prefix, playbackID := parsePlus(m[1])
 	if playbackID == "" {
-		return "", "", "", false
+		return "", "", "", ""
 	}
-	return prefix, playbackID, "/json_%s.js", true
+	return "json", prefix, playbackID, "/json_%s.js"
 }
 
-func parsePlaybackIDWebRTC(path string) (string, string, string, bool) {
-	r := regexp.MustCompile(`^/webrtc/([\w+-]+)$`)
-	m := r.FindStringSubmatch(path)
+var regexpWebRTCPath = regexp.MustCompile(`^/webrtc/([\w+-]+)$`)
+
+func parsePlaybackIDWebRTC(path string) (string, string, string, string) {
+	m := regexpWebRTCPath.FindStringSubmatch(path)
 	if len(m) < 2 {
-		return "", "", "", false
+		return "", "", "", ""
 	}
 	prefix, playbackID := parsePlus(m[1])
 	if playbackID == "" {
-		return "", "", "", false
+		return "", "", "", ""
 	}
-	return prefix, playbackID, "/webrtc/%s", true
+	return "webrtc", prefix, playbackID, "/webrtc/%s"
 }
 
-func parsePlaybackID(path string) (string, string, string, bool) {
-	parsers := []func(string) (string, string, string, bool){parsePlaybackIDHLS, parsePlaybackIDJS, parsePlaybackIDWebRTC}
+func parsePlaybackID(path string) (string, string, string, string) {
+	parsers := []func(string) (string, string, string, string){parsePlaybackIDHLS, parsePlaybackIDJS, parsePlaybackIDWebRTC}
 	for _, parser := range parsers {
-		prefix, playbackID, suffix, isValid := parser(path)
-		if isValid {
-			return prefix, playbackID, suffix, isValid
+		pathType, prefix, playbackID, suffix := parser(path)
+		if pathType != "" {
+			return pathType, prefix, playbackID, suffix
 		}
 	}
-	return "", "", "", false
+	return "", "", "", ""
 }
 
 func protocol(r *http.Request) string {
@@ -178,4 +205,13 @@ func protocol(r *http.Request) string {
 		return "https"
 	}
 	return "http"
+}
+
+func contains[T comparable](list []T, v T) bool {
+	for _, elm := range list {
+		if elm == v {
+			return true
+		}
+	}
+	return false
 }
