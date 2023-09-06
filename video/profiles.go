@@ -12,7 +12,7 @@ const (
 	MaxVideoBitrate         = 288_000_000
 	TrackTypeVideo          = "video"
 	TrackTypeAudio          = "audio"
-	defaultCRF              = 23
+	defaultCRF              = 27
 )
 
 type InputVideo struct {
@@ -106,23 +106,27 @@ func SetTranscodeProfiles(inputVideoStats InputVideo, reqTranscodeProfiles []Enc
 		// a single profile that matches the input video's specs with the target bitrate
 	} else if len(reqTranscodeProfiles) == 1 {
 		if reqTranscodeProfiles[0].Width == 0 && reqTranscodeProfiles[0].Height == 0 && reqTranscodeProfiles[0].Bitrate != 0 {
-			transcodeProfiles = GenerateSingleProfileWithTargetBitrate(videoTrack, reqTranscodeProfiles[0].Bitrate)
+			transcodeProfiles = GenerateSingleProfileWithTargetParams(videoTrack, reqTranscodeProfiles[0])
 			return transcodeProfiles, nil
 		}
 	}
 	return reqTranscodeProfiles, nil
 }
 
-func GenerateSingleProfileWithTargetBitrate(videoTrack InputTrack, videoBitrate int64) []EncodedProfile {
+func GenerateSingleProfileWithTargetParams(videoTrack InputTrack, videoProfile EncodedProfile) []EncodedProfile {
 	profiles := make([]EncodedProfile, 0)
+	var CRF uint = defaultCRF
+	if videoProfile.CRF != 0 {
+		CRF = videoProfile.CRF
+	}
 
 	profiles = append(profiles, EncodedProfile{
 		Name:    strconv.FormatInt(videoTrack.Height, 10) + "p0",
-		Bitrate: videoBitrate,
+		Bitrate: videoProfile.Bitrate,
 		FPS:     0,
 		Width:   videoTrack.Width,
 		Height:  videoTrack.Height,
-		CRF:     defaultCRF,
+		CRF:     CRF,
 	})
 	return profiles
 }
@@ -138,7 +142,10 @@ func GetDefaultPlaybackProfiles(video InputTrack) ([]EncodedProfile, error) {
 		// check it here.
 		lowerQualityThanSrc := profile.Height < video.Height && profile.Bitrate < video.Bitrate
 		if lowerQualityThanSrc {
-			relativeBitrate := float64(profile.Width*profile.Height) * (float64(videoBitrate) / float64(video.Width*video.Height))
+			// relativeBitrate needs to be slightly higher than the proportional average bitrate of the source video.
+			// Livepeer network uses bitrate to set max bitrate for encoding, so for the video to look good, we multiply
+			// it by a factor of 1.2.
+			relativeBitrate := 1.2 * float64(profile.Width*profile.Height) * (float64(videoBitrate) / float64(video.Width*video.Height))
 			br := math.Min(relativeBitrate, float64(profile.Bitrate))
 			profile.Bitrate = int64(br)
 			profiles = append(profiles, profile)
