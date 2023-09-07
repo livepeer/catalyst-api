@@ -31,6 +31,9 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 		host := r.Host
 		pathType, prefix, playbackID, pathTmpl := parsePlaybackID(r.URL.Path)
+		redirectPrefixes := c.Config.RedirectPrefixes
+		lat := r.Header.Get("X-Latitude")
+		lon := r.Header.Get("X-Longitude")
 
 		if c.Config.CdnRedirectPrefix != nil && (pathType == "hls" || pathType == "webrtc") {
 			if contains(c.Config.CdnRedirectPlaybackIDs, playbackID) {
@@ -43,10 +46,18 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 					glog.V(6).Infof("%s not supported for CDN-redirected %s", r.URL.Path, playbackID)
 					return
 				}
+
+				_, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix)
+				if err != nil {
+					glog.Errorf("failed to find either origin or fallback server for playbackID=%s err=%s", playbackID, err)
+					w.WriteHeader(http.StatusBadGateway)
+					return
+				}
+
 				newURL, _ := url.Parse(r.URL.String())
 				newURL.Scheme = protocol(r)
 				newURL.Host = c.Config.CdnRedirectPrefix.Host
-				newURL.Path, _ = url.JoinPath(c.Config.CdnRedirectPrefix.Path, newURL.Path)
+				newURL.Path, _ = url.JoinPath(c.Config.CdnRedirectPrefix.Path, fmt.Sprintf(pathTmpl, fullPlaybackID))
 				http.Redirect(w, r, newURL.String(), http.StatusTemporaryRedirect)
 				metrics.Metrics.CDNRedirectCount.WithLabelValues(playbackID).Inc()
 				glog.V(6).Infof("CDN redirect host=%s from=%s to=%s", host, r.URL, newURL)
@@ -76,10 +87,6 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			return
 		}
 
-		lat := r.Header.Get("X-Latitude")
-		lon := r.Header.Get("X-Longitude")
-
-		redirectPrefixes := c.Config.RedirectPrefixes
 		bestNode, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix)
 		if err != nil {
 			glog.Errorf("failed to find either origin or fallback server for playbackID=%s err=%s", playbackID, err)
