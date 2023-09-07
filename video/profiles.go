@@ -2,7 +2,6 @@ package video
 
 import (
 	"fmt"
-	"math"
 	"strconv"
 )
 
@@ -12,7 +11,7 @@ const (
 	MaxVideoBitrate         = 288_000_000
 	TrackTypeVideo          = "video"
 	TrackTypeAudio          = "audio"
-	defaultCRF              = 27
+	defaultCRF              = 30
 )
 
 type InputVideo struct {
@@ -142,12 +141,6 @@ func GetDefaultPlaybackProfiles(video InputTrack) ([]EncodedProfile, error) {
 		// check it here.
 		lowerQualityThanSrc := profile.Height < video.Height && profile.Bitrate < video.Bitrate
 		if lowerQualityThanSrc {
-			// relativeBitrate needs to be slightly higher than the proportional average bitrate of the source video.
-			// Livepeer network uses bitrate to set max bitrate for encoding, so for the video to look good, we multiply
-			// it by a factor of 1.2.
-			relativeBitrate := 1.2 * float64(profile.Width*profile.Height) * (float64(videoBitrate) / float64(video.Width*video.Height))
-			br := math.Min(relativeBitrate, float64(profile.Bitrate))
-			profile.Bitrate = int64(br)
 			profiles = append(profiles, profile)
 		}
 	}
