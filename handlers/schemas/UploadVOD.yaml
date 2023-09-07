@@ -93,6 +93,8 @@ properties:
           type: "integer"
         bitrate:
           type: "integer"
+        crf:
+          type: "integer"
         fps:
           type: "integer"
         fpsDen:
