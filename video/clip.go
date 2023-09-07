@@ -15,7 +15,7 @@ func formatTime(seconds float64) string {
 	return timeObj.Format("15:04:05")
 }
 
-func getTotalDurationAndSegments(manifest *m3u8.MediaPlaylist) (float64, uint64) {
+func GetTotalDurationAndSegments(manifest *m3u8.MediaPlaylist) (float64, uint64) {
 	if manifest == nil {
 		return 0.0, 0
 	}
@@ -60,7 +60,7 @@ func ClipManifest(requestID string, manifest *m3u8.MediaPlaylist, startTime, end
 	var startSegIdx, endSegIdx uint64
 	var err error
 
-	manifestDuration, manifestSegments := getTotalDurationAndSegments(manifest)
+	manifestDuration, manifestSegments := GetTotalDurationAndSegments(manifest)
 
 	// Find the segment index that correlates with the specified startTime
 	// but error out it exceeds the  manifest's duration.

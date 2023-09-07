@@ -72,6 +72,18 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 	log.Log(requestID, "probe succeeded", "source", inputFile.String(), "dest", osTransferURL.String())
 	videoTrack, err := inputFileProbe.GetTrack(video.TrackTypeVideo)
 	hasVideoTrack := err == nil
+	// verify the duration of the video track and don't process if we can't determine duration
+	if hasVideoTrack && videoTrack.DurationSec == 0 {
+		duration := 0.0
+		if IsHLSInput(inputFile) {
+			duration = getVideoTrackDuration(requestID, signedURL)
+		}
+		if duration == 0.0 {
+			log.Log(requestID, "input file duration is 0 or cannot be determined")
+		} else {
+			videoTrack.DurationSec = duration
+		}
+	}
 	if hasVideoTrack {
 		log.Log(requestID, "probed video track:", "container", inputFileProbe.Format, "codec", videoTrack.Codec, "bitrate", videoTrack.Bitrate, "duration", videoTrack.DurationSec, "w", videoTrack.Width, "h", videoTrack.Height, "pix-format", videoTrack.PixelFormat, "FPS", videoTrack.FPS)
 	}
@@ -86,6 +98,15 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 	audioTrack, _ := inputFileProbe.GetTrack(video.TrackTypeAudio)
 	log.Log(requestID, "probed audio track", "codec", audioTrack.Codec, "bitrate", audioTrack.Bitrate, "duration", audioTrack.DurationSec, "channels", audioTrack.Channels)
 	return inputFileProbe, signedURL, nil
+}
+
+func getVideoTrackDuration(requestID, manifestUrl string) float64 {
+	manifest, err := DownloadRenditionManifest(requestID, manifestUrl)
+	if err != nil {
+		return 0
+	}
+	manifestDuration, _ := video.GetTotalDurationAndSegments(&manifest)
+	return manifestDuration
 }
 
 func getSignedURL(osTransferURL *url.URL) (string, error) {

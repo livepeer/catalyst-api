@@ -49,6 +49,45 @@ const manifestC = `#EXTM3U
 3.ts
 #EXT-X-ENDLIST`
 
+// an example of a manifest that ffprobe fails on when
+// trying to determine the duration.
+const manifestD = `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-PLAYLIST-TYPE:EVENT
+#EXT-X-TARGETDURATION:11.0000000000
+#EXT-X-MEDIA-SEQUENCE:0
+#EXT-X-PROGRAM-DATE-TIME:2023-08-28T10:17:20.948Z
+#EXTINF:10.634,
+source/0.ts
+#EXT-X-PROGRAM-DATE-TIME:2023-08-28T10:17:31.582Z
+#EXTINF:10.000,
+source/1.ts
+#EXT-X-PROGRAM-DATE-TIME:2023-08-28T10:17:41.582Z
+#EXTINF:10.000,
+source/63744.ts
+#EXT-X-PROGRAM-DATE-TIME:2023-09-05T00:13:30.682Z
+#EXTINF:10.000,
+source/63745.ts
+`
+
+func TestManifestDurationCalculation(t *testing.T) {
+	sourceManifestB, _, err := m3u8.DecodeFrom(strings.NewReader(manifestB), true)
+	require.NoError(t, err)
+	plB := sourceManifestB.(*m3u8.MediaPlaylist)
+
+	dur, segs := GetTotalDurationAndSegments(plB)
+	require.Equal(t, 18.78, dur)
+	require.Equal(t, uint64(4), segs)
+
+	sourceManifestD, _, err := m3u8.DecodeFrom(strings.NewReader(manifestD), true)
+	require.NoError(t, err)
+	plD := sourceManifestD.(*m3u8.MediaPlaylist)
+
+	dur, segs = GetTotalDurationAndSegments(plD)
+	require.Equal(t, 40.634, dur)
+	require.Equal(t, uint64(4), segs)
+}
+
 func TestClippingFailsWhenInvalidManifestIsUsed(t *testing.T) {
 
 	sourceManifestC, _, err := m3u8.DecodeFrom(strings.NewReader(manifestC), true)
