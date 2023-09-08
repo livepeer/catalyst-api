@@ -12,7 +12,7 @@ const (
 	MaxVideoBitrate         = 288_000_000
 	TrackTypeVideo          = "video"
 	TrackTypeAudio          = "audio"
-	defaultCRF              = 27
+	defaultQuality          = 27
 )
 
 type InputVideo struct {
@@ -74,7 +74,7 @@ var DefaultProfile360p = EncodedProfile{
 	Bitrate: 1_000_000,
 	Width:   640,
 	Height:  360,
-	CRF:     defaultCRF,
+	Quality: defaultQuality,
 }
 var DefaultProfile720p = EncodedProfile{
 	Name:    "720p0",
@@ -82,7 +82,7 @@ var DefaultProfile720p = EncodedProfile{
 	Bitrate: 4_000_000,
 	Width:   1280,
 	Height:  720,
-	CRF:     defaultCRF,
+	Quality: defaultQuality,
 }
 
 // DefaultTranscodeProfiles defines the default set of encoding profiles to use when none are specified
@@ -115,9 +115,9 @@ func SetTranscodeProfiles(inputVideoStats InputVideo, reqTranscodeProfiles []Enc
 
 func GenerateSingleProfileWithTargetParams(videoTrack InputTrack, videoProfile EncodedProfile) []EncodedProfile {
 	profiles := make([]EncodedProfile, 0)
-	var CRF uint = defaultCRF
-	if videoProfile.CRF != 0 {
-		CRF = videoProfile.CRF
+	var quality uint = defaultQuality
+	if videoProfile.Quality != 0 {
+		quality = videoProfile.Quality
 	}
 
 	profiles = append(profiles, EncodedProfile{
@@ -126,7 +126,7 @@ func GenerateSingleProfileWithTargetParams(videoTrack InputTrack, videoProfile E
 		FPS:     0,
 		Width:   videoTrack.Width,
 		Height:  videoTrack.Height,
-		CRF:     CRF,
+		Quality: quality,
 	})
 	return profiles
 }
@@ -160,7 +160,7 @@ func GetDefaultPlaybackProfiles(video InputTrack) ([]EncodedProfile, error) {
 		FPS:     0,
 		Width:   nearestEven(video.Width),
 		Height:  nearestEven(video.Height),
-		CRF:     defaultCRF,
+		Quality: defaultQuality,
 	})
 	return profiles, nil
 }
@@ -182,7 +182,7 @@ func lowBitrateProfile(video InputTrack) EncodedProfile {
 		Bitrate: bitrate,
 		Width:   nearestEven(video.Width),
 		Height:  nearestEven(video.Height),
-		CRF:     defaultCRF,
+		Quality: defaultQuality,
 	}
 }
 
@@ -202,7 +202,7 @@ type EncodedProfile struct {
 	Encoder      string `json:"encoder,omitempty"`
 	ColorDepth   int64  `json:"colorDepth,omitempty"`
 	ChromaFormat int64  `json:"chromaFormat,omitempty"`
-	CRF          uint   `json:"crf"`
+	Quality      uint   `json:"quality"`
 }
 
 type OutputVideo struct {
