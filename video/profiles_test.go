@@ -147,13 +147,12 @@ func TestGetDefaultPlaybackProfiles(t *testing.T) {
 	}
 }
 
-func TestCheckUpdatedAlgo(t *testing.T) {
+func TestGetDefaultPlaybackProfilesFixtures(t *testing.T) {
 	type ProfilesTest struct {
-		Width          int64
-		Height         int64
-		Bitrate        int64
-		ExpectedOutput []EncodedProfile
-		CurrentOutput  []EncodedProfile
+		Width         int64
+		Height        int64
+		Bitrate       int64
+		CurrentOutput []EncodedProfile
 	}
 	dir := "./fixtures/profiles_tests"
 	files, err := os.ReadDir(dir)
@@ -162,7 +161,8 @@ func TestCheckUpdatedAlgo(t *testing.T) {
 		if file.IsDir() {
 			continue
 		}
-		contents, err := os.ReadFile(filepath.Join(dir, file.Name()))
+		fileName := filepath.Join(dir, file.Name())
+		contents, err := os.ReadFile(fileName)
 		require.NoError(t, err)
 		var testCase ProfilesTest
 		err = json.Unmarshal(contents, &testCase)
@@ -179,20 +179,19 @@ func TestCheckUpdatedAlgo(t *testing.T) {
 					},
 				}},
 			}
-			oldAlgorithmOutput := testCase.ExpectedOutput
 			vt, err := iv.GetTrack(TrackTypeVideo)
 			require.NoError(t, err)
 			current, err := GetDefaultPlaybackProfiles(vt)
 			require.NoError(t, err)
-			require.Equal(t, testCase.CurrentOutput, current)
-			require.Equal(t, len(oldAlgorithmOutput), len(current))
-			for i, profile := range oldAlgorithmOutput {
-				currentProfile := current[i]
-				// check that they're equal other than the new bitrates being lower
-				require.LessOrEqual(t, currentProfile.Bitrate, profile.Bitrate)
-				profile.Bitrate = currentProfile.Bitrate
-				require.Equal(t, profile, currentProfile)
+
+			if os.Getenv("REGENERATE_FIXTURES") != "" {
+				testCase.CurrentOutput = current
+				bs, err := json.Marshal(testCase)
+				require.NoError(t, err)
+				err = os.WriteFile(fileName, bs, 0644)
+				require.NoError(t, err)
 			}
+			require.Equal(t, testCase.CurrentOutput, current)
 		})
 	}
 }
