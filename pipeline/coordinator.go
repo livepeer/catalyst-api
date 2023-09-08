@@ -286,7 +286,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		si.SourceFile = osTransferURL.String()  // OS URL used by mist
 		si.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert
 		si.InputFileInfo = inputVideoProbe
-		si.GenerateMP4 = ShouldGenerateMP4(sourceURL, p.Mp4TargetURL, p.FragMp4TargetURL, p.Mp4OnlyShort, p.InputFileInfo.Duration)
+		si.GenerateMP4 = ShouldGenerateMP4(sourceURL, p.Mp4TargetURL, p.FragMp4TargetURL, p.Mp4OnlyShort, si.InputFileInfo.Duration)
 		si.DownloadDone = time.Now()
 
 		log.AddContext(p.RequestID, "new_source_url", si.SourceFile)
