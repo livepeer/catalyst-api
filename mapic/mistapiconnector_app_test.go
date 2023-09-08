@@ -1,13 +1,14 @@
 package mistapiconnector
 
 import (
+	"testing"
+
 	"github.com/golang/mock/gomock"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	mockmistclient "github.com/livepeer/catalyst-api/mocks/clients"
 	"github.com/livepeer/go-api-client"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestReconcileMultistream(t *testing.T) {
@@ -157,7 +158,9 @@ func TestReconcileMultistream(t *testing.T) {
 		return nil
 	}).AnyTimes()
 
-	mc.reconcileMultistream()
+	mistState, err := mm.GetState()
+	require.NoError(t, err)
+	mc.reconcileMultistream(mistState)
 
 	expectedAutoToAdd := []streamTarget{
 		{

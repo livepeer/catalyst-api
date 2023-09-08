@@ -27,6 +27,8 @@ type CatalystAPIMetrics struct {
 	UploadVODRequestDurationSec *prometheus.SummaryVec
 	TranscodeSegmentDurationSec prometheus.Histogram
 	PlaybackRequestDurationSec  *prometheus.SummaryVec
+	CDNRedirectCount            *prometheus.CounterVec
+	CDNRedirectWebRTC406        *prometheus.CounterVec
 
 	TranscodingStatusUpdate ClientMetrics
 	BroadcasterClient       ClientMetrics
@@ -64,7 +66,14 @@ func NewMetrics() *CatalystAPIMetrics {
 			Name: "catalyst_playback_request_duration_seconds",
 			Help: "The latency of the requests made to /asset/hls in seconds broken up by success and status code",
 		}, []string{"success", "status_code", "version"}),
-
+		CDNRedirectCount: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "cdn_redirect_count",
+			Help: "Number of requests redirected to CDN",
+		}, []string{"playbackID"}),
+		CDNRedirectWebRTC406: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "cdn_redirect_webrtc_406",
+			Help: "Number of WebRTC requests rejected with HTTP 406 because of playback should be seved from external CDN",
+		}, []string{"playbackID"}),
 		// Clients metrics
 
 		TranscodingStatusUpdate: ClientMetrics{

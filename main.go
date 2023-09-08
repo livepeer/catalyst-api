@@ -87,6 +87,8 @@ func main() {
 	fs.StringVar(&cli.NodeName, "node", hostname, "Name of this node within the cluster")
 	config.SpaceSliceFlag(fs, &cli.BalancerArgs, "balancer-args", []string{}, "arguments passed to MistUtilLoad")
 	fs.StringVar(&cli.NodeHost, "node-host", "", "Hostname this node should handle requests for. Requests on any other domain will trigger a redirect. Useful as a 404 handler to send users to another node.")
+	config.CommaSliceFlag(fs, &cli.CdnRedirectPlaybackIDs, "cdn-redirect-playback-ids", []string{}, "PlaybackIDs to be redirected to CDN.")
+	config.URLVarFlag(fs, &cli.CdnRedirectPrefix, "cdn-redirect-prefix", "", "CDN URL where streams selected by -cdn-redirect-playback-ids are redirected. E.g. https://externalcdn.livepeer.com/mist/")
 	fs.Float64Var(&cli.NodeLatitude, "node-latitude", 0, "Latitude of this Catalyst node. Used for load balancing.")
 	fs.Float64Var(&cli.NodeLongitude, "node-longitude", 0, "Longitude of this Catalyst node. Used for load balancing.")
 	config.CommaSliceFlag(fs, &cli.RedirectPrefixes, "redirect-prefixes", []string{}, "Set of valid prefixes of playback id which are handled by mistserver")

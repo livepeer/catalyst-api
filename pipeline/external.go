@@ -18,6 +18,10 @@ func (m *external) Name() string {
 }
 
 func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
+	if e == nil || e.transcoder == nil {
+		return nil, fmt.Errorf("no external transcoder configured")
+	}
+
 	sourceFileUrl, err := url.Parse(job.SignedSourceURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid source file URL: %w", err)

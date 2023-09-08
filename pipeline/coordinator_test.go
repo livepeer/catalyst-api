@@ -173,64 +173,6 @@ func TestCoordinatorSourceCopy(t *testing.T) {
 	require.Zero(len(calls))
 }
 
-func TestCoordinatorBackgroundJobsStrategies(t *testing.T) {
-	require := require.New(t)
-
-	callbackHandler, callbacks := callbacksRecorder()
-	fgHandler, foregroundCalls := recordingHandler(nil)
-	backgroundCalls := make(chan *JobInfo, 10)
-	bgHandler := &StubHandler{
-		handleStartUploadJob: func(job *JobInfo) (*HandlerOutput, error) {
-			backgroundCalls <- job
-			// Test that background job is really hidden: status callbacks are not reported (empty URL)
-			job.ReportProgress(clients.TranscodeStatusPreparing, 0.2)
-
-			time.Sleep(1 * time.Second)
-			require.Zero(len(callbacks))
-			return testHandlerResult, nil
-		},
-	}
-
-	doTest := func(strategy Strategy) {
-		var coord *Coordinator
-		if strategy == StrategyBackgroundExternal {
-			coord = NewStubCoordinatorOpts(strategy, callbackHandler, fgHandler, bgHandler, "")
-		} else {
-			t.Fatalf("Unexpected strategy: %s", strategy)
-		}
-
-		inputFile, _, cleanup := setupTransferDir(t, coord)
-		defer cleanup()
-		job := testJob
-		job.SourceFile = "file://" + inputFile.Name()
-		coord.StartUploadJob(job)
-
-		requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
-		msg := requireReceive(t, callbacks, 1*time.Second)
-		require.NotZero(msg.URL)
-		require.Equal(clients.TranscodeStatusPreparing, msg.Status)
-
-		fgJob := requireReceive(t, foregroundCalls, 1*time.Second)
-		require.Equal("123", fgJob.RequestID)
-		bgJob := requireReceive(t, backgroundCalls, 1*time.Second)
-		require.Equal("bg_123", bgJob.RequestID)
-		require.NotEqual(fgJob.StreamName, bgJob.StreamName)
-
-		// Test that foreground job is the real one: status callbacks ARE reported
-		msg = requireReceive(t, callbacks, 1*time.Second)
-		require.NotZero(msg.URL)
-		require.Equal(clients.TranscodeStatusCompleted, msg.Status)
-		require.Equal("123", msg.RequestID)
-
-		time.Sleep(1 * time.Second)
-		require.Zero(len(foregroundCalls))
-		require.Zero(len(backgroundCalls))
-		require.Zero(len(callbacks))
-	}
-
-	doTest(StrategyBackgroundExternal)
-}
-
 func TestCoordinatorFallbackStrategySuccess(t *testing.T) {
 	require := require.New(t)
 
@@ -336,7 +278,7 @@ func TestAllowsOverridingStrategyOnRequest(t *testing.T) {
 	defer cleanup()
 	// Override the strategy to background external, which will call the external provider *and* the ffmpeg provider
 	p := testJob
-	p.PipelineStrategy = StrategyBackgroundExternal
+	p.PipelineStrategy = StrategyFallbackExternal
 	p.SourceFile = "file://" + inputFile.Name()
 	coord.StartUploadJob(p)
 
@@ -347,8 +289,8 @@ func TestAllowsOverridingStrategyOnRequest(t *testing.T) {
 
 	// Sanity check that ffmpeg also ran
 	externalJob := requireReceive(t, externalCalls, 1*time.Second)
-	require.Equal("bg_"+ffmpegJob.RequestID, externalJob.RequestID)
-	require.Equal("catalyst_vod_bg_"+ffmpegJob.RequestID, externalJob.StreamName)
+	require.Equal(ffmpegJob.RequestID, externalJob.RequestID)
+	require.Equal("catalyst_vod_"+ffmpegJob.RequestID, externalJob.StreamName)
 }
 
 func setJobInfoFields(job *JobInfo) {
@@ -385,7 +327,7 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 
 	db, dbMock, err := sqlmock.New()
 	require.NoError(err)
-	coord := NewStubCoordinatorOpts(StrategyBackgroundExternal, callbackHandler, ffmpeg, external, "")
+	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, ffmpeg, external, "")
 	coord.MetricsDB = db
 
 	inputFile, transferDir, cleanup := setupTransferDir(t, coord)
@@ -396,7 +338,7 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 
 	dbMock.
 		ExpectExec("insert into \"vod_completed\".*").
-		WithArgs(sqlmock.AnyArg(), 0, sqlmock.AnyArg(), sqlmock.AnyArg(), "vid codec", "audio codec", "stub", "test region", "completed", 1, sqlmock.AnyArg(), 2, 3, 4, 5, sourceFile, "s3+https://user:xxxxx@storage.google.com/bucket/key", false, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), 0, "123", sqlmock.AnyArg(), "vid codec", "audio codec", "stub", "test region", "completed", 1, sqlmock.AnyArg(), 2, 3, 4, 5, sourceFile, "s3+https://user:xxxxx@storage.google.com/bucket/key", false, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	coord.StartUploadJob(job)
@@ -463,7 +405,7 @@ func Test_ProbeErrors(t *testing.T) {
 		{
 			name:        "audio only",
 			assetType:   "audio",
-			expectedErr: "error copying input to storage: no video track found in input video: no 'video' tracks found",
+			expectedErr: "",
 		},
 		{
 			name:        "filesize greater than max",
