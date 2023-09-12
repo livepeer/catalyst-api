@@ -49,6 +49,9 @@ type UploadVODRequest struct {
 	TargetSegmentSizeSecs int64                  `json:"target_segment_size_secs"`
 	Profiles              []video.EncodedProfile `json:"profiles"`
 	PipelineStrategy      pipeline.Strategy      `json:"pipeline_strategy"`
+
+	// Forwarded to clipping stage:
+	ClipStrategy video.ClipStrategy `json:"clip_strategy"`
 }
 
 type UploadVODResponse struct {
@@ -98,6 +101,15 @@ func (r UploadVODRequest) IsProfileValid() bool {
 		}
 	}
 
+	return true
+}
+
+func (r UploadVODRequest) IsClipValid() bool {
+	startTime := r.ClipStrategy.StartTime
+	endTime := r.ClipStrategy.EndTime
+	if startTime < 0 || endTime <= 0 || startTime == endTime || startTime < endTime {
+		return false
+	}
 	return true
 }
 
@@ -196,6 +208,12 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	}
 	log.AddContext(requestID, "target_segment_size_secs", uploadVODRequest.TargetSegmentSizeSecs)
 
+	// Check if this is a clipping request
+	if uploadVODRequest.IsClipValid() {
+		uploadVODRequest.ClipStrategy.Enabled = true
+	}
+
+	// Get target locatons for HLS, MP4, FMP4 outputs
 	hlsTargetOutput := uploadVODRequest.getTargetHlsOutput()
 	hlsTargetURL, err := toTargetURL(hlsTargetOutput, requestID)
 	if err != nil {
@@ -211,11 +229,11 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	if err != nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 	}
-
 	if hlsTargetURL == nil && mp4TargetURL == nil && fragMp4TargetURL == nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", errors2.New("none of output enabled: hls or mp4 or f-mp4"))
 	}
 
+	// Verify pipeline strategy
 	if strat := uploadVODRequest.PipelineStrategy; strat != "" && !strat.IsValid() {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("invalid value provided for pipeline strategy: %q", uploadVODRequest.PipelineStrategy))
 	}
@@ -224,7 +242,6 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 
 	// Once we're happy with the request, do the rest of the Segmenting stage asynchronously to allow us to
 	// from the API call and free up the HTTP connection
-
 	d.VODEngine.StartUploadJob(pipeline.UploadJobPayload{
 		SourceFile:            uploadVODRequest.Url,
 		CallbackURL:           uploadVODRequest.CallbackUrl,
@@ -241,6 +258,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		TargetSegmentSizeSecs: uploadVODRequest.TargetSegmentSizeSecs,
 		Encryption:            uploadVODRequest.Encryption,
 		SourceCopy:            uploadVODRequest.getSourceCopyEnabled(),
+		ClipStrategy:          uploadVODRequest.ClipStrategy,
 	})
 
 	respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})
