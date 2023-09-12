@@ -556,7 +556,7 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 		WithLabelValues(labels...).
 		Add(float64(job.transcodedSegments))
 
-	go c.sendDBMetrics(job, out)
+	c.sendDBMetrics(job, out)
 
 	job.result <- success
 }
