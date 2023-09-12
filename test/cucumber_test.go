@@ -69,6 +69,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^I get an HTTP response with code "([^"]*)" and the following body "([^"]*)"$`, stepContext.CheckHTTPResponseCodeAndBody)
 	ctx.Step(`^Mist calls the "([^"]*)" trigger with "([^"]*)" and ID "([^"]*)"$`, stepContext.CreateTriggerRequest)
 	ctx.Step(`^my "(failed|successful)" (vod|playback) request metrics get recorded$`, stepContext.CheckRecordedMetrics)
+	ctx.Step(`^a "([^"]*)" metric is recorded with a value of "([^"]*)"$`, stepContext.CheckMetricEqual)
 	ctx.Step(`^the body matches file "([^"]*)"$`, stepContext.CheckHTTPResponseBodyFromFile)
 	ctx.Step(`^the gate API will (allow|deny) playback$`, stepContext.SetGateAPIResponse)
 	ctx.Step(`^the gate API will be called (\d+) times$`, stepContext.CheckGateAPICallCount)

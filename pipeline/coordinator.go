@@ -254,6 +254,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 	c.Jobs.Store(streamName, si)
 	log.Log(si.RequestID, "Wrote to jobs cache")
+	metrics.Metrics.JobsInFlight.Set(float64(len(c.Jobs.GetKeys())))
 
 	c.runHandlerAsync(si, func() (*HandlerOutput, error) {
 		sourceURL, err := url.Parse(p.SourceFile)
@@ -467,6 +468,7 @@ func (c *Coordinator) startOneUploadJob(si *JobInfo, handler Handler, hasFallbac
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 	c.Jobs.Store(si.StreamName, si)
 	log.Log(si.RequestID, "Wrote to jobs cache")
+	metrics.Metrics.JobsInFlight.Set(float64(len(c.Jobs.GetKeys())))
 
 	c.runHandlerAsync(si, func() (*HandlerOutput, error) {
 		return si.handler.HandleStartUploadJob(si)
@@ -517,8 +519,8 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 	// Automatically delete jobs after an error or result
 	success := err == nil && err2 == nil
 	c.Jobs.Remove(job.StreamName)
-
 	log.Log(job.RequestID, "Finished job and deleted from job cache", "success", success)
+	metrics.Metrics.JobsInFlight.Set(float64(len(c.Jobs.GetKeys())))
 
 	var labels = []string{
 		job.sourceCodecVideo,
