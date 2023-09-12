@@ -6,6 +6,7 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/pipeline"
 )
 
@@ -15,6 +16,10 @@ type CapacityMiddleware struct {
 
 func (c *CapacityMiddleware) HasCapacity(vodEngine *pipeline.Coordinator, next httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+		// Keep a gauge of HTTP requests in flight
+		metrics.Metrics.HTTPRequestsInFlight.Add(1)
+		defer metrics.Metrics.HTTPRequestsInFlight.Add(-1)
+
 		requestsInFlight := c.requestsInFlight.Add(1)
 		defer c.requestsInFlight.Add(-1)
 

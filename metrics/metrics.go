@@ -30,6 +30,9 @@ type CatalystAPIMetrics struct {
 	CDNRedirectCount            *prometheus.CounterVec
 	CDNRedirectWebRTC406        *prometheus.CounterVec
 
+	JobsInFlight         prometheus.Gauge
+	HTTPRequestsInFlight prometheus.Gauge
+
 	TranscodingStatusUpdate ClientMetrics
 	BroadcasterClient       ClientMetrics
 	MistClient              ClientMetrics
@@ -47,6 +50,16 @@ func NewMetrics() *CatalystAPIMetrics {
 			Name: "version",
 			Help: "Current Git SHA / Tag that's running. Incremented once on app startup.",
 		}, []string{"app", "version"}),
+
+		// Node-level Capacity Metrics
+		JobsInFlight: promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "jobs_in_flight",
+			Help: "A count of the jobs in flight",
+		}),
+		HTTPRequestsInFlight: promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "http_requests_in_flight",
+			Help: "A count of the http requests in flight",
+		}),
 
 		// /api/vod request metrics
 		UploadVODRequestCount: promauto.NewCounter(prometheus.CounterOpts{

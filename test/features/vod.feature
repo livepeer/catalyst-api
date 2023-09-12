@@ -36,6 +36,7 @@ Feature: VOD Streaming
     Then I get an HTTP response with code "200"
     And I receive a Request ID in the response body
     And the source playback manifest is written to storage within "5" seconds
+    And a "jobs_in_flight" metric is recorded with a value of "1"
     And my "successful" vod request metrics get recorded
     And "4" source segments are written to storage within "5" seconds
     And the source manifest is written to storage within "3" seconds and contains "4" segments
