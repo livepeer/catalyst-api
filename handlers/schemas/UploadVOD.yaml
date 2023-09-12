@@ -24,6 +24,16 @@ properties:
     required: 
       - "encrypted_key"
     additionalProperties: false
+  clip_strategy:
+    type: "object"
+    properties:
+      start_time:
+        type: "integer"
+      end_time:
+        type: "integer"
+    required:
+      -  "start_time"
+    additionalProperties: false
   pipeline_strategy:
     type: string
     description:

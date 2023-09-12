@@ -74,6 +74,7 @@ type UploadJobPayload struct {
 	Encryption            *EncryptionPayload
 	InputFileInfo         video.InputVideo
 	SourceCopy            bool
+	ClipStrategy          video.ClipStrategy
 }
 
 type EncryptionPayload struct {
@@ -272,6 +273,15 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 
 		osTransferURL := c.SourceOutputURL.JoinPath(p.RequestID, "transfer", path.Base(sourceURL.Path))
 		if clients.IsHLSInput(sourceURL) {
+			// Currently we only clip an HLS source (e.g recordings or transcoded asset)
+			if p.ClipStrategy.Enabled {
+				log.Log(p.RequestID, "clippity clipping the input")
+				// Use new clipped manifest as the source URL
+				sourceURL, err = video.ClipInput(p.RequestID, sourceURL, p.ClipStrategy.StartTime, p.ClipStrategy.EndTime)
+				if err != nil {
+					return nil, fmt.Errorf("error clipping input: %w", err)
+				}
+			}
 			osTransferURL = sourceURL
 		} else if p.SourceCopy {
 			log.Log(p.RequestID, "source copy enabled")

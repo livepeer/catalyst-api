@@ -5,8 +5,15 @@ import (
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/log"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
+	"net/url"
 	"time"
 )
+
+type ClipStrategy struct {
+	Enabled   bool
+	StartTime float64 `json:"start_time,omitempty"`
+	EndTime   float64 `json:"end_time,omitempty"`
+}
 
 // format time in secs to be copatible with ffmpeg's expected time syntax
 func formatTime(seconds float64) string {
@@ -53,6 +60,13 @@ func getRelevantSegment(allSegments []*m3u8.MediaSegment, playHeadTime float64, 
 		return segment.SeqId, nil
 	}
 	return 0, fmt.Errorf("error clipping: did not find a segment that falls within %v seconds", playHeadTime)
+}
+
+// Function that will take a source URL manifest and return a new URL
+// pointing to the clipped manifest
+func ClipInput(requestID string, srcUrl *url.URL, startTime, endTime float64) (*url.URL, error) {
+	// TODO:*actually* do the clipping
+	return srcUrl, nil
 }
 
 // Function to find relevant segments that span from the clipping start and end times
