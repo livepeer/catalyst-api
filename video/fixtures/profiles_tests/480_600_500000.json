@@ -1,1 +1,1 @@
-{"Width":480,"Height":600,"Bitrate":500000,"CurrentOutput":[{"name":"low-bitrate","width":480,"height":600,"bitrate":250000,"fps":0,"quality":27},{"name":"600p0","width":480,"height":600,"bitrate":500000,"fps":0,"quality":27}]}
+{"Width":480,"Height":600,"Bitrate":500000,"CurrentOutput":[{"name":"low-bitrate","width":480,"height":600,"bitrate":250000,"fps":0,"quality":27},{"name":"600p0","width":480,"height":600,"bitrate":600000,"fps":0,"quality":27}]}
