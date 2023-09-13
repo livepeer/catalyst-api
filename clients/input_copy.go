@@ -82,7 +82,10 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 			log.Log(requestID, "input file duration is 0 or cannot be determined")
 		} else {
 			videoTrack.DurationSec = duration
-			inputFileProbe.SetTrack(video.TrackTypeVideo, videoTrack)
+			err := inputFileProbe.SetTrack(video.TrackTypeVideo, videoTrack)
+			if err != nil {
+				return video.InputVideo{}, "", err
+			}
 		}
 	}
 	if hasVideoTrack {
