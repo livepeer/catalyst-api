@@ -107,7 +107,7 @@ func (r UploadVODRequest) IsProfileValid() bool {
 func (r UploadVODRequest) IsClipValid() bool {
 	startTime := r.ClipStrategy.StartTime
 	endTime := r.ClipStrategy.EndTime
-	if startTime < 0 || endTime <= 0 || startTime == endTime || startTime < endTime {
+	if startTime < 0 || endTime <= 0 || startTime == endTime || startTime > endTime {
 		return false
 	}
 	return true
