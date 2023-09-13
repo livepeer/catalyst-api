@@ -84,7 +84,7 @@ func TestCoordinatorDoesNotBlock(t *testing.T) {
 			return nil, errors.New("test error")
 		},
 	}
-	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler, "")
+	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler)
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
 	job := testJob
@@ -114,7 +114,7 @@ func TestCoordinatorResistsPanics(t *testing.T) {
 			panic("oh no!")
 		},
 	}
-	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler, "")
+	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler)
 
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
@@ -136,7 +136,7 @@ func TestCoordinatorCatalystDominance(t *testing.T) {
 
 	ffmpeg, calls := recordingHandler(nil)
 	external := allFailingHandler(t)
-	coord := NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, nil, ffmpeg, external, "")
+	coord := NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, nil, ffmpeg, external)
 
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
@@ -156,7 +156,7 @@ func TestCoordinatorSourceCopy(t *testing.T) {
 
 	ffmpeg, calls := recordingHandler(nil)
 	external := allFailingHandler(t)
-	coord := NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, nil, ffmpeg, external, "")
+	coord := NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, nil, ffmpeg, external)
 
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
@@ -180,7 +180,7 @@ func TestCoordinatorFallbackStrategySuccess(t *testing.T) {
 	ffmpeg, ffmpegCalls := recordingHandler(nil)
 	external, externalCalls := recordingHandler(nil)
 
-	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, ffmpeg, external, "")
+	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, ffmpeg, external)
 
 	// Start a job that will complete successfully on ffmpeg, which should not
 	// trigger the external pipeline
@@ -222,7 +222,7 @@ func TestCoordinatorFallbackStrategyFailure(t *testing.T) {
 		},
 	}
 
-	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, ffmpeg, external, "")
+	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, ffmpeg, external)
 
 	// Start a job which ffmpeg will fail and only then call the external one
 	inputFile, _, cleanup := setupTransferDir(t, coord)
@@ -272,7 +272,7 @@ func TestAllowsOverridingStrategyOnRequest(t *testing.T) {
 	external, externalCalls := recordingHandler(nil)
 
 	// create coordinator with strategy catalyst dominance (external should never be called)
-	coord := NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, nil, ffmpeg, external, "")
+	coord := NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, nil, ffmpeg, external)
 
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
@@ -327,7 +327,7 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 
 	db, dbMock, err := sqlmock.New()
 	require.NoError(err)
-	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, ffmpeg, external, "")
+	coord := NewStubCoordinatorOpts(StrategyFallbackExternal, callbackHandler, ffmpeg, external)
 	coord.MetricsDB = db
 
 	inputFile, transferDir, cleanup := setupTransferDir(t, coord)
@@ -368,7 +368,7 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 
 func Test_EmptyFile(t *testing.T) {
 	callbackHandler, callbacks := callbacksRecorder()
-	coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil, "")
+	coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil)
 	inputFile, _, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
 
@@ -422,7 +422,7 @@ func Test_ProbeErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			callbackHandler, callbacks := callbacksRecorder()
-			coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil, "")
+			coord := NewStubCoordinatorOpts("", callbackHandler, nil, nil)
 			inputFile, transferDir, cleanup := setupTransferDir(t, coord)
 			defer cleanup()
 			coord.InputCopy = &clients.InputCopy{
@@ -456,7 +456,7 @@ func Test_InputCopiedToTransferLocation(t *testing.T) {
 			return testHandlerResult, nil
 		},
 	}
-	coord := NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, callbackHandler, ffmpeg, nil, "")
+	coord := NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, callbackHandler, ffmpeg, nil)
 	f, transferDir, cleanup := setupTransferDir(t, coord)
 	defer cleanup()
 

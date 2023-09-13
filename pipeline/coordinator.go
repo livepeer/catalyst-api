@@ -189,7 +189,7 @@ func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string,
 		strategy:     strategy,
 		statusClient: statusClient,
 		pipeFfmpeg: &ffmpeg{
-			SourceOutputUrl:     sourceOutputURL,
+			SourceOutputURL:     sourceOutput,
 			Broadcaster:         broadcaster,
 			probe:               video.Probe{},
 			sourcePlaybackHosts: sourcePlaybackHosts,
@@ -204,10 +204,10 @@ func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string,
 }
 
 func NewStubCoordinator() *Coordinator {
-	return NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, nil, nil, nil, "")
+	return NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, nil, nil, nil)
 }
 
-func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeFfmpeg, pipeExternal Handler, sourceOutputUrl string) *Coordinator {
+func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeFfmpeg, pipeExternal Handler) *Coordinator {
 	if strategy == "" {
 		strategy = StrategyCatalystFfmpegDominance
 	}
@@ -215,7 +215,7 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 		statusClient = clients.TranscodeStatusFunc(func(tsm clients.TranscodeStatusMessage) error { return nil })
 	}
 	if pipeFfmpeg == nil {
-		pipeFfmpeg = &ffmpeg{SourceOutputUrl: sourceOutputUrl, probe: video.Probe{}}
+		pipeFfmpeg = &ffmpeg{SourceOutputURL: &url.URL{}, probe: video.Probe{}}
 	}
 	if pipeExternal == nil {
 		pipeExternal = &external{}

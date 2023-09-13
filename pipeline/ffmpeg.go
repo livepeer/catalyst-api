@@ -23,7 +23,7 @@ const LocalSourceFilePattern = "sourcevideo*"
 
 type ffmpeg struct {
 	// The base of where to output source segments to
-	SourceOutputUrl string
+	SourceOutputURL *url.URL
 	// Broadcaster for local transcoding
 	Broadcaster         clients.BroadcasterClient
 	probe               video.Prober
@@ -45,11 +45,7 @@ func (f *ffmpeg) Name() string {
 func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	log.Log(job.RequestID, "Handling job via FFMPEG/Livepeer pipeline")
 
-	sourceOutputBaseURL, err := url.Parse(f.SourceOutputUrl)
-	if err != nil {
-		return nil, fmt.Errorf("cannot create sourceOutputUrl: %w", err)
-	}
-	sourceOutputURL := sourceOutputBaseURL.JoinPath(job.RequestID)
+	sourceOutputURL := f.SourceOutputURL.JoinPath(job.RequestID)
 	segmentingTargetURL := sourceOutputURL.JoinPath(config.SEGMENTING_SUBDIR, config.SEGMENTING_TARGET_MANIFEST)
 
 	job.SegmentingTargetURL = segmentingTargetURL.String()
