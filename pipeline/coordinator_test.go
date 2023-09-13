@@ -853,4 +853,10 @@ func TestMP4Generation(t *testing.T) {
 		ShouldGenerateMP4(hlsSourceURL, nil, nil, false, 60*60*13),
 		"SHOULD NOT generate an MP4 if no valid mp4 or fmp4 URL was provided",
 	)
+
+	require.False(
+		t,
+		ShouldGenerateMP4(hlsSourceURL, mp4TargetURL, fragMp4TargetURL, false, 0),
+		"SHOULD NOT generate an MP4 if duration is 0 regardless of a valid mp4/fmp4 URL",
+	)
 }
