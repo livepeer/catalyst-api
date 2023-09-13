@@ -303,12 +303,20 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		log.AddContext(p.RequestID, "new_source_url", si.SourceFile)
 		log.AddContext(p.RequestID, "signed_url", si.SignedSourceURL)
 
+		if si.GenerateMP4 {
+			log.Log(si.RequestID, "MP4s will be generated", "duration", si.InputFileInfo.Duration)
+		}
+
 		c.startUploadJob(si)
 		return nil, nil
 	})
 }
 
 func ShouldGenerateMP4(sourceURL, mp4TargetUrl *url.URL, fragMp4TargetUrl *url.URL, mp4OnlyShort bool, durationSecs float64) bool {
+	// Skip mp4 generation if we weren't able to determine the duration of the input file for any reason
+	if durationSecs == 0.0 {
+		return false
+	}
 	// We're currently memory-bound for generating MP4s above a certain file size
 	// This has been hitting us for long recordings, so do a crude "is it longer than 3 hours?" check and skip the MP4 if it is
 	const maxRecordingMP4Duration = 12 * time.Hour
