@@ -156,6 +156,26 @@ func (f *ffmpeg) sendSourcePlayback(job *JobInfo) {
 		return
 	}
 
+	sourceURL, err := url.Parse(job.SourceFile)
+	if err != nil {
+		log.LogError(job.RequestID, "unable to parse source url for source playback", err)
+		return
+	}
+
+	prefix := ""
+	if clients.IsHLSInput(sourceURL) {
+		for k, v := range f.sourcePlaybackHosts {
+			if strings.HasPrefix(job.SourceFile, k) {
+				prefix = strings.Replace(job.SourceFile, k, v, 1)
+				break
+			}
+		}
+		if prefix == "" {
+			log.Log(job.RequestID, "no source playback prefix found", "host", sourceURL.Host)
+			return
+		}
+	}
+
 	segmentingPath := strings.Split(segmentingTargetURL.Path, "/")
 	if len(segmentingPath) < 3 || segmentingPath[1] == "" {
 		log.Log(job.RequestID, "unable to find bucket for source playback", "segmentingTargetURL", segmentingTargetURL)
@@ -163,7 +183,7 @@ func (f *ffmpeg) sendSourcePlayback(job *JobInfo) {
 	}
 	// assume bucket is second element in slice (first element should be an empty string as the path has a leading slash)
 	segmentingBucket := segmentingPath[1]
-	if job.HlsTargetURL == nil || !strings.Contains(job.HlsTargetURL.String(), "/"+segmentingBucket+"/") {
+	if (job.HlsTargetURL == nil || !strings.Contains(job.HlsTargetURL.String(), "/"+segmentingBucket+"/")) && prefix == "" {
 		log.Log(job.RequestID, "source playback not available, not a studio job", "segmentingTargetURL", segmentingTargetURL)
 		return
 	}
@@ -183,19 +203,10 @@ func (f *ffmpeg) sendSourcePlayback(job *JobInfo) {
 		return
 	}
 
-	sourceURL, err := url.Parse(job.SourceFile)
-	if err != nil {
-		log.LogError(job.RequestID, "unable to parse source url for source playback", err)
-		return
+	if prefix == "" {
+		prefix = "/" + path.Join(segmentingPath[2:]...)
 	}
-
-	prefix := f.sourcePlaybackHosts[sourceURL.Host]
-	if clients.IsHLSInput(sourceURL) && prefix == "" {
-		log.Log(job.RequestID, "no source playback prefix found", "host", sourceURL.Host)
-		return
-	}
-
-	sourceMaster.Append(prefix+"/"+path.Join(segmentingPath[2:]...), &m3u8.MediaPlaylist{}, m3u8.VariantParams{
+	sourceMaster.Append(prefix, &m3u8.MediaPlaylist{}, m3u8.VariantParams{
 		Bandwidth:  uint32(videoTrack.Bitrate),
 		Resolution: fmt.Sprintf("%dx%d", videoTrack.Width, videoTrack.Height),
 		Name:       fmt.Sprintf("%dp", videoTrack.Height),
