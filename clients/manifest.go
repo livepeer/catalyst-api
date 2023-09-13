@@ -3,9 +3,13 @@ package clients
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -200,4 +204,75 @@ func SortTranscodedStats(transcodedStats []*video.RenditionStats) {
 			return resolutionA > resolutionB
 		}
 	})
+}
+
+func ClipInput(requestID, sourceURL string, startTime, endTime float64) (clippedManifestUrl string, err error) {
+
+	// Get the source manifest that will be clipped
+	origManifest, err := DownloadRenditionManifest(requestID, sourceURL)
+	if err != nil {
+		return "", fmt.Errorf("error clipping: failed to download original manifest: %w", err)
+	}
+	// Generate the full segment URLs from the manifest
+	// TODO: optimize later as we don't need to convert each and every single url
+	sourceSegmentURLs, err := GetSourceSegmentURLs(sourceURL, origManifest)
+	if err != nil {
+		return "", fmt.Errorf("error clipping: failed to get urls: %w", err)
+	}
+
+	// get segments at the clipping boundaries
+	segs, err := video.Clip(requestID, &origManifest, startTime, endTime)
+
+	err = os.MkdirAll(video.ClipStorageDir, 0700)
+	if err != nil {
+		return "", fmt.Errorf("error clipping: failed to create temp storage dir: %w", err)
+	}
+	// download those segments and write to storage
+	for _, v := range segs {
+		fmt.Println("XXX: URL IS THIS: ", sourceSegmentURLs[v.SeqId])
+
+		//create temp local file:
+		clipSegmentFileName := filepath.Join(video.ClipStorageDir, requestID+"_"+strconv.FormatUint(v.SeqId, 10)+".ts")
+		//defer os.Remove(clipSegmentFileName)
+		// Create a new file in the temporary directory
+		file, err := os.Create(clipSegmentFileName)
+		if err != nil {
+			return "", err
+		}
+		defer file.Close()
+
+		// Download the segment from OS -> write to local file
+		dStorage := NewDStorageDownload()
+		err = backoff.Retry(func() error {
+			rc, err := GetFile(context.Background(), requestID, sourceSegmentURLs[v.SeqId].URL.String(), dStorage)
+			if err != nil {
+				return fmt.Errorf("error clipping: failed to download segments: %w", err)
+			}
+			// Write the segment data to the file
+			_, err = io.Copy(file, rc)
+			if err != nil {
+				return fmt.Errorf("error clipping: failed to write segments: %w", err)
+			}
+			rc.Close()
+			return nil
+		}, DownloadRetryBackoff())
+		if err != nil {
+			return "", fmt.Errorf("error clipping: failed to get segments...: %w", err)
+		}
+
+		// Transcode Segment:
+		transcodedSegmentFileName := filepath.Join(video.ClipStorageDir, requestID+"_"+strconv.FormatUint(v.SeqId, 10)+"_clip.ts")
+		err = video.ClipSegment(clipSegmentFileName, transcodedSegmentFileName, startTime, endTime)
+		if err != nil {
+			return "", fmt.Errorf("error clipping: failed to transcode segments...: %w", err)
+		}
+
+		// upload segment
+
+	}
+
+	return "", fmt.Errorf("XXX: ERROR %s", segs)
+
+
+	// generate and upload clipped manifest
 }

@@ -273,16 +273,19 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		}
 
 		osTransferURL := c.SourceOutputURL.JoinPath(p.RequestID, "transfer", path.Base(sourceURL.Path))
+
+		// Update osTransferURL if needed
 		if clients.IsHLSInput(sourceURL) {
+			fmt.Println("XXX: HERE", p.ClipStrategy.Enabled)
 			// Currently we only clip an HLS source (e.g recordings or transcoded asset)
 			if p.ClipStrategy.Enabled {
-				log.Log(p.RequestID, "clippity clipping the input")
-				// Use new clipped manifest as the source URL
-				sourceURL, err = video.ClipInput(p.RequestID, sourceURL, p.ClipStrategy.StartTime, p.ClipStrategy.EndTime)
+				log.Log(p.RequestID, "XXX: clippity clipping the input")
+				sourceURL, err := clients.ClipInput(p.RequestID, sourceURL.String(), p.ClipStrategy.StartTime, p.ClipStrategy.EndTime)
 				if err != nil {
-					return nil, fmt.Errorf("error clipping input: %w", err)
+					return nil, fmt.Errorf("error clippity: %s %w", sourceURL, err)
 				}
 			}
+			// Use the source URL location as the transfer directory to hold the clipped outputs
 			osTransferURL = sourceURL
 		} else if p.SourceCopy {
 			log.Log(p.RequestID, "source copy enabled")

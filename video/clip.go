@@ -5,8 +5,11 @@ import (
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/log"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
-	"net/url"
 	"time"
+)
+
+const (
+	ClipStorageDir = "/tmp/clip_stage"
 )
 
 type ClipStrategy struct {
@@ -62,11 +65,16 @@ func getRelevantSegment(allSegments []*m3u8.MediaSegment, playHeadTime float64, 
 	return 0, fmt.Errorf("error clipping: did not find a segment that falls within %v seconds", playHeadTime)
 }
 
-// Function that will take a source URL manifest and return a new URL
-// pointing to the clipped manifest
-func ClipInput(requestID string, srcUrl *url.URL, startTime, endTime float64) (*url.URL, error) {
-	// TODO:*actually* do the clipping
-	return srcUrl, nil
+func Clip(requestID string, manifest *m3u8.MediaPlaylist, startTime, endTime float64) ([]*m3u8.MediaSegment, error) {
+	// Get the segments that correspond to the start/end
+	segs, err := ClipManifest(requestID, manifest, startTime, endTime)
+	if err != nil {
+		return nil, fmt.Errorf("error clipping input: %w", err)
+	}
+	fmt.Printf("XXX: %d segs %+v\n", len(segs), segs[0])
+
+	// Re-transcode the segments
+	return segs, nil
 }
 
 // Function to find relevant segments that span from the clipping start and end times
@@ -133,7 +141,7 @@ func ClipSegment(tsInputFile, tsOutputFile string, startTime, endTime float64) e
 			"c:a":          "copy"}).
 		OverWriteOutput().ErrorToStdOut().Run()
 	if err != nil {
-		return fmt.Errorf("failed to transmux concatenated mpeg-ts file (%s) into a mp4 file: %s", tsInputFile, err)
+		return fmt.Errorf("failed to clip segments from %s: %w", tsInputFile, err)
 	}
 	return nil
 }
