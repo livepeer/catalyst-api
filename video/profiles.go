@@ -36,6 +36,19 @@ func (i InputVideo) GetTrack(trackType string) (InputTrack, error) {
 	return InputTrack{}, fmt.Errorf("no '%s' tracks found", trackType)
 }
 
+func (i InputVideo) SetTrack(trackType string, track InputTrack) error {
+	if trackType != TrackTypeVideo && trackType != TrackTypeAudio {
+		return fmt.Errorf("invalid track type - must be '%s' or '%s'", TrackTypeVideo, TrackTypeAudio)
+	}
+	for j, t := range i.Tracks {
+		if t.Type == trackType {
+			i.Tracks[j] = track
+			return nil
+		}
+	}
+	return fmt.Errorf("no '%s' tracks found", trackType)
+}
+
 type VideoTrack struct {
 	Width              int64   `json:"width,omitempty"`
 	Height             int64   `json:"height,omitempty"`
