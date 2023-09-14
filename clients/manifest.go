@@ -206,7 +206,10 @@ func SortTranscodedStats(transcodedStats []*video.RenditionStats) {
 	})
 }
 
-func ClipInput(requestID, sourceURL string, startTime, endTime float64) (clippedManifestUrl string, err error) {
+func ClipInput(requestID, sourceURL, clipTargetUrl string, startTime, endTime float64) (clippedManifestUrl string, err error) {
+
+	fmt.Println("XXX: sourceURL: ", sourceURL)
+	fmt.Println("XXX: hlsTargetURL: ", clipTargetUrl)
 
 	// Get the source manifest that will be clipped
 	origManifest, err := DownloadRenditionManifest(requestID, sourceURL)
@@ -268,11 +271,32 @@ func ClipInput(requestID, sourceURL string, startTime, endTime float64) (clipped
 		}
 
 		// upload segment
+		// Open the file and create an io.ReadCloser
+		o, err := os.Open(transcodedSegmentFileName)
+		if err != nil {
+			return "", fmt.Errorf("error clipping: failed to open file to upload...: %w", err)
+		}
+		defer o.Close()
+/*
+		destUrl := sourceSegmentURLs[v.SeqId]
+		u, err := url.Parse(destUrl.URL.String())
+		if err != nil {
+			return "", fmt.Errorf("error clipping: failed to parse...: %w", err)
+		}
+		dirPath := path.Dir(u.Path)
+*/
+		// Reconstruct the modified URL
+//		modifiedURL := fmt.Sprintf("s3+%s://%s%s", u.Scheme, u.Host, dirPath)
+
+		outputFile := "clip_" + strconv.FormatUint(v.SeqId, 10) + ".ts"
+		err = UploadToOSURL(clipTargetUrl, outputFile, o, MaxCopyFileDuration)
+		if err != nil {
+			return "", fmt.Errorf("error clipping: failed to uplaod...: %w", err)
+		}
 
 	}
 
 	return "", fmt.Errorf("XXX: ERROR %s", segs)
-
 
 	// generate and upload clipped manifest
 }

@@ -276,11 +276,13 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 
 		// Update osTransferURL if needed
 		if clients.IsHLSInput(sourceURL) {
+			fmt.Printf("XXX: details %+v\n", si) 
 			fmt.Println("XXX: HERE", p.ClipStrategy.Enabled)
+			fmt.Println("XXX: osTransferURL", osTransferURL)
 			// Currently we only clip an HLS source (e.g recordings or transcoded asset)
 			if p.ClipStrategy.Enabled {
 				log.Log(p.RequestID, "XXX: clippity clipping the input")
-				sourceURL, err := clients.ClipInput(p.RequestID, sourceURL.String(), p.ClipStrategy.StartTime, p.ClipStrategy.EndTime)
+				sourceURL, err := clients.ClipInput(p.RequestID, sourceURL.String(), p.HlsTargetURL.String(), p.ClipStrategy.StartTime, p.ClipStrategy.EndTime)
 				if err != nil {
 					return nil, fmt.Errorf("error clippity: %s %w", sourceURL, err)
 				}
