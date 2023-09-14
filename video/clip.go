@@ -5,8 +5,15 @@ import (
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/log"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
+	"net/url"
 	"time"
 )
+
+type ClipStrategy struct {
+	Enabled   bool
+	StartTime float64 `json:"start_time,omitempty"`
+	EndTime   float64 `json:"end_time,omitempty"`
+}
 
 // format time in secs to be copatible with ffmpeg's expected time syntax
 func formatTime(seconds float64) string {
@@ -15,7 +22,7 @@ func formatTime(seconds float64) string {
 	return timeObj.Format("15:04:05")
 }
 
-func getTotalDurationAndSegments(manifest *m3u8.MediaPlaylist) (float64, uint64) {
+func GetTotalDurationAndSegments(manifest *m3u8.MediaPlaylist) (float64, uint64) {
 	if manifest == nil {
 		return 0.0, 0
 	}
@@ -55,12 +62,19 @@ func getRelevantSegment(allSegments []*m3u8.MediaSegment, playHeadTime float64, 
 	return 0, fmt.Errorf("error clipping: did not find a segment that falls within %v seconds", playHeadTime)
 }
 
+// Function that will take a source URL manifest and return a new URL
+// pointing to the clipped manifest
+func ClipInput(requestID string, srcUrl *url.URL, startTime, endTime float64) (*url.URL, error) {
+	// TODO:*actually* do the clipping
+	return srcUrl, nil
+}
+
 // Function to find relevant segments that span from the clipping start and end times
 func ClipManifest(requestID string, manifest *m3u8.MediaPlaylist, startTime, endTime float64) ([]*m3u8.MediaSegment, error) {
 	var startSegIdx, endSegIdx uint64
 	var err error
 
-	manifestDuration, manifestSegments := getTotalDurationAndSegments(manifest)
+	manifestDuration, manifestSegments := GetTotalDurationAndSegments(manifest)
 
 	// Find the segment index that correlates with the specified startTime
 	// but error out it exceeds the  manifest's duration.

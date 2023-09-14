@@ -74,6 +74,7 @@ type UploadJobPayload struct {
 	Encryption            *EncryptionPayload
 	InputFileInfo         video.InputVideo
 	SourceCopy            bool
+	ClipStrategy          video.ClipStrategy
 }
 
 type EncryptionPayload struct {
@@ -188,7 +189,7 @@ func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string,
 		strategy:     strategy,
 		statusClient: statusClient,
 		pipeFfmpeg: &ffmpeg{
-			SourceOutputUrl:     sourceOutputURL,
+			SourceOutputURL:     sourceOutput,
 			Broadcaster:         broadcaster,
 			probe:               video.Probe{},
 			sourcePlaybackHosts: sourcePlaybackHosts,
@@ -203,10 +204,10 @@ func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string,
 }
 
 func NewStubCoordinator() *Coordinator {
-	return NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, nil, nil, nil, "")
+	return NewStubCoordinatorOpts(StrategyCatalystFfmpegDominance, nil, nil, nil)
 }
 
-func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeFfmpeg, pipeExternal Handler, sourceOutputUrl string) *Coordinator {
+func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeStatusClient, pipeFfmpeg, pipeExternal Handler) *Coordinator {
 	if strategy == "" {
 		strategy = StrategyCatalystFfmpegDominance
 	}
@@ -214,7 +215,7 @@ func NewStubCoordinatorOpts(strategy Strategy, statusClient clients.TranscodeSta
 		statusClient = clients.TranscodeStatusFunc(func(tsm clients.TranscodeStatusMessage) error { return nil })
 	}
 	if pipeFfmpeg == nil {
-		pipeFfmpeg = &ffmpeg{SourceOutputUrl: sourceOutputUrl, probe: video.Probe{}}
+		pipeFfmpeg = &ffmpeg{SourceOutputURL: &url.URL{}, probe: video.Probe{}}
 	}
 	if pipeExternal == nil {
 		pipeExternal = &external{}
@@ -254,6 +255,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 	c.Jobs.Store(streamName, si)
 	log.Log(si.RequestID, "Wrote to jobs cache")
+	metrics.Metrics.JobsInFlight.Set(float64(len(c.Jobs.GetKeys())))
 
 	c.runHandlerAsync(si, func() (*HandlerOutput, error) {
 		sourceURL, err := url.Parse(p.SourceFile)
@@ -272,6 +274,15 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 
 		osTransferURL := c.SourceOutputURL.JoinPath(p.RequestID, "transfer", path.Base(sourceURL.Path))
 		if clients.IsHLSInput(sourceURL) {
+			// Currently we only clip an HLS source (e.g recordings or transcoded asset)
+			if p.ClipStrategy.Enabled {
+				log.Log(p.RequestID, "clippity clipping the input")
+				// Use new clipped manifest as the source URL
+				sourceURL, err = video.ClipInput(p.RequestID, sourceURL, p.ClipStrategy.StartTime, p.ClipStrategy.EndTime)
+				if err != nil {
+					return nil, fmt.Errorf("error clipping input: %w", err)
+				}
+			}
 			osTransferURL = sourceURL
 		} else if p.SourceCopy {
 			log.Log(p.RequestID, "source copy enabled")
@@ -292,12 +303,20 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		log.AddContext(p.RequestID, "new_source_url", si.SourceFile)
 		log.AddContext(p.RequestID, "signed_url", si.SignedSourceURL)
 
+		if si.GenerateMP4 {
+			log.Log(si.RequestID, "MP4s will be generated", "duration", si.InputFileInfo.Duration)
+		}
+
 		c.startUploadJob(si)
 		return nil, nil
 	})
 }
 
 func ShouldGenerateMP4(sourceURL, mp4TargetUrl *url.URL, fragMp4TargetUrl *url.URL, mp4OnlyShort bool, durationSecs float64) bool {
+	// Skip mp4 generation if we weren't able to determine the duration of the input file for any reason
+	if durationSecs == 0.0 {
+		return false
+	}
 	// We're currently memory-bound for generating MP4s above a certain file size
 	// This has been hitting us for long recordings, so do a crude "is it longer than 3 hours?" check and skip the MP4 if it is
 	const maxRecordingMP4Duration = 12 * time.Hour
@@ -467,6 +486,7 @@ func (c *Coordinator) startOneUploadJob(si *JobInfo, handler Handler, hasFallbac
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 	c.Jobs.Store(si.StreamName, si)
 	log.Log(si.RequestID, "Wrote to jobs cache")
+	metrics.Metrics.JobsInFlight.Set(float64(len(c.Jobs.GetKeys())))
 
 	c.runHandlerAsync(si, func() (*HandlerOutput, error) {
 		return si.handler.HandleStartUploadJob(si)
@@ -517,8 +537,8 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 	// Automatically delete jobs after an error or result
 	success := err == nil && err2 == nil
 	c.Jobs.Remove(job.StreamName)
-
 	log.Log(job.RequestID, "Finished job and deleted from job cache", "success", success)
+	metrics.Metrics.JobsInFlight.Set(float64(len(c.Jobs.GetKeys())))
 
 	var labels = []string{
 		job.sourceCodecVideo,
@@ -556,7 +576,7 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 		WithLabelValues(labels...).
 		Add(float64(job.transcodedSegments))
 
-	go c.sendDBMetrics(job, out)
+	c.sendDBMetrics(job, out)
 
 	job.result <- success
 }

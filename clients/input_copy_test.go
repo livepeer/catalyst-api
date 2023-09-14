@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/livepeer/catalyst-api/video"
 	"github.com/stretchr/testify/require"
 )
 
@@ -129,4 +130,15 @@ func Test_getSegmentTransferLocation(t *testing.T) {
 			require.Equal(t, tt.want, url)
 		})
 	}
+}
+
+func TestHLSDurationSet(t *testing.T) {
+	i := InputCopy{
+		Probe: video.Probe{},
+	}
+	inputFile, _ := url.Parse("../test/fixtures/tiny.m3u8")
+	iv, _, err := i.CopyInputToS3("requestID", inputFile, &url.URL{}, nil)
+	require.NoError(t, err)
+	videoTrack, _ := iv.GetTrack(video.TrackTypeVideo)
+	require.Equal(t, 30.0, videoTrack.DurationSec)
 }

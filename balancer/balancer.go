@@ -308,12 +308,13 @@ func (b *BalancerImpl) GetBestNode(ctx context.Context, redirectPrefixes []strin
 	for _, prefix := range redirectPrefixes {
 		waitGroup.Add(1)
 		go func(prefix string) {
+			defer waitGroup.Done()
 			addr, e := b.queryMistForClosestNode(ctx, playbackID, lat, lon, prefix)
 			mu.Lock()
 			defer mu.Unlock()
 			if e != nil {
 				err = e
-				glog.V(8).Infof("error finding origin server playbackID=%s prefix=%s error=%s", playbackID, prefix, e)
+				glog.V(9).Infof("error finding origin server playbackID=%s prefix=%s error=%s", playbackID, prefix, e)
 				// If we didn't find a stream but we did find a server, keep that so we can use it to handle a 404
 				if addr != "" {
 					fallbackAddr = addr
@@ -322,7 +323,6 @@ func (b *BalancerImpl) GetBestNode(ctx context.Context, redirectPrefixes []strin
 				nodeAddr = addr
 				fullPlaybackID = prefix + "+" + playbackID
 			}
-			waitGroup.Done()
 		}(prefix)
 	}
 	waitGroup.Wait()

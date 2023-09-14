@@ -330,6 +330,30 @@ func (s *StepContext) CheckGateAPICallCount(expectedCount int) error {
 	return nil
 }
 
+func (s *StepContext) CheckMetricEqual(metricName, value string) error {
+	var url = s.BaseInternalURL + "/metrics"
+
+	res, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+
+	r := regexp.MustCompile(`\n` + metricName + ` ` + value + `\n`)
+	if !r.Match(body) {
+		// Try to build a more useful error message than "not found" in the case where the value is wrong
+		r2 := regexp.MustCompile(`\n` + metricName + ` \d\n`)
+		found := r2.Find(body)
+
+		return fmt.Errorf("could not find metric %s equal to %s. Got: %s", metricName, value, strings.TrimSpace(string(found)))
+	}
+	return nil
+}
+
 func (s *StepContext) CheckRecordedMetrics(metricsType, requestType string) error {
 	var url = s.BaseInternalURL + "/metrics"
 

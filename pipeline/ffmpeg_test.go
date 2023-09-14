@@ -57,7 +57,9 @@ func Test_sendSourcePlayback(t *testing.T) {
 	}
 	ff := ffmpeg{
 		sourcePlaybackHosts: map[string]string{
-			"lp-us-catalyst-recordings-monster.storage.googleapis.com": "//recordings-cdn.lp-playback.monster/hls",
+			"http://lp-us-catalyst-recordings-monster.storage.googleapis.com/foo":                         "//recordings-cdn.lp-playback.monster/hls",
+			"https://link.storjshare.io/raw/jvnqoncawzmc3lb7tstb5ut3d7va/catalyst-recordings-monster/hls": "//link.storjshare.io/raw/jvnqoncawzmc3lb7tstb5ut3d7va/catalyst-recordings-monster/hls",
+			"https://link.storjshare.io/raw/jvnqoncawzmc3lb7tstb5ut3d7vb/catalyst-recordings-monster/hls": "//recordings-cdn.lp-playback.monster/hls",
 		},
 	}
 
@@ -101,12 +103,36 @@ func Test_sendSourcePlayback(t *testing.T) {
 			job: &JobInfo{
 				SegmentingTargetURL: segmentingTargetURL,
 				UploadJobPayload: UploadJobPayload{
-					SourceFile:   "http://lp-us-catalyst-recordings-monster.storage.googleapis.com/foo/bar",
+					SourceFile:   "http://lp-us-catalyst-recordings-monster.storage.googleapis.com/foo/bar/output.m3u8",
 					HlsTargetURL: mustParseUrl("/bucket/foo", t),
 				},
 			},
 			shouldWriteSourcePlaylist: true,
-			expectedRendition:         "//recordings-cdn.lp-playback.monster/hls/path",
+			expectedRendition:         "//recordings-cdn.lp-playback.monster/hls/bar/output.m3u8",
+		},
+		{
+			name: "host mapping - storj",
+			job: &JobInfo{
+				SegmentingTargetURL: "https://link.storjshare.io/raw/jvnqoncawzmc3lb7tstb5ut3d7va/catalyst-recordings-monster/hls/e88briv8dl7rzg8o-test/3c446cbe-3ca9-4eba-84a9-68b38305d67a/output.m3u8",
+				UploadJobPayload: UploadJobPayload{
+					SourceFile:   "https://link.storjshare.io/raw/jvnqoncawzmc3lb7tstb5ut3d7va/catalyst-recordings-monster/hls/e88briv8dl7rzg8o-test/3c446cbe-3ca9-4eba-84a9-68b38305d67a/output.m3u8",
+					HlsTargetURL: mustParseUrl("/bucket/foo", t),
+				},
+			},
+			shouldWriteSourcePlaylist: true,
+			expectedRendition:         "//link.storjshare.io/raw/jvnqoncawzmc3lb7tstb5ut3d7va/catalyst-recordings-monster/hls/e88briv8dl7rzg8o-test/3c446cbe-3ca9-4eba-84a9-68b38305d67a/output.m3u8",
+		},
+		{
+			name: "host mapping - storj cdn",
+			job: &JobInfo{
+				SegmentingTargetURL: "https://link.storjshare.io/raw/jvnqoncawzmc3lb7tstb5ut3d7vb/catalyst-recordings-monster/hls/e88briv8dl7rzg8o-test/3c446cbe-3ca9-4eba-84a9-68b38305d67a/output.m3u8",
+				UploadJobPayload: UploadJobPayload{
+					SourceFile:   "https://link.storjshare.io/raw/jvnqoncawzmc3lb7tstb5ut3d7vb/catalyst-recordings-monster/hls/e88briv8dl7rzg8o-test/3c446cbe-3ca9-4eba-84a9-68b38305d67a/output.m3u8",
+					HlsTargetURL: mustParseUrl("/bucket/foo", t),
+				},
+			},
+			shouldWriteSourcePlaylist: true,
+			expectedRendition:         "//recordings-cdn.lp-playback.monster/hls/e88briv8dl7rzg8o-test/3c446cbe-3ca9-4eba-84a9-68b38305d67a/output.m3u8",
 		},
 		{
 			name: "not standard bucket - no source playback",

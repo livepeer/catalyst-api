@@ -45,7 +45,7 @@ func TestItErrorsWhenNoJobCapacityAvailable(t *testing.T) {
 
 	pipeFfmpeg, release := pipeline.NewBlockingStubHandler()
 	defer release()
-	coordinator := pipeline.NewStubCoordinatorOpts(pipeline.StrategyCatalystFfmpegDominance, nil, pipeFfmpeg, nil, "")
+	coordinator := pipeline.NewStubCoordinatorOpts(pipeline.StrategyCatalystFfmpegDominance, nil, pipeFfmpeg, nil)
 	coordinator.InputCopy = &clients.StubInputCopy{}
 
 	// Create a lot of in-flight jobs
@@ -82,7 +82,7 @@ func TestItTakesIntoAccountInFlightHTTPRequests(t *testing.T) {
 
 	pipeFfmpeg, release := pipeline.NewBlockingStubHandler()
 	defer release()
-	coordinator := pipeline.NewStubCoordinatorOpts(pipeline.StrategyCatalystFfmpegDominance, nil, pipeFfmpeg, nil, "")
+	coordinator := pipeline.NewStubCoordinatorOpts(pipeline.StrategyCatalystFfmpegDominance, nil, pipeFfmpeg, nil)
 	coordinator.InputCopy = &clients.StubInputCopy{}
 
 	// Set up the HTTP handler

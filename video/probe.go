@@ -89,7 +89,7 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 		iv := InputVideo{
 			Format:    findFormat(probeData.Format.FormatName),
 			Tracks:    []InputTrack{},
-			Duration:  float64(audioStream.DurationTs),
+			Duration:  parseAssetDuration(audioStream.Duration),
 			SizeBytes: size,
 		}
 		return addAudioTrack(probeData, iv)
