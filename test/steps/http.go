@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cucumber/godog"
+	"github.com/livepeer/catalyst-api/video"
 )
 
 var App *exec.Cmd
@@ -77,7 +78,7 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 		return fmt.Errorf("failed to create a source file: %s", err)
 	}
 	var sourceFixture = "fixtures/tiny.mp4"
-	if payload == "a valid upload vod request (audio-only)" {
+	if strings.Contains(payload, "audio-only") {
 		sourceFixture = "fixtures/audio.mp4"
 	}
 	sourceBytes, err := os.ReadFile(sourceFixture)
@@ -117,6 +118,18 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 		req := DefaultUploadRequest
 		req.PipelineStrategy = "fallback_external"
 		req.URL = "file://" + sourceFile.Name()
+		if strings.Contains(payload, "with profiles") {
+			req.Profiles = []video.EncodedProfile{
+				{
+					Name:    "hd",
+					Width:   1024,
+					Height:  768,
+					Bitrate: 100_000,
+					FPS:     60,
+					Profile: "hd-profile",
+				},
+			}
+		}
 		if payload, err = req.ToJSON(); err != nil {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}

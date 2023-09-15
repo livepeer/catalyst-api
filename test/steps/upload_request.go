@@ -2,6 +2,8 @@ package steps
 
 import (
 	"encoding/json"
+
+	"github.com/livepeer/catalyst-api/video"
 )
 
 type Output struct {
@@ -18,11 +20,12 @@ type OutputLocation struct {
 }
 
 type UploadRequest struct {
-	URL                   string           `json:"url,omitempty"`
-	CallbackURL           string           `json:"callback_url,omitempty"`
-	TargetSegmentSizeSecs int64            `json:"target_segment_size_secs,omitempty"`
-	OutputLocations       []OutputLocation `json:"output_locations,omitempty"`
-	PipelineStrategy      string           `json:"pipeline_strategy,omitempty"`
+	URL                   string                 `json:"url,omitempty"`
+	CallbackURL           string                 `json:"callback_url,omitempty"`
+	TargetSegmentSizeSecs int64                  `json:"target_segment_size_secs,omitempty"`
+	OutputLocations       []OutputLocation       `json:"output_locations,omitempty"`
+	PipelineStrategy      string                 `json:"pipeline_strategy,omitempty"`
+	Profiles              []video.EncodedProfile `json:"profiles,omitempty"`
 }
 
 var DefaultUploadRequest = UploadRequest{

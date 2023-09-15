@@ -131,6 +131,12 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 		}
 	}
 
+	// If we don't have a video track then ignore any profiles that have been passed in
+	// and do a default audio transcode
+	if !hasVideoTrack {
+		mcArgs.Profiles = []video.EncodedProfile{}
+	}
+
 	var mcHlsOutputRelPath string
 	if hlsTarget != nil {
 		// AWS MediaConvert adds the .m3u8 to the end of the output file name
