@@ -74,5 +74,6 @@ Feature: VOD Streaming
     And Mediaconvert receives a valid job creation request within "5" seconds
 
     Examples:
-      | payload                                 |
-      | a valid upload vod request (audio-only) |
+      | payload                                               |
+      | a valid upload vod request (audio-only)               |
+      | a valid upload vod request (audio-only) with profiles |
