@@ -216,7 +216,7 @@ type EncodedProfile struct {
 	Encoder      string `json:"encoder,omitempty"`
 	ColorDepth   int64  `json:"colorDepth,omitempty"`
 	ChromaFormat int64  `json:"chromaFormat,omitempty"`
-	Quality      uint   `json:"quality"`
+	Quality      uint   `json:"quality,omitempty"`
 }
 
 type OutputVideo struct {
