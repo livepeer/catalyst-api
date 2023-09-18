@@ -206,7 +206,7 @@ func SortTranscodedStats(transcodedStats []*video.RenditionStats) {
 	})
 }
 
-func ClipInput(requestID, sourceURL, clipTargetUrl string, startTime, endTime float64) (clippedManifestUrl string, err error) {
+func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTime, endTime float64) (clippedManifestUrl string, err error) {
 
 	fmt.Println("XXX: sourceURL: ", sourceURL)
 	fmt.Println("XXX: hlsTargetURL: ", clipTargetUrl)
@@ -225,10 +225,14 @@ func ClipInput(requestID, sourceURL, clipTargetUrl string, startTime, endTime fl
 	}
 
 	// Find the segments at the clipping start/end timestamp boundaries
-	segs, err := video.Clip(requestID, &origManifest, startTime, endTime)
+	segs, err := video.ClipManifest(requestID, &origManifest, startTime, endTime)
 	if err != nil {
 		return "", fmt.Errorf("error clipping: failed to get start/end segments: %w", err)
 	}
+
+	// Only the first and last segments should be clipped
+	segsToClip := segs[:1]                             // First element
+	segsToClip = append(segsToClip, segs[len(segs)-1]) // Last element
 
 	// Create temp local storage dir to hold all clipping related files to upload later
 	err = os.MkdirAll(video.ClipStorageDir, 0700)
@@ -236,8 +240,8 @@ func ClipInput(requestID, sourceURL, clipTargetUrl string, startTime, endTime fl
 		return "", fmt.Errorf("error clipping: failed to create temp clipping storage dir: %w", err)
 	}
 
-	// Download start/end clipped segments and write to OS URL
-	for _, v := range segs {
+	// Download start/end segments and clip
+	for _, v := range segsToClip {
 		fmt.Println("XXX: URL IS THIS: ", sourceSegmentURLs[v.SeqId])
 
 		// Create temp local file to store the segments:
@@ -269,7 +273,7 @@ func ClipInput(requestID, sourceURL, clipTargetUrl string, startTime, endTime fl
 			return "", fmt.Errorf("error clipping: failed to download or write segments to local temp storage: %w", err)
 		}
 
-		// Locally clip (and re-transcode) those relevant segments at the specified start/end timestamps
+		// Locally clip (i.e re-transcode + clip) those relevant segments at the specified start/end timestamps
 		clippedSegmentFileName := filepath.Join(video.ClipStorageDir, requestID+"_"+strconv.FormatUint(v.SeqId, 10)+"_clip.ts")
 		err = video.ClipSegment(clipSegmentFileName, clippedSegmentFileName, startTime, endTime)
 		if err != nil {
@@ -288,11 +292,9 @@ func ClipInput(requestID, sourceURL, clipTargetUrl string, startTime, endTime fl
 		if err != nil {
 			return "", fmt.Errorf("error clipping: failed to upload clipped segment %d: %w", v.SeqId, err)
 		}
-
 	}
 
-	// TODO: generate and upload clipped manifest file
-
-	return "", fmt.Errorf("XXX: ERROR %s", segs)
+	// TODO: generate, upload and return clipped manifest file URL
+	return sourceURL, nil
 
 }

@@ -65,18 +65,6 @@ func getRelevantSegment(allSegments []*m3u8.MediaSegment, playHeadTime float64, 
 	return 0, fmt.Errorf("error clipping: did not find a segment that falls within %v seconds", playHeadTime)
 }
 
-func Clip(requestID string, manifest *m3u8.MediaPlaylist, startTime, endTime float64) ([]*m3u8.MediaSegment, error) {
-	// Get the segments that correspond to the start/end
-	segs, err := ClipManifest(requestID, manifest, startTime, endTime)
-	if err != nil {
-		return nil, fmt.Errorf("error clipping input: %w", err)
-	}
-	fmt.Printf("XXX: %d segs %+v\n", len(segs), segs[0])
-
-	// Re-transcode the segments
-	return segs, nil
-}
-
 // Function to find relevant segments that span from the clipping start and end times
 func ClipManifest(requestID string, manifest *m3u8.MediaPlaylist, startTime, endTime float64) ([]*m3u8.MediaSegment, error) {
 	var startSegIdx, endSegIdx uint64
