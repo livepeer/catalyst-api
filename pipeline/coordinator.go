@@ -276,7 +276,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		if clients.IsHLSInput(sourceURL) {
 			// Currently we only clip an HLS source (e.g recordings or transcoded asset)
 			if p.ClipStrategy.Enabled {
-				log.Log(p.RequestID, "clippity clipping the input")
+				log.Log(p.RequestID, "clippity clipping the input", "Playback-ID", p.ClipStrategy.PlaybackID)
 				// Use new clipped manifest as the source URL
 				sourceURL, err = video.ClipInput(p.RequestID, sourceURL, p.ClipStrategy.StartTime, p.ClipStrategy.EndTime)
 				if err != nil {
