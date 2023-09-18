@@ -26,8 +26,8 @@ func TestGetDefaultPlaybackProfiles(t *testing.T) {
 				},
 			},
 			want: []EncodedProfile{
-				{Name: "low-bitrate", Width: 640, Height: 360, Bitrate: 500_000},
-				{Name: "360p0", Width: 640, Height: 360, Bitrate: 1_000_001},
+				{Name: "low-bitrate", Width: 640, Height: 360, Bitrate: 500_000, Quality: defaultQuality},
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 1_200_001, Quality: defaultQuality},
 			},
 		},
 		{
@@ -41,8 +41,8 @@ func TestGetDefaultPlaybackProfiles(t *testing.T) {
 				},
 			},
 			want: []EncodedProfile{
-				{Name: "low-bitrate", Width: 640, Height: 360, Bitrate: 250_000},
-				{Name: "360p0", Width: 640, Height: 360, Bitrate: 500_000},
+				{Name: "low-bitrate", Width: 640, Height: 360, Bitrate: 250_000, Quality: defaultQuality},
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 600_000, Quality: defaultQuality},
 			},
 		},
 		{
@@ -56,8 +56,8 @@ func TestGetDefaultPlaybackProfiles(t *testing.T) {
 				},
 			},
 			want: []EncodedProfile{
-				{Name: "360p0", Width: 640, Height: 360, Bitrate: 1_000_000},
-				{Name: "720p0", Width: 1280, Height: 720, Bitrate: 4_000_001},
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 1_000_000, Quality: defaultQuality},
+				{Name: "720p0", Width: 1280, Height: 720, Bitrate: 4_800_001, Quality: defaultQuality},
 			},
 		},
 		{
@@ -71,8 +71,8 @@ func TestGetDefaultPlaybackProfiles(t *testing.T) {
 				},
 			},
 			want: []EncodedProfile{
-				{Name: "360p0", Width: 640, Height: 360, Bitrate: 266_666},
-				{Name: "720p0", Width: 1200, Height: 720, Bitrate: 1_000_001},
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 320_000, Quality: defaultQuality},
+				{Name: "720p0", Width: 1200, Height: 720, Bitrate: 1_200_001, Quality: defaultQuality},
 			},
 		},
 		{
@@ -86,9 +86,9 @@ func TestGetDefaultPlaybackProfiles(t *testing.T) {
 				},
 			},
 			want: []EncodedProfile{
-				{Name: "360p0", Width: 640, Height: 360, Bitrate: 555_555},
-				{Name: "720p0", Width: 1280, Height: 720, Bitrate: 2_222_222},
-				{Name: "1080p0", Width: 1920, Height: 1080, Bitrate: 5_000_000},
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 666_666, Quality: defaultQuality},
+				{Name: "720p0", Width: 1280, Height: 720, Bitrate: 2_666_666, Quality: defaultQuality},
+				{Name: "1080p0", Width: 1920, Height: 1080, Bitrate: 6_000_000, Quality: defaultQuality},
 			},
 		},
 		{
@@ -102,8 +102,8 @@ func TestGetDefaultPlaybackProfiles(t *testing.T) {
 				},
 			},
 			want: []EncodedProfile{
-				{Name: "low-bitrate", Width: 400, Height: 240, Bitrate: 258549},
-				{Name: "240p0", Width: 400, Height: 240, Bitrate: 517099},
+				{Name: "low-bitrate", Width: 400, Height: 240, Bitrate: 258549, Quality: defaultQuality},
+				{Name: "240p0", Width: 400, Height: 240, Bitrate: 620518, Quality: defaultQuality},
 			},
 		},
 		{
@@ -117,9 +117,9 @@ func TestGetDefaultPlaybackProfiles(t *testing.T) {
 				},
 			},
 			want: []EncodedProfile{
-				{Name: "360p0", Width: 640, Height: 360, Bitrate: 1_000_000},
-				{Name: "720p0", Width: 1280, Height: 720, Bitrate: 4_000_000},
-				{Name: "1080p0", Width: 1920, Height: 1080, Bitrate: MaxVideoBitrate},
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 1_000_000, Quality: defaultQuality},
+				{Name: "720p0", Width: 1280, Height: 720, Bitrate: 4_000_000, Quality: defaultQuality},
+				{Name: "1080p0", Width: 1920, Height: 1080, Bitrate: MaxVideoBitrate, Quality: defaultQuality},
 			},
 		},
 		{
@@ -133,8 +133,23 @@ func TestGetDefaultPlaybackProfiles(t *testing.T) {
 				},
 			},
 			want: []EncodedProfile{
-				{Name: "360p0", Width: 640, Height: 360, Bitrate: 122_222},
-				{Name: "1080p0", Width: 1920, Height: 1080, Bitrate: 1_100_000},
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 146_666, Quality: defaultQuality},
+				{Name: "1080p0", Width: 1920, Height: 1080, Bitrate: 1_320_000, Quality: defaultQuality},
+			},
+		},
+		{
+			name: "low bitrate 1080p", // https://linear.app/livepeer/issue/VID-228/streameth-recording-uploaded-assets-returns-bad-quality
+			track: InputTrack{
+				Type:    "video",
+				Bitrate: 1_100_000,
+				VideoTrack: VideoTrack{
+					Width:  1920,
+					Height: 1080,
+				},
+			},
+			want: []EncodedProfile{
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 146_666, Quality: defaultQuality},
+				{Name: "1080p0", Width: 1920, Height: 1080, Bitrate: 1_320_000, Quality: defaultQuality},
 			},
 		},
 	}
@@ -147,13 +162,12 @@ func TestGetDefaultPlaybackProfiles(t *testing.T) {
 	}
 }
 
-func TestCheckUpdatedAlgo(t *testing.T) {
+func TestGetDefaultPlaybackProfilesFixtures(t *testing.T) {
 	type ProfilesTest struct {
-		Width          int64
-		Height         int64
-		Bitrate        int64
-		ExpectedOutput []EncodedProfile
-		CurrentOutput  []EncodedProfile
+		Width         int64
+		Height        int64
+		Bitrate       int64
+		CurrentOutput []EncodedProfile
 	}
 	dir := "./fixtures/profiles_tests"
 	files, err := os.ReadDir(dir)
@@ -162,7 +176,8 @@ func TestCheckUpdatedAlgo(t *testing.T) {
 		if file.IsDir() {
 			continue
 		}
-		contents, err := os.ReadFile(filepath.Join(dir, file.Name()))
+		fileName := filepath.Join(dir, file.Name())
+		contents, err := os.ReadFile(fileName)
 		require.NoError(t, err)
 		var testCase ProfilesTest
 		err = json.Unmarshal(contents, &testCase)
@@ -179,20 +194,19 @@ func TestCheckUpdatedAlgo(t *testing.T) {
 					},
 				}},
 			}
-			oldAlgorithmOutput := testCase.ExpectedOutput
 			vt, err := iv.GetTrack(TrackTypeVideo)
 			require.NoError(t, err)
 			current, err := GetDefaultPlaybackProfiles(vt)
 			require.NoError(t, err)
-			require.Equal(t, testCase.CurrentOutput, current)
-			require.Equal(t, len(oldAlgorithmOutput), len(current))
-			for i, profile := range oldAlgorithmOutput {
-				currentProfile := current[i]
-				// check that they're equal other than the new bitrates being lower
-				require.LessOrEqual(t, currentProfile.Bitrate, profile.Bitrate)
-				profile.Bitrate = currentProfile.Bitrate
-				require.Equal(t, profile, currentProfile)
+
+			if os.Getenv("REGENERATE_FIXTURES") != "" {
+				testCase.CurrentOutput = current
+				bs, err := json.Marshal(testCase)
+				require.NoError(t, err)
+				err = os.WriteFile(fileName, bs, 0644)
+				require.NoError(t, err)
 			}
+			require.Equal(t, testCase.CurrentOutput, current)
 		})
 	}
 }

@@ -12,6 +12,10 @@ const (
 	MaxVideoBitrate         = 288_000_000
 	TrackTypeVideo          = "video"
 	TrackTypeAudio          = "audio"
+	defaultQuality          = 27
+	// Livepeer network uses bitrate to set max bitrate for encoding, so for the video to look good, we multiply
+	// it by a factor of 1.2.
+	maxBitrateFactor = 1.2
 )
 
 type InputVideo struct {
@@ -86,6 +90,7 @@ var DefaultProfile360p = EncodedProfile{
 	Bitrate: 1_000_000,
 	Width:   640,
 	Height:  360,
+	Quality: defaultQuality,
 }
 var DefaultProfile720p = EncodedProfile{
 	Name:    "720p0",
@@ -93,6 +98,7 @@ var DefaultProfile720p = EncodedProfile{
 	Bitrate: 4_000_000,
 	Width:   1280,
 	Height:  720,
+	Quality: defaultQuality,
 }
 
 // DefaultTranscodeProfiles defines the default set of encoding profiles to use when none are specified
@@ -116,22 +122,27 @@ func SetTranscodeProfiles(inputVideoStats InputVideo, reqTranscodeProfiles []Enc
 		// a single profile that matches the input video's specs with the target bitrate
 	} else if len(reqTranscodeProfiles) == 1 {
 		if reqTranscodeProfiles[0].Width == 0 && reqTranscodeProfiles[0].Height == 0 && reqTranscodeProfiles[0].Bitrate != 0 {
-			transcodeProfiles = GenerateSingleProfileWithTargetBitrate(videoTrack, reqTranscodeProfiles[0].Bitrate)
+			transcodeProfiles = GenerateSingleProfileWithTargetParams(videoTrack, reqTranscodeProfiles[0])
 			return transcodeProfiles, nil
 		}
 	}
 	return reqTranscodeProfiles, nil
 }
 
-func GenerateSingleProfileWithTargetBitrate(videoTrack InputTrack, videoBitrate int64) []EncodedProfile {
+func GenerateSingleProfileWithTargetParams(videoTrack InputTrack, videoProfile EncodedProfile) []EncodedProfile {
 	profiles := make([]EncodedProfile, 0)
+	var quality uint = defaultQuality
+	if videoProfile.Quality != 0 {
+		quality = videoProfile.Quality
+	}
 
 	profiles = append(profiles, EncodedProfile{
 		Name:    strconv.FormatInt(videoTrack.Height, 10) + "p0",
-		Bitrate: videoBitrate,
+		Bitrate: videoProfile.Bitrate,
 		FPS:     0,
 		Width:   videoTrack.Width,
 		Height:  videoTrack.Height,
+		Quality: quality,
 	})
 	return profiles
 }
@@ -147,7 +158,8 @@ func GetDefaultPlaybackProfiles(video InputTrack) ([]EncodedProfile, error) {
 		// check it here.
 		lowerQualityThanSrc := profile.Height < video.Height && profile.Bitrate < video.Bitrate
 		if lowerQualityThanSrc {
-			relativeBitrate := float64(profile.Width*profile.Height) * (float64(videoBitrate) / float64(video.Width*video.Height))
+			// relativeBitrate needs to be slightly higher than the proportional average bitrate of the source video.
+			relativeBitrate := maxBitrateFactor * float64(profile.Width*profile.Height) * (float64(videoBitrate) / float64(video.Width*video.Height))
 			br := math.Min(relativeBitrate, float64(profile.Bitrate))
 			profile.Bitrate = int64(br)
 			profiles = append(profiles, profile)
@@ -158,10 +170,11 @@ func GetDefaultPlaybackProfiles(video InputTrack) ([]EncodedProfile, error) {
 	}
 	profiles = append(profiles, EncodedProfile{
 		Name:    strconv.FormatInt(nearestEven(video.Height), 10) + "p0",
-		Bitrate: videoBitrate,
+		Bitrate: int64(math.Min(maxBitrateFactor*float64(videoBitrate), MaxVideoBitrate)),
 		FPS:     0,
 		Width:   nearestEven(video.Width),
 		Height:  nearestEven(video.Height),
+		Quality: defaultQuality,
 	})
 	return profiles, nil
 }
@@ -183,6 +196,7 @@ func lowBitrateProfile(video InputTrack) EncodedProfile {
 		Bitrate: bitrate,
 		Width:   nearestEven(video.Width),
 		Height:  nearestEven(video.Height),
+		Quality: defaultQuality,
 	}
 }
 
@@ -202,6 +216,7 @@ type EncodedProfile struct {
 	Encoder      string `json:"encoder,omitempty"`
 	ColorDepth   int64  `json:"colorDepth,omitempty"`
 	ChromaFormat int64  `json:"chromaFormat,omitempty"`
+	Quality      uint   `json:"quality"`
 }
 
 type OutputVideo struct {
