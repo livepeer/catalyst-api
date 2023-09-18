@@ -31,6 +31,8 @@ properties:
         type: "integer"
       end_time:
         type: "integer"
+      playback_id:
+        type: "string"
     required:
       -  "start_time"
     additionalProperties: false

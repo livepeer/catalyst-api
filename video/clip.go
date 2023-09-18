@@ -10,9 +10,10 @@ import (
 )
 
 type ClipStrategy struct {
-	Enabled   bool
-	StartTime float64 `json:"start_time,omitempty"`
-	EndTime   float64 `json:"end_time,omitempty"`
+	Enabled    bool
+	StartTime  float64 `json:"start_time,omitempty"`
+	EndTime    float64 `json:"end_time,omitempty"`
+	PlaybackID string  `json:"playback_id,omitempty"` // playback-id of asset to clip
 }
 
 // format time in secs to be copatible with ffmpeg's expected time syntax
