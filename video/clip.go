@@ -8,10 +8,6 @@ import (
 	"time"
 )
 
-const (
-	ClipStorageDir = "/tmp/clip_stage"
-)
-
 type ClipStrategy struct {
 	Enabled    bool
 	StartTime  float64 `json:"start_time,omitempty"`
