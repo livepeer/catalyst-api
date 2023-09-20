@@ -206,27 +206,27 @@ func SortTranscodedStats(transcodedStats []*video.RenditionStats) {
 	})
 }
 
-func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTime, endTime float64) (clippedManifestUrl string, err error) {
+func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTime, endTime float64) (clippedManifestUrl *url.URL, err error) {
 
 	fmt.Println("YYY", sourceURL)
 	fmt.Println("YYY", clipTargetUrl)
 	// Get the source manifest that will be clipped
 	origManifest, err := DownloadRenditionManifest(requestID, sourceURL)
 	if err != nil {
-		return "", fmt.Errorf("error clipping: failed to download original manifest: %w", err)
+		return nil, fmt.Errorf("error clipping: failed to download original manifest: %w", err)
 	}
 
 	// Generate the absolute path URLS for segmens from the manifest's relative path
 	// TODO: optimize later and only get absolute path URLs for the start/end segments
 	sourceSegmentURLs, err := GetSourceSegmentURLs(sourceURL, origManifest)
 	if err != nil {
-		return "", fmt.Errorf("error clipping: failed to get segment urls: %w", err)
+		return nil, fmt.Errorf("error clipping: failed to get segment urls: %w", err)
 	}
 
 	// Find the segments at the clipping start/end timestamp boundaries
 	segs, err := video.ClipManifest(requestID, &origManifest, startTime, endTime)
 	if err != nil {
-		return "", fmt.Errorf("error clipping: failed to get start/end segments: %w", err)
+		return nil, fmt.Errorf("error clipping: failed to get start/end segments: %w", err)
 	}
 
 	var segsToClip []*m3u8.MediaSegment
@@ -243,7 +243,7 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTime, en
 	// Create temp local storage dir to hold all clipping related files to upload later
 	clipStorageDir, err := os.MkdirTemp(os.TempDir(), "clip_stage_")
 	if err != nil {
-		return "", fmt.Errorf("error clipping: failed to create temp clipping storage dir: %w", err)
+		return nil, fmt.Errorf("error clipping: failed to create temp clipping storage dir: %w", err)
 	}
 	defer os.RemoveAll(clipStorageDir)
 
@@ -254,7 +254,7 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTime, en
 		defer os.Remove(clipSegmentFileName)
 		clipSegmentFile, err := os.Create(clipSegmentFileName)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		defer clipSegmentFile.Close()
 
@@ -275,39 +275,39 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTime, en
 			return nil
 		}, DownloadRetryBackoff())
 		if err != nil {
-			return "", fmt.Errorf("error clipping: failed to download or write segments to local temp storage: %w", err)
+			return nil, fmt.Errorf("error clipping: failed to download or write segments to local temp storage: %w", err)
 		}
 
 		// Locally clip (i.e re-transcode + clip) those relevant segments at the specified start/end timestamps
 		clippedSegmentFileName := filepath.Join(clipStorageDir, requestID+"_"+strconv.FormatUint(v.SeqId, 10)+"_clip.ts")
 		err = video.ClipSegment(clipSegmentFileName, clippedSegmentFileName, startTime, endTime)
 		if err != nil {
-			return "", fmt.Errorf("error clipping: failed to clip segment %d: %w", v.SeqId, err)
+			return nil, fmt.Errorf("error clipping: failed to clip segment %d: %w", v.SeqId, err)
 		}
 
 
 		// Upload clipped segment to OS
 		clippedSegmentFile, err := os.Open(clippedSegmentFileName)
 		if err != nil {
-			return "", fmt.Errorf("error clipping: failed to open clipped segment %d: %w", v.SeqId, err)
+			return nil, fmt.Errorf("error clipping: failed to open clipped segment %d: %w", v.SeqId, err)
 		}
 		defer clippedSegmentFile.Close()
 
 		clippedSegmentOSFilename := "clip_" + strconv.FormatUint(v.SeqId, 10) + ".ts"
 		err = UploadToOSURL(clipTargetUrl, clippedSegmentOSFilename, clippedSegmentFile, MaxCopyFileDuration)
 		if err != nil {
-			return "", fmt.Errorf("error clipping: failed to upload clipped segment %d: %w", v.SeqId, err)
+			return nil, fmt.Errorf("error clipping: failed to upload clipped segment %d: %w", v.SeqId, err)
 		}
 
 		// Get duration of clipped segment
 		p := video.Probe{}
 		clipSegProbe, err := p.ProbeFile(requestID, clippedSegmentFileName)
 		if err != nil {
-			return "", fmt.Errorf("error clipping: failed to probe file: %w", err)
+			return nil, fmt.Errorf("error clipping: failed to probe file: %w", err)
 		}
 		vidTrack, err := clipSegProbe.GetTrack(video.TrackTypeVideo)
 		if err != nil {
-			return "", fmt.Errorf("error clipping: unknown duration of clipped segment: %w", err)
+			return nil, fmt.Errorf("error clipping: unknown duration of clipped segment: %w", err)
 		}
 		// Overwrite segs with new uri/duration. Note that these are pointers 
 		// so original segs slice is directly modified 
@@ -318,9 +318,8 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTime, en
 	
 	clippedPlaylist, err := CreateClippedPlaylist(origManifest, segs)
 	if err != nil {
-		return "", fmt.Errorf("error clipping: failed to generate clipped playlist: %w", err)
+		return nil, fmt.Errorf("error clipping: failed to generate clipped playlist: %w", err)
 	}
-       fmt.Println("XXX: ", clippedPlaylist.Encode().String())
 
 
 
@@ -328,12 +327,26 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTime, en
                          return UploadToOSURL(clipTargetUrl, "clip.m3u8", strings.NewReader(clippedPlaylist.String()), ManifestUploadTimeout)
                  }, UploadRetryBackoff())
                  if err != nil {
-                         return "", fmt.Errorf("failed to upload clipped playlist: %s", err)
+                         return nil, fmt.Errorf("failed to upload clipped playlist: %s", err)
                  }
 
+         // Parse the URL
+         parsedURL, err := url.Parse(clipTargetUrl)
+         if err != nil {
+              return nil, fmt.Errorf("failed to upload clipped playlist: %s", err)
+         }
+         // Remove the "s3+" prefix from the Scheme
+         parsedURL.Scheme = strings.TrimPrefix(parsedURL.Scheme, "s3+")
+         // Remove the username and password
+         parsedURL.User = nil
+	 parsedURL.Path += "/clip.m3u8"
+         // Convert the URL back to a string
+
+
+fmt.Println("YYY3", parsedURL.String())
 
 	// TODO: generate, upload and return clipped manifest file URL
-	return sourceURL, fmt.Errorf("error XXX") 
+	return parsedURL, nil 
 }
 
 func CreateClippedPlaylist(origManifest m3u8.MediaPlaylist, segs []*m3u8.MediaSegment) (*m3u8.MediaPlaylist, error) {
