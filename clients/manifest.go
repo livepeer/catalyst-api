@@ -208,6 +208,8 @@ func SortTranscodedStats(transcodedStats []*video.RenditionStats) {
 
 func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTime, endTime float64) (clippedManifestUrl string, err error) {
 
+	fmt.Println("YYY", sourceURL)
+	fmt.Println("YYY", clipTargetUrl)
 	// Get the source manifest that will be clipped
 	origManifest, err := DownloadRenditionManifest(requestID, sourceURL)
 	if err != nil {
@@ -227,9 +229,16 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTime, en
 		return "", fmt.Errorf("error clipping: failed to get start/end segments: %w", err)
 	}
 
+	var segsToClip []*m3u8.MediaSegment
 	// Only the first and last segments should be clipped
-	segsToClip := segs[:1]                             // First element
-	segsToClip = append(segsToClip, segs[len(segs)-1]) // Last element
+	if len(segs) == 1 {
+		segsToClip = make([]*m3u8.MediaSegment,1)
+		segsToClip[0] = segs[0]
+	} else {
+		segsToClip = make([]*m3u8.MediaSegment,2)
+		segsToClip[0] = segs[0]
+		segsToClip[1] = segs[len(segs)-1]
+	}
 
 	// Create temp local storage dir to hold all clipping related files to upload later
 	clipStorageDir, err := os.MkdirTemp(os.TempDir(), "clip_stage_")
@@ -276,6 +285,7 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTime, en
 			return "", fmt.Errorf("error clipping: failed to clip segment %d: %w", v.SeqId, err)
 		}
 
+
 		// Upload clipped segment to OS
 		clippedSegmentFile, err := os.Open(clippedSegmentFileName)
 		if err != nil {
@@ -288,9 +298,62 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTime, en
 		if err != nil {
 			return "", fmt.Errorf("error clipping: failed to upload clipped segment %d: %w", v.SeqId, err)
 		}
+
+		// Get duration of clipped segment
+		p := video.Probe{}
+		clipSegProbe, err := p.ProbeFile(requestID, clippedSegmentFileName)
+		if err != nil {
+			return "", fmt.Errorf("error clipping: failed to probe file: %w", err)
+		}
+		vidTrack, err := clipSegProbe.GetTrack(video.TrackTypeVideo)
+		if err != nil {
+			return "", fmt.Errorf("error clipping: unknown duration of clipped segment: %w", err)
+		}
+		// Overwrite segs with new uri/duration. Note that these are pointers 
+		// so original segs slice is directly modified 
+		v.Duration = vidTrack.DurationSec
+		v.URI = clippedSegmentOSFilename
 	}
 
-	// TODO: generate, upload and return clipped manifest file URL
-	return sourceURL, nil
+	
+	clippedPlaylist, err := CreateClippedPlaylist(origManifest, segs)
+	if err != nil {
+		return "", fmt.Errorf("error clipping: failed to generate clipped playlist: %w", err)
+	}
+       fmt.Println("XXX: ", clippedPlaylist.Encode().String())
 
+
+
+                 err = backoff.Retry(func() error {
+                         return UploadToOSURL(clipTargetUrl, "clip.m3u8", strings.NewReader(clippedPlaylist.String()), ManifestUploadTimeout)
+                 }, UploadRetryBackoff())
+                 if err != nil {
+                         return "", fmt.Errorf("failed to upload clipped playlist: %s", err)
+                 }
+
+
+	// TODO: generate, upload and return clipped manifest file URL
+	return sourceURL, fmt.Errorf("error XXX") 
+}
+
+func CreateClippedPlaylist(origManifest m3u8.MediaPlaylist, segs []*m3u8.MediaSegment) (*m3u8.MediaPlaylist, error) {
+	clippedPlaylist, err := m3u8.NewMediaPlaylist(origManifest.WinSize(), uint(len(segs)))
+	if err != nil {
+		return nil, fmt.Errorf("error clipping: failed to create clipped media playlist: %w", err)
+	}
+	for i, s := range segs {
+		if s == nil {
+			break
+		}
+		// Hack: 
+		if i != 0 && i != (len(segs)-1) {
+			s.URI = "../" + s.URI
+		}
+		err := clippedPlaylist.AppendSegment(s)
+		if err != nil {
+			return nil, fmt.Errorf("error clipping: failed to append segments to clipped playlist: %w", err)
+		}
+	}
+	clippedPlaylist.Close()
+	return clippedPlaylist, nil
 }
