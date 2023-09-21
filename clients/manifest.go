@@ -233,12 +233,9 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTime, en
 	// or it can span sevveral segments startng from start-time and spanning to end-time
 	var segsToClip []*m3u8.MediaSegment
 	if len(segs) == 1 {
-		segsToClip = make([]*m3u8.MediaSegment, 1)
-		segsToClip[0] = segs[0]
+		segsToClip = []*m3u8.MediaSegment{segs[0]}
 	} else {
-		segsToClip = make([]*m3u8.MediaSegment, 2)
-		segsToClip[0] = segs[0]
-		segsToClip[1] = segs[len(segs)-1]
+		segsToClip = []*m3u8.MediaSegment{segs[0], segs[len(segs)-1]}
 	}
 
 	// Create temp local storage dir to hold all clipping related files to upload later
