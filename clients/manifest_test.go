@@ -229,3 +229,97 @@ lowlowlow/index.m3u8
 `
 	require.Equal(t, expectedMasterManifest, string(masterManifestContents))
 }
+
+func TestCompliantClippedManifest(t *testing.T) {
+	const expectedClippedManifest = `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-MEDIA-SEQUENCE:0
+#EXT-X-TARGETDURATION:15
+#EXT-X-PROGRAM-DATE-TIME:2023-09-20T23:07:45.854388-07:00
+#EXTINF:10.000,blah0
+source/0.ts
+#EXT-X-PROGRAM-DATE-TIME:2023-09-20T23:07:55.854388-07:00
+#EXTINF:15.000,blah1
+../source/1.ts
+#EXT-X-PROGRAM-DATE-TIME:2023-09-20T23:08:00.854388-07:00
+#EXTINF:10.000,blah2
+source/2.ts
+#EXT-X-ENDLIST
+`
+
+	dummyPlaylist := createDummyMediaPlaylistWithSegments()
+	dummyClippedSegs := createDummyMediaSegments()
+	clipManifest, err := CreateClippedPlaylist(dummyPlaylist, dummyClippedSegs)
+	require.NoError(t, err)
+	require.Equal(t, expectedClippedManifest, clipManifest.String())
+}
+
+func createDummyMediaPlaylistWithSegments() m3u8.MediaPlaylist {
+	segs := createDummyMediaSegments()
+	playlist := m3u8.MediaPlaylist{
+		TargetDuration:   35.0,
+		SeqNo:            0,
+		Segments:         segs,
+		Args:             "sampleArgs",
+		Iframe:           false,
+		Closed:           false,
+		MediaType:        m3u8.EVENT,
+		DiscontinuitySeq: 0,
+		StartTime:        0.0,
+		StartTimePrecise: false,
+	}
+
+	return playlist
+}
+
+func createDummyMediaSegments() []*m3u8.MediaSegment {
+
+	layout := "2006-01-02T15:04:05.999999-07:00"
+	currentTimeStr := "2023-09-20T23:07:45.854388-07:00"
+	currentTime, err := time.Parse(layout, currentTimeStr)
+	if err != nil {
+		return nil
+	}
+
+	return []*m3u8.MediaSegment{
+		{
+			SeqId:           0,
+			Title:           "blah0",
+			URI:             "source/0.ts",
+			Duration:        10.0,
+			Limit:           0,
+			Offset:          0,
+			Key:             nil,
+			Map:             nil,
+			Discontinuity:   false,
+			SCTE:            nil,
+			ProgramDateTime: currentTime,
+		},
+		{
+			SeqId:           1,
+			Title:           "blah1",
+			URI:             "source/1.ts",
+			Duration:        15.0,
+			Limit:           0,
+			Offset:          0,
+			Key:             nil,
+			Map:             nil,
+			Discontinuity:   false,
+			SCTE:            nil,
+			ProgramDateTime: currentTime.Add(10 * time.Second),
+		},
+		{
+			SeqId:           2,
+			Title:           "blah2",
+			URI:             "source/2.ts",
+			Duration:        10.0,
+			Limit:           0,
+			Offset:          0,
+			Key:             nil,
+			Map:             nil,
+			Discontinuity:   false,
+			SCTE:            nil,
+			ProgramDateTime: currentTime.Add(15 * time.Second),
+		},
+	}
+}
