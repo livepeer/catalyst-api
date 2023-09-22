@@ -61,6 +61,7 @@ type UploadJobPayload struct {
 	HlsTargetURL          *url.URL
 	Mp4TargetURL          *url.URL
 	FragMp4TargetURL      *url.URL
+	ClipTargetURL         *url.URL
 	Mp4OnlyShort          bool
 	AccessToken           string
 	TranscodeAPIUrl       string
@@ -281,7 +282,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 			if p.ClipStrategy.Enabled {
 				log.Log(p.RequestID, "clippity clipping the input", "Playback-ID", p.ClipStrategy.PlaybackID)
 				// Use new clipped manifest as the source URL
-				sourceURL, err = clients.ClipInputManifest(p.RequestID, sourceURL.String(), p.HlsTargetURL.String(), p.ClipStrategy.StartTime, p.ClipStrategy.EndTime)
+				sourceURL, err = clients.ClipInputManifest(p.RequestID, sourceURL.String(), p.ClipTargetURL.String(), p.ClipStrategy.StartTime, p.ClipStrategy.EndTime)
 				if err != nil {
 					return nil, fmt.Errorf("error clippity: %s %w", sourceURL, err)
 				}

@@ -26,6 +26,7 @@ type UploadVODRequestOutputLocationOutputs struct {
 	HLS           string `json:"hls"`
 	MP4           string `json:"mp4"`
 	FragmentedMP4 string `json:"fragmented_mp4"`
+	Clip          string `json:"clip"`
 	SourceMp4     bool   `json:"source_mp4"`
 }
 
@@ -142,6 +143,15 @@ func (r UploadVODRequest) getTargetFragMp4Output() UploadVODRequestOutputLocatio
 	return UploadVODRequestOutputLocation{}
 }
 
+func (r UploadVODRequest) getTargetClipOutput() UploadVODRequestOutputLocation {
+	for _, o := range r.OutputLocations {
+		if o.Outputs.Clip == "enabled" {
+			return o
+		}
+	}
+	return UploadVODRequestOutputLocation{}
+}
+
 func (r UploadVODRequest) getSourceCopyEnabled() bool {
 	for _, o := range r.OutputLocations {
 		if o.Outputs.SourceMp4 {
@@ -209,7 +219,14 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	log.AddContext(requestID, "target_segment_size_secs", uploadVODRequest.TargetSegmentSizeSecs)
 
 	// Check if this is a clipping request
+	var clipTargetURL *url.URL
+	var err error
 	if uploadVODRequest.IsClipValid() {
+		clipTargetOutput := uploadVODRequest.getTargetClipOutput()
+		clipTargetURL, err = toTargetURL(clipTargetOutput, requestID)
+		if err != nil {
+			return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+		}
 		uploadVODRequest.ClipStrategy.Enabled = true
 	}
 
@@ -248,6 +265,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		HlsTargetURL:          hlsTargetURL,
 		Mp4TargetURL:          mp4TargetURL,
 		FragMp4TargetURL:      fragMp4TargetURL,
+		ClipTargetURL:         clipTargetURL,
 		Mp4OnlyShort:          mp4OnlyShort,
 		AccessToken:           uploadVODRequest.AccessToken,
 		TranscodeAPIUrl:       uploadVODRequest.TranscodeAPIUrl,
