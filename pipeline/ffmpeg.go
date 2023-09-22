@@ -155,6 +155,7 @@ func (f *ffmpeg) sendSourcePlayback(job *JobInfo) {
 		log.LogError(job.RequestID, "unable to parse url for source playback", err)
 		return
 	}
+	segmentingTargetURL.User = nil // remove creds as we are creating playback URLs here
 
 	sourceURL, err := url.Parse(job.SourceFile)
 	if err != nil {
@@ -163,17 +164,15 @@ func (f *ffmpeg) sendSourcePlayback(job *JobInfo) {
 	}
 
 	prefix := ""
-	if clients.IsHLSInput(sourceURL) {
-		for k, v := range f.sourcePlaybackHosts {
-			if strings.HasPrefix(job.SourceFile, k) {
-				prefix = strings.Replace(job.SourceFile, k, v, 1)
-				break
-			}
+	for k, v := range f.sourcePlaybackHosts {
+		if strings.HasPrefix(segmentingTargetURL.String(), k) {
+			prefix = strings.Replace(segmentingTargetURL.String(), k, v, 1)
+			break
 		}
-		if prefix == "" {
-			log.Log(job.RequestID, "no source playback prefix found", "host", sourceURL.Host)
-			return
-		}
+	}
+	if clients.IsHLSInput(sourceURL) && prefix == "" {
+		log.Log(job.RequestID, "no source playback prefix found", "segmentingTargetURL", segmentingTargetURL)
+		return
 	}
 
 	segmentingPath := strings.Split(segmentingTargetURL.Path, "/")
