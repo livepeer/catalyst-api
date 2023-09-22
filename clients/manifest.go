@@ -207,7 +207,7 @@ func SortTranscodedStats(transcodedStats []*video.RenditionStats) {
 	})
 }
 
-func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTime, endTime float64) (clippedManifestUrl *url.URL, err error) {
+func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnixMillis, endTimeUnixMillis int64) (clippedManifestUrl *url.URL, err error) {
 
 	// Get the source manifest that will be clipped
 	origManifest, err := DownloadRenditionManifest(requestID, sourceURL)
@@ -220,6 +220,12 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTime, en
 	sourceSegmentURLs, err := GetSourceSegmentURLs(sourceURL, origManifest)
 	if err != nil {
 		return nil, fmt.Errorf("error clipping: failed to get segment urls: %w", err)
+	}
+
+	// Convert start/end time specified in UNIX time (milliseconds) to seconds wrt the first segment
+	startTime, endTime, err := video.ConvertUnixMillisToSeconds(requestID, origManifest.Segments[0], startTimeUnixMillis, endTimeUnixMillis)
+	if err != nil {
+		return nil, fmt.Errorf("error clipping: failed to get start/end time offsets in seconds: %w", err)
 	}
 
 	// Find the segments at the clipping start/end timestamp boundaries

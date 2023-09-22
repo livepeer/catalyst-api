@@ -10,9 +10,9 @@ import (
 
 type ClipStrategy struct {
 	Enabled    bool
-	StartTime  float64 `json:"start_time,omitempty"`
-	EndTime    float64 `json:"end_time,omitempty"`
-	PlaybackID string  `json:"playback_id,omitempty"` // playback-id of asset to clip
+	StartTime  int64  `json:"start_time,omitempty"`
+	EndTime    int64  `json:"end_time,omitempty"`
+	PlaybackID string `json:"playback_id,omitempty"` // playback-id of asset to clip
 }
 
 // format time in secs to be copatible with ffmpeg's expected time syntax
@@ -60,6 +60,25 @@ func getRelevantSegment(allSegments []*m3u8.MediaSegment, playHeadTime float64, 
 		return segment.SeqId, nil
 	}
 	return 0, fmt.Errorf("error clipping: did not find a segment that falls within %v seconds", playHeadTime)
+}
+
+func ConvertUnixMillisToSeconds(requestID string, firstSegment *m3u8.MediaSegment, startTimeUnixMillis, endTimeUnixMillis int64) (float64, float64, error) {
+	firstSegProgramDateTimeUTC := firstSegment.ProgramDateTime
+	if firstSegProgramDateTimeUTC.IsZero() {
+		return 0.0, 0.0, fmt.Errorf("error clipping: PROGRAM-DATE-TIME of first segment is not set")
+	}
+	firstSegUnixMillis := firstSegProgramDateTimeUTC.UnixNano() / int64(time.Millisecond)
+
+	startTimeSeconds := float64(startTimeUnixMillis-firstSegUnixMillis) / 1000.0
+	endTimeSeconds := float64(endTimeUnixMillis-firstSegUnixMillis) / 1000.0
+
+	log.Log(requestID, "Clipping timestamps",
+		"start-PROGRAM-DATE-TIME-UTC", firstSegProgramDateTimeUTC,
+		"UNIX-time-milliseconds", firstSegUnixMillis,
+		"start-offset-seconds", startTimeSeconds,
+		"end-offset-seconds", endTimeSeconds)
+
+	return startTimeSeconds, endTimeSeconds, nil
 }
 
 // Function to find relevant segments that span from the clipping start and end times
