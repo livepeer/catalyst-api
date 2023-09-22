@@ -14,6 +14,7 @@ func TestGetTargetOutputs(t *testing.T) {
 		expectedHlsURL       string
 		expectedMp4URL       string
 		expectedFragMp4URL   string
+		expectedClipURL      string
 		expectedMp4ShortOnly bool
 	}{
 		{
@@ -59,10 +60,17 @@ func TestGetTargetOutputs(t *testing.T) {
 						FragmentedMP4: "enabled",
 					},
 				},
+				{
+					URL: "s3+https://fourth:fourth@bucket",
+					Outputs: UploadVODRequestOutputLocationOutputs{
+						Clip: "enabled",
+					},
+				},
 			}},
 			expectedHlsURL:       "s3+https://first:first@bucket",
 			expectedMp4URL:       "s3+https://second:second@bucket",
 			expectedFragMp4URL:   "s3+https://third:third@bucket",
+			expectedClipURL:      "s3+https://fourth:fourth@bucket",
 			expectedMp4ShortOnly: true,
 		},
 	}
@@ -73,9 +81,11 @@ func TestGetTargetOutputs(t *testing.T) {
 			require.Equal(t, tt.expectedHlsURL, gotHls.URL)
 			gotMp4, gotShortOnly := tt.req.getTargetMp4Output()
 			gotFragMp4 := tt.req.getTargetFragMp4Output()
+			gotClip := tt.req.getTargetClipOutput()
 			require.Equal(t, tt.expectedMp4URL, gotMp4.URL)
 			require.Equal(t, tt.expectedMp4ShortOnly, gotShortOnly)
 			require.Equal(t, tt.expectedFragMp4URL, gotFragMp4.URL)
+			require.Equal(t, tt.expectedClipURL, gotClip.URL)
 		})
 	}
 }
