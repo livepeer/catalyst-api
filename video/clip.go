@@ -16,10 +16,11 @@ type ClipStrategy struct {
 }
 
 // format time in secs to be copatible with ffmpeg's expected time syntax
-func formatTime(seconds float64) string {
-	duration := time.Duration(seconds * float64(time.Second))
-	timeObj := time.Date(0, 0, 0, 0, 0, 0, 0, time.UTC).Add(duration)
-	return timeObj.Format("15:04:05")
+func formatTime(timeSeconds float64) string {
+	timeMillis := int64(timeSeconds * 1000)
+	duration := time.Duration(timeMillis) * time.Millisecond
+	formattedTime := time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC).Add(duration)
+	return formattedTime.Format("15:04:05.000")
 }
 
 func GetTotalDurationAndSegments(manifest *m3u8.MediaPlaylist) (float64, uint64) {
