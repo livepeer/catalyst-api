@@ -155,7 +155,9 @@ func (f *ffmpeg) sendSourcePlayback(job *JobInfo) {
 		log.LogError(job.RequestID, "unable to parse url for source playback", err)
 		return
 	}
-	segmentingTargetURL.User = nil // remove creds as we are creating playback URLs here
+	// remove creds as we are creating playback URLs to be used directly by a front end player
+	// currently this will work for our regular buckets except for the ones we're excluding in sourcePlaybackBucketBlocklist
+	segmentingTargetURL.User = nil
 
 	sourceURL, err := url.Parse(job.SourceFile)
 	if err != nil {
@@ -163,14 +165,14 @@ func (f *ffmpeg) sendSourcePlayback(job *JobInfo) {
 		return
 	}
 
-	prefix := ""
+	renditionURL := ""
 	for k, v := range f.sourcePlaybackHosts {
 		if strings.HasPrefix(segmentingTargetURL.String(), k) {
-			prefix = strings.Replace(segmentingTargetURL.String(), k, v, 1)
+			renditionURL = strings.Replace(segmentingTargetURL.String(), k, v, 1)
 			break
 		}
 	}
-	if clients.IsHLSInput(sourceURL) && prefix == "" {
+	if clients.IsHLSInput(sourceURL) && renditionURL == "" {
 		log.Log(job.RequestID, "no source playback prefix found", "segmentingTargetURL", segmentingTargetURL)
 		return
 	}
@@ -182,7 +184,7 @@ func (f *ffmpeg) sendSourcePlayback(job *JobInfo) {
 	}
 	// assume bucket is second element in slice (first element should be an empty string as the path has a leading slash)
 	segmentingBucket := segmentingPath[1]
-	if (job.HlsTargetURL == nil || !strings.Contains(job.HlsTargetURL.String(), "/"+segmentingBucket+"/")) && prefix == "" {
+	if (job.HlsTargetURL == nil || !strings.Contains(job.HlsTargetURL.String(), "/"+segmentingBucket+"/")) && renditionURL == "" {
 		log.Log(job.RequestID, "source playback not available, not a studio job", "segmentingTargetURL", segmentingTargetURL)
 		return
 	}
@@ -202,10 +204,10 @@ func (f *ffmpeg) sendSourcePlayback(job *JobInfo) {
 		return
 	}
 
-	if prefix == "" {
-		prefix = "/" + path.Join(segmentingPath[2:]...)
+	if renditionURL == "" {
+		renditionURL = "/" + path.Join(segmentingPath[2:]...)
 	}
-	sourceMaster.Append(prefix, &m3u8.MediaPlaylist{}, m3u8.VariantParams{
+	sourceMaster.Append(renditionURL, &m3u8.MediaPlaylist{}, m3u8.VariantParams{
 		Bandwidth:  uint32(videoTrack.Bitrate),
 		Resolution: fmt.Sprintf("%dx%d", videoTrack.Width, videoTrack.Height),
 		Name:       fmt.Sprintf("%dp", videoTrack.Height),
