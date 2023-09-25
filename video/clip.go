@@ -68,15 +68,21 @@ func ConvertUnixMillisToSeconds(requestID string, firstSegment *m3u8.MediaSegmen
 	if firstSegProgramDateTimeUTC.IsZero() {
 		return 0.0, 0.0, fmt.Errorf("error clipping: PROGRAM-DATE-TIME of first segment is not set")
 	}
+	// explicity use GMT+0(UTC) timezone so that local timezone is not used
+	firstSegProgramDateTimeUTC = firstSegProgramDateTimeUTC.In(time.UTC)
+	// convert first segment's program-date-time tag in manifest to unix time in milliseconds
 	firstSegUnixMillis := firstSegProgramDateTimeUTC.UnixNano() / int64(time.Millisecond)
 
+	// calculate offsets in seconds of start/end times from first segment's program-date-time
 	startTimeSeconds := float64(startTimeUnixMillis-firstSegUnixMillis) / 1000.0
 	endTimeSeconds := float64(endTimeUnixMillis-firstSegUnixMillis) / 1000.0
 
 	log.Log(requestID, "Clipping timestamps",
 		"start-PROGRAM-DATE-TIME-UTC", firstSegProgramDateTimeUTC,
 		"UNIX-time-milliseconds", firstSegUnixMillis,
+		"start-time-unix-milliseconds", startTimeUnixMillis,
 		"start-offset-seconds", startTimeSeconds,
+		"end-time-unix-milliseconds", endTimeUnixMillis,
 		"end-offset-seconds", endTimeSeconds)
 
 	return startTimeSeconds, endTimeSeconds, nil
@@ -96,7 +102,7 @@ func ClipManifest(requestID string, manifest *m3u8.MediaPlaylist, startTime, end
 	} else {
 		startSegIdx, err = getRelevantSegment(manifest.Segments, startTime, 0)
 		if err != nil {
-			return nil, fmt.Errorf("error clipping: failed to get a starting index")
+			return nil, fmt.Errorf("error clipping: failed to get a starting index: %w", err)
 		}
 	}
 
