@@ -41,7 +41,9 @@ func (t *ParallelTranscoding) Start() {
 	t.completed.Add(config.TranscodingParallelJobs)
 	for index := 0; index < config.TranscodingParallelJobs; index++ {
 		go t.workerRoutine()
-		// Add some desync interval to avoid load spikes on segment-encode-end
+		// Add a sleep after the first transcoding goroutine starts, to avoid the situation where 2 segments
+		// hit the Broadcaster at once and get routed to different Os, then immediately switch away from
+		// one of them
 		time.Sleep(config.TranscodingParallelSleep)
 	}
 }
