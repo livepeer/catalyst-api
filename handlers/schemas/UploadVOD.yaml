@@ -33,8 +33,6 @@ properties:
         type: "integer"
       playback_id:
         type: "string"
-    required:
-      -  "start_time"
     additionalProperties: false
   pipeline_strategy:
     type: string
