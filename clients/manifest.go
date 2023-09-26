@@ -332,16 +332,22 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnix
 		return nil, fmt.Errorf("error clipping: failed to upload clipped playlist: %s", err)
 	}
 
-	// Parse the clipTargetUrl so that it can be used as the new source in the transcode stage.
-	clipTargetOSURL, err := url.Parse(clipTargetUrl)
-	if err != nil {
-		return nil, fmt.Errorf("error clipping: failed to parse clipped playlist: %s", err)
-	}
-	clipTargetOSURL.Scheme = strings.TrimPrefix(clipTargetOSURL.Scheme, "s3+")
-	clipTargetOSURL.User = nil
-	clipTargetOSURL.Path += "/" + ClipManifestFilename
+	//TODO/HACK: With Storj being used for recordings/clips, generate an URL pointing
+	// to the clipped manifest file using the public source url. This logic should be
+	// simplified by setting an output folder explicitly as a param in the ClippingStrategy
+	// struct as part of the clipping request
 
-	return clipTargetOSURL, nil
+	// extract the folder where clip segments/manifests are saved
+	clipPlaybackRelPath := path.Base(clipTargetUrl)
+	// create a new publically accessible base url from the source url
+	source, err := url.Parse(sourceURL)
+	if err != nil {
+		return nil, fmt.Errorf("error clipping: failed to parse sourceURL: %s", err)
+	}
+	// set the correct path to clip.m3u8 file in the base url that will be used as the
+	// input file to next VOD (transcode) stage.
+
+	return source.JoinPath("..", clipPlaybackRelPath, ClipManifestFilename), nil
 }
 
 func CreateClippedPlaylist(origManifest m3u8.MediaPlaylist, segs []*m3u8.MediaSegment) (*m3u8.MediaPlaylist, error) {
