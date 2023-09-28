@@ -365,10 +365,12 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnix
 }
 
 func CreateClippedPlaylist(origManifest m3u8.MediaPlaylist, segs []*m3u8.MediaSegment) (*m3u8.MediaPlaylist, error) {
-	clippedPlaylist, err := m3u8.NewMediaPlaylist(origManifest.WinSize(), uint(len(segs)))
+	totalSegs := uint(len(segs))
+	clippedPlaylist, err := m3u8.NewMediaPlaylist(origManifest.WinSize(), totalSegs)
 	if err != nil {
 		return nil, fmt.Errorf("error clipping: failed to create clipped media playlist: %w", err)
 	}
+	var t time.Time
 	for i, s := range segs {
 		if s == nil {
 			break
@@ -378,11 +380,24 @@ func CreateClippedPlaylist(origManifest m3u8.MediaPlaylist, segs []*m3u8.MediaSe
 		if i != 0 && i != (len(segs)-1) {
 			s.URI = "../" + s.URI
 		}
+		// Remove PROGRAM-DATE-TIME tag from first clipped segment so that player doesn't
+		// run into seek issues or display incorrect times on playhead
+		if i == 0 {
+			s.ProgramDateTime = t 
+		}
+		// Add a DISCONTINUITY tag to let hls players know about different encoding between
+		// segments. But don't do this if there's a single segment in the clipped manifest
+		// or contains total two segments in the clipped manifest (i.e. back to back segments 
+		// were run through ffmpeg)
+		if i-1 == 0 && totalSegs > 2 {
+			s.Discontinuity = true
+		}
 		err := clippedPlaylist.AppendSegment(s)
 		if err != nil {
 			return nil, fmt.Errorf("error clipping: failed to append segments to clipped playlist: %w", err)
 		}
 	}
 	clippedPlaylist.Close()
+	fmt.Println("XXX: ",clippedPlaylist.String()) 
 	return clippedPlaylist, nil
 }
