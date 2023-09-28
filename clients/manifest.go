@@ -229,14 +229,14 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnix
 	}
 
 	// Find the segments at the clipping start/end timestamp boundaries
-	segs, err := video.ClipManifest(requestID, &origManifest, startTime, endTime)
+	segs, clipsegs, err := video.ClipManifest(requestID, &origManifest, startTime, endTime)
 	if err != nil {
 		return nil, fmt.Errorf("error clipping: failed to get start/end segments: %w", err)
 	}
 
 	// Only the first and last segments should be clipped.
 	// And segs can be a single segment (if start/end times fall within the same segment)
-	// or it can span sevveral segments startng from start-time and spanning to end-time
+	// or it can span several segments startng from start-time and spanning to end-time
 	var segsToClip []*m3u8.MediaSegment
 	if len(segs) == 1 {
 		segsToClip = []*m3u8.MediaSegment{segs[0]}
@@ -252,7 +252,7 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnix
 	defer os.RemoveAll(clipStorageDir)
 
 	// Download start/end segments and clip
-	for _, v := range segsToClip {
+	for i, v := range segsToClip {
 		// Create temp local file to store the segments:
 		clipSegmentFileName := filepath.Join(clipStorageDir, requestID+"_"+strconv.FormatUint(v.SeqId, 10)+".ts")
 		defer os.Remove(clipSegmentFileName)
@@ -284,9 +284,21 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnix
 
 		// Locally clip (i.e re-transcode + clip) those relevant segments at the specified start/end timestamps
 		clippedSegmentFileName := filepath.Join(clipStorageDir, requestID+"_"+strconv.FormatUint(v.SeqId, 10)+"_clip.ts")
-		err = video.ClipSegment(clipSegmentFileName, clippedSegmentFileName, startTime, endTime)
-		if err != nil {
-			return nil, fmt.Errorf("error clipping: failed to clip segment %d: %w", v.SeqId, err)
+		if len(segs) == 1 {
+			err = video.ClipSegment(clipSegmentFileName, clippedSegmentFileName, startTime, endTime)
+			if err != nil {
+				return nil, fmt.Errorf("error clipping: failed to clip segment %d: %w", v.SeqId, err)
+			}
+		} else {
+			if i == 0 {
+				err = video.ClipSegment(clipSegmentFileName, clippedSegmentFileName, clipsegs[0].ClipOffsetSecs, -1)
+			} else {
+				err = video.ClipSegment(clipSegmentFileName, clippedSegmentFileName, -1, clipsegs[1].ClipOffsetSecs)
+
+			}
+			if err != nil {
+				return nil, fmt.Errorf("error clipping: failed to clip segment %d: %w", v.SeqId, err)
+			}
 		}
 
 		// Upload clipped segment to OS
@@ -351,10 +363,12 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnix
 }
 
 func CreateClippedPlaylist(origManifest m3u8.MediaPlaylist, segs []*m3u8.MediaSegment) (*m3u8.MediaPlaylist, error) {
-	clippedPlaylist, err := m3u8.NewMediaPlaylist(origManifest.WinSize(), uint(len(segs)))
+	totalSegs := uint(len(segs))
+	clippedPlaylist, err := m3u8.NewMediaPlaylist(origManifest.WinSize(), totalSegs)
 	if err != nil {
 		return nil, fmt.Errorf("error clipping: failed to create clipped media playlist: %w", err)
 	}
+	var t time.Time
 	for i, s := range segs {
 		if s == nil {
 			break
@@ -363,6 +377,18 @@ func CreateClippedPlaylist(origManifest m3u8.MediaPlaylist, segs []*m3u8.MediaSe
 		// be in the same place from root folder. Find a smarter way to handle this later.
 		if i != 0 && i != (len(segs)-1) {
 			s.URI = "../" + s.URI
+		}
+		// Remove PROGRAM-DATE-TIME tag from first clipped segment so that player doesn't
+		// run into seek issues or display incorrect times on playhead
+		if i == 0 {
+			s.ProgramDateTime = t
+		}
+		// Add a DISCONTINUITY tag to let hls players know about different encoding between
+		// segments. But don't do this if there's a single segment in the clipped manifest
+		// or contains total two segments in the clipped manifest (i.e. back to back segments
+		// were run through ffmpeg)
+		if i-1 == 0 && totalSegs > 2 {
+			s.Discontinuity = true
 		}
 		err := clippedPlaylist.AppendSegment(s)
 		if err != nil {
