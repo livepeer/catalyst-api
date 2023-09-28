@@ -98,7 +98,6 @@ func ConvertUnixMillisToSeconds(requestID string, firstSegment *m3u8.MediaSegmen
 
 // Function to find relevant segments that span from the clipping start and end times
 func ClipManifest(requestID string, manifest *m3u8.MediaPlaylist, startTime, endTime float64) ([]*m3u8.MediaSegment, []ClipSegmentInfo, error) {
-	//var startSegIdx, endSegIdx uint64
 	var clipStartSegmentInfo, clipEndSegmentInfo ClipSegmentInfo
 	var err error
 
@@ -161,12 +160,11 @@ func ClipManifest(requestID string, manifest *m3u8.MediaPlaylist, startTime, end
 //	"bf": "0": Disables B-frames for bidirectional prediction.
 //	"c:a": "aac": re-encode audio and clip.
 func ClipSegment(tsInputFile, tsOutputFile string, startTime, endTime float64) error {
-	var start, end string
 	var args ffmpeg.KwArgs
 	if endTime < 0 {
 		// Clip from specified start time to the end of
 		// the segment (when clipping starting segment)
-		start = formatTime(startTime)
+		start := formatTime(startTime)
 		args = ffmpeg.KwArgs{"bf": "0",
 			"c:a":          "aac",
 			"c:v":          "libx264",
@@ -177,8 +175,7 @@ func ClipSegment(tsInputFile, tsOutputFile string, startTime, endTime float64) e
 	} else if startTime < 0 {
 		// Clip from beginning of segment to specified end time
 		// without re-encoding (when clipping ending segment)
-		start = formatTime(startTime)
-		end = formatTime(endTime)
+		end := formatTime(endTime)
 		args = ffmpeg.KwArgs{"c:a": "copy",
 			"c:v": "copy",
 			"ss":  "00:00:00.000",
@@ -186,8 +183,8 @@ func ClipSegment(tsInputFile, tsOutputFile string, startTime, endTime float64) e
 	} else {
 		// Clip from specified start/end times (when
 		// start/end falls within same segment)
-		start = formatTime(startTime)
-		end = formatTime(endTime)
+		start := formatTime(startTime)
+		end := formatTime(endTime)
 		args = ffmpeg.KwArgs{"bf": "0",
 			"c:a":          "aac",
 			"c:v":          "libx264",
