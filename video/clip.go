@@ -122,7 +122,7 @@ func ClipManifest(requestID string, manifest *m3u8.MediaPlaylist, startTime, end
 		lastSegmentDuration := manifest.Segments[lastSegmentIdx].Duration
 		clipEndSegmentInfo = ClipSegmentInfo{SequenceID: lastSegmentIdx, Duration: lastSegmentDuration, ClipOffsetSecs: lastSegmentDuration}
 	} else {
-		clipEndSegmentInfo, err = getRelevantSegment(manifest.Segments, endTime, clipStartSegmentInfo.SequenceID)
+		clipEndSegmentInfo, err = getRelevantSegment(manifest.Segments, endTime, 0)
 		if err != nil {
 			return nil, []ClipSegmentInfo{}, fmt.Errorf("error clipping: failed to get an ending index")
 		}
