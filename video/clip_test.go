@@ -1,6 +1,7 @@
 package video
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -94,7 +95,7 @@ func TestClippingFailsWhenInvalidManifestIsUsed(t *testing.T) {
 	require.NoError(t, err)
 	plC := sourceManifestC.(*m3u8.MediaPlaylist)
 
-	_, err = ClipManifest("1234", plC, 1, 5)
+	_, _, err = ClipManifest("1234", plC, 1, 5)
 	require.ErrorContains(t, err, "error clipping")
 }
 
@@ -104,50 +105,60 @@ func TestClippingSucceedsWhenValidManifestIsUsed(t *testing.T) {
 	plA := sourceManifestA.(*m3u8.MediaPlaylist)
 
 	// start/end falls in same segment: ensure only 0.ts is returned
-	segs, err := ClipManifest("1234", plA, 1, 5)
+	segs, csi, err := ClipManifest("1234", plA, 1, 5)
 	length := len(segs)
 	require.NoError(t, err)
 	require.Equal(t, uint64(0), uint64(segs[0].SeqId))
 	require.Equal(t, 1, length)
+	require.Equal(t, 10.4160000000, csi[0].Duration)
 
 	// start/end falls in different segments: ensure only 0.ts and 1.ts is returned
-	segs, err = ClipManifest("1234", plA, 1, 10.5)
+	segs, csi, err = ClipManifest("1234", plA, 1, 10.5)
 	length = len(segs)
 	require.NoError(t, err)
 	require.Equal(t, uint64(0), uint64(segs[0].SeqId))
 	require.Equal(t, uint64(1), uint64(segs[1].SeqId))
 	require.Equal(t, 2, length)
+	require.Equal(t, 10.4160000000, csi[0].Duration)
+	require.Equal(t, 5.3340000000, csi[1].Duration)
+	require.Equal(t, float64(1), csi[0].ClipOffsetSecs)
+	require.Equal(t, fmt.Sprintf("%.3f", 0.084), fmt.Sprintf("%.3f", csi[1].ClipOffsetSecs))
 
 	// start/end with millisecond precision: ensure 0.ts and 1.ts is returned
-	segs, err = ClipManifest("1234", plA, 10.416, 10.5)
+	segs, csi, err = ClipManifest("1234", plA, 10.416, 10.5)
 	length = len(segs)
 	require.NoError(t, err)
 	require.Equal(t, uint64(0), uint64(segs[0].SeqId))
 	require.Equal(t, uint64(1), uint64(segs[1].SeqId))
 	require.Equal(t, 2, length)
+	require.Equal(t, float64(10.416), csi[0].ClipOffsetSecs)
+	require.Equal(t, fmt.Sprintf("%.3f", 0.084), fmt.Sprintf("%.3f", csi[1].ClipOffsetSecs))
 
 	sourceManifestB, _, err := m3u8.DecodeFrom(strings.NewReader(manifestB), true)
 	require.NoError(t, err)
 	plB := sourceManifestB.(*m3u8.MediaPlaylist)
 
 	// start/end spans the full duration of playlist: ensure 0.ts and 3.ts is returned
-	segs, err = ClipManifest("1234", plB, 0, 18.78)
+	segs, csi, err = ClipManifest("1234", plB, 0, 18.78)
 	length = len(segs)
 	require.NoError(t, err)
 	require.Equal(t, uint64(0), uint64(segs[0].SeqId))
 	require.Equal(t, uint64(3), uint64(segs[3].SeqId))
 	require.Equal(t, 4, length)
+	require.Equal(t, float64(0), csi[0].ClipOffsetSecs)
+	require.Equal(t, fmt.Sprintf("%.3f", 1.000), fmt.Sprintf("%.3f", csi[1].ClipOffsetSecs))
 
 	// start exceeds the duration of playlist: ensure no segments are returned
-	segs, err = ClipManifest("1234", plB, 30, 20.78)
+	segs, _, err = ClipManifest("1234", plB, 30, 20.78)
 	require.ErrorContains(t, err, "start time specified exceeds duration of manifest")
 	require.Equal(t, segs, []*m3u8.MediaSegment(nil))
 
 	// end exceeds the duration of playlist: ensure only 0.ts is returned
-	segs, err = ClipManifest("1234", plB, 0, 20.78)
+	segs, csi, err = ClipManifest("1234", plB, 0, 20.78)
 	length = len(segs)
 	require.NoError(t, err)
 	require.Equal(t, uint64(0), uint64(segs[0].SeqId))
 	require.Equal(t, uint64(3), uint64(segs[3].SeqId))
 	require.Equal(t, 4, length)
+	require.Equal(t, float64(0), csi[0].ClipOffsetSecs)
 }
