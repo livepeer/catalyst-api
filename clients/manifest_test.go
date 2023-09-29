@@ -240,6 +240,7 @@ source/0.ts
 #EXT-X-DISCONTINUITY
 #EXTINF:15.000,blah1
 ../source/1.ts
+#EXT-X-DISCONTINUITY
 #EXTINF:10.000,blah2
 source/2.ts
 #EXT-X-ENDLIST

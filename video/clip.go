@@ -176,10 +176,14 @@ func ClipSegment(tsInputFile, tsOutputFile string, startTime, endTime float64) e
 		// Clip from beginning of segment to specified end time
 		// without re-encoding (when clipping ending segment)
 		end := formatTime(endTime)
-		args = ffmpeg.KwArgs{"c:a": "copy",
-			"c:v": "copy",
-			"ss":  "00:00:00.000",
-			"to":  end}
+		args = ffmpeg.KwArgs{"bf": "0",
+			"c:a":          "aac",
+			"c:v":          "libx264",
+			"g":            "48",
+			"keyint_min":   "48",
+			"sc_threshold": 50,
+			"ss":           "00:00:00.000",
+			"to":           end}
 	} else {
 		// Clip from specified start/end times (when
 		// start/end falls within same segment)
