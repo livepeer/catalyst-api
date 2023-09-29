@@ -17,7 +17,7 @@ func Segment(sourceFilename string, outputManifestURL string, targetSegmentSize 
 		Output(
 			outputManifestURL,
 			ffmpeg.KwArgs{
-				"c:a":               "copy",
+				"c:a":               "aac",
 				"c:v":               "copy",
 				"f":                 "hls",
 				"hls_segment_type":  "mpegts",
