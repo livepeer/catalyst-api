@@ -174,6 +174,29 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}
 	}
+	if payload == "a valid livestream clipping request" {
+		req := DefaultUploadRequest
+		req.URL = "file://" + filepath.Join(sourceManifestDir, "tiny.m3u8")
+		req.PipelineStrategy = "catalyst_ffmpeg"
+		req.OutputLocations = []OutputLocation{
+			{
+				Type: "object_store",
+				URL:  "file://" + destinationDir,
+				Outputs: Output{
+					HLS:       "enabled",
+					SourceMp4: false,
+				},
+			},
+		}
+		req.ClipStrategy = ClipStrategy{
+			StartTime:  0,
+			EndTime:    10,
+			PlaybackID: "EXAMPLE-PLAYBACK-ID",
+		}
+		if payload, err = req.ToJSON(); err != nil {
+			return fmt.Errorf("failed to build upload request JSON: %s", err)
+		}
+	}
 	if payload == "an invalid upload vod request" {
 		payload = "{}"
 	}

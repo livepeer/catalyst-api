@@ -225,9 +225,8 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		clipTargetOutput := uploadVODRequest.getTargetClipOutput()
 		clipTargetURL, err = toTargetURL(clipTargetOutput, requestID)
 		if err != nil {
-			return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+			return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("error parsing Clip Target URL: %w", err))
 		}
-		uploadVODRequest.ClipStrategy.Enabled = true
 	}
 
 	// Get target locatons for HLS, MP4, FMP4 outputs
@@ -294,7 +293,9 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 }
 
 func toTargetURL(ol UploadVODRequestOutputLocation, reqID string) (*url.URL, error) {
-	if ol.URL != "" {
+	if ol.URL == "" {
+		return nil, fmt.Errorf("blank URL")
+	} else {
 		tURL, err := url.Parse(ol.URL)
 		if err != nil {
 			return nil, err
@@ -308,7 +309,6 @@ func toTargetURL(ol UploadVODRequestOutputLocation, reqID string) (*url.URL, err
 		}
 		return tURL, nil
 	}
-	return nil, nil
 }
 
 func CheckSourceURLValid(sourceURL string) error {

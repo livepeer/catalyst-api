@@ -2,17 +2,27 @@ package video
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/log"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
-	"time"
 )
 
 type ClipStrategy struct {
-	Enabled    bool
 	StartTime  int64  `json:"start_time,omitempty"`
 	EndTime    int64  `json:"end_time,omitempty"`
 	PlaybackID string `json:"playback_id,omitempty"` // playback-id of asset to clip
+}
+
+func (c ClipStrategy) IsEnabled() bool {
+	return c.EndTime > 0
+}
+
+type ClipSegmentInfo struct {
+	SequenceID     uint64
+	Duration       float64
+	ClipOffsetSecs float64
 }
 
 // format time in secs to be copatible with ffmpeg's expected time syntax

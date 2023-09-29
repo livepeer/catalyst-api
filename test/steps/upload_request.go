@@ -26,6 +26,13 @@ type UploadRequest struct {
 	OutputLocations       []OutputLocation       `json:"output_locations,omitempty"`
 	PipelineStrategy      string                 `json:"pipeline_strategy,omitempty"`
 	Profiles              []video.EncodedProfile `json:"profiles,omitempty"`
+	ClipStrategy          ClipStrategy           `json:"clip_strategy,omitempty"`
+}
+
+type ClipStrategy struct {
+	StartTime  int64  `json:"start_time,omitempty"`
+	EndTime    int64  `json:"end_time,omitempty"`
+	PlaybackID string `json:"playback_id,omitempty"`
 }
 
 var DefaultUploadRequest = UploadRequest{
