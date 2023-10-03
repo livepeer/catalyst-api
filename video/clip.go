@@ -1,10 +1,12 @@
 package video
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/log"
-	ffmpeg "github.com/u2takey/ffmpeg-go"
+	"os/exec"
 	"time"
 )
 
@@ -85,7 +87,7 @@ func ConvertUnixMillisToSeconds(requestID string, firstSegment *m3u8.MediaSegmen
 	startTimeSeconds := float64(startTimeUnixMillis-firstSegUnixMillis) / 1000.0
 	endTimeSeconds := float64(endTimeUnixMillis-firstSegUnixMillis) / 1000.0
 
-	log.Log(requestID, "Clipping timestamps",
+	log.Log(requestID, "clipping timestamps",
 		"start-PROGRAM-DATE-TIME-UTC", firstSegProgramDateTimeUTC,
 		"UNIX-time-milliseconds", firstSegUnixMillis,
 		"start-time-unix-milliseconds", startTimeUnixMillis,
@@ -135,7 +137,7 @@ func ClipManifest(requestID string, manifest *m3u8.MediaPlaylist, startTime, end
 		return nil, []ClipSegmentInfo{}, fmt.Errorf("error clipping: no relevant segments found in the specified time range")
 	}
 
-	log.Log(requestID, "Clipping segments", "from", firstSegmentToClip, "to", lastSegmentToClip)
+	log.Log(requestID, "clipping segments", "from", firstSegmentToClip, "to", lastSegmentToClip)
 
 	// If the clip start/end times fall within the same segment, then
 	// save only the single segment's info
@@ -153,57 +155,69 @@ func ClipManifest(requestID string, manifest *m3u8.MediaPlaylist, startTime, end
 // This allows for frame-accurate clipping.
 // Currently using a combination of these settings for the encode step:
 //
-//	"c:v": "libx264": Specifies H.264 video codec.
-//	"g": "48": Inserts keyframe every 48 frames (GOP size).
-//	"keyint_min": "48": Minimum keyframe interval.
-//	"sc_threshold": 50: Detects scene changes with threshold 50.
-//	"bf": "0": Disables B-frames for bidirectional prediction.
-//	"c:a": "aac": re-encode audio and clip.
-func ClipSegment(tsInputFile, tsOutputFile string, startTime, endTime float64) error {
-	var args ffmpeg.KwArgs
+//		"c:v": "libx264": Specifies H.264 video codec.
+//		"g": "48": Inserts keyframe every 48 frames (GOP size).
+//		"keyint_min": "48": Minimum keyframe interval.
+//		"sc_threshold": 50: Detects scene changes with threshold 50.
+//		"bf": "0": Disables B-frames for bidirectional prediction.
+//		"c:a": "aac": re-encode audio and clip.
+//	     "map 0:a map 0:v": so that audio track is always first which matches recording segments
+func ClipSegment(requestID, tsInputFile, tsOutputFile string, startTime, endTime float64) error {
+
+	var baseArgs []string
+	mapArgs := []string{"-map", "0:a", "-map", "0:v"}
+
+	// append input file
+	baseArgs = append(baseArgs,
+		"-i", tsInputFile)
+
+	// append args that will apply re-encoding
+	baseArgs = append(baseArgs,
+		"-bf", "0",
+		"-c:a", "aac",
+		"-c:v", "libx264",
+		"-g", "48",
+		"-keyint_min", "48",
+		"-sc_threshold", "50")
+
 	if endTime < 0 {
-		// Clip from specified start time to the end of
-		// the segment (when clipping starting segment)
+		// Clip from specified start time to the end of the segment
+		// (when clipping starting segment)
 		start := formatTime(startTime)
-		args = ffmpeg.KwArgs{"bf": "0",
-			"c:a":          "aac",
-			"c:v":          "libx264",
-			"g":            "48",
-			"keyint_min":   "48",
-			"sc_threshold": 50,
-			"ss":           start}
+		baseArgs = append(baseArgs, "-ss", start)
 	} else if startTime < 0 {
 		// Clip from beginning of segment to specified end time
-		// without re-encoding (when clipping ending segment)
+		// (when clipping ending segment)
 		end := formatTime(endTime)
-		args = ffmpeg.KwArgs{"bf": "0",
-			"c:a":          "aac",
-			"c:v":          "libx264",
-			"g":            "48",
-			"keyint_min":   "48",
-			"sc_threshold": 50,
-			"ss":           "00:00:00.000",
-			"to":           end}
+		baseArgs = append(baseArgs, "-ss", "00:00:00.000", "-to", end)
 	} else {
-		// Clip from specified start/end times (when
-		// start/end falls within same segment)
+		// Clip from specified start/end times
+		// (when start/end falls within same segment)
 		start := formatTime(startTime)
 		end := formatTime(endTime)
-		args = ffmpeg.KwArgs{"bf": "0",
-			"c:a":          "aac",
-			"c:v":          "libx264",
-			"g":            "48",
-			"keyint_min":   "48",
-			"sc_threshold": 50,
-			"ss":           start,
-			"to":           end}
+		baseArgs = append(baseArgs, "-ss", start, "-to", end)
 	}
 
-	err := ffmpeg.Input(tsInputFile).
-		Output(tsOutputFile, args).
-		OverWriteOutput().ErrorToStdOut().Run()
+	// append map parameters so that audio track is always first and video track second
+	baseArgs = append(baseArgs, mapArgs...)
+
+	// append output file
+	baseArgs = append(baseArgs, tsOutputFile, "-y")
+
+	timeout, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(timeout, "ffmpeg", baseArgs...)
+
+	log.Log(requestID, "clipping", "compiled-command", fmt.Sprintf("ffmpeg %s", baseArgs))
+
+	var outputBuf bytes.Buffer
+	var stdErr bytes.Buffer
+	cmd.Stdout = &outputBuf
+	cmd.Stderr = &stdErr
+	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("failed to clip segments from %s: %w", tsInputFile, err)
+		return fmt.Errorf("failed to clip segments from %s [%s] [%s]: %w", tsInputFile, outputBuf.String(), stdErr.String(), err)
 	}
+
 	return nil
 }
