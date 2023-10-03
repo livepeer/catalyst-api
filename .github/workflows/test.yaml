@@ -48,7 +48,7 @@ jobs:
           go test $(go list ./... | grep -v cucumber) --short --race --covermode=atomic --coverprofile=coverage.out
 
       - name: Upload coverage reports
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v3
         with:
           files: ./coverage.out
           name: ${{ github.event.repository.name }}
