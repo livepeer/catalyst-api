@@ -208,7 +208,6 @@ func SortTranscodedStats(transcodedStats []*video.RenditionStats) {
 }
 
 func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnixMillis, endTimeUnixMillis int64) (clippedManifestUrl *url.URL, err error) {
-
 	// Get the source manifest that will be clipped
 	origManifest, err := DownloadRenditionManifest(requestID, sourceURL)
 	if err != nil {
@@ -286,7 +285,7 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnix
 		clippedSegmentFileName := filepath.Join(clipStorageDir, requestID+"_"+strconv.FormatUint(v.SeqId, 10)+"_clip.ts")
 		if len(segs) == 1 {
 			// If start/end times fall within same segment, then clip just that single segment
-			err = video.ClipSegment(clipSegmentFileName, clippedSegmentFileName, startTime, endTime)
+			err = video.ClipSegment(requestID, clipSegmentFileName, clippedSegmentFileName, startTime, endTime)
 			if err != nil {
 				return nil, fmt.Errorf("error clipping: failed to clip segment %d: %w", v.SeqId, err)
 			}
@@ -294,9 +293,9 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnix
 			// If start/end times fall within different segments, then clip segment from start-time to end of segment
 			// or clip from beginning of segment to end-time.
 			if i == 0 {
-				err = video.ClipSegment(clipSegmentFileName, clippedSegmentFileName, clipsegs[0].ClipOffsetSecs, -1)
+				err = video.ClipSegment(requestID, clipSegmentFileName, clippedSegmentFileName, clipsegs[0].ClipOffsetSecs, -1)
 			} else {
-				err = video.ClipSegment(clipSegmentFileName, clippedSegmentFileName, -1, clipsegs[1].ClipOffsetSecs)
+				err = video.ClipSegment(requestID, clipSegmentFileName, clippedSegmentFileName, -1, clipsegs[1].ClipOffsetSecs)
 			}
 			if err != nil {
 				return nil, fmt.Errorf("error clipping: failed to clip segment %d: %w", v.SeqId, err)
