@@ -4,6 +4,7 @@ import (
 	"crypto/rsa"
 	"database/sql"
 	"fmt"
+	"github.com/cenkalti/backoff/v4"
 	"math"
 	"net/url"
 	"os"
@@ -145,6 +146,10 @@ func (j *JobInfo) ReportProgress(stage clients.TranscodeStatus, completionRatio 
 	_ = j.statusClient.SendTranscodeStatus(tsm)
 }
 
+func ClippingRetryBackoff() backoff.BackOff {
+	return backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 10)
+}
+
 // Coordinator provides the main interface to handle the pipelines. It should be
 // called directly from the API handlers and never blocks on execution, but
 // rather schedules routines to do the actual work in background.
@@ -280,11 +285,17 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 			// Currently we only clip an HLS source (e.g recordings or transcoded asset)
 			var err error
 			if p.ClipStrategy.Enabled {
-				log.Log(p.RequestID, "clippity clipping the input", "Playback-ID", p.ClipStrategy.PlaybackID)
-				// Use new clipped manifest as the source URL
-				sourceURL, err = clients.ClipInputManifest(p.RequestID, sourceURL.String(), p.ClipTargetURL.String(), p.ClipStrategy.StartTime, p.ClipStrategy.EndTime)
+				err := backoff.Retry(func() error {
+					log.Log(p.RequestID, "clippity clipping the input", "Playback-ID", p.ClipStrategy.PlaybackID)
+					// Use new clipped manifest as the source URL
+					sourceURL, err = clients.ClipInputManifest(p.RequestID, sourceURL.String(), p.ClipTargetURL.String(), p.ClipStrategy.StartTime, p.ClipStrategy.EndTime)
+					if err != nil {
+						return fmt.Errorf("clipping failed: %s %w", sourceURL, err)
+					}
+					return nil
+				}, ClippingRetryBackoff())
 				if err != nil {
-					return nil, fmt.Errorf("error clippity: %s %w", sourceURL, err)
+					return nil, err
 				}
 			}
 			// Use the source URL location as the transfer directory to hold the clipped outputs
