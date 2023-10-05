@@ -64,6 +64,7 @@ type UploadJobPayload struct {
 	Mp4TargetURL          *url.URL
 	FragMp4TargetURL      *url.URL
 	ClipTargetURL         *url.URL
+	ThumbnailsTargetURL   *url.URL
 	Mp4OnlyShort          bool
 	AccessToken           string
 	TranscodeAPIUrl       string
@@ -324,6 +325,13 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 			log.Log(si.RequestID, "MP4s will be generated", "duration", si.InputFileInfo.Duration)
 		}
 
+		if si.ThumbnailsTargetURL != nil {
+			err = GenerateThumbs(osTransferURL, si.ThumbnailsTargetURL)
+			if err != nil {
+				log.LogError(si.RequestID, "generate thumbs failed", err, "in", osTransferURL, "out", si.ThumbnailsTargetURL)
+			}
+		}
+
 		c.startUploadJob(si)
 		return nil, nil
 	})
@@ -571,6 +579,7 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 		strconv.FormatBool(job.inFallbackMode),
 		strconv.FormatBool(job.LivepeerSupported),
 		strconv.FormatBool(job.ClipStrategy.Enabled),
+		strconv.FormatBool(job.ThumbnailsTargetURL != nil),
 	}
 
 	metrics.Metrics.VODPipelineMetrics.Count.
@@ -647,8 +656,9 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
                             "download_done_at",
                             "segmenting_done_at",
                             "transcoding_done_at",
-                            "is_clip"
-                            ) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`
+                            "is_clip",
+                            "is_thumbs",
+                            ) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)`
 	_, err := c.MetricsDB.Exec(
 		insertDynStmt,
 		time.Now().Unix(),
@@ -674,6 +684,7 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
 		job.SegmentingDone.Unix(),
 		job.TranscodingDone.Unix(),
 		job.ClipStrategy.Enabled,
+		job.ThumbnailsTargetURL != nil,
 	)
 	if err != nil {
 		log.LogError(job.RequestID, "error writing postgres metrics", err)
