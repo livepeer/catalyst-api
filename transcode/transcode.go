@@ -47,6 +47,7 @@ type TranscodeSegmentRequest struct {
 	RequestID      string                                 `json:"-"`
 	ReportProgress func(clients.TranscodeStatus, float64) `json:"-"`
 	GenerateMP4    bool
+	IsClip         bool
 }
 
 func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo video.InputVideo, broadcaster clients.BroadcasterClient) ([]video.OutputVideo, int, error) {
@@ -411,6 +412,23 @@ func transcodeSegment(
 ) error {
 	start := time.Now()
 
+	transcodeConf := clients.LivepeerTranscodeConfiguration{
+		TimeoutMultiplier: 10,
+	}
+	// If this is a request to transcode a Clip source input, then
+	// force T to do a re-init of transcoder after segment at idx=0.
+	// This is required because the segment at idx=0 is a locally
+	// re-encoded segment and the following segment at idx=1 is a
+	// source recorded segment. Without a re-init of the transcoder,
+	// the different encoding between the two segments causes the
+	// transcode operation to incorrectly tag the output segment as
+	// having two video tracks.
+	if transcodeRequest.IsClip && int64(segment.Index) == 1 {
+		transcodeConf.ForceSessionReinit = true
+	} else {
+		transcodeConf.ForceSessionReinit = false
+	}
+
 	var tr clients.TranscodeResult
 	err := backoff.Retry(func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), clients.MaxCopyFileDuration)
@@ -434,7 +452,7 @@ func transcodeSegment(
 				return fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
 			}
 		} else {
-			tr, err = broadcaster.TranscodeSegment(rc, int64(segment.Index), transcodeProfiles, segment.Input.DurationMillis, manifestID)
+			tr, err = broadcaster.TranscodeSegment(rc, int64(segment.Index), transcodeProfiles, segment.Input.DurationMillis, manifestID, transcodeConf)
 			if err != nil {
 				return fmt.Errorf("failed to run TranscodeSegment: %s", err)
 			}
