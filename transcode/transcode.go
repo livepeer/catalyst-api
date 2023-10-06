@@ -431,7 +431,7 @@ func transcodeSegment(
 	// This is a temporary workaround that implements the same logic
 	// as the previous if block -- a new manifestID will force a
 	// T session re-init between segment at index=0 and index=1.
-	if int64(segment.Index) == 0 {
+	if transcodeRequest.IsClip && int64(segment.Index) == 0 {
 		manifestID = manifestID + "_clip"
 	}
 
