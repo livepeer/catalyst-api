@@ -34,8 +34,9 @@ type createStreamPayload struct {
 }
 
 type LivepeerTranscodeConfiguration struct {
-	Profiles          []video.EncodedProfile `json:"profiles"`
-	TimeoutMultiplier int                    `json:"timeoutMultiplier"`
+	Profiles           []video.EncodedProfile `json:"profiles"`
+	TimeoutMultiplier  int                    `json:"timeoutMultiplier"`
+	ForceSessionReinit bool                   `json:"forceSessionReinit"`
 }
 
 type Credentials struct {
