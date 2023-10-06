@@ -146,6 +146,7 @@ func TestItCanGenerateAndWriteManifests(t *testing.T) {
 				BitsPerSecond: 1,
 			},
 		},
+		false,
 	)
 	require.NoError(t, err)
 
@@ -212,6 +213,7 @@ func TestCompliantMasterManifestOrdering(t *testing.T) {
 				BitsPerSecond: 2000000,
 			},
 		},
+		false,
 	)
 	require.NoError(t, err)
 
