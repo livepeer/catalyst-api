@@ -98,7 +98,7 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 
 // Generate a Master manifest, plus one Rendition manifest for each Profile we're transcoding, then write them to storage
 // Returns the master manifest URL on success
-func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL string, transcodedStats []*video.RenditionStats) (string, error) {
+func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL string, transcodedStats []*video.RenditionStats, isClip bool) (string, error) {
 	// Generate the master + rendition output manifests
 	masterPlaylist := m3u8.NewMasterPlaylist()
 
@@ -144,6 +144,12 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 			if err != nil {
 				return "", fmt.Errorf("failed to append to rendition playlist number %d: %s", i, err)
 			}
+		}
+
+		if isClip {
+			_, totalSegs := video.GetTotalDurationAndSegments(renditionPlaylist)
+			renditionPlaylist.Segments[1].Discontinuity = true
+			renditionPlaylist.Segments[totalSegs-1].Discontinuity = true
 		}
 
 		// Write #EXT-X-ENDLIST
