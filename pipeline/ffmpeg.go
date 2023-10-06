@@ -279,7 +279,7 @@ func copyFileToLocalTmpAndSegment(job *JobInfo) error {
 	// Create a temporary local file to write to
 	localSourceFile, err := os.CreateTemp(os.TempDir(), LocalSourceFilePattern)
 	if err != nil {
-		return fmt.Errorf("failed to create local file (%s) for segmenting: %s", localSourceFile.Name(), err)
+		return fmt.Errorf("failed to create local file for segmenting: %w", err)
 	}
 	defer localSourceFile.Close()
 	defer os.Remove(localSourceFile.Name()) // Clean up the file as soon as we're done segmenting
