@@ -18,13 +18,14 @@ func Segment(sourceFilename string, outputManifestURL string, targetSegmentSize 
 		Output(
 			strings.Replace(outputManifestURL, ".m3u8", "", 1)+"%d.ts",
 			ffmpeg.KwArgs{
-				"c:a":              "copy",
-				"c:v":              "copy",
-				"f":                "segment",
-				"segment_list":     outputManifestURL,
-				"segment_format":   "mpegts",
-				"segment_time":     targetSegmentSize,
-				"min_seg_duration": "2",
+				"c:a":               "copy",
+				"c:v":               "copy",
+				"f":                 "segment",
+				"segment_list":      outputManifestURL,
+				"segment_list_type": "m3u8",
+				"segment_format":    "mpegts",
+				"segment_time":      targetSegmentSize,
+				"min_seg_duration":  "2",
 			},
 		).OverWriteOutput().ErrorToStdOut().Run()
 	if err != nil {

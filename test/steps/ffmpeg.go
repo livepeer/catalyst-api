@@ -83,6 +83,9 @@ func (s *StepContext) TheSourceManifestIsWrittenToStorageWithinSeconds(secs, num
 	if mediaManifest.TargetDuration != 11.0 {
 		return fmt.Errorf("expected manifest to have a Target Duration of 11 but got: %f", mediaManifest.TargetDuration)
 	}
+	if mediaManifest.MediaType != m3u8.VOD {
+		return fmt.Errorf("expected manifest to have playlist type VOD but got: %v", mediaManifest.MediaType)
+	}
 
 	return nil
 }
