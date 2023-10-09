@@ -23,7 +23,7 @@ type ClipSegmentInfo struct {
 	ClipOffsetSecs float64
 }
 
-// format time in secs to be copatible with ffmpeg's expected time syntax
+// format time in secs to be compatible with ffmpeg's expected time syntax
 func formatTime(timeSeconds float64) string {
 	timeMillis := int64(timeSeconds * 1000)
 	duration := time.Duration(timeMillis) * time.Millisecond
