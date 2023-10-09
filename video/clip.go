@@ -87,6 +87,11 @@ func ConvertUnixMillisToSeconds(requestID string, firstSegment *m3u8.MediaSegmen
 	startTimeSeconds := float64(startTimeUnixMillis-firstSegUnixMillis) / 1000.0
 	endTimeSeconds := float64(endTimeUnixMillis-firstSegUnixMillis) / 1000.0
 
+	// set start-time to 0 if the clipping start time preceeds the first segment's program-date-time
+	if startTimeSeconds < 0 {
+		startTimeSeconds = 0
+	}
+
 	log.Log(requestID, "clipping timestamps",
 		"start-PROGRAM-DATE-TIME-UTC", firstSegProgramDateTimeUTC,
 		"UNIX-time-milliseconds", firstSegUnixMillis,
