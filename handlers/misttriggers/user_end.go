@@ -52,6 +52,8 @@ type UserEndPayload struct {
 // comma-separated list of seconds spend connected to each stream, same order as stream list, string
 // the session ID, string
 func ParseUserEndPayload(payload MistTriggerBody, TriggerID string) (UserEndPayload, error) {
+	glog.Infof("Received USER_END Mist trigger payload=%q", payload)
+
 	lines := payload.Lines()
 	if len(lines) != 12 {
 		return UserEndPayload{}, fmt.Errorf("expected 12 lines in USER_NEW payload but got lines=%d payload=%s", len(lines), payload)
