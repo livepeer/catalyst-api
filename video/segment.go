@@ -2,11 +2,12 @@ package video
 
 import (
 	"fmt"
+	"strings"
 
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
-// Split a source video URL into segments
+// Segment splits a source video URL into segments
 //
 // FFMPEG can use remote files, but depending on the layout of the file can get bogged
 // down and end up making multiple range requests per segment.
@@ -15,16 +16,15 @@ func Segment(sourceFilename string, outputManifestURL string, targetSegmentSize 
 	// Do the segmenting, using the local file as source
 	err := ffmpeg.Input(sourceFilename).
 		Output(
-			outputManifestURL,
+			strings.Replace(outputManifestURL, ".m3u8", "", 1)+"%d.ts",
 			ffmpeg.KwArgs{
-				"c:a":               "copy",
-				"c:v":               "copy",
-				"f":                 "hls",
-				"hls_segment_type":  "mpegts",
-				"hls_playlist_type": "vod",
-				"hls_list_size":     "0",
-				"hls_time":          targetSegmentSize,
-				"method":            "PUT",
+				"c:a":              "copy",
+				"c:v":              "copy",
+				"f":                "segment",
+				"segment_list":     outputManifestURL,
+				"segment_format":   "mpegts",
+				"segment_time":     targetSegmentSize,
+				"min_seg_duration": "2",
 			},
 		).OverWriteOutput().ErrorToStdOut().Run()
 	if err != nil {

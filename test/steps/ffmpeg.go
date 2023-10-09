@@ -80,8 +80,8 @@ func (s *StepContext) TheSourceManifestIsWrittenToStorageWithinSeconds(secs, num
 	if mediaManifest.Version() != 3 {
 		return fmt.Errorf("expected manifest to be HLSv3 but got version: %d", mediaManifest.Version())
 	}
-	if mediaManifest.TargetDuration != 10.0 {
-		return fmt.Errorf("expected manifest to have a Target Duration of 10 but got: %f", mediaManifest.TargetDuration)
+	if mediaManifest.TargetDuration != 11.0 {
+		return fmt.Errorf("expected manifest to have a Target Duration of 11 but got: %f", mediaManifest.TargetDuration)
 	}
 
 	return nil
