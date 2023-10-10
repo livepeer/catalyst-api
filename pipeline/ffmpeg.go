@@ -61,7 +61,9 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		job.SegmentingTargetURL = job.SourceFile
 	}
 	job.SegmentingDone = time.Now()
-	f.sendSourcePlayback(job)
+	if job.HlsTargetURL != nil {
+		f.sendSourcePlayback(job)
+	}
 	job.ReportProgress(clients.TranscodeStatusPreparingCompleted, 1)
 
 	// Transcode Beginning
