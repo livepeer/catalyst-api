@@ -533,8 +533,15 @@ func (mc *mac) reconcileMultistream(mistState clients.MistState) {
 		return key{stream: stream, target: target}
 	}
 	isMultistream := func(k key) bool {
-		return (strings.HasPrefix(k.stream, "video+") || strings.HasPrefix(k.stream, "videorec+")) &&
-			(strings.HasPrefix(strings.ToLower(k.target), "rtmp:") || strings.HasPrefix(strings.ToLower(k.target), "srt:"))
+		acceptedTargetPrefixes := []string{"rtmp:", "rtmps:", "srt:"}
+		if strings.HasPrefix(k.stream, "video+") || strings.HasPrefix(k.stream, "videorec+") {
+			for _, acceptedTargetPrefix := range acceptedTargetPrefixes {
+				if strings.HasPrefix(strings.ToLower(k.target), acceptedTargetPrefix) {
+					return true
+				}
+			}
+		}
+		return false
 	}
 
 	// Get the existing PUSH_AUTO from Mist
