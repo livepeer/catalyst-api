@@ -423,7 +423,7 @@ func transcodeSegment(
 	// the different encoding between the two segments causes the
 	// transcode operation to incorrectly tag the output segment as
 	// having two video tracks.
-	if transcodeRequest.IsClip && int64(segment.Index) == 1 {
+	if transcodeRequest.IsClip && (int64(segment.Index) == 0 || segment.IsLastSegment) {
 		transcodeConf.ForceSessionReinit = true
 	} else {
 		transcodeConf.ForceSessionReinit = false
@@ -431,7 +431,7 @@ func transcodeSegment(
 	// This is a temporary workaround that implements the same logic
 	// as the previous if block -- a new manifestID will force a
 	// T session re-init between segment at index=0 and index=1.
-	if transcodeRequest.IsClip && int64(segment.Index) == 0 {
+	if transcodeRequest.IsClip && (int64(segment.Index) == 0 || segment.IsLastSegment) {
 		manifestID = manifestID + "_clip"
 	}
 
@@ -538,8 +538,9 @@ func channelFromWaitgroup(wg *sync.WaitGroup) chan bool {
 }
 
 type segmentInfo struct {
-	Input clients.SourceSegment
-	Index int
+	Input         clients.SourceSegment
+	Index         int
+	IsLastSegment bool
 }
 
 func statsFromProfiles(profiles []video.EncodedProfile) []*video.RenditionStats {
