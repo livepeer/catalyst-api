@@ -105,17 +105,32 @@ func appendAccessKey(uri, gatingParam, gatingParamName string) (string, error) {
 }
 
 func osFetch(playbackID, file, byteRange string) (*drivers.FileInfoReader, error) {
-	osURL := config.PrivateBucketURL.JoinPath("hls").JoinPath(playbackID).JoinPath(file)
-	f, err := clients.GetOSURL(osURL.String(), byteRange)
-	if err != nil {
+	if len(config.PrivateBucketURLs) < 1 {
+		return nil, errors.New("playback failed, no private buckets configured")
+	}
+
+	var (
+		err error
+		f   *drivers.FileInfoReader
+	)
+	// try all private buckets until object is found or return error
+	for _, bucket := range config.PrivateBucketURLs {
+		osURL := bucket.JoinPath("hls").JoinPath(playbackID).JoinPath(file)
+		f, err = clients.GetOSURL(osURL.String(), byteRange)
+		if err == nil {
+			// object found successfully so return early
+			return f, nil
+		}
+		// if this is the final bucket in the list then the error set here will be used in the final return
 		var awsErr awserr.Error
 		if errors.As(err, &awsErr) && awsErr.Code() == s3.ErrCodeNoSuchKey ||
 			strings.Contains(err.Error(), "no such file") {
-			return nil, fmt.Errorf("invalid request: %w %v", caterrs.ObjectNotFoundError, err)
+			err = fmt.Errorf("invalid request: %w %v", caterrs.ObjectNotFoundError, err)
+		} else {
+			err = fmt.Errorf("failed to get file for playback: %w", err)
 		}
-		return nil, fmt.Errorf("failed to get file for playback: %w", err)
 	}
-	return f, nil
+	return nil, err
 }
 
 func IsManifest(requestFile string) bool {

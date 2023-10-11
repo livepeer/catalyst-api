@@ -51,6 +51,6 @@ var ImportIPFSGatewayURLs []*url.URL
 
 var ImportArweaveGatewayURLs []*url.URL
 
-var PrivateBucketURL *url.URL
+var PrivateBucketURLs []*url.URL
 
 var HTTPInternalAddress string
