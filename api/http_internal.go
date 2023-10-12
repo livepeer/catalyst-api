@@ -122,7 +122,7 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	broker.OnUserEnd(analyticsHandlers.HandleUserEnd)
 
 	// Endpoint to receive segments and manifests that ffmpeg produces
-	router.PUT("/api/ffmpeg/:id/:filename", withLogging(ffmpegSegmentingHandlers.NewFile()))
+	router.POST("/api/ffmpeg/:id/:filename", withLogging(ffmpegSegmentingHandlers.NewFile()))
 
 	// Temporary endpoint for admin queries
 	router.GET("/admin/members", withLogging(adminHandlers.MembersHandler()))
