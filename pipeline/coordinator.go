@@ -4,7 +4,6 @@ import (
 	"crypto/rsa"
 	"database/sql"
 	"fmt"
-	"github.com/cenkalti/backoff/v4"
 	"math"
 	"net/url"
 	"os"
@@ -14,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/cenkalti/backoff/v4"
 
 	_ "github.com/lib/pq"
 	"github.com/livepeer/catalyst-api/cache"
@@ -522,6 +523,9 @@ func (c *Coordinator) runHandlerAsync(job *JobInfo, handler func() (*HandlerOutp
 
 		out, err := recovered(handler)
 		if err != nil || (out != nil && !out.Continue) {
+			if err != nil {
+				log.LogError(job.RequestID, "error running job handler", err)
+			}
 			c.finishJob(job, out, err)
 		}
 		// dummy
