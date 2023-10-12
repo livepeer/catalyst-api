@@ -566,6 +566,7 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 		config.Version,
 		strconv.FormatBool(job.inFallbackMode),
 		strconv.FormatBool(job.LivepeerSupported),
+		strconv.FormatBool(job.ClipStrategy.Enabled),
 	}
 
 	metrics.Metrics.VODPipelineMetrics.Count.
@@ -641,8 +642,9 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
                             "source_playback_at",
                             "download_done_at",
                             "segmenting_done_at",
-                            "transcoding_done_at"
-                            ) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`
+                            "transcoding_done_at",
+                            "is_clip"
+                            ) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`
 	_, err := c.MetricsDB.Exec(
 		insertDynStmt,
 		time.Now().Unix(),
@@ -667,6 +669,7 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
 		job.DownloadDone.Unix(),
 		job.SegmentingDone.Unix(),
 		job.TranscodingDone.Unix(),
+		job.ClipStrategy.Enabled,
 	)
 	if err != nil {
 		log.LogError(job.RequestID, "error writing postgres metrics", err)
