@@ -55,6 +55,10 @@ func (h *HandlersCollection) NewFile() httprouter.Handle {
 				mediaPl := playlist.(*m3u8.MediaPlaylist)
 				mediaPl.MediaType = m3u8.VOD
 				body = mediaPl.Encode()
+			} else {
+				// should never happen but useful to at least see a log line if it ever did
+				log.Log(job.RequestID, "media playlist not found")
+				body = playlist.Encode()
 			}
 		}
 		// job.SegmentingTargetURL comes in the format the Mist wants, looking like:
