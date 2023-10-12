@@ -148,8 +148,11 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 
 		if isClip {
 			_, totalSegs := video.GetTotalDurationAndSegments(renditionPlaylist)
-			renditionPlaylist.Segments[1].Discontinuity = true
-			renditionPlaylist.Segments[totalSegs-1].Discontinuity = true
+			// Only add DISCONTINUITY tag if more than one segment exists in clipped playlist
+			if totalSegs > 1 {
+				renditionPlaylist.Segments[1].Discontinuity = true
+				renditionPlaylist.Segments[totalSegs-1].Discontinuity = true
+			}
 		}
 
 		// Write #EXT-X-ENDLIST
@@ -248,7 +251,6 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnix
 	} else {
 		segsToClip = []*m3u8.MediaSegment{segs[0], segs[len(segs)-1]}
 	}
-
 	// Create temp local storage dir to hold all clipping related files to upload later
 	clipStorageDir, err := os.MkdirTemp(os.TempDir(), "clip_stage_")
 	if err != nil {
@@ -291,7 +293,8 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnix
 		clippedSegmentFileName := filepath.Join(clipStorageDir, requestID+"_"+strconv.FormatUint(v.SeqId, 10)+"_clip.ts")
 		if len(segs) == 1 {
 			// If start/end times fall within same segment, then clip just that single segment
-			err = video.ClipSegment(requestID, clipSegmentFileName, clippedSegmentFileName, startTime, endTime)
+			duration := endTime - startTime
+			err = video.ClipSegment(requestID, clipSegmentFileName, clippedSegmentFileName, clipsegs[0].ClipOffsetSecs, clipsegs[0].ClipOffsetSecs+duration)
 			if err != nil {
 				return nil, fmt.Errorf("error clipping: failed to clip segment %d: %w", v.SeqId, err)
 			}
