@@ -63,7 +63,7 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 	playback := middleware.LogAndMetrics(metrics.Metrics.PlaybackRequestDurationSec)(
 		withCORS(
 			withGatingCheck(
-				handlers.NewPlaybackHandler(cli).Handle,
+				handlers.NewPlaybackHandler(cli.PrivateBucketURLs).Handle,
 			),
 		),
 	)

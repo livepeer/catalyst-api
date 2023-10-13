@@ -8,7 +8,6 @@ import (
 	"net/url"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/config"
 	catErrs "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/playback"
@@ -19,9 +18,9 @@ type PlaybackHandler struct {
 	PrivateBucketURLs []*url.URL
 }
 
-func NewPlaybackHandler(cli config.Cli) *PlaybackHandler {
+func NewPlaybackHandler(urls []*url.URL) *PlaybackHandler {
 	return &PlaybackHandler{
-		PrivateBucketURLs: cli.PrivateBucketURLs,
+		PrivateBucketURLs: urls,
 	}
 }
 
