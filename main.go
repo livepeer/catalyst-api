@@ -54,7 +54,7 @@ func main() {
 	// catalyst-api parameters
 	fs.StringVar(&cli.APIToken, "api-token", "IAmAuthorized", "Auth header value for API access")
 	fs.StringVar(&cli.SourceOutput, "source-output", "", "URL for the video source segments used if source_segments is not defined in the upload request")
-	config.URLSliceVarFlag(fs, &cli.PrivateBucketURL, "private-bucket", "", "URL for the private media bucket")
+	config.URLSliceVarFlag(fs, &cli.PrivateBucketURLs, "private-bucket", "", "URL for the private media bucket")
 	fs.StringVar(&cli.ExternalTranscoder, "external-transcoder", "", "URL for the external transcoder to be used by the pipeline coordinator. Only 1 implementation today for AWS MediaConvert which should be in the format: mediaconvert://key-id:key-secret@endpoint-host?region=aws-region&role=iam-role&s3_aux_bucket=s3://bucket")
 	fs.StringVar(&cli.VodPipelineStrategy, "vod-pipeline-strategy", string(pipeline.StrategyCatalystFfmpegDominance), "Which strategy to use for the VOD pipeline")
 	fs.StringVar(&cli.MetricsDBConnectionString, "metrics-db-connection-string", "", "Connection string to use for the metrics Postgres DB. Takes the form: host=X port=X user=X password=X dbname=X")
@@ -153,7 +153,6 @@ func main() {
 	// TODO: I don't love the global variables for these
 	config.ImportIPFSGatewayURLs = cli.ImportIPFSGatewayURLs
 	config.ImportArweaveGatewayURLs = cli.ImportArweaveGatewayURLs
-	config.PrivateBucketURLs = cli.PrivateBucketURL
 	config.HTTPInternalAddress = cli.HTTPInternalAddress
 
 	var (

@@ -11,7 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/clients"
-	"github.com/livepeer/catalyst-api/config"
 	caterrs "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/go-tools/drivers"
 )
@@ -33,8 +32,8 @@ type Response struct {
 	ContentRange  string
 }
 
-func Handle(req Request) (*Response, error) {
-	f, err := osFetch(req.PlaybackID, req.File, req.Range)
+func Handle(buckets []*url.URL, req Request) (*Response, error) {
+	f, err := osFetch(buckets, req.PlaybackID, req.File, req.Range)
 	if err != nil {
 		return nil, err
 	}
@@ -104,8 +103,8 @@ func appendAccessKey(uri, gatingParam, gatingParamName string) (string, error) {
 	return variantURI.String(), nil
 }
 
-func osFetch(playbackID, file, byteRange string) (*drivers.FileInfoReader, error) {
-	if len(config.PrivateBucketURLs) < 1 {
+func osFetch(buckets []*url.URL, playbackID, file, byteRange string) (*drivers.FileInfoReader, error) {
+	if len(buckets) < 1 {
 		return nil, errors.New("playback failed, no private buckets configured")
 	}
 
@@ -114,7 +113,7 @@ func osFetch(playbackID, file, byteRange string) (*drivers.FileInfoReader, error
 		f   *drivers.FileInfoReader
 	)
 	// try all private buckets until object is found or return error
-	for _, bucket := range config.PrivateBucketURLs {
+	for _, bucket := range buckets {
 		osURL := bucket.JoinPath("hls").JoinPath(playbackID).JoinPath(file)
 		f, err = clients.GetOSURL(osURL.String(), byteRange)
 		if err == nil {

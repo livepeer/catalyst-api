@@ -39,7 +39,7 @@ type Cli struct {
 	APIToken                  string
 	APIServer                 string
 	SourceOutput              string
-	PrivateBucketURL          []*url.URL
+	PrivateBucketURLs         []*url.URL
 	ExternalTranscoder        string
 	VodPipelineStrategy       string
 	MetricsDBConnectionString string

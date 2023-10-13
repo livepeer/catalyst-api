@@ -5,68 +5,78 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/config"
 	catErrs "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/playback"
 	"github.com/livepeer/catalyst-api/requests"
 )
 
-func PlaybackHandler() httprouter.Handle {
-	return func(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
-		requestID := requests.GetRequestId(req)
+type PlaybackHandler struct {
+	PrivateBucketURLs []*url.URL
+}
 
-		err := req.ParseForm()
-		if err != nil {
-			handleError(err, req, requestID, w)
-			return
-		}
+func NewPlaybackHandler(cli config.Cli) *PlaybackHandler {
+	return &PlaybackHandler{
+		PrivateBucketURLs: cli.PrivateBucketURLs,
+	}
+}
 
-		gatingParamName := "accessKey"
-		gatingParam := req.URL.Query().Get(gatingParamName)
-		if gatingParam == "" {
-			gatingParamName = "jwt"
-			gatingParam = req.URL.Query().Get(gatingParamName)
-		}
+func (p *PlaybackHandler) Handle(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	requestID := requests.GetRequestId(req)
 
-		playbackReq := playback.Request{
-			RequestID:       requestID,
-			PlaybackID:      params.ByName("playbackID"),
-			File:            params.ByName("file"),
-			GatingParam:     gatingParam,
-			GatingParamName: gatingParamName,
-			Range:           req.Header.Get("range"),
-		}
-		response, err := playback.Handle(playbackReq)
-		if err != nil {
-			handleError(err, req, requestID, w)
-			return
-		}
-		defer response.Body.Close()
+	err := req.ParseForm()
+	if err != nil {
+		handleError(err, req, requestID, w)
+		return
+	}
 
-		w.Header().Set("accept-ranges", "bytes")
-		w.Header().Set("content-type", response.ContentType)
-		w.Header().Set("cache-control", "max-age=0")
-		if response.ContentLength != nil {
-			w.Header().Set("content-length", fmt.Sprintf("%d", *response.ContentLength))
-		}
-		w.Header().Set("etag", response.ETag)
+	gatingParamName := "accessKey"
+	gatingParam := req.URL.Query().Get(gatingParamName)
+	if gatingParam == "" {
+		gatingParamName = "jwt"
+		gatingParam = req.URL.Query().Get(gatingParamName)
+	}
 
-		if response.ContentRange != "" {
-			w.Header().Set("content-range", response.ContentRange)
-			w.WriteHeader(http.StatusPartialContent)
-		} else {
-			w.WriteHeader(http.StatusOK)
-		}
+	playbackReq := playback.Request{
+		RequestID:       requestID,
+		PlaybackID:      params.ByName("playbackID"),
+		File:            params.ByName("file"),
+		GatingParam:     gatingParam,
+		GatingParamName: gatingParamName,
+		Range:           req.Header.Get("range"),
+	}
+	response, err := playback.Handle(p.PrivateBucketURLs, playbackReq)
+	if err != nil {
+		handleError(err, req, requestID, w)
+		return
+	}
+	defer response.Body.Close()
 
-		if req.Method == http.MethodHead {
-			return
-		}
-		_, err = io.Copy(w, response.Body)
-		if err != nil {
-			log.LogError(requestID, "failed to write response", err)
-		}
+	w.Header().Set("accept-ranges", "bytes")
+	w.Header().Set("content-type", response.ContentType)
+	w.Header().Set("cache-control", "max-age=0")
+	if response.ContentLength != nil {
+		w.Header().Set("content-length", fmt.Sprintf("%d", *response.ContentLength))
+	}
+	w.Header().Set("etag", response.ETag)
+
+	if response.ContentRange != "" {
+		w.Header().Set("content-range", response.ContentRange)
+		w.WriteHeader(http.StatusPartialContent)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+
+	if req.Method == http.MethodHead {
+		return
+	}
+	_, err = io.Copy(w, response.Body)
+	if err != nil {
+		log.LogError(requestID, "failed to write response", err)
 	}
 }
 

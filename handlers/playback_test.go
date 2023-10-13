@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -110,18 +109,18 @@ func TestManifest(t *testing.T) {
 		},
 	}
 
-	handler := PlaybackHandler()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			p := &PlaybackHandler{
+				PrivateBucketURLs: []*url.URL{privateBucket},
+			}
 			if len(tt.privateBucketURLs) > 0 {
-				config.PrivateBucketURLs = tt.privateBucketURLs
-			} else {
-				config.PrivateBucketURLs = []*url.URL{privateBucket}
+				p.PrivateBucketURLs = tt.privateBucketURLs
 			}
 			writer := httptest.NewRecorder()
 			req, err := http.NewRequest("GET", tt.reqURL, strings.NewReader(""))
 			require.NoError(t, err)
-			handler(writer, req, []httprouter.Param{
+			p.Handle(writer, req, []httprouter.Param{
 				{
 					Key:   "playbackID",
 					Value: tt.playbackID,
