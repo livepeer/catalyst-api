@@ -53,6 +53,12 @@ func (h *HandlersCollection) NewFile() httprouter.Handle {
 				body = &buf
 			} else if playlistType == m3u8.MEDIA {
 				mediaPl := playlist.(*m3u8.MediaPlaylist)
+				if !mediaPl.Closed {
+					// we don't want to upload an unfinished playlist, otherwise there's a race condition
+					// where potentially a playlist before the final one is written last and we're missing segments
+					return
+				}
+
 				mediaPl.MediaType = m3u8.VOD
 				body = mediaPl.Encode()
 			} else {
