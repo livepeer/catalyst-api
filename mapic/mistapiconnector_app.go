@@ -580,7 +580,7 @@ func (mc *mac) nukeAllStreamNames(playbackID string) {
 	for _, streamName := range streamNames {
 		err := mc.mist.NukeStream(streamName)
 		if err != nil {
-			glog.Errorf("error nuking stream playbackId=%s streamName=%s err=%q", si.stream.PlaybackID, streamName, err)
+			glog.Errorf("error nuking stream playbackId=%s streamName=%s err=%q", playbackID, streamName, err)
 		}
 	}
 }
