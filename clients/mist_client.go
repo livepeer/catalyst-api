@@ -23,6 +23,7 @@ type MistAPIClient interface {
 	PushAutoRemove(streamParams []interface{}) error
 	PushStop(id int64) error
 	DeleteStream(streamName string) error
+	NukeStream(streamName string) error
 	AddTrigger(streamName []string, triggerName string, sync bool) error
 	DeleteTrigger(streamName []string, triggerName string) error
 	GetStreamInfo(streamName string) (MistStreamInfo, error)
@@ -249,6 +250,14 @@ func (mc *MistClient) DeleteStream(streamName string) error {
 	nukeErr := wrapErr(validateNukeStream(mc.sendCommand(commandNukeStream(streamName))), streamName)
 	if deleteErr != nil || nukeErr != nil {
 		return fmt.Errorf("deleting stream failed, 'deletestream' command err: %v, 'nuke_stream' command err: %v", deleteErr, nukeErr)
+	}
+	return nil
+}
+
+func (mc *MistClient) NukeStream(streamName string) error {
+	c := commandNukeStream(streamName)
+	if err := validateNukeStream(mc.sendCommand(c)); err != nil {
+		return err
 	}
 	return nil
 }

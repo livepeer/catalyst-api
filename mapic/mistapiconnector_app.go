@@ -42,8 +42,7 @@ type (
 	IMac interface {
 		Start(ctx context.Context) error
 		MetricsHandler() http.Handler
-		RefreshMultistreamIfNeeded(playbackID string)
-		NukeStream(playbackID string)
+		RefreshStreamIfNeeded(playbackID string)
 	}
 
 	pushStatus struct {
@@ -101,7 +100,7 @@ type (
 		config                    *config.Cli
 		broker                    misttriggers.TriggerBroker
 		mist                      clients.MistAPIClient
-		multistreamUpdated        chan struct{}
+		streamUpdated             chan struct{}
 		metricsCollector          *metricsCollector
 	}
 )
@@ -154,7 +153,7 @@ func (mc *mac) Start(ctx context.Context) error {
 		mc.metricsCollector = createMetricsCollector(mc.nodeID, mc.ownRegion, mc.mist, lapi, producer, ownExchangeName, mc)
 	}
 
-	mc.multistreamUpdated = make(chan struct{}, 1)
+	mc.streamUpdated = make(chan struct{}, 1)
 	go func() {
 		mc.reconcileLoop(ctx)
 	}()
@@ -167,28 +166,21 @@ func (mc *mac) MetricsHandler() http.Handler {
 	return metrics.Exporter
 }
 
-func (mc *mac) RefreshMultistreamIfNeeded(playbackID string) {
-	if mc.streamExists(playbackID) {
-		mc.refreshMultistream(playbackID)
+func (mc *mac) RefreshStreamIfNeeded(playbackID string) {
+	if !mc.streamExists(playbackID) {
+		// Ignore streams that aren't already in memory. This is to avoid a surge of
+		// requests to the API on any event. For streams not synced to mapic memory,
+		// it will be reconciled on the next loop anyway (30s) and get fixed soon.
+		return
 	}
-}
-
-func (mc *mac) NukeStream(playbackID string) {
-	// ignore the base name from the input, in case someone happens to send one in the playbackId
-	if strings.Contains(playbackID, "+") {
-		playbackID = strings.Split(playbackID, "+")[1]
-	}
-
-	streamNames := []string{
-		mc.wildcardPlaybackID(&api.Stream{PlaybackID: playbackID}),               // not recorded
-		mc.wildcardPlaybackID(&api.Stream{PlaybackID: playbackID, Record: true}), // recorded
+	si, err := mc.refreshStream(playbackID)
+	if err != nil {
+		glog.Errorf("Error refreshing stream playbackID=%s", playbackID)
+		return
 	}
 
-	for _, streamName := range streamNames {
-		if err := mc.mist.DeleteStream(streamName); err != nil {
-			glog.Errorf("Error nuking stream playbackId=%s streamName=%s err=%q", streamName, playbackID, err)
-		}
-	}
+	// trigger an immediate stream reconcile to already nuke it if needed
+	mc.reconcileSingleStream(si)
 }
 
 func (mc *mac) handleStreamBuffer(ctx context.Context, payload *misttriggers.StreamBufferPayload) error {
@@ -288,7 +280,7 @@ func (mc *mac) handleLiveTrackList(ctx context.Context, payload *misttriggers.Li
 		videoTracksNum := payload.CountVideoTracks()
 		playbackID := mistStreamName2playbackID(payload.StreamName)
 		glog.Infof("for video %s got %d video tracks", playbackID, videoTracksNum)
-		mc.refreshMultistream(playbackID)
+		mc.refreshStream(playbackID)
 	}()
 	return nil
 }
@@ -300,18 +292,21 @@ func (mc *mac) streamExists(playbackID string) bool {
 	return streamExists
 }
 
-func (mc *mac) refreshMultistream(playbackID string) {
-	_, err := mc.refreshStreamInfo(playbackID)
+func (mc *mac) refreshStream(playbackID string) (*streamInfo, error) {
+	si, err := mc.refreshStreamInfo(playbackID)
 	if err != nil {
 		glog.Errorf("Error refreshing stream info for playbackID=%s", playbackID)
-		return
+		return nil, err
 	}
+
 	select {
-	case mc.multistreamUpdated <- struct{}{}:
-		// trigger reconcile multistream
+	case mc.streamUpdated <- struct{}{}:
+		// trigger reconcile loop
 	default:
 		// do not block if reconcile multistream already triggered
 	}
+
+	return si, nil
 }
 
 func (mc *mac) handlePushOutStart(ctx context.Context, payload *misttriggers.PushOutStartPayload) (string, error) {
@@ -525,15 +520,59 @@ func (mc *mac) reconcileLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-		case <-mc.multistreamUpdated:
+		case <-mc.streamUpdated:
 		}
 		mistState, err := mc.mist.GetState()
 		if err != nil {
 			glog.Errorf("error executing query on Mist, cannot reconcile err=%v", err)
 			continue
 		}
+		mc.reconcileStreams(mistState)
 		mc.reconcileMultistream(mistState)
 		mc.processStats(mistState)
+	}
+}
+
+func (mc *mac) reconcileStreams(mistState clients.MistState) {
+	for streamName, _ := range mistState.ActiveStreams {
+		// read map directly to avoid creating streamInfo object even for playback-only (pull) streams
+		mc.mu.RLock()
+		si := mc.streamInfo[mistStreamName2playbackID(streamName)]
+		mc.mu.RUnlock()
+
+		if isIngestStream(streamName, si, mistState) {
+			if si == nil {
+				var err error
+				si, err = mc.refreshStreamInfo(streamName)
+				if err != nil {
+					glog.Errorf("error refreshing stream info streamName=%s err=%v", streamName, err)
+					continue
+				}
+			}
+
+			mc.reconcileSingleStream(si)
+		}
+	}
+}
+
+func (mc *mac) reconcileSingleStream(si *streamInfo) {
+	shouldNuke := si.stream.Deleted || si.stream.Suspended
+	if !shouldNuke {
+		// the only thing we do here is nuke
+		return
+	}
+
+	streamNames := []string{mc.wildcardPlaybackID(si.stream)}
+	// make sure we nuke any possible stream names on mist to account for any inconsistencies
+	copy := *si.stream
+	copy.Record = !copy.Record
+	streamNames = append(streamNames, mc.wildcardPlaybackID(&copy))
+
+	for _, streamName := range streamNames {
+		err := mc.mist.NukeStream(streamName)
+		if err != nil {
+			glog.Errorf("error nuking stream playbackId=%s streamName=%s err=%q", si.stream.PlaybackID, streamName, err)
+		}
 	}
 }
 
@@ -790,5 +829,5 @@ func pushToMultistreamTargetInfo(pushInfo *pushStatus) data.MultistreamTargetInf
 //   - MistState: active_streams have source "push://" for ingest streams; checking this condition only is not good
 //     enough, because a freshly started stream may not be yet visible in Mist (though it's already started).
 func isIngestStream(stream string, si *streamInfo, mistState clients.MistState) bool {
-	return !si.isLazy || mistState.IsIngestStream(stream)
+	return (si != nil && !si.isLazy) || mistState.IsIngestStream(stream)
 }
