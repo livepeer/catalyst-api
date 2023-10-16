@@ -43,6 +43,7 @@ type (
 		Start(ctx context.Context) error
 		MetricsHandler() http.Handler
 		RefreshStreamIfNeeded(playbackID string)
+		NukeStream(playbackID string)
 	}
 
 	pushStatus struct {
@@ -175,12 +176,16 @@ func (mc *mac) RefreshStreamIfNeeded(playbackID string) {
 	}
 	si, err := mc.refreshStream(playbackID)
 	if err != nil {
-		glog.Errorf("Error refreshing stream playbackID=%s", playbackID)
+		glog.Errorf("Error refreshing stream playbackID=%s err=%q", playbackID, err)
 		return
 	}
 
 	// trigger an immediate stream reconcile to already nuke it if needed
 	mc.reconcileSingleStream(si)
+}
+
+func (mc *mac) NukeStream(playbackID string) {
+	mc.nukeAllStreamNames(playbackID)
 }
 
 func (mc *mac) handleStreamBuffer(ctx context.Context, payload *misttriggers.StreamBufferPayload) error {
@@ -562,11 +567,15 @@ func (mc *mac) reconcileSingleStream(si *streamInfo) {
 		return
 	}
 
-	streamNames := []string{mc.wildcardPlaybackID(si.stream)}
 	// make sure we nuke any possible stream names on mist to account for any inconsistencies
-	copy := *si.stream
-	copy.Record = !copy.Record
-	streamNames = append(streamNames, mc.wildcardPlaybackID(&copy))
+	mc.nukeAllStreamNames(si.stream.PlaybackID)
+}
+
+func (mc *mac) nukeAllStreamNames(playbackID string) {
+	streamNames := []string{
+		mc.wildcardPlaybackID(&api.Stream{PlaybackID: playbackID}),               // not recorded
+		mc.wildcardPlaybackID(&api.Stream{PlaybackID: playbackID, Record: true}), // recorded
+	}
 
 	for _, streamName := range streamNames {
 		err := mc.mist.NukeStream(streamName)
