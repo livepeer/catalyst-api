@@ -336,6 +336,9 @@ func processClusterEvent(mapic mistapiconnector.IMac, e serf.UserEvent) {
 		case "stream":
 			mapic.RefreshMultistreamIfNeeded(eventPayload.PlaybackID)
 			return
+		case "nuke":
+			mapic.NukeStream(eventPayload.PlaybackID)
+			return
 		default:
 			glog.Errorf("unsupported serf event: %v", e)
 		}

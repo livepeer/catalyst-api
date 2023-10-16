@@ -43,6 +43,7 @@ type (
 		Start(ctx context.Context) error
 		MetricsHandler() http.Handler
 		RefreshMultistreamIfNeeded(playbackID string)
+		NukeStream(playbackID string)
 	}
 
 	pushStatus struct {
@@ -169,6 +170,24 @@ func (mc *mac) MetricsHandler() http.Handler {
 func (mc *mac) RefreshMultistreamIfNeeded(playbackID string) {
 	if mc.streamExists(playbackID) {
 		mc.refreshMultistream(playbackID)
+	}
+}
+
+func (mc *mac) NukeStream(playbackID string) {
+	// ignore the base name from the input, in case someone happens to send one in the playbackId
+	if strings.Contains(playbackID, "+") {
+		playbackID = strings.Split(playbackID, "+")[1]
+	}
+
+	streamNames := []string{
+		mc.wildcardPlaybackID(&api.Stream{PlaybackID: playbackID}),               // not recorded
+		mc.wildcardPlaybackID(&api.Stream{PlaybackID: playbackID, Record: true}), // recorded
+	}
+
+	for _, streamName := range streamNames {
+		if err := mc.mist.DeleteStream(streamName); err != nil {
+			glog.Errorf("Error nuking stream playbackId=%s streamName=%s err=%q", streamName, playbackID, err)
+		}
 	}
 }
 
