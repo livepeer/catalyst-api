@@ -11,7 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/clients"
-	"github.com/livepeer/catalyst-api/config"
 	caterrs "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/go-tools/drivers"
 )
@@ -33,8 +32,8 @@ type Response struct {
 	ContentRange  string
 }
 
-func Handle(req Request) (*Response, error) {
-	f, err := osFetch(req.PlaybackID, req.File, req.Range)
+func Handle(buckets []*url.URL, req Request) (*Response, error) {
+	f, err := osFetch(buckets, req.PlaybackID, req.File, req.Range)
 	if err != nil {
 		return nil, err
 	}
@@ -104,18 +103,33 @@ func appendAccessKey(uri, gatingParam, gatingParamName string) (string, error) {
 	return variantURI.String(), nil
 }
 
-func osFetch(playbackID, file, byteRange string) (*drivers.FileInfoReader, error) {
-	osURL := config.PrivateBucketURL.JoinPath("hls").JoinPath(playbackID).JoinPath(file)
-	f, err := clients.GetOSURL(osURL.String(), byteRange)
-	if err != nil {
+func osFetch(buckets []*url.URL, playbackID, file, byteRange string) (*drivers.FileInfoReader, error) {
+	if len(buckets) < 1 {
+		return nil, errors.New("playback failed, no private buckets configured")
+	}
+
+	var (
+		err error
+		f   *drivers.FileInfoReader
+	)
+	// try all private buckets until object is found or return error
+	for _, bucket := range buckets {
+		osURL := bucket.JoinPath("hls").JoinPath(playbackID).JoinPath(file)
+		f, err = clients.GetOSURL(osURL.String(), byteRange)
+		if err == nil {
+			// object found successfully so return early
+			return f, nil
+		}
+		// if this is the final bucket in the list then the error set here will be used in the final return
 		var awsErr awserr.Error
 		if errors.As(err, &awsErr) && awsErr.Code() == s3.ErrCodeNoSuchKey ||
 			strings.Contains(err.Error(), "no such file") {
-			return nil, fmt.Errorf("invalid request: %w %v", caterrs.ObjectNotFoundError, err)
+			err = fmt.Errorf("invalid request: %w %v", caterrs.ObjectNotFoundError, err)
+		} else {
+			err = fmt.Errorf("failed to get file for playback: %w", err)
 		}
-		return nil, fmt.Errorf("failed to get file for playback: %w", err)
 	}
-	return f, nil
+	return nil, err
 }
 
 func IsManifest(requestFile string) bool {
