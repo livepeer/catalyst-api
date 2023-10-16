@@ -72,9 +72,11 @@ uri
 			name: "media manifest",
 			manifest: (&m3u8.MediaPlaylist{
 				TargetDuration: 5,
+				Closed:         true,
 			}).Encode().String(),
 			expectedManifest: (&m3u8.MediaPlaylist{
 				TargetDuration: 5,
+				Closed:         true,
 				MediaType:      m3u8.VOD,
 			}).Encode().String(), // media playlists should have the VOD type added
 		},
