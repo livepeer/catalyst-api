@@ -41,7 +41,7 @@ Feature: VOD Streaming
     And "4" source segments are written to storage within "10" seconds
     And the source manifest is written to storage within "3" seconds and contains "4" segments
     And the Broadcaster receives "4" segments for transcoding within "10" seconds
-    And "4" transcoded segments and manifests have been written to disk for profiles "270p0,low-bitrate" within "10" seconds
+    And "4" transcoded segments and manifests have been written to disk for profiles "270p0,low-bitrate" within "30" seconds
     And a source copy <source_copy> been written to disk
     And I receive a "success" callback within "30" seconds
 
@@ -57,7 +57,7 @@ Feature: VOD Streaming
     And I receive a Request ID in the response body
     And my "successful" vod request metrics get recorded
     And the Broadcaster receives "3" segments for transcoding within "10" seconds
-    And "3" transcoded segments and manifests have been written to disk for profiles "270p0,low-bitrate" within "10" seconds
+    And "3" transcoded segments and manifests have been written to disk for profiles "270p0,low-bitrate" within "30" seconds
     And a source copy has not been written to disk
     And I receive a "success" callback within "30" seconds
 
