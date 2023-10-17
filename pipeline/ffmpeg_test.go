@@ -81,6 +81,18 @@ func Test_sendSourcePlayback(t *testing.T) {
 				},
 			},
 		}
+		highBitrate = video.InputVideo{
+			Tracks: []video.InputTrack{
+				{
+					Type:    "video",
+					Bitrate: 12_000_000,
+					VideoTrack: video.VideoTrack{
+						Width:  10,
+						Height: 10,
+					},
+				},
+			},
+		}
 	)
 	tests := []struct {
 		name                      string
@@ -166,6 +178,17 @@ func Test_sendSourcePlayback(t *testing.T) {
 			},
 			shouldWriteSourcePlaylist: false,
 		},
+		{
+			name: "high bitrate should be ignored",
+			job: &JobInfo{
+				SegmentingTargetURL: "https://google.com/lp-us-catalyst-vod-monster/path",
+				UploadJobPayload: UploadJobPayload{
+					HlsTargetURL:  mustParseUrl("/lp-us-catalyst-vod-monster/foo", t),
+					InputFileInfo: highBitrate,
+				},
+			},
+			shouldWriteSourcePlaylist: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -175,7 +198,9 @@ func Test_sendSourcePlayback(t *testing.T) {
 
 			tt.job.RequestID = requestID
 			tt.job.HlsTargetURL = mustParseUrl(tmpDir, t).JoinPath(tt.job.HlsTargetURL.Path)
-			tt.job.InputFileInfo = inputVideo
+			if len(tt.job.InputFileInfo.Tracks) == 0 {
+				tt.job.InputFileInfo = inputVideo
+			}
 			callbackClient := &mockCallbackClient{}
 			tt.job.statusClient = callbackClient
 			ff.sendSourcePlayback(tt.job)

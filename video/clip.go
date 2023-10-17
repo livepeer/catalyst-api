@@ -123,6 +123,7 @@ func ClipManifest(requestID string, manifest *m3u8.MediaPlaylist, startTime, end
 
 	// Find the segment index that correlates with the specified endTime.
 	if endTime > manifestDuration {
+		log.Log(requestID, "clipping end segment past manifest duration", "end-time", endTime, "total-manifest-duration", manifestDuration)
 		lastSegmentIdx := manifestSegments - 1
 		lastSegmentDuration := manifest.Segments[lastSegmentIdx].Duration
 		clipEndSegmentInfo = ClipSegmentInfo{SequenceID: lastSegmentIdx, Duration: lastSegmentDuration, ClipOffsetSecs: lastSegmentDuration}
@@ -143,6 +144,9 @@ func ClipManifest(requestID string, manifest *m3u8.MediaPlaylist, startTime, end
 	}
 
 	log.Log(requestID, "clipping segments", "from", firstSegmentToClip, "to", lastSegmentToClip)
+	log.Log(requestID, "clipping segments",
+		"start-segment-duration", clipStartSegmentInfo.Duration, "start-segment-offset", clipStartSegmentInfo.ClipOffsetSecs,
+		"end-segment-duration", clipEndSegmentInfo.Duration, "end-segment-offset", clipEndSegmentInfo.ClipOffsetSecs)
 
 	// If the clip start/end times fall within the same segment, then
 	// save only the single segment's info

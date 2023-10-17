@@ -61,7 +61,9 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		job.SegmentingTargetURL = job.SourceFile
 	}
 	job.SegmentingDone = time.Now()
-	f.sendSourcePlayback(job)
+	if job.HlsTargetURL != nil {
+		f.sendSourcePlayback(job)
+	}
 	job.ReportProgress(clients.TranscodeStatusPreparingCompleted, 1)
 
 	// Transcode Beginning
@@ -150,7 +152,17 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 var sourcePlaybackBucketBlocklist = []string{"lp-us-catalyst-vod-pvt-monster", "lp-us-catalyst-vod-pvt-com"}
 
+// 80th percentile of assets uploaded in the past week was 5.9mbps
+const maxBitrateSourcePb = 6_000_000
+
 func (f *ffmpeg) sendSourcePlayback(job *JobInfo) {
+	for _, track := range job.InputFileInfo.Tracks {
+		if track.Bitrate > maxBitrateSourcePb {
+			log.Log(job.RequestID, "source playback not available, bitrate too high", "bitrate", track.Bitrate)
+			return
+		}
+	}
+
 	segmentingTargetURL, err := url.Parse(job.SegmentingTargetURL)
 	if err != nil {
 		log.LogError(job.RequestID, "unable to parse url for source playback", err)

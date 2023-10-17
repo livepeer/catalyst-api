@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"github.com/julienschmidt/httprouter"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,18 +10,25 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/livepeer/catalyst-api/config"
+	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/require"
 )
 
 func TestManifest(t *testing.T) {
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	privateBucket, err := url.Parse("file://" + path.Join(wd, "../test/fixtures/playback-bucket"))
+	require.NoError(t, err)
+	emptyBucket, err := url.Parse("file://" + path.Join(wd, "../test/fixtures/"))
+	require.NoError(t, err)
 	tests := []struct {
-		name           string
-		reqURL         string
-		playbackID     string
-		file           string
-		expected       string
-		expectedStatus int
+		name              string
+		reqURL            string
+		playbackID        string
+		file              string
+		expected          string
+		expectedStatus    int
+		privateBucketURLs []*url.URL
 	}{
 		{
 			name:           "master playlist",
@@ -31,6 +37,32 @@ func TestManifest(t *testing.T) {
 			file:           "index.m3u8",
 			expected:       "hls/dbe3q3g6q2kia036/index.m3u8",
 			expectedStatus: http.StatusOK,
+		},
+		{
+			name:              "master playlist first bucket",
+			reqURL:            "/index.m3u8?accessKey=secretlpkey",
+			playbackID:        "dbe3q3g6q2kia036",
+			file:              "index.m3u8",
+			privateBucketURLs: []*url.URL{privateBucket, emptyBucket},
+			expected:          "hls/dbe3q3g6q2kia036/index.m3u8",
+			expectedStatus:    http.StatusOK,
+		},
+		{
+			name:              "master playlist second bucket",
+			reqURL:            "/index.m3u8?accessKey=secretlpkey",
+			playbackID:        "dbe3q3g6q2kia036",
+			file:              "index.m3u8",
+			privateBucketURLs: []*url.URL{emptyBucket, privateBucket},
+			expected:          "hls/dbe3q3g6q2kia036/index.m3u8",
+			expectedStatus:    http.StatusOK,
+		},
+		{
+			name:              "not found multi buckets",
+			reqURL:            "/doesntexist?accessKey=secretlpkey",
+			playbackID:        "dbe3q3g6q2kia036",
+			file:              "doesntexist",
+			privateBucketURLs: []*url.URL{privateBucket, emptyBucket},
+			expectedStatus:    http.StatusNotFound,
 		},
 		{
 			name:           "rendition playlist",
@@ -76,18 +108,19 @@ func TestManifest(t *testing.T) {
 			expectedStatus: http.StatusInternalServerError,
 		},
 	}
-	wd, err := os.Getwd()
-	require.NoError(t, err)
-	privateBucket, err := url.Parse("file://" + path.Join(wd, "../test/fixtures/playback-bucket"))
-	require.NoError(t, err)
-	config.PrivateBucketURL = privateBucket
-	handler := PlaybackHandler()
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			p := &PlaybackHandler{
+				PrivateBucketURLs: []*url.URL{privateBucket},
+			}
+			if len(tt.privateBucketURLs) > 0 {
+				p.PrivateBucketURLs = tt.privateBucketURLs
+			}
 			writer := httptest.NewRecorder()
 			req, err := http.NewRequest("GET", tt.reqURL, strings.NewReader(""))
 			require.NoError(t, err)
-			handler(writer, req, []httprouter.Param{
+			p.Handle(writer, req, []httprouter.Param{
 				{
 					Key:   "playbackID",
 					Value: tt.playbackID,

@@ -21,16 +21,21 @@ type ParallelTranscoding struct {
 }
 
 func NewParallelTranscoding(sourceSegmentURLs []clients.SourceSegment, work func(segment segmentInfo) error) *ParallelTranscoding {
+	totalSegs := len(sourceSegmentURLs)
 	jobs := &ParallelTranscoding{
-		queue:         make(chan segmentInfo, len(sourceSegmentURLs)),
+		queue:         make(chan segmentInfo, totalSegs),
 		errors:        make(chan error, 100),
 		work:          work,
 		isRunning:     true,
-		totalSegments: len(sourceSegmentURLs),
+		totalSegments: totalSegs,
 	}
 	// post all jobs on buffered queue for goroutines to process
 	for segmentIndex, u := range sourceSegmentURLs {
-		jobs.queue <- segmentInfo{Input: u, Index: segmentIndex}
+		if segmentIndex == totalSegs-1 {
+			jobs.queue <- segmentInfo{Input: u, Index: segmentIndex, IsLastSegment: true}
+		} else {
+			jobs.queue <- segmentInfo{Input: u, Index: segmentIndex, IsLastSegment: false}
+		}
 	}
 	close(jobs.queue)
 	return jobs

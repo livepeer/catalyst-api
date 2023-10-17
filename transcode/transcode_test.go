@@ -266,3 +266,30 @@ func TestParallelJobSaveTime(t *testing.T) {
 	require.Less(t, elapsed, 160*time.Millisecond) // usually takes less than 101ms on idle machine
 	time.Sleep(10 * time.Millisecond)              // wait for other workers to exit
 }
+
+func TestNewParallelTranscoding(t *testing.T) {
+	sourceSegmentURLs := []clients.SourceSegment{
+		{URL: segmentURL(t, "1.ts"), DurationMillis: 1000}, {URL: segmentURL(t, "2.ts"), DurationMillis: 1000}, {URL: segmentURL(t, "3.ts"), DurationMillis: 1000},
+		{URL: segmentURL(t, "4.ts"), DurationMillis: 1000}, {URL: segmentURL(t, "5.ts"), DurationMillis: 1000}, {URL: segmentURL(t, "6.ts"), DurationMillis: 1000},
+	}
+
+	// Define a test work function that doesn't do anything.
+	testWork := func(segmentInfo) error {
+		return nil
+	}
+
+	jobs := NewParallelTranscoding(sourceSegmentURLs, testWork)
+
+	for i, u := range sourceSegmentURLs {
+		expectedIsLastSegment := i == len(sourceSegmentURLs)-1
+		segment := <-jobs.queue
+		if segment.Input != u || segment.IsLastSegment != expectedIsLastSegment {
+			t.Errorf("Test case failed for segment #%d, expected IsLastSegment=%v, got IsLastSegment=%v", i, expectedIsLastSegment, segment.IsLastSegment)
+		}
+	}
+
+	// Check if there are any remaining segments in the queue (should be closed).
+	if _, more := <-jobs.queue; more {
+		t.Error("Expected the queue to be closed after processing all segments.")
+	}
+}
