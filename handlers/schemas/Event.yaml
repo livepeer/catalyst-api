@@ -4,6 +4,7 @@ properties:
     type: "string"
     enum:
       - stream
+      - nuke
   playback_id:
     type: "string"
 required:
