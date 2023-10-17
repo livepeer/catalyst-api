@@ -541,14 +541,17 @@ func (mc *mac) reconcileLoop(ctx context.Context) {
 
 func (mc *mac) reconcileStreams(mistState clients.MistState) {
 	for streamName, _ := range mistState.ActiveStreams {
-			if mistState.IsIngestStream(streamName) {
-			si, err := mc.getStreamInfo(mistStreamName2playbackID(streamName))
-			if err != nil {
-				glog.Errorf("error getting stream info streamName=%s err=%v", streamName, err)
-				continue
-			}
-			mc.reconcileSingleStream(si)
+		if !mistState.IsIngestStream(streamName) {
+			continue
 		}
+
+		si, err := mc.getStreamInfo(streamName)
+		if err != nil {
+			glog.Errorf("error getting stream info streamName=%s err=%v", streamName, err)
+			continue
+		}
+
+		mc.reconcileSingleStream(si)
 	}
 }
 
