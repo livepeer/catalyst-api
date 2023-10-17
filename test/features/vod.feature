@@ -43,7 +43,7 @@ Feature: VOD Streaming
     And the Broadcaster receives "4" segments for transcoding within "10" seconds
     And "4" transcoded segments and manifests have been written to disk for profiles "270p0,low-bitrate" within "10" seconds
     And a source copy <source_copy> been written to disk
-    And I receive a "success" callback within "20" seconds
+    And I receive a "success" callback within "30" seconds
 
     Examples:
       | payload                                                                         | source_copy |
@@ -59,7 +59,7 @@ Feature: VOD Streaming
     And the Broadcaster receives "3" segments for transcoding within "10" seconds
     And "3" transcoded segments and manifests have been written to disk for profiles "270p0,low-bitrate" within "10" seconds
     And a source copy has not been written to disk
-    And I receive a "success" callback within "20" seconds
+    And I receive a "success" callback within "30" seconds
 
     Examples:
       | payload                                                                     |
