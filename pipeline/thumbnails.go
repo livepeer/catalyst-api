@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/livepeer/catalyst-api/clients"
+	"github.com/livepeer/go-tools/drivers"
 )
 
 const framesEverySecs = 5
@@ -63,9 +64,10 @@ func GenerateThumbs(input *url.URL, output *url.URL) error {
 	outputLocation := output.JoinPath("thumbnails").String()
 	for _, file := range files {
 		filename := path.Base(file)
-		start := timestamp.Format("15:04:05.000")
+		const layout = "15:04:05.000"
+		start := timestamp.Format(layout)
 		timestamp = timestamp.Add(time.Duration(framesEverySecs) * time.Second)
-		end := timestamp.Format("15:04:05.000")
+		end := timestamp.Format(layout)
 
 		_, err := builder.WriteString(fmt.Sprintf("%s --> %s\n%s\n\n", start, end, filename))
 		if err != nil {
@@ -83,8 +85,7 @@ func GenerateThumbs(input *url.URL, output *url.URL) error {
 		}
 	}
 
-	// TODO set content-type
-	err = clients.UploadToOSURL(outputLocation, "thumbnails.vtt", bytes.NewReader(builder.Bytes()), time.Minute)
+	err = clients.UploadToOSURLFields(outputLocation, "thumbnails.vtt", bytes.NewReader(builder.Bytes()), time.Minute, &drivers.FileProperties{ContentType: "text/vtt"})
 	if err != nil {
 		return err
 	}
