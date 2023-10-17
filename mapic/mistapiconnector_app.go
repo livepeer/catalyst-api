@@ -540,21 +540,12 @@ func (mc *mac) reconcileLoop(ctx context.Context) {
 
 func (mc *mac) reconcileStreams(mistState clients.MistState) {
 	for streamName, _ := range mistState.ActiveStreams {
-		// read map directly to avoid creating streamInfo object even for playback-only (pull) streams
-		mc.mu.RLock()
-		si := mc.streamInfo[mistStreamName2playbackID(streamName)]
-		mc.mu.RUnlock()
-
-		if isIngestStream(streamName, si, mistState) {
-			if si == nil {
-				var err error
-				si, err = mc.refreshStreamInfo(streamName)
-				if err != nil {
-					glog.Errorf("error refreshing stream info streamName=%s err=%v", streamName, err)
-					continue
-				}
+			if mistState.IsIngestStream(streamName) {
+			si, err := mc.getStreamInfo(mistStreamName2playbackID(streamName))
+			if err != nil {
+				glog.Errorf("error getting stream info streamName=%s err=%v", streamName, err)
+				continue
 			}
-
 			mc.reconcileSingleStream(si)
 		}
 	}
