@@ -43,7 +43,7 @@ const MaxInputFileSizeBytes = 30 * 1024 * 1024 * 1024 // 30 GiB
 
 var TranscodingParallelJobs int = 2
 
-var TranscodingParallelSleep time.Duration = 5 * time.Second
+var TranscodingParallelSleep time.Duration = 10 * time.Second
 
 var DownloadOSURLRetries uint64 = 10
 
