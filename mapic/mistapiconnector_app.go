@@ -516,7 +516,8 @@ func (mc *mac) shouldEnableAudio(stream *api.Stream) bool {
 	return audio
 }
 
-// reconcileLoop calls reconcileMultistream and processStats periodically or when multistreamUpdated is triggered on demand.
+// reconcileLoop calls reconcileStream, reconcileMultistream and processStats
+// periodically or when streamUpdated is triggered on demand (from serf event).
 func (mc *mac) reconcileLoop(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
