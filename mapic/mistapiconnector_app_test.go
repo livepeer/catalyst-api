@@ -180,3 +180,84 @@ func TestReconcileMultistream(t *testing.T) {
 	require.ElementsMatch(t, expectedAutoToRemove, recordedAutoRemove)
 	require.ElementsMatch(t, expectedPushToStop, recordedPushStop)
 }
+
+func TestReconcileStreams(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mm := mockmistclient.NewMockMistAPIClient(ctrl)
+	mc := mac{
+		mist:           mm,
+		baseStreamName: "video",
+		config: &config.Cli{
+			MistSendAudio: audioRecord,
+		},
+	}
+
+	mm.EXPECT().GetState().DoAndReturn(func() (clients.MistState, error) {
+		return clients.MistState{
+			ActiveStreams: map[string]*clients.ActiveStream{
+				// Ingest stream, deleted, should nuke
+				"video+6736xac7u1hj36pa": {
+					Source: "push://",
+				},
+				// Ingest stream, suspended, should nuke
+				"video+abcdefghi": {
+					Source: "push://",
+				},
+				// Ingest stream
+				"video+bbbbbbbbb": {
+					Source: "push://",
+				},
+				// Playback stream
+				"video+not-ingest-stream": {
+					Source: "push://INTERNAL_ONLY:dtsc://mdw-staging-staging-catalyst-0.livepeer.monster:4200",
+				},
+			},
+		}, nil
+	}).Times(1)
+	mc.streamInfo = map[string]*streamInfo{
+		"6736xac7u1hj36pa": {
+			stream: &api.Stream{
+				PlaybackID: "6736xac7u1hj36pa",
+				Deleted:    true,
+			},
+		},
+		"abcdefghi": {
+			stream: &api.Stream{
+				PlaybackID: "abcdefghi",
+				Suspended:  true,
+			},
+		},
+		"bbbbbbbbb": {
+			stream: &api.Stream{
+				PlaybackID: "bbbbbbbbb",
+			},
+		},
+		// Ignore, exist in active streams, but is not an ingest stream
+		"not-ingest-stream": {
+			stream: &api.Stream{
+				PlaybackID: "not-active-stream",
+				Deleted:    true,
+			},
+		},
+	}
+
+	var recodedNuked []string
+	mm.EXPECT().NukeStream(gomock.Any()).DoAndReturn(func(streamName string) error {
+		recodedNuked = append(recodedNuked, streamName)
+		return nil
+	}).AnyTimes()
+
+	mistState, err := mm.GetState()
+	require.NoError(t, err)
+	mc.reconcileStreams(mistState)
+
+	expectedNuked := []string{
+		// Deleted stream
+		"video+6736xac7u1hj36pa",
+		"videorec+6736xac7u1hj36pa",
+		// Suspended stream
+		"video+abcdefghi",
+		"videorec+abcdefghi",
+	}
+	require.ElementsMatch(t, expectedNuked, recodedNuked)
+}
