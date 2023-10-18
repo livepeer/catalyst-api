@@ -169,6 +169,11 @@ func main() {
 		if err != nil {
 			glog.Fatalf("Error creating postgres metrics connection: %v", err)
 		}
+
+		// Without this, we've run into issues with exceeding our open connection limit
+		metricsDB.SetMaxOpenConns(2)
+		metricsDB.SetMaxIdleConns(2)
+		metricsDB.SetConnMaxLifetime(time.Hour)
 	} else {
 		glog.Info("Postgres metrics connection string was not set, postgres metrics are disabled.")
 	}
