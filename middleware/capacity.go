@@ -23,7 +23,7 @@ func (c *CapacityMiddleware) HasCapacity(vodEngine *pipeline.Coordinator, next h
 		requestsInFlight := c.requestsInFlight.Add(1)
 		defer c.requestsInFlight.Add(-1)
 
-		if len(vodEngine.Jobs.GetKeys())+int(requestsInFlight) >= config.MAX_JOBS_IN_FLIGHT {
+		if len(vodEngine.Jobs.GetKeys())+int(requestsInFlight) >= config.MaxInFlightJobs {
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		}

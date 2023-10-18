@@ -71,6 +71,8 @@ func main() {
 	fs.Float64Var(&video.MaxBitrateFactor, "max-bitrate-factor", 1.2, "Factor to limit the max video bitrate with relation to the source average bitrate")
 	fs.StringVar(&cli.C2PAPrivateKeyPath, "c2pa-private-key", "", "Path to the private key used to sign C2PA manifest")
 	fs.StringVar(&cli.C2PACertsPath, "c2pa-certs", "", "Path to the certs used to sign C2PA manifest")
+	fs.IntVar(&config.MaxInFlightJobs, "max-inflight-jobs", 8, "Maximum number of concurrent VOD jobs to support in catalyst-api")
+	fs.IntVar(&config.TranscodingParallelJobs, "parallel-transcode-jobs", 2, "Number of parallel transcode jobs")
 
 	// mist-api-connector parameters
 	fs.IntVar(&cli.MistPort, "mist-port", 4242, "Port to connect to Mist")
