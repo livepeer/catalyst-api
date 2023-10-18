@@ -277,13 +277,17 @@ func (f *ffmpeg) probeSourceSegment(requestID string, seg *m3u8.MediaSegment, so
 	}
 	_, err = f.probe.ProbeFile(requestID, probeURL)
 	if err != nil {
-		return fmt.Errorf("probe failed for segment %s: %w", u, err)
+		if strings.Contains(err.Error(), "non-existing SPS") {
+			log.LogError(requestID, "probeSourceSegment warning", err)
+		} else {
+			return fmt.Errorf("probe failed for segment %s: %w", u, err)
+		}
 	}
 
 	// check for audio issues https://linear.app/livepeer/issue/VID-287/audio-missing-after-segmenting
 	_, err = f.probe.ProbeFile(requestID, probeURL, "-loglevel", "warning")
 	if err != nil && strings.Contains(err.Error(), "no TS found at start of file, duration not set") {
-		return fmt.Errorf("probe failed for segment %s: %w", u, err)
+		return fmt.Errorf("probe failed with audio issues for segment %s: %w", u, err)
 	}
 	return nil
 }
