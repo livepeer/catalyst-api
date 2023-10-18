@@ -1,21 +1,21 @@
-package pipeline
+package thumbnails
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"time"
 
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/go-tools/drivers"
+	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
 const framesEverySecs = 5
+const resolution = "320:240"
 
 func GenerateThumbs(input *url.URL, output *url.URL) error {
 	in, err := clients.SignURL(input)
@@ -28,26 +28,17 @@ func GenerateThumbs(input *url.URL, output *url.URL) error {
 	}
 	defer os.RemoveAll(tempDir)
 
-	args := []string{
-		"-i", in,
-		"-vf", "select=eq(pict_type\\,I)",
-		"-vsync", "vfr",
-		"-vf", fmt.Sprintf("fps=1/%d", framesEverySecs),
-		path.Join(tempDir, "/keyframes_%03d.jpg"),
-	}
-
-	timeout, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-	cmd := exec.CommandContext(timeout, "ffmpeg", args...)
-
-	var outputBuf bytes.Buffer
-	var stdErr bytes.Buffer
-	cmd.Stdout = &outputBuf
-	cmd.Stderr = &stdErr
-
-	err = cmd.Run()
+	err = ffmpeg.Input(in).
+		Output(
+			path.Join(tempDir, "/keyframes_%03d.jpg"),
+			ffmpeg.KwArgs{
+				// video filter to extract frames every x seconds and resize
+				"vf":  fmt.Sprintf("fps=1/%d,scale=%s:force_original_aspect_ratio=decrease", framesEverySecs, resolution),
+				"q:v": "2", // quality level for the jpgs
+			},
+		).OverWriteOutput().ErrorToStdOut().Run()
 	if err != nil {
-		return fmt.Errorf("error running ffmpeg [%s] [%s] %w", outputBuf.String(), stdErr.String(), err)
+		return fmt.Errorf("error running ffmpeg %w", err)
 	}
 
 	// generate the webvtt file
@@ -55,7 +46,7 @@ func GenerateThumbs(input *url.URL, output *url.URL) error {
 	if err != nil {
 		return err
 	}
-	builder := bytes.Buffer{}
+	builder := &bytes.Buffer{}
 	_, err = builder.WriteString("WEBVTT\n")
 	if err != nil {
 		return err
@@ -85,7 +76,7 @@ func GenerateThumbs(input *url.URL, output *url.URL) error {
 		}
 	}
 
-	err = clients.UploadToOSURLFields(outputLocation, "thumbnails.vtt", bytes.NewReader(builder.Bytes()), time.Minute, &drivers.FileProperties{ContentType: "text/vtt"})
+	err = clients.UploadToOSURLFields(outputLocation, "thumbnails.vtt", builder, time.Minute, &drivers.FileProperties{ContentType: "text/vtt"})
 	if err != nil {
 		return err
 	}
