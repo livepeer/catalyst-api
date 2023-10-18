@@ -27,7 +27,7 @@ const MaxSegmentSizeSecs = 20
 // Somewhat arbitrary and conservative number of maximum Catalyst VOD jobs in the system
 // at one time. We can look at more sophisticated strategies for calculating capacity in
 // the future.
-const MAX_JOBS_IN_FLIGHT = 8
+var MaxInFlightJobs int = 8
 
 // How long to try writing a single segment to storage for before giving up
 const SEGMENT_WRITE_TIMEOUT = 5 * time.Minute

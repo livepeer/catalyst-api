@@ -115,5 +115,5 @@ func TestItTakesIntoAccountInFlightHTTPRequests(t *testing.T) {
 	}
 
 	// Confirm the handler didn't let too many requests through
-	require.Equal(t, rejectedRequestCount, 100-config.MAX_JOBS_IN_FLIGHT+1)
+	require.Equal(t, rejectedRequestCount, 100-config.MaxInFlightJobs+1)
 }
