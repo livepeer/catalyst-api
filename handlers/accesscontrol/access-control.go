@@ -88,10 +88,11 @@ func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, reqUR
 		acReq.AccessKey = accessKey
 		cacheKey = "accessKey_" + accessKey
 	} else if jwt != "" {
-		acReq.Pub = extractKeyFromJwt(jwt, acReq.Stream)
-		if acReq.Pub == "" {
-			return false, fmt.Errorf("failed to extract key from jwt: %s", jwt)
+		pub, err := extractKeyFromJwt(jwt, acReq.Stream)
+		if err != nil {
+			return false, fmt.Errorf("failed to extract key from jwt: %w", err)
 		}
+		acReq.Pub = pub
 
 		acReq.Type = "jwt"
 		cacheKey = "jwtPubKey_" + acReq.Pub
@@ -217,20 +218,18 @@ func (c *PlaybackGateClaims) Valid() error {
 	return nil
 }
 
-func extractKeyFromJwt(tokenString, playbackID string) string {
+func extractKeyFromJwt(tokenString, playbackID string) (string, error) {
 	claims, err := decodeJwt(tokenString)
 	if err != nil {
-		glog.Errorf("Unable to decode on incoming playbackId=%v jwt=%v", playbackID, tokenString)
-		return ""
+		return "", fmt.Errorf("unable to decode jwt on incoming playbackId=%v jwt=%v %w", playbackID, tokenString, err)
 	}
 
 	if playbackID != claims.Subject {
-		glog.Errorf("PlaybackId mismatch playbackId=%v != claimed=%v", playbackID, claims.Subject)
-		return ""
+		return "", fmt.Errorf("playbackId mismatch playbackId=%v != claimed=%v jwt=%s", playbackID, claims.Subject, tokenString)
 	}
 
 	glog.Infof("Access control request for playbackId=%v pubkey=%v", playbackID, claims.PublicKey)
-	return claims.PublicKey
+	return claims.PublicKey, nil
 }
 
 func decodeJwt(tokenString string) (*PlaybackGateClaims, error) {
