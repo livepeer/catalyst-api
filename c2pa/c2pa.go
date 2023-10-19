@@ -15,6 +15,7 @@ const c2paManifestTemplate = `
   "ta_url": "http://timestamp.digicert.com",
 
   "claim_generator": "Livepeer Studio",
+  "title": "%s",
   "assertions": [
     {
       "label": "c2pa.actions",
@@ -44,15 +45,15 @@ func NewC2PA(alg, privateKeyPath, signCertPath string) C2PA {
 	}
 }
 
-func (c C2PA) c2paManifest() string {
-	return fmt.Sprintf(c2paManifestTemplate, c.alg, c.privateKeyPath, c.signCertPath)
+func (c C2PA) c2paManifest(title string) string {
+	return fmt.Sprintf(c2paManifestTemplate, c.alg, c.privateKeyPath, c.signCertPath, title)
 }
 
-func (c C2PA) SignFile(inFile, outFile string) error {
+func (c C2PA) SignFile(inFile, outFile, title string) error {
 	args := []string{
 		inFile,
 		"-c",
-		c.c2paManifest(),
+		c.c2paManifest(title),
 		"-f",
 		"-o",
 		outFile,

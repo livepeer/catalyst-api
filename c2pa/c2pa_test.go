@@ -21,7 +21,7 @@ func TestSign(t *testing.T) {
 	c := NewC2PA("es256", "test/es256_private.key", "test/es256_certs.pem")
 	defer os.Remove(outFile)
 
-	err = c.SignFile("test/tiny.mp4", outFile)
+	err = c.SignFile("test/tiny.mp4", outFile, "Tiny")
 
 	require.Nil(t, err)
 	out, err := runCmd(exec.CommandContext(context.TODO(), "c2patool", outFile))
@@ -37,7 +37,7 @@ func TestSign_NotExistingPrivateKey(t *testing.T) {
 	}
 
 	c := NewC2PA("es256", "some/path/notexisting", "test/es256_certs.pem")
-	err = c.SignFile("test/tiny.mp4", "test/tiny_signed.mp4")
+	err = c.SignFile("test/tiny.mp4", "test/tiny_signed.mp4", "Tiny")
 	require.ErrorContains(t, err, "No such file or directory")
 }
 
@@ -49,6 +49,6 @@ func TestSign_NotExistingSigningCert(t *testing.T) {
 	}
 
 	c := NewC2PA("es256", "test/es256_private.key", "some/path/notexisting")
-	err = c.SignFile("test/tiny.mp4", "test/tiny_signed.mp4")
+	err = c.SignFile("test/tiny.mp4", "test/tiny_signed.mp4", "Tiny")
 	require.ErrorContains(t, err, "No such file or directory")
 }
