@@ -84,6 +84,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		ReportProgress:    job.ReportProgress,
 		GenerateMP4:       job.GenerateMP4,
 		IsClip:            job.ClipStrategy.Enabled,
+		C2PA:              job.C2PA,
 	}
 
 	inputInfo := video.InputVideo{

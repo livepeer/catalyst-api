@@ -17,6 +17,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 
 	_ "github.com/lib/pq"
+	"github.com/livepeer/catalyst-api/c2pa"
 	"github.com/livepeer/catalyst-api/cache"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
@@ -127,6 +128,7 @@ type JobInfo struct {
 	inFallbackMode        bool
 	SignedSourceURL       string
 	LivepeerSupported     bool
+	C2PA                  *c2pa.C2PA
 }
 
 // PipelineInfo represents the state of an individual pipeline, i.e. ffmpeg or mediaconvert
@@ -165,9 +167,10 @@ type Coordinator struct {
 	InputCopy            clients.InputCopier
 	VodDecryptPrivateKey *rsa.PrivateKey
 	SourceOutputURL      *url.URL
+	C2PA                 *c2pa.C2PA
 }
 
-func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB, VodDecryptPrivateKey *rsa.PrivateKey, broadcasterURL string, sourcePlaybackHosts map[string]string) (*Coordinator, error) {
+func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB, VodDecryptPrivateKey *rsa.PrivateKey, broadcasterURL string, sourcePlaybackHosts map[string]string, c2pa *c2pa.C2PA) (*Coordinator, error) {
 	if !strategy.IsValid() {
 		return nil, fmt.Errorf("invalid strategy: %s", strategy)
 	}
@@ -207,6 +210,7 @@ func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string,
 		InputCopy:            clients.NewInputCopy(),
 		VodDecryptPrivateKey: VodDecryptPrivateKey,
 		SourceOutputURL:      sourceOutput,
+		C2PA:                 c2pa,
 	}, nil
 }
 
@@ -311,6 +315,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 			return nil, fmt.Errorf("error copying input to storage: %w", err)
 		}
 
+		si.C2PA = c.C2PA
 		si.SourceFile = osTransferURL.String()  // OS URL used by mist
 		si.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert
 		si.InputFileInfo = inputVideoProbe
