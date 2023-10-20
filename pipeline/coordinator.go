@@ -326,7 +326,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		}
 
 		if si.ThumbnailsTargetURL != nil {
-			err = thumbnails.GenerateThumbs(osTransferURL, si.ThumbnailsTargetURL)
+			err = thumbnails.GenerateThumbs(osTransferURL, si.ThumbnailsTargetURL, si.InputFileInfo)
 			if err != nil {
 				log.LogError(si.RequestID, "generate thumbs failed", err, "in", osTransferURL, "out", si.ThumbnailsTargetURL)
 			}

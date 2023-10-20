@@ -2,12 +2,12 @@ package thumbnails
 
 import (
 	"context"
-	"log"
 	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/livepeer/catalyst-api/video"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/vansante/go-ffprobe.v2"
 )
@@ -19,31 +19,26 @@ func TestGenerateThumbs(t *testing.T) {
 	outDir, err := os.MkdirTemp(os.TempDir(), "thumbs*")
 	require.NoError(t, err)
 	defer os.RemoveAll(outDir)
-	log.Println(outDir)
 
 	out, err := url.Parse(outDir)
 	require.NoError(t, err)
-	err = GenerateThumbs(u, out)
+	err = GenerateThumbs(u, out, video.InputVideo{
+		Tracks: []video.InputTrack{{
+			Type:       video.TrackTypeVideo,
+			VideoTrack: video.VideoTrack{FPS: 30},
+		}},
+	})
 	require.NoError(t, err)
 
 	expectedVtt := `WEBVTT
-00:00:00.000 --> 00:00:05.000
-keyframes_001.jpg
+00:00:00.000 --> 00:00:10.000
+keyframes_0.jpg
 
-00:00:05.000 --> 00:00:10.000
-keyframes_002.jpg
+00:00:10.000 --> 00:00:20.000
+keyframes_300.jpg
 
-00:00:10.000 --> 00:00:15.000
-keyframes_003.jpg
-
-00:00:15.000 --> 00:00:20.000
-keyframes_004.jpg
-
-00:00:20.000 --> 00:00:25.000
-keyframes_005.jpg
-
-00:00:25.000 --> 00:00:30.000
-keyframes_006.jpg
+00:00:20.000 --> 00:00:30.000
+keyframes_600.jpg
 
 `
 
@@ -53,7 +48,7 @@ keyframes_006.jpg
 
 	files, err := filepath.Glob(filepath.Join(outDir, "thumbnails", "*.jpg"))
 	require.NoError(t, err)
-	require.Len(t, files, 6)
+	require.Len(t, files, 3)
 
 	for _, file := range files {
 		data, err := ffprobe.ProbeURL(context.Background(), file)
