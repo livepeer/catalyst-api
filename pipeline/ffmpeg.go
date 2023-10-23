@@ -53,9 +53,19 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	job.ReportProgress(clients.TranscodeStatusPreparing, 0.3)
 
 	// Segment only for non-HLS inputs
+	var localSourceTmp string
 	if job.InputFileInfo.Format != "hls" {
-		if err := copyFileToLocalTmpAndSegment(job); err != nil {
+		var err error
+		localSourceTmp, err = copyFileToLocalTmpAndSegment(job)
+		if err != nil {
 			return nil, err
+		}
+		if job.C2PA == nil {
+			os.Remove(localSourceTmp)
+		} else {
+			// Source file is needed for the C2PA signature,
+			// so we can remove the temp source file only after the whole transcoding is completed
+			defer os.Remove(localSourceTmp)
 		}
 	} else {
 		job.SegmentingTargetURL = job.SourceFile
@@ -85,6 +95,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		GenerateMP4:       job.GenerateMP4,
 		IsClip:            job.ClipStrategy.Enabled,
 		C2PA:              job.C2PA,
+		LocalSourceTmp:    localSourceTmp,
 	}
 
 	inputInfo := video.InputVideo{
@@ -289,14 +300,13 @@ func (f *ffmpeg) probeSourceSegment(requestID string, seg *m3u8.MediaSegment, so
 	return nil
 }
 
-func copyFileToLocalTmpAndSegment(job *JobInfo) error {
+func copyFileToLocalTmpAndSegment(job *JobInfo) (string, error) {
 	// Create a temporary local file to write to
 	localSourceFile, err := os.CreateTemp(os.TempDir(), LocalSourceFilePattern)
 	if err != nil {
-		return fmt.Errorf("failed to create local file for segmenting: %w", err)
+		return "", fmt.Errorf("failed to create local file for segmenting: %w", err)
 	}
 	defer localSourceFile.Close()
-	defer os.Remove(localSourceFile.Name()) // Clean up the file as soon as we're done segmenting
 
 	// Copy the file locally because of issues with ffmpeg segmenting and remote files
 	// We can be aggressive with the timeout because we're copying from cloud storage
@@ -304,7 +314,7 @@ func copyFileToLocalTmpAndSegment(job *JobInfo) error {
 	defer cancel()
 	_, err = clients.CopyFile(timeout, job.SignedSourceURL, localSourceFile.Name(), "", job.RequestID)
 	if err != nil {
-		return fmt.Errorf("failed to copy file (%s) locally for segmenting: %s", job.SignedSourceURL, err)
+		return "", fmt.Errorf("failed to copy file (%s) locally for segmenting: %s", job.SignedSourceURL, err)
 	}
 
 	// Begin Segmenting
@@ -319,10 +329,10 @@ func copyFileToLocalTmpAndSegment(job *JobInfo) error {
 
 	destinationURL := fmt.Sprintf("%s/api/ffmpeg/%s/index.m3u8", internalAddress, job.StreamName)
 	if err := video.Segment(localSourceFile.Name(), destinationURL, job.TargetSegmentSizeSecs); err != nil {
-		return err
+		return "", err
 	}
 
-	return nil
+	return localSourceFile.Name(), nil
 }
 
 func cleanUpLocalTmpFiles(dir string, filenamePattern string, maxAge time.Duration) error {

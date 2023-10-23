@@ -48,6 +48,7 @@ type TranscodeSegmentRequest struct {
 	RequestID      string                                 `json:"-"`
 	ReportProgress func(clients.TranscodeStatus, float64) `json:"-"`
 	C2PA           *c2pa2.C2PA                            `json:"-"`
+	LocalSourceTmp string                                 `json:"-"`
 	GenerateMP4    bool
 	IsClip         bool
 }
@@ -239,7 +240,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				// Add C2PA Signature
 				if transcodeRequest.C2PA != nil {
 					for _, f := range standardMp4OutputFiles {
-						if err := transcodeRequest.C2PA.SignFile(f, f, rendition, ""); err != nil {
+						if err := transcodeRequest.C2PA.SignFile(f, f, rendition, transcodeRequest.LocalSourceTmp); err != nil {
 							log.Log(transcodeRequest.RequestID, "error signing C2PA manifest", "file", f)
 						}
 					}
