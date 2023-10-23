@@ -137,7 +137,7 @@ func GenerateSingleProfileWithTargetParams(videoTrack InputTrack, videoProfile E
 	}
 
 	profiles = append(profiles, EncodedProfile{
-		Name:    strconv.FormatInt(videoTrack.Height, 10) + "p0",
+		Name:    videoProfile.Name,
 		Bitrate: videoProfile.Bitrate,
 		FPS:     0,
 		Width:   videoTrack.Width,
