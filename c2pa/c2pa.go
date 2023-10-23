@@ -49,14 +49,17 @@ func (c C2PA) c2paManifest(title string) string {
 	return fmt.Sprintf(c2paManifestTemplate, c.alg, c.privateKeyPath, c.signCertPath, title)
 }
 
-func (c C2PA) SignFile(inFile, outFile, title string) error {
+func (c C2PA) SignFile(inFile, outFile, title, parent string) error {
 	args := []string{
 		inFile,
-		"-c",
+		"--config",
 		c.c2paManifest(title),
-		"-f",
-		"-o",
+		"--force",
+		"--output",
 		outFile,
+	}
+	if parent != "" {
+		args = append(args, "--parent", parent)
 	}
 	_, err := runCmd(exec.CommandContext(context.TODO(), "c2patool", args...))
 	return err
