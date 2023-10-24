@@ -302,7 +302,8 @@ func (f *ffmpeg) probeSourceSegment(requestID string, seg *m3u8.MediaSegment, so
 
 func copyFileToLocalTmpAndSegment(job *JobInfo) (string, error) {
 	// Create a temporary local file to write to
-	localSourceFile, err := os.CreateTemp(os.TempDir(), LocalSourceFilePattern)
+	ext := job.SignedSourceURL[strings.LastIndex(job.SignedSourceURL, "."):]
+	localSourceFile, err := os.CreateTemp(os.TempDir(), fmt.Sprintf("%s%s", LocalSourceFilePattern, ext))
 	if err != nil {
 		return "", fmt.Errorf("failed to create local file for segmenting: %w", err)
 	}
