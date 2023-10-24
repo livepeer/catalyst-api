@@ -79,6 +79,7 @@ type UploadJobPayload struct {
 	InputFileInfo         video.InputVideo
 	SourceCopy            bool
 	ClipStrategy          video.ClipStrategy
+	C2PA                  bool
 }
 
 type EncryptionPayload struct {
@@ -315,7 +316,9 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 			return nil, fmt.Errorf("error copying input to storage: %w", err)
 		}
 
-		si.C2PA = c.C2PA
+		if p.C2PA {
+			si.C2PA = c.C2PA
+		}
 		si.SourceFile = osTransferURL.String()  // OS URL used by mist
 		si.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert
 		si.InputFileInfo = inputVideoProbe
