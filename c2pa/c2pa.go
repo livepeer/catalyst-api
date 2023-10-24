@@ -14,7 +14,7 @@ const c2paManifestTemplate = `
   "sign_cert": "%s",
   "ta_url": "http://timestamp.digicert.com",
 
-  "claim_generator": "Livepeer Studio",
+  "claim_generator": "LivepeerStudio",
   "title": "%s",
   "assertions": [
     {
