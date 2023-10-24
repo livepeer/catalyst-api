@@ -19,7 +19,7 @@ import (
 	"github.com/livepeer/go-tools/drivers"
 )
 
-const LocalSourceFilePattern = "sourcevideo*"
+const LocalSourceFilePattern = "sourcevideo*.mp4"
 
 type ffmpeg struct {
 	// The base of where to output source segments to
@@ -302,8 +302,7 @@ func (f *ffmpeg) probeSourceSegment(requestID string, seg *m3u8.MediaSegment, so
 
 func copyFileToLocalTmpAndSegment(job *JobInfo) (string, error) {
 	// Create a temporary local file to write to
-	ext := job.SignedSourceURL[strings.LastIndex(job.SignedSourceURL, "."):]
-	localSourceFile, err := os.CreateTemp(os.TempDir(), fmt.Sprintf("%s%s", LocalSourceFilePattern, ext))
+	localSourceFile, err := os.CreateTemp(os.TempDir(), LocalSourceFilePattern)
 	if err != nil {
 		return "", fmt.Errorf("failed to create local file for segmenting: %w", err)
 	}
