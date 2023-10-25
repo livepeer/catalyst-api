@@ -60,6 +60,8 @@ type Cli struct {
 	StreamHealthHookURL       string
 	BroadcasterURL            string
 	SourcePlaybackHosts       map[string]string
+	DefaultQuality            int
+	MaxBitrateFactor          float64
 	CdnRedirectPrefix         *url.URL
 	CdnRedirectPlaybackIDs    []string
 }
