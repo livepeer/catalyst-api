@@ -33,7 +33,7 @@ require (
 	golang.org/x/sync v0.4.0
 	golang.org/x/text v0.13.0
 	gopkg.in/vansante/go-ffprobe.v2 v2.1.2-0.20230412093356-81f7fcbea828
-	sigs.k8s.io/yaml v1.3.0
+	sigs.k8s.io/yaml v1.4.0
 )
 
 require (
