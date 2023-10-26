@@ -194,9 +194,14 @@ func main() {
 		}
 	}
 
+	c2, err := createC2PA(&cli)
+	if err != nil {
+		// Log warning, but still start without C2PA signing
+		glog.Warning(err)
+	}
 	// Start the "co-ordinator" that determines whether to send jobs to the Catalyst transcoding pipeline
 	// or an external one
-	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB, vodDecryptPrivateKey, cli.BroadcasterURL, cli.SourcePlaybackHosts, createC2PA(&cli))
+	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB, vodDecryptPrivateKey, cli.BroadcasterURL, cli.SourcePlaybackHosts, c2)
 	if err != nil {
 		glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 	}
@@ -364,22 +369,20 @@ func handleSignals(ctx context.Context) error {
 	}
 }
 
-func createC2PA(cli *config.Cli) *c2pa.C2PA {
+func createC2PA(cli *config.Cli) (*c2pa.C2PA, error) {
 	if cli == nil {
-		return nil
+		return nil, nil
 	}
 	if cli.C2PAPrivateKeyPath == "" || cli.C2PACertsPath == "" {
 		glog.Infof("C2PA private key and/or C2PA certs are not set, will not use C2PA signing")
-		return nil
+		return nil, nil
 	}
 	if _, err := os.Stat(cli.C2PAPrivateKeyPath); err != nil {
-		glog.Warningf("C2PA private key file not found: %s", cli.C2PAPrivateKeyPath)
-		return nil
+		return nil, fmt.Errorf("C2PA private key file not found: %s", cli.C2PAPrivateKeyPath)
 	}
 	if _, err := os.Stat(cli.C2PACertsPath); err != nil {
-		glog.Warningf("C2PA certs file not found: %s", cli.C2PACertsPath)
-		return nil
+		return nil, fmt.Errorf("C2PA certs file not found: %s", cli.C2PACertsPath)
 	}
 	c := c2pa.NewC2PA("ps256", cli.C2PAPrivateKeyPath, cli.C2PACertsPath)
-	return &c
+	return &c, nil
 }
