@@ -20,6 +20,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/livepeer/catalyst-api/api"
 	"github.com/livepeer/catalyst-api/balancer"
+	"github.com/livepeer/catalyst-api/c2pa"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
@@ -65,6 +66,8 @@ func main() {
 	fs.StringVar(&cli.BroadcasterURL, "broadcaster-url", config.DefaultBroadcasterURL, "URL of local broadcaster")
 	config.InvertedBoolFlag(fs, &cli.MistEnabled, "mist", true, "Disable all Mist integrations. Should only be used for development and CI")
 	config.CommaMapFlag(fs, &cli.SourcePlaybackHosts, "source-playback-hosts", map[string]string{}, "Hostname to prefix mappings for source playback URLs")
+	fs.StringVar(&cli.C2PAPrivateKeyPath, "c2pa-private-key", "", "Path to the private key used to sign C2PA manifest")
+	fs.StringVar(&cli.C2PACertsPath, "c2pa-certs", "", "Path to the certs used to sign C2PA manifest")
 
 	// mist-api-connector parameters
 	fs.IntVar(&cli.MistPort, "mist-port", 4242, "Port to connect to Mist")
@@ -191,9 +194,14 @@ func main() {
 		}
 	}
 
+	c2, err := createC2PA(&cli)
+	if err != nil {
+		// Log warning, but still start without C2PA signing
+		glog.Warning(err)
+	}
 	// Start the "co-ordinator" that determines whether to send jobs to the Catalyst transcoding pipeline
 	// or an external one
-	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB, vodDecryptPrivateKey, cli.BroadcasterURL, cli.SourcePlaybackHosts)
+	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB, vodDecryptPrivateKey, cli.BroadcasterURL, cli.SourcePlaybackHosts, c2)
 	if err != nil {
 		glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 	}
@@ -362,4 +370,22 @@ func handleSignals(ctx context.Context) error {
 			return nil
 		}
 	}
+}
+
+func createC2PA(cli *config.Cli) (*c2pa.C2PA, error) {
+	if cli == nil {
+		return nil, nil
+	}
+	if cli.C2PAPrivateKeyPath == "" || cli.C2PACertsPath == "" {
+		glog.Infof("C2PA private key and/or C2PA certs are not set, will not use C2PA signing")
+		return nil, nil
+	}
+	if _, err := os.Stat(cli.C2PAPrivateKeyPath); err != nil {
+		return nil, fmt.Errorf("C2PA private key file not found: %s", cli.C2PAPrivateKeyPath)
+	}
+	if _, err := os.Stat(cli.C2PACertsPath); err != nil {
+		return nil, fmt.Errorf("C2PA certs file not found: %s", cli.C2PACertsPath)
+	}
+	c := c2pa.NewC2PA("ps256", cli.C2PAPrivateKeyPath, cli.C2PACertsPath)
+	return &c, nil
 }

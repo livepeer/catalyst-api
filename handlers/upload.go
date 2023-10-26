@@ -45,6 +45,7 @@ type UploadVODRequest struct {
 	AccessToken     string                           `json:"accessToken"`
 	TranscodeAPIUrl string                           `json:"transcodeAPIUrl"`
 	Encryption      *pipeline.EncryptionPayload      `json:"encryption,omitempty"`
+	C2PA            bool                             `json:"c2pa,omitempty"`
 
 	// Forwarded to transcoding stage:
 	TargetSegmentSizeSecs int64                  `json:"target_segment_size_secs"`
@@ -277,6 +278,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		Encryption:            uploadVODRequest.Encryption,
 		SourceCopy:            uploadVODRequest.getSourceCopyEnabled(),
 		ClipStrategy:          uploadVODRequest.ClipStrategy,
+		C2PA:                  uploadVODRequest.C2PA,
 	})
 
 	respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})

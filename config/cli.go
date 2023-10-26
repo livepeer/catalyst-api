@@ -62,6 +62,8 @@ type Cli struct {
 	SourcePlaybackHosts       map[string]string
 	CdnRedirectPrefix         *url.URL
 	CdnRedirectPlaybackIDs    []string
+	C2PAPrivateKeyPath        string
+	C2PACertsPath             string
 }
 
 // Return our own URL for callback trigger purposes
