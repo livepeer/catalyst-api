@@ -16,6 +16,8 @@ properties:
     type: "string"
   target_segment_size_secs:
     type: "integer"
+  c2pa:
+    type: "boolean"
   encryption:
     type: "object"
     properties:
