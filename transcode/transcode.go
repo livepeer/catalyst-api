@@ -241,7 +241,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				if transcodeRequest.C2PA != nil {
 					for _, f := range standardMp4OutputFiles {
 						if err := transcodeRequest.C2PA.SignFile(f, f, rendition, transcodeRequest.LocalSourceTmp); err != nil {
-							log.Log(transcodeRequest.RequestID, "error signing C2PA manifest", "file", f)
+							log.LogError(transcodeRequest.RequestID, "error signing C2PA manifest", err, "file", f)
 						}
 					}
 				}
