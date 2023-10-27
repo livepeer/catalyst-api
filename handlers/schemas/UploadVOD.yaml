@@ -105,6 +105,8 @@ properties:
           type: "integer"
         bitrate:
           type: "integer"
+        quality:
+          type: "integer"
         fps:
           type: "integer"
         fpsDen:
