@@ -84,8 +84,12 @@ func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, paylo
 	accessKey := payload.URL.Query().Get("accessKey")
 	jwt := payload.URL.Query().Get("jwt")
 
-	if accessKey == "" && jwt == "" {
+	if accessKey == "" {
 		accessKey = payload.AccessKey
+	}
+
+	if jwt == "" {
+		jwt = payload.JWT
 	}
 
 	if accessKey != "" {
