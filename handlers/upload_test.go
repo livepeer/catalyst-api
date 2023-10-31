@@ -9,13 +9,14 @@ import (
 
 func TestGetTargetOutputs(t *testing.T) {
 	tests := []struct {
-		name                 string
-		req                  UploadVODRequest
-		expectedHlsURL       string
-		expectedMp4URL       string
-		expectedFragMp4URL   string
-		expectedClipURL      string
-		expectedMp4ShortOnly bool
+		name                  string
+		req                   UploadVODRequest
+		expectedHlsURL        string
+		expectedMp4URL        string
+		expectedFragMp4URL    string
+		expectedClipURL       string
+		expectedMp4ShortOnly  bool
+		expectedThumbnailsURL string
 	}{
 		{
 			name: "single output location with HLS",
@@ -66,26 +67,43 @@ func TestGetTargetOutputs(t *testing.T) {
 						Clip: "enabled",
 					},
 				},
+				{
+					URL: "s3+https://fifth:fifth@bucket",
+					Outputs: UploadVODRequestOutputLocationOutputs{
+						Thumbnails: "enabled",
+					},
+				},
 			}},
-			expectedHlsURL:       "s3+https://first:first@bucket",
-			expectedMp4URL:       "s3+https://second:second@bucket",
-			expectedFragMp4URL:   "s3+https://third:third@bucket",
-			expectedClipURL:      "s3+https://fourth:fourth@bucket",
-			expectedMp4ShortOnly: true,
+			expectedHlsURL:        "s3+https://first:first@bucket",
+			expectedMp4URL:        "s3+https://second:second@bucket",
+			expectedFragMp4URL:    "s3+https://third:third@bucket",
+			expectedClipURL:       "s3+https://fourth:fourth@bucket",
+			expectedThumbnailsURL: "s3+https://fifth:fifth@bucket",
+			expectedMp4ShortOnly:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotHls := tt.req.getTargetHlsOutput()
+			gotHls := tt.req.getTargetOutput(func(o UploadVODRequestOutputLocationOutputs) string {
+				return o.HLS
+			})
 			require.Equal(t, tt.expectedHlsURL, gotHls.URL)
 			gotMp4, gotShortOnly := tt.req.getTargetMp4Output()
-			gotFragMp4 := tt.req.getTargetFragMp4Output()
-			gotClip := tt.req.getTargetClipOutput()
+			gotFragMp4 := tt.req.getTargetOutput(func(o UploadVODRequestOutputLocationOutputs) string {
+				return o.FragmentedMP4
+			})
+			gotClip := tt.req.getTargetOutput(func(o UploadVODRequestOutputLocationOutputs) string {
+				return o.Clip
+			})
+			gotThumbs := tt.req.getTargetOutput(func(o UploadVODRequestOutputLocationOutputs) string {
+				return o.Thumbnails
+			})
 			require.Equal(t, tt.expectedMp4URL, gotMp4.URL)
 			require.Equal(t, tt.expectedMp4ShortOnly, gotShortOnly)
 			require.Equal(t, tt.expectedFragMp4URL, gotFragMp4.URL)
 			require.Equal(t, tt.expectedClipURL, gotClip.URL)
+			require.Equal(t, tt.expectedThumbnailsURL, gotThumbs.URL)
 		})
 	}
 }

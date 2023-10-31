@@ -338,7 +338,7 @@ func TestPipelineCollectedMetrics(t *testing.T) {
 
 	dbMock.
 		ExpectExec("insert into \"vod_completed\".*").
-		WithArgs(sqlmock.AnyArg(), 0, "123", sqlmock.AnyArg(), "vid codec", "audio codec", "stub", "test region", "completed", 1, sqlmock.AnyArg(), 2, 3, 4, 5, sourceFile, "s3+https://user:xxxxx@storage.google.com/bucket/key", false, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), false).
+		WithArgs(sqlmock.AnyArg(), 0, "123", sqlmock.AnyArg(), "vid codec", "audio codec", "stub", "test region", "completed", 1, sqlmock.AnyArg(), 2, 3, 4, 5, sourceFile, "s3+https://user:xxxxx@storage.google.com/bucket/key", false, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), false, false).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	coord.StartUploadJob(job)

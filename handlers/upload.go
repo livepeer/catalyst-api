@@ -28,6 +28,7 @@ type UploadVODRequestOutputLocationOutputs struct {
 	FragmentedMP4 string `json:"fragmented_mp4"`
 	Clip          string `json:"clip"`
 	SourceMp4     bool   `json:"source_mp4"`
+	Thumbnails    string `json:"thumbnails"`
 }
 
 type UploadVODRequestOutputLocation struct {
@@ -115,15 +116,6 @@ func (r UploadVODRequest) IsClipValid() bool {
 	return true
 }
 
-func (r UploadVODRequest) getTargetHlsOutput() UploadVODRequestOutputLocation {
-	for _, o := range r.OutputLocations {
-		if o.Outputs.HLS == "enabled" {
-			return o
-		}
-	}
-	return UploadVODRequestOutputLocation{}
-}
-
 func (r UploadVODRequest) getTargetMp4Output() (UploadVODRequestOutputLocation, bool) {
 	for _, o := range r.OutputLocations {
 		if o.Outputs.MP4 == "enabled" {
@@ -135,24 +127,6 @@ func (r UploadVODRequest) getTargetMp4Output() (UploadVODRequestOutputLocation, 
 	return UploadVODRequestOutputLocation{}, false
 }
 
-func (r UploadVODRequest) getTargetFragMp4Output() UploadVODRequestOutputLocation {
-	for _, o := range r.OutputLocations {
-		if o.Outputs.FragmentedMP4 == "enabled" {
-			return o
-		}
-	}
-	return UploadVODRequestOutputLocation{}
-}
-
-func (r UploadVODRequest) getTargetClipOutput() UploadVODRequestOutputLocation {
-	for _, o := range r.OutputLocations {
-		if o.Outputs.Clip == "enabled" {
-			return o
-		}
-	}
-	return UploadVODRequestOutputLocation{}
-}
-
 func (r UploadVODRequest) getSourceCopyEnabled() bool {
 	for _, o := range r.OutputLocations {
 		if o.Outputs.SourceMp4 {
@@ -160,6 +134,17 @@ func (r UploadVODRequest) getSourceCopyEnabled() bool {
 		}
 	}
 	return false
+}
+
+type getOutput func(UploadVODRequestOutputLocationOutputs) string
+
+func (r UploadVODRequest) getTargetOutput(getOutput getOutput) UploadVODRequestOutputLocation {
+	for _, o := range r.OutputLocations {
+		if getOutput(o.Outputs) == "enabled" {
+			return o
+		}
+	}
+	return UploadVODRequestOutputLocation{}
 }
 
 func (d *CatalystAPIHandlersCollection) UploadVOD() httprouter.Handle {
@@ -223,7 +208,9 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	var clipTargetURL *url.URL
 	var err error
 	if uploadVODRequest.IsClipValid() {
-		clipTargetOutput := uploadVODRequest.getTargetClipOutput()
+		clipTargetOutput := uploadVODRequest.getTargetOutput(func(o UploadVODRequestOutputLocationOutputs) string {
+			return o.Clip
+		})
 		clipTargetURL, err = toTargetURL(clipTargetOutput, requestID)
 		if err != nil {
 			return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
@@ -232,7 +219,9 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	}
 
 	// Get target locatons for HLS, MP4, FMP4 outputs
-	hlsTargetOutput := uploadVODRequest.getTargetHlsOutput()
+	hlsTargetOutput := uploadVODRequest.getTargetOutput(func(o UploadVODRequestOutputLocationOutputs) string {
+		return o.HLS
+	})
 	hlsTargetURL, err := toTargetURL(hlsTargetOutput, requestID)
 	if err != nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
@@ -242,13 +231,22 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	if err != nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 	}
-	fragMp4TargetOutput := uploadVODRequest.getTargetFragMp4Output()
+	fragMp4TargetOutput := uploadVODRequest.getTargetOutput(func(o UploadVODRequestOutputLocationOutputs) string {
+		return o.FragmentedMP4
+	})
 	fragMp4TargetURL, err := toTargetURL(fragMp4TargetOutput, requestID)
 	if err != nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 	}
 	if hlsTargetURL == nil && mp4TargetURL == nil && fragMp4TargetURL == nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", errors2.New("none of output enabled: hls or mp4 or f-mp4"))
+	}
+	thumbsTargetOutput := uploadVODRequest.getTargetOutput(func(o UploadVODRequestOutputLocationOutputs) string {
+		return o.Thumbnails
+	})
+	thumbsTargetURL, err := toTargetURL(thumbsTargetOutput, requestID)
+	if err != nil {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 	}
 
 	// Verify pipeline strategy
@@ -267,6 +265,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		Mp4TargetURL:          mp4TargetURL,
 		FragMp4TargetURL:      fragMp4TargetURL,
 		ClipTargetURL:         clipTargetURL,
+		ThumbnailsTargetURL:   thumbsTargetURL,
 		Mp4OnlyShort:          mp4OnlyShort,
 		AccessToken:           uploadVODRequest.AccessToken,
 		TranscodeAPIUrl:       uploadVODRequest.TranscodeAPIUrl,
