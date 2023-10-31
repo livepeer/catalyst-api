@@ -15,6 +15,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/config"
+	catErrs "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/pquerna/cachecontrol/cacheobject"
 )
@@ -47,8 +48,6 @@ type GateClient struct {
 	gateURL string
 }
 
-const UserNewTrigger = "USER_NEW"
-
 func NewAccessControlHandlersCollection(cli config.Cli) *AccessControlHandlersCollection {
 	return &AccessControlHandlersCollection{
 		cache: make(map[string]map[string]*PlaybackAccessControlEntry),
@@ -78,7 +77,6 @@ func (ac *AccessControlHandlersCollection) HandleUserNew(ctx context.Context, pa
 }
 
 func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, payload *misttriggers.UserNewPayload) (bool, error) {
-
 	acReq := PlaybackAccessControlRequest{Stream: playbackID, Type: "accessKey"}
 	cacheKey := ""
 	accessKey := payload.URL.Query().Get("accessKey")
@@ -99,7 +97,7 @@ func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, paylo
 	} else if jwt != "" {
 		pub, err := extractKeyFromJwt(jwt, acReq.Stream)
 		if err != nil {
-			return false, fmt.Errorf("failed to extract key from jwt: %w", err)
+			return false, fmt.Errorf("failed to extract key from jwt: %w %w", catErrs.InvalidJWT, err)
 		}
 		acReq.Pub = pub
 

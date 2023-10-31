@@ -39,7 +39,11 @@ func (h *GatingHandler) GatingCheck(next httprouter.Handle) httprouter.Handle {
 		playbackAccessControlAllowed, err := h.AccessControl.IsAuthorized(playbackID, &payload)
 		if err != nil {
 			log.LogError(requestID, "unable to get playback access control info", err, "playbackID", playbackID, "accessKey", accessKey, "jwt", jwt)
-			catErrs.WriteHTTPInternalServerError(w, "error authorizing playback request", nil)
+			if errors.Is(err, catErrs.InvalidJWT) {
+				deny(params.ByName("file"), w)
+			} else {
+				catErrs.WriteHTTPInternalServerError(w, "error authorizing playback request", nil)
+			}
 			return
 		}
 
