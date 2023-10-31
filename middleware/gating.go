@@ -8,6 +8,7 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	catErrs "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/handlers/accesscontrol"
+	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/playback"
 	"github.com/livepeer/catalyst-api/requests"
@@ -31,7 +32,11 @@ func (h *GatingHandler) GatingCheck(next httprouter.Handle) httprouter.Handle {
 		accessKey := req.URL.Query().Get("accessKey")
 		jwt := req.URL.Query().Get("jwt")
 
-		playbackAccessControlAllowed, err := h.AccessControl.IsAuthorized(playbackID, req.URL)
+		payload := misttriggers.UserNewPayload{
+			URL: req.URL,
+		}
+
+		playbackAccessControlAllowed, err := h.AccessControl.IsAuthorized(playbackID, &payload)
 		if err != nil {
 			log.LogError(requestID, "unable to get playback access control info", err, "playbackID", playbackID, "accessKey", accessKey, "jwt", jwt)
 			catErrs.WriteHTTPInternalServerError(w, "error authorizing playback request", nil)

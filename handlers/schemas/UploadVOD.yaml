@@ -16,6 +16,8 @@ properties:
     type: "string"
   target_segment_size_secs:
     type: "integer"
+  c2pa:
+    type: "boolean"
   encryption:
     type: "object"
     properties:
@@ -102,6 +104,8 @@ properties:
         height:
           type: "integer"
         bitrate:
+          type: "integer"
+        quality:
           type: "integer"
         fps:
           type: "integer"

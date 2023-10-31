@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -63,7 +62,7 @@ func NewAccessControlHandlersCollection(cli config.Cli) *AccessControlHandlersCo
 func (ac *AccessControlHandlersCollection) HandleUserNew(ctx context.Context, payload *misttriggers.UserNewPayload) (bool, error) {
 	playbackID := payload.StreamName[strings.Index(payload.StreamName, "+")+1:]
 
-	playbackAccessControlAllowed, err := ac.IsAuthorized(playbackID, payload.URL)
+	playbackAccessControlAllowed, err := ac.IsAuthorized(playbackID, payload)
 	if err != nil {
 		glog.Errorf("Unable to get playback access control info for playbackId=%v err=%s", playbackID, err.Error())
 		return false, err
@@ -78,11 +77,21 @@ func (ac *AccessControlHandlersCollection) HandleUserNew(ctx context.Context, pa
 	return false, nil
 }
 
-func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, reqURL *url.URL) (bool, error) {
+func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, payload *misttriggers.UserNewPayload) (bool, error) {
+
 	acReq := PlaybackAccessControlRequest{Stream: playbackID, Type: "accessKey"}
 	cacheKey := ""
-	accessKey := reqURL.Query().Get("accessKey")
-	jwt := reqURL.Query().Get("jwt")
+	accessKey := payload.URL.Query().Get("accessKey")
+	jwt := payload.URL.Query().Get("jwt")
+
+	if accessKey == "" {
+		accessKey = payload.AccessKey
+	}
+
+	if jwt == "" {
+		jwt = payload.JWT
+	}
+
 	if accessKey != "" {
 		acReq.Type = "accessKey"
 		acReq.AccessKey = accessKey

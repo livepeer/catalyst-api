@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	c2pa2 "github.com/livepeer/catalyst-api/c2pa"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
@@ -46,6 +47,8 @@ type TranscodeSegmentRequest struct {
 
 	RequestID      string                                 `json:"-"`
 	ReportProgress func(clients.TranscodeStatus, float64) `json:"-"`
+	C2PA           *c2pa2.C2PA                            `json:"-"`
+	LocalSourceTmp string                                 `json:"-"`
 	GenerateMP4    bool
 	IsClip         bool
 }
@@ -233,6 +236,16 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 					log.Log(transcodeRequest.RequestID, "error transmuxing to regular mp4", "file", mp4OutputFileName, "err", err)
 					continue
 				}
+
+				// Add C2PA Signature
+				if transcodeRequest.C2PA != nil {
+					for _, f := range standardMp4OutputFiles {
+						if err := transcodeRequest.C2PA.SignFile(f, f, rendition, transcodeRequest.LocalSourceTmp); err != nil {
+							log.LogError(transcodeRequest.RequestID, "error signing C2PA manifest", err, "file", f)
+						}
+					}
+				}
+
 				// Upload the mp4 file
 				mp4Out, err := uploadMp4Files(mp4TargetUrlBase, standardMp4OutputFiles, rendition)
 				if err != nil {
