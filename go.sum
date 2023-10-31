@@ -415,8 +415,8 @@ github.com/libp2p/go-msgio v0.2.0 h1:W6shmB+FeynDrUVl2dgFQvzfBZcXiyqY4VmpQLu9FqU
 github.com/libp2p/go-nat v0.1.0 h1:MfVsH6DLcpa04Xr+p8hmVRG4juse0s3J8HyNWYHffXg=
 github.com/libp2p/go-netroute v0.2.0 h1:0FpsbsvuSnAhXFnCY0VLFbJOzaK0VnP0r1QT/o4nWRE=
 github.com/libp2p/go-openssl v0.1.0 h1:LBkKEcUv6vtZIQLVTegAil8jbNpJErQ9AnT+bWV+Ooo=
-github.com/livepeer/go-api-client v0.4.10 h1:WMWJ2guElf000TBcqQpbrC2zGGRlVlin/7w6lMvSGkY=
-github.com/livepeer/go-api-client v0.4.10/go.mod h1:Jdb+RI7JyzEZOHd1GUuKofwFDKMO/btTa80SdpUpYQw=
+github.com/livepeer/go-api-client v0.4.11 h1:I9hz+QihDvWFnI6A9EvnCzXKXFsZMGRKewnbGq6NzlQ=
+github.com/livepeer/go-api-client v0.4.11/go.mod h1:Jdb+RI7JyzEZOHd1GUuKofwFDKMO/btTa80SdpUpYQw=
 github.com/livepeer/go-tools v0.3.3 h1:Je2P+ovDIIlFWtlns5v+MmHtdIytsAJS6+XyeZ8sFJI=
 github.com/livepeer/go-tools v0.3.3/go.mod h1:qs31y68b3PQPmSr8nR8l5WQiIWI623z6pqOccqebjos=
 github.com/livepeer/joy4 v0.1.1 h1:Tz7gVcmvpG/nfUKHU+XJn6Qke/k32mTWMiH9qB0bhnM=
