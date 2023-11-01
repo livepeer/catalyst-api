@@ -80,4 +80,5 @@ var (
 	EmptyGatingParamError = errors.New("EmptyGatingParamError")
 	ObjectNotFoundError   = errors.New("ObjectNotFoundError")
 	UnauthorisedError     = errors.New("UnauthorisedError")
+	InvalidJWT            = errors.New("InvalidJWTError")
 )
