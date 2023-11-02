@@ -322,7 +322,10 @@ func createJobPayload(inputFile, hlsOutputFile, mp4OutputFile, role string, acce
 				{
 					AudioSelectors: map[string]*mediaconvert.AudioSelector{
 						"Audio Selector 1": {
+							Offset:           aws.Int64(0),
 							DefaultSelection: aws.String("DEFAULT"),
+							SelectorType:     aws.String("TRACK"),
+							ProgramSelection: aws.Int64(1),
 						},
 					},
 					FileInput:      aws.String(inputFile),

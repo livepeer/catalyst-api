@@ -7,7 +7,10 @@
     Inputs: [{
         AudioSelectors: {
           Audio Selector 1: {
-            DefaultSelection: "DEFAULT"
+            DefaultSelection: "DEFAULT",
+            Offset:           0,
+            ProgramSelection: 1,
+            SelectorType:     "TRACK",
           }
         },
         FileInput: "input",
