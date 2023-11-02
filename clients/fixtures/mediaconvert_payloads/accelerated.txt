@@ -8,9 +8,9 @@
         AudioSelectors: {
           Audio Selector 1: {
             DefaultSelection: "DEFAULT",
-            Offset:           0,
+            Offset: 0,
             ProgramSelection: 1,
-            SelectorType:     "TRACK",
+            SelectorType: "TRACK"
           }
         },
         FileInput: "input",
