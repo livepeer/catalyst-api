@@ -10,6 +10,9 @@ func AllowCORS() func(httprouter.Handle) httprouter.Handle {
 	return func(next httprouter.Handle) httprouter.Handle {
 		handler := func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 			originDomain := r.Header.Get("Origin")
+			if originDomain == "" {
+				originDomain = "*"
+			}
 			w.Header().Set("Access-Control-Allow-Origin", originDomain)
 			w.Header().Set("Access-Control-Allow-Headers", "*")
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
