@@ -39,7 +39,6 @@ func (c *CapacityMiddleware) HasCapacity(vodEngine *pipeline.Coordinator, next h
 				vodJobCount++
 			}
 		}
-		fmt.Println("XXX total Clip Jobs:", clipJobCount)
 
 		// Get this current request's job type (i.e. clipping or regular-vod request)
 		isClip, err := isClipRequest(r)
@@ -54,7 +53,6 @@ func (c *CapacityMiddleware) HasCapacity(vodEngine *pipeline.Coordinator, next h
 
 			if clipJobCount+int(inFlightClipReqs) >= config.MaxInFlightClipJobs {
 				w.WriteHeader(http.StatusTooManyRequests)
-				fmt.Println("XXX: too many clips in progress")
 				return
 			}
 		} else {
@@ -97,7 +95,6 @@ func isClipRequest(r *http.Request) (bool, error) {
 
 	// Check if current request is a clipping request
 	if b.ClipStrategy.PlaybackID != "" {
-		fmt.Println("XXX: THIS IS A CLIP")
 		return true, nil
 	}
 	return false, nil
