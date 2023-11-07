@@ -24,10 +24,11 @@ const DefaultSegmentSizeSecs = 10
 // Maximum segment size to allow people to override to
 const MaxSegmentSizeSecs = 20
 
-// Somewhat arbitrary and conservative number of maximum Catalyst VOD jobs in the system
-// at one time. We can look at more sophisticated strategies for calculating capacity in
-// the future.
+// Separate limits are set for the the maximum number of regular VOD jobs and clipping
+// VOD jobs. The limits are somewhat arbitrary and will need to be tweaked based on
+// requirements.
 var MaxInFlightJobs int = 8
+var MaxInFlightClipJobs int = 20
 
 // How long to try writing a single segment to storage for before giving up
 const SEGMENT_WRITE_TIMEOUT = 5 * time.Minute

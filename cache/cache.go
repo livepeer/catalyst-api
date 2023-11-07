@@ -32,6 +32,16 @@ func (c *Cache[T]) Get(streamName string) T {
 	return zero
 }
 
+func (c *Cache[T]) GetJobs() []T {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	vals := make([]T, 0, len(c.cache))
+	for _, info := range c.cache {
+		vals = append(vals, info)
+	}
+	return vals
+}
+
 func (c *Cache[T]) GetKeys() []string {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
