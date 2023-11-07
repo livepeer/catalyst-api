@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"github.com/livepeer/catalyst-api/thumbnails"
 	"net/url"
 	"os"
 	"path"
@@ -75,6 +76,13 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		f.sendSourcePlayback(job)
 	}
 	job.ReportProgress(clients.TranscodeStatusPreparingCompleted, 1)
+
+	if job.ThumbnailsTargetURL != nil {
+		err := thumbnails.GenerateThumbs(job.RequestID, job.SegmentingTargetURL, job.ThumbnailsTargetURL)
+		if err != nil {
+			log.LogError(job.RequestID, "generate thumbs failed", err, "in", job.SegmentingTargetURL, "out", job.ThumbnailsTargetURL)
+		}
+	}
 
 	// Transcode Beginning
 	log.Log(job.RequestID, "Beginning transcoding via FFMPEG/Livepeer pipeline")

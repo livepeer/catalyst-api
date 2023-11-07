@@ -24,7 +24,6 @@ import (
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
-	"github.com/livepeer/catalyst-api/thumbnails"
 	"github.com/livepeer/catalyst-api/video"
 )
 
@@ -331,13 +330,6 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 
 		if si.GenerateMP4 {
 			log.Log(si.RequestID, "MP4s will be generated", "duration", si.InputFileInfo.Duration)
-		}
-
-		if si.ThumbnailsTargetURL != nil {
-			err = thumbnails.GenerateThumbs(osTransferURL, si.ThumbnailsTargetURL, si.InputFileInfo)
-			if err != nil {
-				log.LogError(si.RequestID, "generate thumbs failed", err, "in", osTransferURL, "out", si.ThumbnailsTargetURL)
-			}
 		}
 
 		c.startUploadJob(si)
