@@ -87,7 +87,7 @@ func (c *metricsCollector) collectMetrics(ctx context.Context, mistState clients
 				return
 			}
 
-			if _, err := c.lapi.SetActive(info.stream.ID, true, info.startedAt); err != nil {
+			if err := c.lapi.Heartbeat(info.stream.ID); err != nil {
 				glog.Errorf("Error updating stream last seen. err=%q streamId=%q", err, info.stream.ID)
 				return
 			}
