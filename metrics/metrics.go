@@ -34,6 +34,7 @@ type CatalystAPIMetrics struct {
 	SerfEventBufferSize             prometheus.Gauge
 	AccessControlRequestCount       *prometheus.CounterVec
 	AccessControlRequestDurationSec *prometheus.SummaryVec
+	ImageRequestDurationSec         *prometheus.SummaryVec // TODO
 
 	JobsInFlight         prometheus.Gauge
 	HTTPRequestsInFlight prometheus.Gauge
