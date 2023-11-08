@@ -26,6 +26,7 @@ func GenerateThumbs(requestID, input string, output *url.URL) error {
 	if err != nil {
 		return err
 	}
+	// download and parse the manifest
 	var rc io.ReadCloser
 	err = backoff.Retry(func() error {
 		rc, err = clients.GetFile(context.Background(), requestID, input, nil)
@@ -65,6 +66,7 @@ func GenerateThumbs(requestID, input string, output *url.URL) error {
 		return err
 	}
 	var currentTime time.Time
+	// loop through each segment, generate a thumbnail image and upload it to storage
 	for _, segment := range mediaPlaylist.GetAllSegments() {
 		thumbOut, err := processSegment(requestID, inputURL, segment, tempDir, outputLocation)
 		if err != nil {
@@ -94,6 +96,7 @@ func processSegment(requestID string, inputURL *url.URL, segment *m3u8.MediaSegm
 		rc  io.ReadCloser
 		err error
 	)
+	// download segment
 	err = backoff.Retry(func() error {
 		rc, err = clients.GetFile(context.Background(), requestID, segURL.String(), nil)
 		return err
@@ -112,6 +115,7 @@ func processSegment(requestID string, inputURL *url.URL, segment *m3u8.MediaSegm
 		return "", fmt.Errorf("error saving segment %s: %w", segURL, err)
 	}
 
+	// generate thumbnail
 	thumbOut := path.Join(tempDir, fmt.Sprintf("keyframes_%d.jpg", segment.SeqId))
 	var ffmpegErr bytes.Buffer
 	err = ffmpeg.
@@ -133,6 +137,7 @@ func processSegment(requestID string, inputURL *url.URL, segment *m3u8.MediaSegm
 		return "", fmt.Errorf("failed to remove temp file %s: %w", segURL, err)
 	}
 
+	// upload thumbnail to storage
 	fileReader, err := os.Open(thumbOut)
 	if err != nil {
 		return "", err
