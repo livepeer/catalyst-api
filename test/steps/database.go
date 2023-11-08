@@ -45,15 +45,49 @@ func (s *StepContext) StartDatabase() error {
 	if err != nil {
 		return err
 	}
+
+	// Create vod table
+	_, err = metricsDB.Exec(`
+		CREATE TABLE vod_completed (
+			timestamp                bigint,
+			request_id               text,
+			job_duration             double precision,
+			source_segment_count     integer,
+			transcoded_segment_count integer,
+			source_bytes_count       integer,
+			source_duration          double precision,
+			source_codec_video       text,
+			source_codec_audio       text,
+			pipeline                 text,
+			catalyst_region          text,
+			state                    text,
+			profiles_count           integer,
+			started_at               bigint,
+			finished_at              bigint,
+			source_url               text,
+			target_url               text,
+			in_fallback_mode         boolean,
+			external_id              text,
+			source_playback_at       bigint,
+			download_done_at         bigint,
+			segmenting_done_at       bigint,
+			transcoding_done_at      bigint,
+			is_clip                  boolean,
+			is_thumbs                boolean
+		);
+	`)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-func (s *StepContext) CheckDatabase(keyValues *godog.Table) error {
+func (s *StepContext) CheckDatabase(table string, keyValues *godog.Table) error {
 	metricsDB, err := sql.Open("postgres", DB_CONNECTION_STRING)
 	if err != nil {
 		return err
 	}
-	queryRows, err := metricsDB.Query("SELECT * FROM user_end_trigger")
+	queryRows, err := metricsDB.Query(fmt.Sprintf("SELECT * FROM %s", table))
 	if err != nil {
 		return err
 	}
@@ -108,6 +142,10 @@ func (s *StepContext) CheckDatabase(keyValues *godog.Table) error {
 			actualValueString = actualValueS
 		} else if actualValueI, ok := actualValue.(int64); ok {
 			actualValueString = strconv.Itoa(int(actualValueI))
+		} else if actualValueB, ok := actualValue.(bool); ok {
+			actualValueString = strconv.FormatBool(actualValueB)
+		} else if actualValueF, ok := actualValue.(float64); ok {
+			actualValueString = strconv.FormatFloat(actualValueF, 'f', -1, 64)
 		} else if actualValue == nil {
 			return fmt.Errorf("field %s not found in database", key)
 		} else {
