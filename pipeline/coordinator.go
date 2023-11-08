@@ -665,7 +665,7 @@ func (c *Coordinator) sendDBMetrics(job *JobInfo, out *HandlerOutput) {
                             "segmenting_done_at",
                             "transcoding_done_at",
                             "is_clip",
-                            "is_thumbs",
+                            "is_thumbs"
                             ) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)`
 	_, err := c.MetricsDB.Exec(
 		insertDynStmt,
