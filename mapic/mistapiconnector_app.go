@@ -196,9 +196,9 @@ func (mc *mac) handleStreamBuffer(ctx context.Context, payload *misttriggers.Str
 	}
 	if info, ok := mc.getStreamInfoLogged(playbackID); ok {
 		glog.Infof("Setting stream's manifestID=%s playbackID=%s active status to %v", info.id, playbackID, isActive)
-		_, err := mc.lapi.SetActive(info.id, isActive, info.startedAt)
-		if err != nil {
-			glog.Error(err)
+		ok, err := mc.lapi.SetActive(info.id, isActive, info.startedAt)
+		if !ok || err != nil {
+			glog.Errorf("Error calling setactive for stream's manifestID=%s playbackID=%s err=%v", info.id, playbackID, err)
 		}
 		mc.emitStreamStateEvent(info.stream, data.StreamState{Active: isActive})
 		if isActive {
