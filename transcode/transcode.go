@@ -193,14 +193,14 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 		var concatFiles []string
 		for rendition, segments := range renditionList.RenditionSegmentTable {
-			// a. create folder to hold transmux-ed files in local storage temporarily
+			// Create folder to hold transmux-ed files in local storage temporarily
 			err := os.MkdirAll(TransmuxStorageDir, 0700)
 			if err != nil && !os.IsExist(err) {
 				log.Log(transcodeRequest.RequestID, "failed to create temp dir for transmuxing", "dir", TransmuxStorageDir, "err", err)
 				return outputs, segmentsCount, err
 			}
 
-			// b. create a single .ts file for a given rendition by concatenating all segments in order
+			// Create a single .ts file for a given rendition by concatenating all segments in order
 			if rendition == "low-bitrate" {
 				// skip mp4 generation for low-bitrate profile
 				continue
@@ -208,13 +208,20 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			concatTsFileName := filepath.Join(TransmuxStorageDir, transcodeRequest.RequestID+"_"+rendition+".ts")
 			concatFiles = append(concatFiles, concatTsFileName)
 			defer os.Remove(concatTsFileName)
-			totalBytes, err := video.ConcatTS(concatTsFileName, segments)
+			// For now, use the stream based concat for clipping only and file based concat for everything else.
+			// Eventually, all mp4 generation can be moved to stream based concat once proven effective.
+			var totalBytes int64
+			if transcodeRequest.IsClip {
+				totalBytes, err = video.ConcatTS(concatTsFileName, segments, true)
+			} else {
+				totalBytes, err = video.ConcatTS(concatTsFileName, segments, false)
+			}
 			if err != nil {
 				log.Log(transcodeRequest.RequestID, "error concatenating .ts", "file", concatTsFileName, "err", err)
 				continue
 			}
 
-			// c. Verify the total bytes written for the single .ts file for a given rendition matches the total # of bytes we received from T
+			// Verify the total bytes written for the single .ts file for a given rendition matches the total # of bytes we received from T
 			renditionIndex := getProfileIndex(transcodeProfiles, rendition)
 			var rendBytesWritten int64 = -1
 			for _, v := range transcodedStats {
@@ -227,7 +234,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				break
 			}
 
-			// d. Mux the .ts file to generate either a regular MP4 (w/ faststart) or fMP4 packaged with HLS/DASH
+			// Mux the .ts file to generate either a regular MP4 (w/ faststart) or fMP4 packaged with HLS/DASH
 			if enableStandardMp4 {
 				// Transmux the single .ts file into an mp4 file
 				mp4OutputFileName := concatTsFileName[:len(concatTsFileName)-len(filepath.Ext(concatTsFileName))] + ".mp4"

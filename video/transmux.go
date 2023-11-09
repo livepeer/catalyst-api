@@ -1,12 +1,14 @@
 package video
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	ffmpeg "github.com/u2takey/ffmpeg-go"
@@ -95,21 +97,88 @@ func MuxTStoFMP4(fmp4ManifestOutputFile string, inputs ...string) error {
 	return nil
 }
 
-func ConcatTS(tsFileName string, segmentsList *TSegmentList) (int64, error) {
+func ConcatTS(tsFileName string, segmentsList *TSegmentList, useStreamBasedConcat bool) (int64, error) {
 	var totalBytes int64
-	// 1. create a .ts file for a given rendition
-	tsFile, err := os.Create(tsFileName)
-	if err != nil {
-		return totalBytes, fmt.Errorf("error creating file (%s) err: %w", tsFileName, err)
-	}
-	defer tsFile.Close()
-	// 2. for a given rendition, write all segment indices in ascending order to the single .ts file
-	for _, k := range segmentsList.GetSortedSegments() {
-		segBytes, err := tsFile.Write(segmentsList.SegmentDataTable[k])
+	if !useStreamBasedConcat {
+		// Create a .ts file for a given rendition
+		tsFile, err := os.Create(tsFileName)
 		if err != nil {
-			return totalBytes, fmt.Errorf("error writing segment %d err: %w", k, err)
+			return totalBytes, fmt.Errorf("error creating file (%s) err: %w", tsFileName, err)
 		}
-		totalBytes = totalBytes + int64(segBytes)
+		defer tsFile.Close()
+		// For a given rendition, write all segment indices in ascending order to the single .ts file
+		for _, k := range segmentsList.GetSortedSegments() {
+			segBytes, err := tsFile.Write(segmentsList.SegmentDataTable[k])
+			if err != nil {
+				return totalBytes, fmt.Errorf("error writing segment %d err: %w", k, err)
+			}
+			totalBytes = totalBytes + int64(segBytes)
+		}
+		return totalBytes, nil
+	} else {
+		// Strip the '.ts' from filename
+		fileBaseWithoutExt := tsFileName[:len(tsFileName)-len(".ts")]
+
+		// Create a text file containing filenames of the segments
+		segmentListTxtFileName := fileBaseWithoutExt + ".txt"
+		segmentListTxtFile, err := os.Create(segmentListTxtFileName)
+		if err != nil {
+			return totalBytes, fmt.Errorf("error creating  segment text file (%s) err: %w", segmentListTxtFileName, err)
+		}
+		defer segmentListTxtFile.Close()
+		defer os.Remove(segmentListTxtFileName)
+		w := bufio.NewWriter(segmentListTxtFile)
+
+		// Write each segment to disk and add segment filename to the text file
+		for segName, segData := range segmentsList.GetSortedSegments() {
+			// Open a new file to write each segment to disk
+			segmentFileName := fileBaseWithoutExt + "_" + strconv.Itoa(segName) + ".ts"
+			segmentFile, err := os.Create(segmentFileName)
+			if err != nil {
+				return totalBytes, fmt.Errorf("error creating individual segment file (%s) err: %w", segmentFileName, err)
+			}
+			defer segmentFile.Close()
+			//defer os.Remove(segmentFileName)
+			// Write the segment data to disk
+			segBytes, err := segmentFile.Write(segmentsList.SegmentDataTable[segData])
+			if err != nil {
+				return totalBytes, fmt.Errorf("error writing segment %d err: %w", segName, err)
+			}
+			totalBytes = totalBytes + int64(segBytes)
+			// Add filename to the text file
+			line := fmt.Sprintf("file '%s'\n", segmentFileName)
+			if _, err = w.WriteString(line); err != nil {
+				return totalBytes, fmt.Errorf("error writing segment %d to text file err: %w", segName, err)
+			}
+			// Flush to make sure all buffered operations are applied
+			if err = w.Flush(); err != nil {
+				return totalBytes, fmt.Errorf("error flushing text file %s err: %w", segmentFileName, err)
+			}
+		}
+		// Create a .ts file for a given rendition
+		tsFile, err := os.Create(tsFileName)
+		if err != nil {
+			return totalBytes, fmt.Errorf("error creating file (%s) err: %w", tsFileName, err)
+		}
+		defer tsFile.Close()
+		// Transmux the individual .ts files into a combined single ts file using stream based concatenation
+		err = ffmpeg.Input(segmentListTxtFileName, ffmpeg.KwArgs{
+			"f":    "concat", // Use stream based concatenation (instead of file based concatenation)
+			"safe": "0"}).    // Must be 0 since relative paths to segments are used in segmentListTxtFileName
+			Output(tsFileName, ffmpeg.KwArgs{
+				"c": "copy", // Don't accidentally transcode
+			}).
+			OverWriteOutput().ErrorToStdOut().Run()
+		if err != nil {
+			return totalBytes, fmt.Errorf("failed to transmux multiple ts files from %s into a ts file: %w", segmentListTxtFileName, err)
+		}
+		// Verify the ts output file was created
+		_, err = os.Stat(tsFileName)
+		if err != nil {
+			return totalBytes, fmt.Errorf("transmux error: failed to stat .ts media file: %w", err)
+		}
+
+		return totalBytes, nil
 	}
-	return totalBytes, nil
+
 }
