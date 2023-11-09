@@ -53,10 +53,6 @@ func GenerateThumbs(requestID, input string, output *url.URL) error {
 		return fmt.Errorf("failed to make temp dir: %w", err)
 	}
 	defer os.RemoveAll(tempDir)
-	err = os.Mkdir(path.Join(tempDir, "segs"), 0755)
-	if err != nil {
-		return fmt.Errorf("failed to make segs dir: %w", err)
-	}
 
 	const layout = "15:04:05.000"
 	outputLocation := output.JoinPath("thumbnails").String()
@@ -68,7 +64,7 @@ func GenerateThumbs(requestID, input string, output *url.URL) error {
 	var currentTime time.Time
 	// loop through each segment, generate a thumbnail image and upload it to storage
 	for _, segment := range mediaPlaylist.GetAllSegments() {
-		thumbOut, err := processSegment(requestID, inputURL, segment, tempDir, outputLocation)
+		thumbOut, err := processSegment(inputURL, segment, tempDir, outputLocation)
 		if err != nil {
 			return err
 		}
@@ -90,51 +86,32 @@ func GenerateThumbs(requestID, input string, output *url.URL) error {
 	return nil
 }
 
-func processSegment(requestID string, inputURL *url.URL, segment *m3u8.MediaSegment, tempDir string, outputLocation string) (string, error) {
+func processSegment(inputURL *url.URL, segment *m3u8.MediaSegment, tempDir string, outputLocation string) (string, error) {
 	segURL := inputURL.JoinPath("..", segment.URI)
-	var (
-		rc  io.ReadCloser
-		err error
-	)
-	// download segment
-	err = backoff.Retry(func() error {
-		rc, err = clients.GetFile(context.Background(), requestID, segURL.String(), nil)
-		return err
-	}, clients.DownloadRetryBackoff())
+	signed, err := clients.SignURL(segURL)
 	if err != nil {
-		return "", fmt.Errorf("error downloading segment %s: %w", segURL, err)
-	}
-	bs, err := io.ReadAll(rc)
-	if err != nil {
-		return "", fmt.Errorf("error reading segment %s: %w", segURL, err)
-	}
-
-	tmpSegFile := path.Join(tempDir, "segs", path.Base(segment.URI))
-	err = os.WriteFile(tmpSegFile, bs, 0644)
-	if err != nil {
-		return "", fmt.Errorf("error saving segment %s: %w", segURL, err)
+		return "", fmt.Errorf("error signing segment url %s: %w", segURL, err)
 	}
 
 	// generate thumbnail
-	thumbOut := path.Join(tempDir, fmt.Sprintf("keyframes_%d.jpg", segment.SeqId))
 	var ffmpegErr bytes.Buffer
-	err = ffmpeg.
-		Input(tmpSegFile, ffmpeg.KwArgs{"skip_frame": "nokey"}). // only extract key frames
-		Output(
-			thumbOut,
-			ffmpeg.KwArgs{
-				"ss":      "00:00:00",
-				"vframes": "1",
-				// video filter to resize
-				"vf": fmt.Sprintf("scale=%s:force_original_aspect_ratio=decrease", resolution),
-			},
-		).OverWriteOutput().WithErrorOutput(&ffmpegErr).Run()
+	thumbOut := path.Join(tempDir, fmt.Sprintf("keyframes_%d.jpg", segment.SeqId))
+	err = backoff.Retry(func() error {
+		ffmpegErr = bytes.Buffer{}
+		return ffmpeg.
+			Input(signed, ffmpeg.KwArgs{"skip_frame": "nokey"}). // only extract key frames
+			Output(
+				thumbOut,
+				ffmpeg.KwArgs{
+					"ss":      "00:00:00",
+					"vframes": "1",
+					// video filter to resize
+					"vf": fmt.Sprintf("scale=%s:force_original_aspect_ratio=decrease", resolution),
+				},
+			).OverWriteOutput().WithErrorOutput(&ffmpegErr).Run()
+	}, clients.DownloadRetryBackoff())
 	if err != nil {
 		return "", fmt.Errorf("error running ffmpeg for thumbnails %s [%s]: %w", segURL, ffmpegErr.String(), err)
-	}
-	err = os.Remove(tmpSegFile)
-	if err != nil {
-		return "", fmt.Errorf("failed to remove temp file %s: %w", segURL, err)
 	}
 
 	// upload thumbnail to storage
