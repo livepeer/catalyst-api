@@ -49,7 +49,7 @@ keyframes_2.jpg
 		require.NoError(t, err)
 		require.Equal(t, "image2", data.Format.FormatName)
 		require.NotNil(t, data.FirstVideoStream())
-		require.Equal(t, 320, data.FirstVideoStream().Width)
-		require.Equal(t, 180, data.FirstVideoStream().Height)
+		require.Equal(t, 853, data.FirstVideoStream().Width)
+		require.Equal(t, 480, data.FirstVideoStream().Height)
 	}
 }
