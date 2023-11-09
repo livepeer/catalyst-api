@@ -17,7 +17,7 @@ import (
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
-const resolution = "320:240"
+const resolution = "854:480"
 
 func GenerateThumbs(requestID, input string, output *url.URL) error {
 	inputURL, err := url.Parse(input)
