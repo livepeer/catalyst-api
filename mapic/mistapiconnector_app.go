@@ -189,27 +189,27 @@ func (mc *mac) NukeStream(playbackID string) {
 }
 
 func (mc *mac) handleStreamBuffer(ctx context.Context, payload *misttriggers.StreamBufferPayload) error {
-	isActive := !payload.IsEmpty()
+	// We only care about connections ending
+	if !payload.IsEmpty() {
+		return nil
+	}
+
 	playbackID := payload.StreamName
 	if mc.baseStreamName != "" && strings.Contains(playbackID, "+") {
 		playbackID = strings.Split(playbackID, "+")[1]
 	}
 	if info, ok := mc.getStreamInfoLogged(playbackID); ok {
-		glog.Infof("Setting stream's manifestID=%s playbackID=%s active status to %v", info.id, playbackID, isActive)
-		ok, err := mc.lapi.SetActive(info.id, isActive, info.startedAt)
-		if !ok || err != nil {
-			glog.Errorf("Error calling setactive for stream's manifestID=%s playbackID=%s err=%v", info.id, playbackID, err)
+		glog.Infof("Setting stream's manifestID=%s playbackID=%s active status to false", info.id, playbackID)
+		_, err := mc.lapi.SetActive(info.id, false, info.startedAt)
+		if err != nil {
+			glog.Error(err)
 		}
-		mc.emitStreamStateEvent(info.stream, data.StreamState{Active: isActive})
-		if isActive {
-			metrics.StartStream()
-		} else {
-			info.mu.Lock()
-			info.stopped = true
-			info.mu.Unlock()
-			mc.removeInfoDelayed(playbackID, info.done)
-			metrics.StopStream(true)
-		}
+		mc.emitStreamStateEvent(info.stream, data.StreamState{Active: false})
+		info.mu.Lock()
+		info.stopped = true
+		info.mu.Unlock()
+		mc.removeInfoDelayed(playbackID, info.done)
+		metrics.StopStream(true)
 	}
 
 	return nil
@@ -263,9 +263,19 @@ func (mc *mac) handlePushRewrite(ctx context.Context, payload *misttriggers.Push
 		} else {
 			responseName = mc.wildcardPlaybackID(stream)
 		}
+		ok, err := mc.lapi.SetActive(stream.ID, true, info.startedAt)
+		if err != nil {
+			return "", fmt.Errorf("Error calling SetActive err=%s", err)
+		} else if !ok {
+			glog.Infof("Stream id=%s streamKey=%s playbackId=%s forbidden by webhook, rejecting", stream.ID, stream.StreamKey, stream.PlaybackID)
+			mc.removeInfo(stream.PlaybackID)
+			return "", nil
+		}
 	} else {
 		glog.Errorf("Shouldn't happen streamID=%s", stream.ID)
 	}
+	go mc.emitStreamStateEvent(stream, data.StreamState{Active: true})
+	metrics.StartStream()
 	glog.Infof("Responded with '%s'", responseName)
 	return responseName, nil
 }
