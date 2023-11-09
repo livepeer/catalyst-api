@@ -4,30 +4,24 @@ import (
 	"context"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"testing"
 
-	"github.com/livepeer/catalyst-api/video"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/vansante/go-ffprobe.v2"
 )
 
 func TestGenerateThumbs(t *testing.T) {
-	u, err := url.Parse("../test/fixtures/tiny.mp4")
-	require.NoError(t, err)
-
 	outDir, err := os.MkdirTemp(os.TempDir(), "thumbs*")
 	require.NoError(t, err)
 	defer os.RemoveAll(outDir)
 
 	out, err := url.Parse(outDir)
 	require.NoError(t, err)
-	err = GenerateThumbs(u, out, video.InputVideo{
-		Tracks: []video.InputTrack{{
-			Type:       video.TrackTypeVideo,
-			VideoTrack: video.VideoTrack{FPS: 30},
-		}},
-	})
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	err = GenerateThumbs("req ID", path.Join(wd, "..", "test/fixtures/tiny.m3u8"), out)
 	require.NoError(t, err)
 
 	expectedVtt := `WEBVTT
@@ -35,10 +29,10 @@ func TestGenerateThumbs(t *testing.T) {
 keyframes_0.jpg
 
 00:00:10.000 --> 00:00:20.000
-keyframes_300.jpg
+keyframes_1.jpg
 
 00:00:20.000 --> 00:00:30.000
-keyframes_600.jpg
+keyframes_2.jpg
 
 `
 
