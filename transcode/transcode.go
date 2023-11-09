@@ -318,7 +318,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			// Populate OutputVideo structs with results from probing step to send back in final response to Studio
 			mp4Out, err = video.PopulateOutput(transcodeRequest.RequestID, video.Probe{}, probeURL, mp4Out)
 			if err != nil {
-				return outputs, segmentsCount, fmt.Errorf("failed to populate output for %v: %s", mp4Out, err)
+				return outputs, segmentsCount, fmt.Errorf("failed to populate output for %s: %w", probeURL, err)
 			}
 			mp4Outputs = append(mp4Outputs, mp4Out)
 		}

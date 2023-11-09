@@ -12,6 +12,7 @@ Feature: VOD Streaming
     And Mediaconvert is running at "localhost:11111"
     And a callback server is running at "localhost:3333"
     And ffmpeg is available
+    And a Postgres database is running
 
   Scenario: HTTP API Startup
     When I query the internal "/ok" endpoint
@@ -44,6 +45,19 @@ Feature: VOD Streaming
     And "4" transcoded segments and manifests have been written to disk for profiles "270p0,low-bitrate" within "30" seconds
     And a source copy <source_copy> been written to disk
     And I receive a "success" callback within "30" seconds
+    And a row is written to the "vod_completed" database table containing the following values
+      | column                   | value           |
+      | in_fallback_mode         | false           |
+      | is_clip                  | false           |
+      | pipeline                 | catalyst_ffmpeg |
+      | profiles_count           | 2               |
+      | source_bytes_count       | 220062          |
+      | source_codec_audio       | aac             |
+      | source_codec_video       | h264            |
+      | source_duration          | 30000           |
+      | source_segment_count     | 4               |
+      | state                    | completed       |
+      | transcoded_segment_count | 4               |
 
     Examples:
       | payload                                                                         | source_copy |
@@ -60,6 +74,18 @@ Feature: VOD Streaming
     And "3" transcoded segments and manifests have been written to disk for profiles "270p0,low-bitrate" within "30" seconds
     And a source copy has not been written to disk
     And I receive a "success" callback within "30" seconds
+    And a row is written to the "vod_completed" database table containing the following values
+      | column                   | value           |
+      | in_fallback_mode         | false           |
+      | is_clip                  | false           |
+      | pipeline                 | catalyst_ffmpeg |
+      | profiles_count           | 2               |
+      | source_codec_audio       | aac             |
+      | source_codec_video       | h264            |
+      | source_duration          | 30000           |
+      | source_segment_count     | 3               |
+      | state                    | completed       |
+      | transcoded_segment_count | 3               |
 
     Examples:
       | payload                                                                     |
