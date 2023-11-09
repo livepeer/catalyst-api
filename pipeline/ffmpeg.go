@@ -78,10 +78,12 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	job.ReportProgress(clients.TranscodeStatusPreparingCompleted, 1)
 
 	if job.ThumbnailsTargetURL != nil {
-		err := thumbnails.GenerateThumbs(job.RequestID, job.SegmentingTargetURL, job.ThumbnailsTargetURL)
-		if err != nil {
-			log.LogError(job.RequestID, "generate thumbs failed", err, "in", job.SegmentingTargetURL, "out", job.ThumbnailsTargetURL)
-		}
+		go func() {
+			err := thumbnails.GenerateThumbs(job.RequestID, job.SegmentingTargetURL, job.ThumbnailsTargetURL)
+			if err != nil {
+				log.LogError(job.RequestID, "generate thumbs failed", err, "in", job.SegmentingTargetURL, "out", job.ThumbnailsTargetURL)
+			}
+		}()
 	}
 
 	// Transcode Beginning
