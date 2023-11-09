@@ -13,7 +13,6 @@ import (
 
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/clients"
-	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/go-tools/drivers"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
@@ -21,7 +20,6 @@ import (
 const resolution = "320:240"
 
 func GenerateThumbs(requestID, input string, output *url.URL) error {
-	log.Log(requestID, "generate thumbs start", "input", input)
 	inputURL, err := url.Parse(input)
 	if err != nil {
 		return err
@@ -82,7 +80,6 @@ func GenerateThumbs(requestID, input string, output *url.URL) error {
 	if err != nil {
 		return fmt.Errorf("failed to upload vtt: %w", err)
 	}
-	log.Log(requestID, "generate thumbs end", "input", input)
 	return nil
 }
 
