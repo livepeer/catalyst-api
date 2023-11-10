@@ -194,11 +194,12 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		var concatFiles []string
 		for rendition, segments := range renditionList.RenditionSegmentTable {
 			// Create folder to hold transmux-ed files in local storage temporarily
-			err := os.MkdirAll(TransmuxStorageDir, 0700)
+			TransmuxStorageDir, err := os.MkdirTemp(os.TempDir(), "transmux_stage_")
 			if err != nil && !os.IsExist(err) {
 				log.Log(transcodeRequest.RequestID, "failed to create temp dir for transmuxing", "dir", TransmuxStorageDir, "err", err)
 				return outputs, segmentsCount, err
 			}
+			defer os.RemoveAll(TransmuxStorageDir)
 
 			// Create a single .ts file for a given rendition by concatenating all segments in order
 			if rendition == "low-bitrate" {
@@ -208,6 +209,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			concatTsFileName := filepath.Join(TransmuxStorageDir, transcodeRequest.RequestID+"_"+rendition+".ts")
 			concatFiles = append(concatFiles, concatTsFileName)
 			defer os.Remove(concatTsFileName)
+
 			// For now, use the stream based concat for clipping only and file based concat for everything else.
 			// Eventually, all mp4 generation can be moved to stream based concat once proven effective.
 			var totalBytes int64
@@ -238,6 +240,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			if enableStandardMp4 {
 				// Transmux the single .ts file into an mp4 file
 				mp4OutputFileName := concatTsFileName[:len(concatTsFileName)-len(filepath.Ext(concatTsFileName))] + ".mp4"
+				defer os.Remove(mp4OutputFileName)
 				standardMp4OutputFiles, err := video.MuxTStoMP4(concatTsFileName, mp4OutputFileName)
 				if err != nil {
 					log.Log(transcodeRequest.RequestID, "error transmuxing to regular mp4", "file", mp4OutputFileName, "err", err)
