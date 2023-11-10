@@ -129,56 +129,73 @@ func ConcatTS(tsFileName string, segmentsList *TSegmentList, useStreamBasedConca
 		defer os.Remove(segmentListTxtFileName)
 		w := bufio.NewWriter(segmentListTxtFile)
 
+		// Save a list of segment filenames so that we can delete them once done
+		segmentFilenames := []string{}
+		defer func() {
+			for _, f := range segmentFilenames {
+				os.Remove(f)
+			}
+		}()
+
 		// Write each segment to disk and add segment filename to the text file
 		for segName, segData := range segmentsList.GetSortedSegments() {
 			// Open a new file to write each segment to disk
-			segmentFileName := fileBaseWithoutExt + "_" + strconv.Itoa(segName) + ".ts"
-			segmentFile, err := os.Create(segmentFileName)
+			segmentFilename := fileBaseWithoutExt + "_" + strconv.Itoa(segName) + ".ts"
+			segmentFile, err := os.Create(segmentFilename)
 			if err != nil {
-				return totalBytes, fmt.Errorf("error creating individual segment file (%s) err: %w", segmentFileName, err)
+				return totalBytes, fmt.Errorf("error creating individual segment file (%s) err: %w", segmentFilename, err)
 			}
 			defer segmentFile.Close()
-			//defer os.Remove(segmentFileName)
 			// Write the segment data to disk
 			segBytes, err := segmentFile.Write(segmentsList.SegmentDataTable[segData])
 			if err != nil {
 				return totalBytes, fmt.Errorf("error writing segment %d err: %w", segName, err)
 			}
+			segmentFilenames = append(segmentFilenames, segmentFilename)
 			totalBytes = totalBytes + int64(segBytes)
 			// Add filename to the text file
-			line := fmt.Sprintf("file '%s'\n", segmentFileName)
+			line := fmt.Sprintf("file '%s'\n", segmentFilename)
 			if _, err = w.WriteString(line); err != nil {
 				return totalBytes, fmt.Errorf("error writing segment %d to text file err: %w", segName, err)
 			}
 			// Flush to make sure all buffered operations are applied
 			if err = w.Flush(); err != nil {
-				return totalBytes, fmt.Errorf("error flushing text file %s err: %w", segmentFileName, err)
+				return totalBytes, fmt.Errorf("error flushing text file %s err: %w", segmentFilename, err)
 			}
 		}
-		// Create a .ts file for a given rendition
-		tsFile, err := os.Create(tsFileName)
+
+		// Use stream-based concatenation by reading segment files in text file
+		err = concatStreams(segmentListTxtFileName, tsFileName)
 		if err != nil {
-			return totalBytes, fmt.Errorf("error creating file (%s) err: %w", tsFileName, err)
-		}
-		defer tsFile.Close()
-		// Transmux the individual .ts files into a combined single ts file using stream based concatenation
-		err = ffmpeg.Input(segmentListTxtFileName, ffmpeg.KwArgs{
-			"f":    "concat", // Use stream based concatenation (instead of file based concatenation)
-			"safe": "0"}).    // Must be 0 since relative paths to segments are used in segmentListTxtFileName
-			Output(tsFileName, ffmpeg.KwArgs{
-				"c": "copy", // Don't accidentally transcode
-			}).
-			OverWriteOutput().ErrorToStdOut().Run()
-		if err != nil {
-			return totalBytes, fmt.Errorf("failed to transmux multiple ts files from %s into a ts file: %w", segmentListTxtFileName, err)
-		}
-		// Verify the ts output file was created
-		_, err = os.Stat(tsFileName)
-		if err != nil {
-			return totalBytes, fmt.Errorf("transmux error: failed to stat .ts media file: %w", err)
+			return totalBytes, fmt.Errorf("failed to stream-concat %s into a ts file: %w", segmentListTxtFileName, err)
 		}
 
 		return totalBytes, nil
 	}
+}
 
+func concatStreams(segmentList, outputTsFileName string) error {
+	// Create a .ts file for a given rendition
+	tsFile, err := os.Create(outputTsFileName)
+	if err != nil {
+		return fmt.Errorf("error creating file (%s) err: %w", outputTsFileName, err)
+	}
+	defer tsFile.Close()
+	// Transmux the individual .ts files into a combined single ts file using stream based concatenation
+	err = ffmpeg.Input(segmentList, ffmpeg.KwArgs{
+		"f":    "concat", // Use stream based concatenation (instead of file based concatenation)
+		"safe": "0"}).    // Must be 0 since relative paths to segments are used in segmentListTxtFileName
+		Output(outputTsFileName, ffmpeg.KwArgs{
+			"c": "copy", // Don't accidentally transcode
+		}).
+		OverWriteOutput().ErrorToStdOut().Run()
+	if err != nil {
+		return fmt.Errorf("failed to transmux multiple ts files from %s into a ts file: %w", segmentList, err)
+	}
+	// Verify the ts output file was created
+	_, err = os.Stat(outputTsFileName)
+	if err != nil {
+		return fmt.Errorf("transmux error: failed to stat .ts media file: %w", err)
+	}
+	return nil
 }
