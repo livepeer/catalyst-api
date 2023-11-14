@@ -20,6 +20,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/livepeer/catalyst-api/api"
 	"github.com/livepeer/catalyst-api/balancer"
+	mist_balancer "github.com/livepeer/catalyst-api/balancer/mist"
 	"github.com/livepeer/catalyst-api/c2pa"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
@@ -259,7 +260,7 @@ func main() {
 	}
 
 	// Start balancer
-	bal := balancer.NewBalancer(&balancer.Config{
+	bal := mist_balancer.NewBalancer(&balancer.Config{
 		Args:                     cli.BalancerArgs,
 		MistUtilLoadPort:         uint32(cli.MistLoadBalancerPort),
 		MistLoadBalancerTemplate: cli.MistLoadBalancerTemplate,

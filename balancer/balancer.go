@@ -4,13 +4,9 @@ package balancer
 
 import (
 	"context"
-	"time"
 
 	"github.com/livepeer/catalyst-api/cluster"
 )
-
-var mistUtilLoadSingleRequestTimeout = 15 * time.Second
-var mistUtilLoadLoopTimeout = 2 * time.Minute
 
 type Balancer interface {
 	Start(ctx context.Context) error

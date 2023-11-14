@@ -12,10 +12,11 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/livepeer/catalyst-api/balancer"
 	"github.com/stretchr/testify/require"
 )
 
-func start(t *testing.T) (*BalancerImpl, *mockMistUtilLoad) {
+func start(t *testing.T) (*MistBalancer, *mockMistUtilLoad) {
 	mul := newMockMistUtilLoad(t)
 
 	u, err := url.Parse(mul.Server.URL)
@@ -23,8 +24,8 @@ func start(t *testing.T) (*BalancerImpl, *mockMistUtilLoad) {
 	port, err := strconv.Atoi(u.Port())
 	require.NoError(t, err)
 
-	b := &BalancerImpl{
-		config: &Config{
+	b := &MistBalancer{
+		config: &balancer.Config{
 			MistHost: u.Hostname(),
 			MistPort: port,
 		},

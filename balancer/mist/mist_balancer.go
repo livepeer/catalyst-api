@@ -1,7 +1,5 @@
 package mist_balancer
 
-//go:generate mockgen -source=./balancer.go -destination=../mocks/balancer/balancer.go
-
 import (
 	"context"
 	"encoding/json"
