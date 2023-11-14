@@ -28,7 +28,6 @@ type Cli struct {
 	MistStreamSource          string
 	MistHardcodedBroadcasters string
 	MistScrapeMetrics         bool
-	MistSendAudio             string
 	MistBaseStreamName        string
 	MistLoadBalancerPort      int
 	MistLoadBalancerTemplate  string

@@ -23,9 +23,6 @@ import (
 )
 
 const streamPlaybackPrefix = "playback_"
-const audioAlways = "always"
-const audioRecord = "record"
-const audioEnabledStreamSuffix = "rec"
 const waitForPushError = 7 * time.Second
 const waitForPushErrorIncreased = 2 * time.Minute
 const keepStreamAfterEnd = 15 * time.Second
@@ -495,25 +492,7 @@ func (mc *mac) removeInfoLocked(playbackID string) {
 }
 
 func (mc *mac) wildcardPlaybackID(stream *api.Stream) string {
-	return mc.baseNameForStream(stream) + "+" + stream.PlaybackID
-}
-
-func (mc *mac) baseNameForStream(stream *api.Stream) string {
-	baseName := mc.baseStreamName
-	if mc.shouldEnableAudio(stream) {
-		baseName += audioEnabledStreamSuffix
-	}
-	return baseName
-}
-
-func (mc *mac) shouldEnableAudio(stream *api.Stream) bool {
-	audio := false
-	if mc.config.MistSendAudio == audioAlways {
-		audio = true
-	} else if mc.config.MistSendAudio == audioRecord {
-		audio = stream.Record
-	}
-	return audio
+	return mc.baseStreamName + "+" + stream.PlaybackID
 }
 
 // reconcileLoop calls reconcileStream, reconcileMultistream and processStats
