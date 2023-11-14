@@ -31,4 +31,5 @@ type StepContext struct {
 	GateAPIStatus               int
 	GateAPICallCount            int
 	GateAPICallType             interface{}
+	uploadRequest               UploadRequest
 }

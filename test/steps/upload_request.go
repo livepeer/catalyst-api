@@ -7,10 +7,11 @@ import (
 )
 
 type Output struct {
-	HLS       string `json:"hls,omitempty"`
-	MP4       string `json:"mp4,omitempty"`
-	FMP4      string `json:"fragmented_mp4,omitempty"`
-	SourceMp4 bool   `json:"source_mp4"`
+	HLS        string `json:"hls,omitempty"`
+	MP4        string `json:"mp4,omitempty"`
+	FMP4       string `json:"fragmented_mp4,omitempty"`
+	SourceMp4  bool   `json:"source_mp4"`
+	Thumbnails string `json:"thumbnails"`
 }
 
 type OutputLocation struct {
