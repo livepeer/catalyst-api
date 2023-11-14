@@ -354,7 +354,7 @@ func TestItCanGetStreamStats(t *testing.T) {
 		},
         "push_auto_list": [
           [
-            "videorec+",
+            "video+",
             "s3+https://***:***@storage.googleapis.com/target",
             null,
             null,
@@ -390,7 +390,7 @@ func TestItCanGetStreamStats(t *testing.T) {
 	require.Equal(t, ok, true)
 	require.Equal(t, streamStats.MediaTimeMs, int64(265458))
 	require.Len(t, status.PushAutoList, 1)
-	require.Equal(t, status.PushAutoList[0].Stream, "videorec+")
+	require.Equal(t, status.PushAutoList[0].Stream, "video+")
 	require.Equal(t, status.PushAutoList[0].Target, "s3+https://***:***@storage.googleapis.com/target")
 	require.Len(t, status.ActiveStreams, 1)
 	require.Equal(t, status.ActiveStreams["video+c447r0acdmqhhhpb"].Source, "push://")
@@ -526,7 +526,7 @@ func TestMistPushAutoUnmarshal(t *testing.T) {
 		{
 			mistPushAutoBody: `
 				[
-					"videorec+",
+					"video+",
 					"s3+https://***:***@storage.googleapis.com/lp-us-catalyst-recordings-monster/hls/$wildcard/$uuid/source/$segmentCounter.ts?m3u8=../output.m3u8&split=5&video=source&audio=source",
 					null,
 					null,
@@ -536,7 +536,7 @@ func TestMistPushAutoUnmarshal(t *testing.T) {
 					null
 				]
 			`,
-			wantStream: "videorec+",
+			wantStream: "video+",
 			wantTarget: "s3+https://***:***@storage.googleapis.com/lp-us-catalyst-recordings-monster/hls/$wildcard/$uuid/source/$segmentCounter.ts?m3u8=../output.m3u8&split=5&video=source&audio=source",
 		},
 		{
@@ -560,7 +560,7 @@ func TestMistPushAutoUnmarshal(t *testing.T) {
 		{
 			mistPushAutoBody: `
 				[
-					"videorec+",
+					"video+",
 					null,
 					null,
 					null,

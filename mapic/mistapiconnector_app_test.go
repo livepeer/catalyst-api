@@ -40,7 +40,7 @@ func TestReconcileMultistream(t *testing.T) {
 				// Ignore, PUSH used for recordings
 				{
 					ID:          1,
-					Stream:      "videorec+",
+					Stream:      "video+",
 					OriginalURL: "s3+https://***:***@storage.googleapis.com/lp-us-catalyst-recordings-monster/hls/$wildcard/$uuid/source/$segmentCounter.ts?m3u8=../output.m3u8&split=5&video=source&audio=source",
 				},
 				// Stop, does not exist in cached stream info
@@ -59,9 +59,9 @@ func TestReconcileMultistream(t *testing.T) {
 			PushAutoList: []*clients.MistPushAuto{
 				// Ignore, PUSH_AUTO used for recordings
 				{
-					Stream:       "videorec+",
+					Stream:       "video+",
 					Target:       "s3+https://***:***@storage.googleapis.com/lp-us-catalyst-recordings-monster/hls/$wildcard/$uuid/source/$segmentCounter.ts?m3u8=../output.m3u8&split=5&video=source&audio=source",
-					StreamParams: []interface{}{"videorec+", "s3+https://***:***@storage.googleapis.com/lp-us-catalyst-recordings-monster/hls/$wildcard/$uuid/source/$segmentCounter.ts?m3u8=../output.m3u8&split=5&video=source&audio=source", nil, nil, nil, nil, nil},
+					StreamParams: []interface{}{"video+", "s3+https://***:***@storage.googleapis.com/lp-us-catalyst-recordings-monster/hls/$wildcard/$uuid/source/$segmentCounter.ts?m3u8=../output.m3u8&split=5&video=source&audio=source", nil, nil, nil, nil, nil},
 				},
 				// Remove, does not exist in cached stream info
 				{
@@ -187,9 +187,7 @@ func TestReconcileStreams(t *testing.T) {
 	mc := mac{
 		mist:           mm,
 		baseStreamName: "video",
-		config: &config.Cli{
-			MistSendAudio: audioRecord,
-		},
+		config:         &config.Cli{},
 	}
 
 	mm.EXPECT().GetState().DoAndReturn(func() (clients.MistState, error) {
@@ -254,10 +252,10 @@ func TestReconcileStreams(t *testing.T) {
 	expectedNuked := []string{
 		// Deleted stream
 		"video+6736xac7u1hj36pa",
-		"videorec+6736xac7u1hj36pa",
+		"video+6736xac7u1hj36pa",
 		// Suspended stream
 		"video+abcdefghi",
-		"videorec+abcdefghi",
+		"video+abcdefghi",
 	}
 	require.ElementsMatch(t, expectedNuked, recodedNuked)
 }

@@ -84,7 +84,6 @@ func main() {
 	fs.StringVar(&cli.MistStreamSource, "mist-stream-source", "push://", "Stream source we should use for created Mist stream")
 	fs.StringVar(&cli.MistHardcodedBroadcasters, "mist-hardcoded-broadcasters", "", "Hardcoded broadcasters for use by MistProcLivepeer")
 	config.InvertedBoolFlag(fs, &cli.MistScrapeMetrics, "mist-scrape-metrics", true, "Scrape statistics from MistServer and publish to RabbitMQ")
-	fs.StringVar(&cli.MistSendAudio, "send-audio", "record", "when should we send audio?  {always|never|record}")
 	fs.StringVar(&cli.MistBaseStreamName, "mist-base-stream-name", "video", "Base stream name to be used in wildcard-based routing scheme")
 	fs.StringVar(&cli.APIServer, "api-server", "", "Livepeer API server to use")
 	fs.StringVar(&cli.AMQPURL, "amqp-url", "", "RabbitMQ url")
@@ -111,6 +110,8 @@ func main() {
 	fs.StringVar(&cli.GateURL, "gate-url", "http://localhost:3004/api/access-control/gate", "Address to contact playback gating API for access control verification")
 	config.InvertedBoolFlag(fs, &cli.MistTriggerSetup, "mist-trigger-setup", true, "Overwrite Mist triggers with the ones built into catalyst-api")
 	pprofPort := fs.Int("pprof-port", 6061, "Pprof listen port")
+
+	fs.String("send-audio", "", "[DEPRECATED] ignored, will be removed")
 
 	// special parameters
 	mistJson := fs.Bool("j", false, "Print application info as JSON. Used by Mist to present flags in its UI.")
