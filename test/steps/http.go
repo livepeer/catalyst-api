@@ -171,6 +171,9 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 				},
 			},
 		}
+		if strings.Contains(payload, "and thumbnails") {
+			req.OutputLocations[0].Outputs.Thumbnails = "enabled"
+		}
 		if payload, err = req.ToJSON(); err != nil {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}

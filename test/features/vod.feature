@@ -76,6 +76,7 @@ Feature: VOD Streaming
     And "3" transcoded segments and manifests have been written to disk for profiles "270p0,low-bitrate" within "30" seconds
     And a source copy has not been written to disk
     And I receive a "success" callback within "30" seconds
+    And thumbnails are written to storage within "10" seconds
     And a row is written to the "vod_completed" database table containing the following values
       | column                   | value           |
       | in_fallback_mode         | false           |
@@ -93,6 +94,7 @@ Feature: VOD Streaming
       | payload                                                                     |
       | a valid ffmpeg upload vod request with a source manifest                    |
       | a valid ffmpeg upload vod request with a source manifest and source copying |
+      | a valid ffmpeg upload vod request with a source manifest and thumbnails     |
 
   Scenario Outline: Submit an audio-only asset for ingestion
     When I submit to the internal "/api/vod" endpoint with "<payload>"
