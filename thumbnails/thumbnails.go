@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/cenkalti/backoff/v4"
 	"io"
 	"net/url"
 	"os"
 	"path"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/go-tools/drivers"
@@ -18,6 +18,8 @@ import (
 )
 
 const resolution = "854:480"
+const vttFilename = "thumbnails.vtt"
+const outputDir = "thumbnails"
 
 func GenerateThumbs(requestID, input string, output *url.URL) error {
 	inputURL, err := url.Parse(input)
@@ -53,7 +55,7 @@ func GenerateThumbs(requestID, input string, output *url.URL) error {
 	defer os.RemoveAll(tempDir)
 
 	const layout = "15:04:05.000"
-	outputLocation := output.JoinPath("thumbnails").String()
+	outputLocation := output.JoinPath(outputDir).String()
 	builder := &bytes.Buffer{}
 	_, err = builder.WriteString("WEBVTT\n")
 	if err != nil {
@@ -76,7 +78,7 @@ func GenerateThumbs(requestID, input string, output *url.URL) error {
 		}
 	}
 
-	err = clients.UploadToOSURLFields(outputLocation, "thumbnails.vtt", builder, time.Minute, &drivers.FileProperties{ContentType: "text/vtt"})
+	err = clients.UploadToOSURLFields(outputLocation, vttFilename, builder, time.Minute, &drivers.FileProperties{ContentType: "text/vtt"})
 	if err != nil {
 		return fmt.Errorf("failed to upload vtt: %w", err)
 	}
@@ -122,4 +124,15 @@ func processSegment(inputURL *url.URL, segment *m3u8.MediaSegment, tempDir strin
 		return "", fmt.Errorf("failed to upload thumbnail %s: %w", segURL, err)
 	}
 	return thumbOut, nil
+}
+
+// Wait a maximum of 5 mins for thumbnails to finish
+var vttBackoff = backoff.WithMaxRetries(backoff.NewConstantBackOff(30*time.Second), 10)
+
+func WaitForThumbs(requestID string, output *url.URL) error {
+	vtt := output.JoinPath(outputDir, vttFilename).String()
+	return backoff.Retry(func() error {
+		_, err := clients.GetFile(context.Background(), requestID, vtt, nil)
+		return err
+	}, vttBackoff)
 }
