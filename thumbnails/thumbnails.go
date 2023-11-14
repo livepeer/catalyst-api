@@ -4,20 +4,23 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/cenkalti/backoff/v4"
 	"io"
 	"net/url"
 	"os"
 	"path"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/go-tools/drivers"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
+	"golang.org/x/sync/errgroup"
 )
 
 const resolution = "854:480"
+const vttFilename = "thumbnails.vtt"
+const outputDir = "thumbnails"
 
 func GenerateThumbs(requestID, input string, output *url.URL) error {
 	inputURL, err := url.Parse(input)
@@ -53,19 +56,24 @@ func GenerateThumbs(requestID, input string, output *url.URL) error {
 	defer os.RemoveAll(tempDir)
 
 	const layout = "15:04:05.000"
-	outputLocation := output.JoinPath("thumbnails").String()
+	outputLocation := output.JoinPath(outputDir).String()
 	builder := &bytes.Buffer{}
 	_, err = builder.WriteString("WEBVTT\n")
 	if err != nil {
 		return err
 	}
-	var currentTime time.Time
+	var (
+		currentTime time.Time
+		segments    = mediaPlaylist.GetAllSegments()
+		thumbOuts   = make([]string, len(segments))
+	)
 	// loop through each segment, generate a thumbnail image and upload it to storage
-	for _, segment := range mediaPlaylist.GetAllSegments() {
+	for i, segment := range segments {
 		thumbOut, err := processSegment(inputURL, segment, tempDir, outputLocation)
 		if err != nil {
 			return err
 		}
+		thumbOuts[i] = thumbOut
 
 		start := currentTime.Format(layout)
 		currentTime = currentTime.Add(time.Duration(segment.Duration) * time.Second)
@@ -76,7 +84,31 @@ func GenerateThumbs(requestID, input string, output *url.URL) error {
 		}
 	}
 
-	err = clients.UploadToOSURLFields(outputLocation, "thumbnails.vtt", builder, time.Minute, &drivers.FileProperties{ContentType: "text/vtt"})
+	// parallelise the thumb uploads
+	uploadGroup, _ := errgroup.WithContext(context.Background())
+	uploadGroup.SetLimit(5)
+	for _, thumbOut := range thumbOuts {
+		thumbOut := thumbOut
+		uploadGroup.Go(func() error {
+			// upload thumbnail to storage
+			fileReader, err := os.Open(thumbOut)
+			if err != nil {
+				return err
+			}
+			defer fileReader.Close()
+			err = clients.UploadToOSURL(outputLocation, path.Base(thumbOut), fileReader, time.Minute)
+			if err != nil {
+				return fmt.Errorf("failed to upload thumbnail %s: %w", thumbOut, err)
+			}
+			return nil
+		})
+	}
+	err = uploadGroup.Wait()
+	if err != nil {
+		return err
+	}
+
+	err = clients.UploadToOSURLFields(outputLocation, vttFilename, builder, time.Minute, &drivers.FileProperties{ContentType: "text/vtt"})
 	if err != nil {
 		return fmt.Errorf("failed to upload vtt: %w", err)
 	}
@@ -111,15 +143,16 @@ func processSegment(inputURL *url.URL, segment *m3u8.MediaSegment, tempDir strin
 		return "", fmt.Errorf("error running ffmpeg for thumbnails %s [%s]: %w", segURL, ffmpegErr.String(), err)
 	}
 
-	// upload thumbnail to storage
-	fileReader, err := os.Open(thumbOut)
-	if err != nil {
-		return "", err
-	}
-	defer fileReader.Close()
-	err = clients.UploadToOSURL(outputLocation, path.Base(thumbOut), fileReader, time.Minute)
-	if err != nil {
-		return "", fmt.Errorf("failed to upload thumbnail %s: %w", segURL, err)
-	}
 	return thumbOut, nil
+}
+
+// Wait a maximum of 5 mins for thumbnails to finish
+var vttBackoff = backoff.WithMaxRetries(backoff.NewConstantBackOff(30*time.Second), 10)
+
+func WaitForThumbs(requestID string, output *url.URL) error {
+	vtt := output.JoinPath(outputDir, vttFilename).String()
+	return backoff.Retry(func() error {
+		_, err := clients.GetFile(context.Background(), requestID, vtt, nil)
+		return err
+	}, vttBackoff)
 }

@@ -3,7 +3,6 @@ package pipeline
 import (
 	"context"
 	"fmt"
-	"github.com/livepeer/catalyst-api/thumbnails"
 	"net/url"
 	"os"
 	"path"
@@ -15,6 +14,7 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/thumbnails"
 	"github.com/livepeer/catalyst-api/transcode"
 	"github.com/livepeer/catalyst-api/video"
 	"github.com/livepeer/go-tools/drivers"
@@ -84,7 +84,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 			if err != nil {
 				log.LogError(job.RequestID, "generate thumbs failed", err, "in", job.SegmentingTargetURL, "out", job.ThumbnailsTargetURL)
 			} else {
-				log.Log(job.RequestID, "generate thumbs succeeded", err, "in", job.SegmentingTargetURL, "out", job.ThumbnailsTargetURL)
+				log.Log(job.RequestID, "generate thumbs succeeded", "in", job.SegmentingTargetURL, "out", job.ThumbnailsTargetURL)
 			}
 		}()
 	}
@@ -163,6 +163,16 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	if err != nil {
 		log.LogError(job.RequestID, "RunTranscodeProcess returned an error", err)
 		return nil, fmt.Errorf("transcoding failed: %w", err)
+	}
+
+	// wait for thumbs background process
+	if job.ThumbnailsTargetURL != nil {
+		err := thumbnails.WaitForThumbs(job.RequestID, job.ThumbnailsTargetURL)
+		if err != nil {
+			log.LogError(job.RequestID, "waiting for thumbs failed", err, "out", job.ThumbnailsTargetURL)
+		} else {
+			log.Log(job.RequestID, "waiting for thumbs succeeded", "out", job.ThumbnailsTargetURL)
+		}
 	}
 
 	job.TranscodingDone = time.Now()
