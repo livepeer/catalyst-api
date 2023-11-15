@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rsa"
 	"database/sql"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -26,6 +25,7 @@ import (
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/crypto"
+	"github.com/livepeer/catalyst-api/events"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/middleware"
@@ -341,24 +341,17 @@ func handleClusterEvents(ctx context.Context, mapic mistapiconnector.IMac, c clu
 }
 
 func processClusterEvent(mapic mistapiconnector.IMac, e serf.UserEvent) {
-	type EventPayload struct {
-		Resource   string `json:"resource"`
-		PlaybackID string `json:"playback_id"`
-	}
-
 	go func() {
-		var eventPayload EventPayload
-		err := json.Unmarshal(e.Payload, &eventPayload)
+		e, err := events.Unmarshal(e.Payload)
 		if err != nil {
-			glog.Errorf("cannot unmarshall received serf event: %v", e)
+			glog.Errorf("cannot unmarshal received serf event: %v", e)
 			return
 		}
-		switch eventPayload.Resource {
-		case "stream":
-			mapic.RefreshStreamIfNeeded(eventPayload.PlaybackID)
-			return
-		case "nuke":
-			mapic.NukeStream(eventPayload.PlaybackID)
+		switch event := e.(type) {
+		case *events.StreamEvent:
+			mapic.RefreshStreamIfNeeded(event.PlaybackID)
+		case *events.NukeEvent:
+			mapic.NukeStream(event.PlaybackID)
 			return
 		default:
 			glog.Errorf("unsupported serf event: %v", e)
