@@ -33,12 +33,8 @@ type ScoredNode struct {
 }
 
 func (n Node) HasStream(streamID string) bool {
-	for _, stream := range n.Streams {
-		if stream.ID == streamID {
-			return true
-		}
-	}
-	return false
+	_, ok := n.Streams[streamID]
+	return ok
 }
 
 func (n Node) GetLoadScore() int {
