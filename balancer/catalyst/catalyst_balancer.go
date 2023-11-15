@@ -75,7 +75,7 @@ func selectTopNodes(nodes []Node, streamID string, requestLatitude, requestLongi
 			localHasStreamNotOverloaded = append(localHasStreamNotOverloaded, node)
 		}
 	}
-	if len(localHasStreamNotOverloaded) > 0 { // TODO: Should this be > 1 so that we can ensure there's always some randomness?
+	if len(localHasStreamNotOverloaded) > 0 { // TODO: Should this be > 1 or > 2 so that we can ensure there's always some randomness?
 		return localHasStreamNotOverloaded
 	}
 
@@ -86,12 +86,18 @@ func selectTopNodes(nodes []Node, streamID string, requestLatitude, requestLongi
 			localNotOverloaded = append(localNotOverloaded, node)
 		}
 	}
-	if len(localNotOverloaded) > 0 { // TODO: Should this be > 1 so that we can ensure there's always some randomness?
+	if len(localNotOverloaded) > 0 { // TODO: Should this be > 1 or > 2 so that we can ensure there's always some randomness?
 		return localNotOverloaded
 	}
 
 	// 3. Weighted least-bad option
-	// TODO
+	for _, node := range scoredNodes {
+		node.Score += node.GeoScore
+		node.Score += int64(node.GetLoadScore())
+		if node.HasStream(streamID) {
+			node.Score += 2
+		}
+	}
 
 	sort.Slice(scoredNodes, func(i, j int) bool {
 		return scoredNodes[i].Score < scoredNodes[j].Score
