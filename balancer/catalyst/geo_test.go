@@ -48,7 +48,7 @@ func TestGeoScores(t *testing.T) {
 	require.Equal(t, []string{"fra-1", "fra-2", "fra-3", "fra-4", "fra-5", "lax-1", "lax-2", "lax-3", "lon-1", "lon-2", "lon-3", "lon-4", "prg-1", "prg-2"}, okay)
 	require.Equal(t, []string{"sao-1", "sao-2", "sin-1", "sin-2"}, bad)
 
-	// Lima, Peru - SAO should be good, USA and Western Europe should be okay
+	// Lima - SAO should be good, USA and Western Europe should be okay
 	good, okay, bad = getGeoScores(-12.046374, -77.042793)
 	require.Equal(t, []string{"sao-1", "sao-2"}, good)
 	require.Equal(t, []string{"fra-1", "fra-2", "fra-3", "fra-4", "fra-5", "lax-1", "lax-2", "lax-3", "lon-1", "lon-2", "lon-3", "lon-4", "mdw-1", "mdw-2", "mdw-3", "mdw-4", "mdw-5", "nyc-1", "nyc-2"}, okay)

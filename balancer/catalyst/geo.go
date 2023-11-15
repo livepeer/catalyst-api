@@ -5,6 +5,14 @@ import (
 	"sort"
 )
 
+// Earth radius in kilometers
+const earthRadius = 6371
+
+// ToRadians converts degrees to radians
+func toRadians(deg float64) float64 {
+	return deg * (math.Pi / 180)
+}
+
 // Rate the nodes as Good / Okay / Bad based on distance from the request
 func geoScores(nodes []ScoredNode, requestLatitude, requestLongitude float64) []ScoredNode {
 	// Calculate distance from request for each node
