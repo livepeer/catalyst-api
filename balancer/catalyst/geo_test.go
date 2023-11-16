@@ -59,6 +59,18 @@ func TestGeoScores(t *testing.T) {
 	require.Equal(t, []string{"sin-1", "sin-2"}, good)
 	require.Equal(t, []string{"fra-1", "fra-2", "fra-3", "fra-4", "fra-5", "lon-1", "lon-2", "lon-3", "lon-4", "prg-1", "prg-2"}, okay)
 	require.Equal(t, []string{"lax-1", "lax-2", "lax-3", "mdw-1", "mdw-2", "mdw-3", "mdw-4", "mdw-5", "nyc-1", "nyc-2", "sao-1", "sao-2"}, bad)
+
+	// Southern tip of Argentina - SAO good, USA okay
+	good, okay, bad = getGeoScores(-54.93355, -67.60963)
+	require.Equal(t, []string{"sao-1", "sao-2"}, good)
+	require.Equal(t, []string{"lax-1", "lax-2", "lax-3", "mdw-1", "mdw-2", "mdw-3", "mdw-4", "mdw-5", "nyc-1", "nyc-2"}, okay)
+	require.Equal(t, []string{"fra-1", "fra-2", "fra-3", "fra-4", "fra-5", "lon-1", "lon-2", "lon-3", "lon-4", "prg-1", "prg-2", "sin-1", "sin-2"}, bad)
+
+	// Auckland (New Zealand) - Singapore good, USA + SAO okay
+	good, okay, bad = getGeoScores(-36.848461, 174.763336)
+	require.Equal(t, []string{"sin-1", "sin-2"}, good)
+	require.Equal(t, []string{"lax-1", "lax-2", "lax-3", "mdw-1", "mdw-2", "mdw-3", "mdw-4", "mdw-5", "nyc-1", "nyc-2", "sao-1", "sao-2"}, okay)
+	require.Equal(t, []string{"fra-1", "fra-2", "fra-3", "fra-4", "fra-5", "lon-1", "lon-2", "lon-3", "lon-4", "prg-1", "prg-2"}, bad)
 }
 
 func getGeoScores(requestLatitude, requestLongitude float64) (good, okay, bad []string) {
