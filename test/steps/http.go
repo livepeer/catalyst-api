@@ -114,8 +114,8 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 	}
 	s.TranscodedOutputDir = destinationDir
 
+	req := DefaultUploadRequest
 	if strings.HasPrefix(payload, "a valid upload vod request") {
-		req := DefaultUploadRequest
 		req.PipelineStrategy = "fallback_external"
 		req.URL = "file://" + sourceFile.Name()
 		if strings.Contains(payload, "with profiles") {
@@ -135,7 +135,6 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 		}
 	}
 	if strings.HasPrefix(payload, "a valid ffmpeg upload vod request with a custom segment size") {
-		req := DefaultUploadRequest
 		req.URL = "file://" + sourceFile.Name()
 		req.PipelineStrategy = "catalyst_ffmpeg"
 		req.TargetSegmentSizeSecs = 9
@@ -152,12 +151,14 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 		if strings.Contains(payload, "and fmp4") {
 			req.OutputLocations[0].Outputs.FMP4 = "enabled"
 		}
+		if strings.Contains(payload, "and thumbnails") {
+			req.OutputLocations[0].Outputs.Thumbnails = "enabled"
+		}
 		if payload, err = req.ToJSON(); err != nil {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}
 	}
 	if strings.HasPrefix(payload, "a valid ffmpeg upload vod request with a source manifest") {
-		req := DefaultUploadRequest
 		req.URL = "file://" + filepath.Join(sourceManifestDir, "tiny.m3u8")
 		req.PipelineStrategy = "catalyst_ffmpeg"
 		req.OutputLocations = []OutputLocation{
@@ -169,6 +170,9 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 					SourceMp4: strings.Contains(payload, "and source copying"),
 				},
 			},
+		}
+		if strings.Contains(payload, "and thumbnails") {
+			req.OutputLocations[0].Outputs.Thumbnails = "enabled"
 		}
 		if payload, err = req.ToJSON(); err != nil {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
@@ -188,6 +192,7 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 		return err
 	}
 
+	s.uploadRequest = req
 	s.pendingRequest = r
 
 	return nil

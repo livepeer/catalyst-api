@@ -188,3 +188,21 @@ func (s *StepContext) SourcePlaybackManifestWrittenToDisk(secs int) error {
 	}
 	return err
 }
+
+func (s *StepContext) ThumbnailsWrittenToStorage(secs int) error {
+	if len(s.uploadRequest.OutputLocations) <= 0 {
+		return nil
+	}
+	if s.uploadRequest.OutputLocations[0].Outputs.Thumbnails != "enabled" {
+		return nil
+	}
+	thumbsVttPath := filepath.Join(s.TranscodedOutputDir, "thumbnails.vtt")
+	var err error
+	for t := 0; t < secs*20; t++ {
+		if _, err := os.ReadFile(thumbsVttPath); err == nil {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return err
+}
