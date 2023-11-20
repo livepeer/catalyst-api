@@ -90,17 +90,19 @@ func GenerateThumbs(requestID, input string, output *url.URL) error {
 	for _, thumbOut := range thumbOuts {
 		thumbOut := thumbOut
 		uploadGroup.Go(func() error {
-			// upload thumbnail to storage
-			fileReader, err := os.Open(thumbOut)
-			if err != nil {
-				return err
-			}
-			defer fileReader.Close()
-			err = clients.UploadToOSURL(outputLocation, path.Base(thumbOut), fileReader, time.Minute)
-			if err != nil {
-				return fmt.Errorf("failed to upload thumbnail %s: %w", thumbOut, err)
-			}
-			return nil
+			return backoff.Retry(func() error {
+				// upload thumbnail to storage
+				fileReader, err := os.Open(thumbOut)
+				if err != nil {
+					return err
+				}
+				defer fileReader.Close()
+				err = clients.UploadToOSURL(outputLocation, path.Base(thumbOut), fileReader, 2*time.Minute)
+				if err != nil {
+					return fmt.Errorf("failed to upload thumbnail %s: %w", thumbOut, err)
+				}
+				return nil
+			}, clients.UploadRetryBackoff())
 		})
 	}
 	err = uploadGroup.Wait()
