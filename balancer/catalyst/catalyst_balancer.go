@@ -87,17 +87,21 @@ func selectTopNodes(nodes []Node, streamID string, requestLatitude, requestLongi
 	}
 
 	// 3. Weighted least-bad option
-	for _, node := range scoredNodes {
+	for i, node := range scoredNodes {
 		node.Score += node.GeoScore
 		node.Score += int64(node.GetLoadScore())
 		if node.HasStream(streamID) {
 			node.Score += 2
 		}
+		scoredNodes[i] = node
 	}
 
 	sort.Slice(scoredNodes, func(i, j int) bool {
-		return scoredNodes[i].Score < scoredNodes[j].Score
+		return scoredNodes[i].Score > scoredNodes[j].Score
 	})
+	if len(scoredNodes) < numNodes {
+		return scoredNodes
+	}
 
 	return scoredNodes[:numNodes]
 }

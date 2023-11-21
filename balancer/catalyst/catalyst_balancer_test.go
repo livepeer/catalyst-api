@@ -143,3 +143,84 @@ func TestItPrefersLocalUnloadedServersWithoutStream(t *testing.T) {
 		foundNodes,
 	)
 }
+
+func TestItChoosesLeastBad(t *testing.T) {
+	requestLatitude, requestLongitude := 51.7520, 1.2577 // Oxford
+	highCPULocal := Node{ID: "local-high-cpu", CPUUsagePercentage: 90, GeoLatitude: requestLatitude, GeoLongitude: requestLongitude}
+	highCPUWithStream := Node{ID: "far-high-cpu", CPUUsagePercentage: 90, GeoLatitude: 1.35, GeoLongitude: 103.82,
+		Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}} // Sin
+	highCPU := Node{ID: "far-medium-cpu", CPUUsagePercentage: 90, GeoLatitude: 1.35, GeoLongitude: 103.82}    // Sin
+	mediumCPU := Node{ID: "far-medium-cpu", CPUUsagePercentage: 80, GeoLatitude: 1.35, GeoLongitude: 103.82}  // Sin
+	lowCPU := Node{ID: "far-low-cpu", CPUUsagePercentage: 40, GeoLatitude: 1.35, GeoLongitude: 103.82}        // Sin
+	lowCPUOkDistance := Node{ID: "low-cpu", CPUUsagePercentage: 40, GeoLatitude: 41.88, GeoLongitude: -87.63} // Mdw
+	mediumMem := Node{ID: "far-medium-mem", RAMUsagePercentage: 80, GeoLatitude: 1.35, GeoLongitude: 103.82}  // Sin
+	mediumMemWithStream := Node{ID: "far-medium-mem-with-stream", RAMUsagePercentage: 80, GeoLatitude: 1.35, GeoLongitude: 103.82,
+		Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}} // Sin
+
+	tests := []struct {
+		name  string
+		nodes []Node
+		want  []ScoredNode
+	}{
+		{
+			name:  "it sorts on resource utilisation",
+			nodes: []Node{highCPULocal, mediumCPU, lowCPU, highCPU},
+			want: []ScoredNode{
+				{Score: 2, GeoScore: 2, GeoDistance: 2.713088946829586e-13, Node: highCPULocal},
+				{Score: 2, GeoScore: 0, GeoDistance: 10748.93875940447, Node: lowCPU},
+				{Score: 1, GeoScore: 0, GeoDistance: 10748.93875940447, Node: mediumCPU},
+			},
+		},
+		{
+			name:  "it sorts on mixed resource utilisation",
+			nodes: []Node{highCPULocal, lowCPU, mediumMem},
+			want: []ScoredNode{
+				{Score: 2, GeoScore: 2, GeoDistance: 2.713088946829586e-13, Node: highCPULocal},
+				{Score: 2, GeoScore: 0, GeoDistance: 10748.93875940447, Node: lowCPU},
+				{Score: 1, GeoScore: 0, GeoDistance: 10748.93875940447, Node: mediumMem},
+			},
+		},
+		{
+			name:  "high CPU node picked last",
+			nodes: []Node{highCPULocal, lowCPU, highCPU},
+			want: []ScoredNode{
+				{Score: 2, GeoScore: 2, GeoDistance: 2.713088946829586e-13, Node: highCPULocal},
+				{Score: 2, GeoScore: 0, GeoDistance: 10748.93875940447, Node: lowCPU},
+				{Score: 0, GeoScore: 0, GeoDistance: 10748.93875940447, Node: highCPU},
+			},
+		},
+		{
+			name:  "okay distance unloaded node",
+			nodes: []Node{highCPULocal, mediumCPU, lowCPUOkDistance},
+			want: []ScoredNode{
+				{Score: 3, GeoScore: 1, GeoDistance: 6424.493306210155, Node: lowCPUOkDistance},
+				{Score: 2, GeoScore: 2, GeoDistance: 2.713088946829586e-13, Node: highCPULocal},
+				{Score: 1, GeoScore: 0, GeoDistance: 10748.93875940447, Node: mediumCPU},
+			},
+		},
+		{
+			name:  "medium loaded node with the stream",
+			nodes: []Node{highCPULocal, lowCPU, mediumMem, mediumMemWithStream},
+			want: []ScoredNode{
+				{Score: 3, GeoScore: 0, GeoDistance: 10748.93875940447, Node: mediumMemWithStream},
+				{Score: 2, GeoScore: 2, GeoDistance: 2.713088946829586e-13, Node: highCPULocal},
+				{Score: 2, GeoScore: 0, GeoDistance: 10748.93875940447, Node: lowCPU},
+			},
+		},
+		{
+			name:  "high loaded node with the stream",
+			nodes: []Node{highCPULocal, lowCPU, highCPUWithStream},
+			want: []ScoredNode{
+				{Score: 2, GeoScore: 2, GeoDistance: 2.713088946829586e-13, Node: highCPULocal},
+				{Score: 2, GeoScore: 0, GeoDistance: 10748.93875940447, Node: lowCPU},
+				{Score: 2, GeoScore: 0, GeoDistance: 10748.93875940447, Node: highCPUWithStream},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := selectTopNodes(tt.nodes, "stream-name-we-want", requestLatitude, requestLongitude, 3)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
