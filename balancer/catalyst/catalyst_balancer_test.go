@@ -89,13 +89,13 @@ func TestItChoosesRandomlyFromTheBestNodes(t *testing.T) {
 // then that's the ideal situation and we should prefer that over everything else
 func TestItPrefersLocalUnloadedServersWithStreamAlready(t *testing.T) {
 	selectionNodes := []Node{
-		{ID: "good-node-1", Streams: map[string]Stream{"stream-name-we-want": Stream{ID: "stream-name-we-want"}}},
-		{ID: "good-node-2", Streams: map[string]Stream{"stream-name-we-want": Stream{ID: "stream-name-we-want"}}},
-		{ID: "good-node-3", Streams: map[string]Stream{"other-steam-name": Stream{ID: "other-steam-name"}}},
+		{ID: "good-node-1", Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}},
+		{ID: "good-node-2", Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}},
+		{ID: "good-node-3", Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name"}}},
 		RAMOverloadedNode,
 		BandwidthOverloadedNode,
-		{ID: "good-node-4", Streams: map[string]Stream{"other-steam-name": Stream{ID: "other-steam-name"}}},
-		{ID: "good-node-5", Streams: map[string]Stream{"stream-name-we-want": Stream{ID: "stream-name-we-want"}}},
+		{ID: "good-node-4", Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name"}}},
+		{ID: "good-node-5", Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}},
 	}
 
 	foundNodes := map[string]bool{}
@@ -119,13 +119,13 @@ func TestItPrefersLocalUnloadedServersWithStreamAlready(t *testing.T) {
 // that aren't overloaded, even if they haven't had the stream replicated to them yet
 func TestItPrefersLocalUnloadedServersWithoutStream(t *testing.T) {
 	selectionNodes := []Node{
-		{ID: "local-with-stream-high-cpu", CPUUsagePercentage: 90, Streams: map[string]Stream{"stream-name-we-want": Stream{ID: "stream-name-we-want"}}},
-		{ID: "local-without-stream", Streams: map[string]Stream{"other-steam-name": Stream{ID: "other-steam-name"}}},
-		{ID: "local-without-stream-2", Streams: map[string]Stream{"other-steam-name": Stream{ID: "other-steam-name"}}},
+		{ID: "local-with-stream-high-cpu", CPUUsagePercentage: 90, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}},
+		{ID: "local-without-stream", Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name"}}},
+		{ID: "local-without-stream-2", Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name"}}},
 		RAMOverloadedNode,
 		BandwidthOverloadedNode,
-		{ID: "far-with-stream", GeoLatitude: 100, GeoLongitude: 100, Streams: map[string]Stream{"stream-name-we-want": Stream{ID: "stream-name-we-want"}}},
-		{ID: "far-without-stream", GeoLatitude: 100, GeoLongitude: 100, Streams: map[string]Stream{"stream-name-we-want": Stream{ID: "stream-name-we-want"}}},
+		{ID: "far-with-stream", GeoLatitude: 100, GeoLongitude: 100, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}},
+		{ID: "far-without-stream", GeoLatitude: 100, GeoLongitude: 100, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}},
 	}
 
 	foundNodes := map[string]bool{}
