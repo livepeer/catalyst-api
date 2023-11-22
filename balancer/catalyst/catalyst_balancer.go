@@ -1,24 +1,87 @@
 package catalyst
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"sort"
+
+	"github.com/livepeer/catalyst-api/cluster"
 )
+
+type CataBalancer struct {
+	Nodes []Node
+}
+
+func (c *CataBalancer) Start(ctx context.Context) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Member) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c *CataBalancer) MistUtilLoadBalance(ctx context.Context, stream, lat, lon string) (string, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c *CataBalancer) MistUtilLoadStreamStats(ctx context.Context, stream string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func NewBalancer() *CataBalancer {
+	return &CataBalancer{}
+}
+
+func (c *CataBalancer) UpdateNodes(id string, nodeMetrics NodeMetrics) {
+	for i := range c.Nodes {
+		if c.Nodes[i].ID == id {
+			c.Nodes[i].NodeMetrics = nodeMetrics
+			break
+		}
+	}
+}
+
+func (c *CataBalancer) UpdateStreams(id string, streams map[string]Stream) {
+	for i := range c.Nodes {
+		if c.Nodes[i].ID == id {
+			c.Nodes[i].Streams = streams
+			break
+		}
+	}
+}
 
 // TODO: This is temporary until we have the real struct definition
 type Node struct {
-	ID                       string
-	Streams                  map[string]Stream // Stream ID -> Stream
-	CPUUsagePercentage       int64
-	RAMUsagePercentage       int64
-	BandwidthUsagePercentage int64
-	GeoLatitude              float64
-	GeoLongitude             float64
+	ID      string
+	Streams map[string]Stream // Stream ID -> Stream
+	NodeMetrics
+	GeoLatitude  float64
+	GeoLongitude float64
 }
 
 type Stream struct {
 	ID string
+}
+
+type NodeMetrics struct {
+	CPUUsagePercentage       int64
+	RAMUsagePercentage       int64
+	BandwidthUsagePercentage int64
 }
 
 // All of the scores are in the range 0-2, where:

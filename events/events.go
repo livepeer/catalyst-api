@@ -3,10 +3,14 @@ package events
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/livepeer/catalyst-api/balancer/catalyst"
 )
 
 const streamEventResource = "stream"
 const nukeEventResource = "nuke"
+const nodeStatsEventResource = "nodeStats"
+const nodeStreamsEventResource = "nodeStreams"
 
 type Event interface{}
 
@@ -24,21 +28,48 @@ type NukeEvent struct {
 	PlaybackID string `json:"playback_id"`
 }
 
+type NodeStatsEvent struct {
+	Resource    string               `json:"resource"`
+	NodeID      string               `json:"node_id"`
+	NodeMetrics catalyst.NodeMetrics `json:"node_metrics"`
+}
+
+type NodeStreamsEvent struct {
+	Resource string                     `json:"resource"`
+	NodeID   string                     `json:"node_id"`
+	Streams  map[string]catalyst.Stream `json:"streams"`
+}
+
 func Unmarshal(payload []byte) (Event, error) {
 	var generic GenericEvent
 	err := json.Unmarshal(payload, &generic)
 	if err != nil {
 		return nil, err
 	}
-	if generic.Resource == streamEventResource {
+	switch generic.Resource {
+	case streamEventResource:
 		event := &StreamEvent{}
 		err := json.Unmarshal(payload, event)
 		if err != nil {
 			return nil, err
 		}
 		return event, nil
-	} else if generic.Resource == nukeEventResource {
+	case nukeEventResource:
 		event := &NukeEvent{}
+		err := json.Unmarshal(payload, event)
+		if err != nil {
+			return nil, err
+		}
+		return event, nil
+	case nodeStatsEventResource:
+		event := &NodeStatsEvent{}
+		err := json.Unmarshal(payload, event)
+		if err != nil {
+			return nil, err
+		}
+		return event, nil
+	case nodeStreamsEventResource:
+		event := &NodeStreamsEvent{}
 		err := json.Unmarshal(payload, event)
 		if err != nil {
 			return nil, err

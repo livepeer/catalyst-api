@@ -19,6 +19,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/livepeer/catalyst-api/api"
 	"github.com/livepeer/catalyst-api/balancer"
+	"github.com/livepeer/catalyst-api/balancer/catalyst"
 	mist_balancer "github.com/livepeer/catalyst-api/balancer/mist"
 	"github.com/livepeer/catalyst-api/c2pa"
 	"github.com/livepeer/catalyst-api/clients"
@@ -269,6 +270,8 @@ func main() {
 		NodeName:                 cli.NodeName,
 	})
 
+	cataBalancer := catalyst.NewBalancer()
+
 	c := cluster.NewCluster(&cli)
 
 	// Initialize root context; cancelling this prompts all components to shut down cleanly
@@ -305,7 +308,7 @@ func main() {
 	})
 
 	group.Go(func() error {
-		return handleClusterEvents(ctx, mapic, c)
+		return handleClusterEvents(ctx, mapic, cataBalancer, c)
 	})
 
 	err = group.Wait()
@@ -328,19 +331,19 @@ func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Clu
 	}
 }
 
-func handleClusterEvents(ctx context.Context, mapic mistapiconnector.IMac, c cluster.Cluster) error {
+func handleClusterEvents(ctx context.Context, mapic mistapiconnector.IMac, cataBalancer *catalyst.CataBalancer, c cluster.Cluster) error {
 	eventCh := c.EventChan()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case e := <-eventCh:
-			processClusterEvent(mapic, e)
+			processClusterEvent(mapic, cataBalancer, e)
 		}
 	}
 }
 
-func processClusterEvent(mapic mistapiconnector.IMac, e serf.UserEvent) {
+func processClusterEvent(mapic mistapiconnector.IMac, cataBalancer *catalyst.CataBalancer, e serf.UserEvent) {
 	go func() {
 		e, err := events.Unmarshal(e.Payload)
 		if err != nil {
@@ -353,6 +356,10 @@ func processClusterEvent(mapic mistapiconnector.IMac, e serf.UserEvent) {
 		case *events.NukeEvent:
 			mapic.NukeStream(event.PlaybackID)
 			return
+		case *events.NodeStatsEvent:
+			cataBalancer.UpdateNodes(event.NodeID, event.NodeMetrics)
+		case *events.NodeStreamsEvent:
+			cataBalancer.UpdateStreams(event.NodeID, event.Streams)
 		default:
 			glog.Errorf("unsupported serf event: %v", e)
 		}
