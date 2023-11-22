@@ -129,7 +129,7 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 
 		if len(hitRecordCache.data[playbackID].hits) >= hitRecordCache.data[playbackID].rateLimit {
 			glog.Infof("rate limit exeeded for playbackId=%v cacheKey=%v rateLimit=%v", playbackID, cacheKey, hitRecordCache.data[playbackID].rateLimit)
-			return false, fmt.Errorf("rate limit exceeded for playbackId=%v", playbackID)
+			return false, nil
 		}
 
 		hitRecordCache.data[playbackID].hits = append(hitRecordCache.data[playbackID].hits, time.Now())
