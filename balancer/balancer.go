@@ -5,6 +5,7 @@ package balancer
 import (
 	"context"
 
+	"github.com/livepeer/catalyst-api/balancer/catalyst"
 	"github.com/livepeer/catalyst-api/cluster"
 )
 
@@ -15,6 +16,8 @@ type Balancer interface {
 	MistUtilLoadBalance(ctx context.Context, stream, lat, lon string) (string, error)
 	MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error)
 	MistUtilLoadStreamStats(ctx context.Context, stream string) error
+	UpdateNodes(id string, nodeMetrics catalyst.NodeMetrics)
+	UpdateStreams(id string, streams map[string]catalyst.Stream)
 }
 
 type Config struct {

@@ -7,27 +7,33 @@ import (
 )
 
 var CPUOverloadedNode = Node{
-	ID:                       "cpu_overload",
-	CPUUsagePercentage:       100,
-	RAMUsagePercentage:       0,
-	BandwidthUsagePercentage: 0,
-	Streams:                  map[string]Stream{},
+	ID: "cpu_overload",
+	NodeMetrics: NodeMetrics{
+		CPUUsagePercentage:       100,
+		RAMUsagePercentage:       0,
+		BandwidthUsagePercentage: 0,
+	},
+	Streams: map[string]Stream{},
 }
 
 var RAMOverloadedNode = Node{
-	ID:                       "mem_overload",
-	CPUUsagePercentage:       0,
-	RAMUsagePercentage:       100,
-	BandwidthUsagePercentage: 0,
-	Streams:                  map[string]Stream{},
+	ID: "mem_overload",
+	NodeMetrics: NodeMetrics{
+		CPUUsagePercentage:       0,
+		RAMUsagePercentage:       100,
+		BandwidthUsagePercentage: 0,
+	},
+	Streams: map[string]Stream{},
 }
 
 var BandwidthOverloadedNode = Node{
-	ID:                       "bw_overload",
-	CPUUsagePercentage:       0,
-	RAMUsagePercentage:       0,
-	BandwidthUsagePercentage: 100,
-	Streams:                  map[string]Stream{},
+	ID: "bw_overload",
+	NodeMetrics: NodeMetrics{
+		CPUUsagePercentage:       0,
+		RAMUsagePercentage:       0,
+		BandwidthUsagePercentage: 100,
+	},
+	Streams: map[string]Stream{},
 }
 
 func TestItReturnsItselfWhenNoOtherNodesPresent(t *testing.T) {
@@ -39,9 +45,11 @@ func TestItReturnsItselfWhenNoOtherNodesPresent(t *testing.T) {
 
 func TestItDoesntChooseOverloadedNodes(t *testing.T) {
 	expectedNode := Node{
-		CPUUsagePercentage:       10,
-		RAMUsagePercentage:       10,
-		BandwidthUsagePercentage: 10,
+		NodeMetrics: NodeMetrics{
+			CPUUsagePercentage:       10,
+			RAMUsagePercentage:       10,
+			BandwidthUsagePercentage: 10,
+		},
 	}
 	selectionNodes := []Node{
 		CPUOverloadedNode,
@@ -119,7 +127,7 @@ func TestItPrefersLocalUnloadedServersWithStreamAlready(t *testing.T) {
 // that aren't overloaded, even if they haven't had the stream replicated to them yet
 func TestItPrefersLocalUnloadedServersWithoutStream(t *testing.T) {
 	selectionNodes := []Node{
-		{ID: "local-with-stream-high-cpu", CPUUsagePercentage: 90, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}},
+		{ID: "local-with-stream-high-cpu", NodeMetrics: NodeMetrics{CPUUsagePercentage: 90}, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}},
 		{ID: "local-without-stream", Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name"}}},
 		{ID: "local-without-stream-2", Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name"}}},
 		RAMOverloadedNode,
@@ -146,15 +154,15 @@ func TestItPrefersLocalUnloadedServersWithoutStream(t *testing.T) {
 
 func TestItChoosesLeastBad(t *testing.T) {
 	requestLatitude, requestLongitude := 51.7520, 1.2577 // Oxford
-	highCPULocal := Node{ID: "local-high-cpu", CPUUsagePercentage: 90, GeoLatitude: requestLatitude, GeoLongitude: requestLongitude}
-	highCPUWithStream := Node{ID: "far-high-cpu", CPUUsagePercentage: 90, GeoLatitude: 1.35, GeoLongitude: 103.82,
+	highCPULocal := Node{ID: "local-high-cpu", NodeMetrics: NodeMetrics{CPUUsagePercentage: 90}, GeoLatitude: requestLatitude, GeoLongitude: requestLongitude}
+	highCPUWithStream := Node{ID: "far-high-cpu", NodeMetrics: NodeMetrics{CPUUsagePercentage: 90}, GeoLatitude: 1.35, GeoLongitude: 103.82,
 		Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}} // Sin
-	highCPU := Node{ID: "far-medium-cpu", CPUUsagePercentage: 90, GeoLatitude: 1.35, GeoLongitude: 103.82}    // Sin
-	mediumCPU := Node{ID: "far-medium-cpu", CPUUsagePercentage: 80, GeoLatitude: 1.35, GeoLongitude: 103.82}  // Sin
-	lowCPU := Node{ID: "far-low-cpu", CPUUsagePercentage: 40, GeoLatitude: 1.35, GeoLongitude: 103.82}        // Sin
-	lowCPUOkDistance := Node{ID: "low-cpu", CPUUsagePercentage: 40, GeoLatitude: 41.88, GeoLongitude: -87.63} // Mdw
-	mediumMem := Node{ID: "far-medium-mem", RAMUsagePercentage: 80, GeoLatitude: 1.35, GeoLongitude: 103.82}  // Sin
-	mediumMemWithStream := Node{ID: "far-medium-mem-with-stream", RAMUsagePercentage: 80, GeoLatitude: 1.35, GeoLongitude: 103.82,
+	highCPU := Node{ID: "far-medium-cpu", NodeMetrics: NodeMetrics{CPUUsagePercentage: 90}, GeoLatitude: 1.35, GeoLongitude: 103.82}    // Sin
+	mediumCPU := Node{ID: "far-medium-cpu", NodeMetrics: NodeMetrics{CPUUsagePercentage: 80}, GeoLatitude: 1.35, GeoLongitude: 103.82}  // Sin
+	lowCPU := Node{ID: "far-low-cpu", NodeMetrics: NodeMetrics{CPUUsagePercentage: 40}, GeoLatitude: 1.35, GeoLongitude: 103.82}        // Sin
+	lowCPUOkDistance := Node{ID: "low-cpu", NodeMetrics: NodeMetrics{CPUUsagePercentage: 40}, GeoLatitude: 41.88, GeoLongitude: -87.63} // Mdw
+	mediumMem := Node{ID: "far-medium-mem", NodeMetrics: NodeMetrics{RAMUsagePercentage: 80}, GeoLatitude: 1.35, GeoLongitude: 103.82}  // Sin
+	mediumMemWithStream := Node{ID: "far-medium-mem-with-stream", NodeMetrics: NodeMetrics{RAMUsagePercentage: 80}, GeoLatitude: 1.35, GeoLongitude: 103.82,
 		Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}} // Sin
 
 	tests := []struct {

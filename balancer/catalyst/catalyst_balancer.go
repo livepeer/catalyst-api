@@ -48,6 +48,7 @@ func NewBalancer() *CataBalancer {
 }
 
 func (c *CataBalancer) UpdateNodes(id string, nodeMetrics NodeMetrics) {
+	// TODO change c.Nodes to a map so that we don't have to worry about the size of the slice changing?
 	for i := range c.Nodes {
 		if c.Nodes[i].ID == id {
 			c.Nodes[i].NodeMetrics = nodeMetrics
