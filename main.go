@@ -270,9 +270,10 @@ func main() {
 		NodeName:                 cli.NodeName,
 	})
 
-	cataBalancer := catalyst.NewBalancer()
-
 	c := cluster.NewCluster(&cli)
+
+	cataBalancer := catalyst.NewBalancer(c)
+	bal = cataBalancer // NOTE: comment this out if you want to flip back to old mist balancer
 
 	// Initialize root context; cancelling this prompts all components to shut down cleanly
 	group, ctx := errgroup.WithContext(context.Background())
@@ -310,6 +311,8 @@ func main() {
 	group.Go(func() error {
 		return handleClusterEvents(ctx, mapic, cataBalancer, c)
 	})
+
+	events.StartMetricSending(cli.NodeName, c)
 
 	err = group.Wait()
 	glog.Infof("Shutdown complete. Reason for shutdown: %s", err)

@@ -3,52 +3,81 @@ package catalyst
 import (
 	"context"
 	"fmt"
+	"github.com/livepeer/catalyst-api/cluster"
+	"github.com/livepeer/catalyst-api/log"
 	"math/rand"
 	"sort"
-
-	"github.com/livepeer/catalyst-api/cluster"
+	"strconv"
 )
 
 type CataBalancer struct {
-	Nodes []Node
+	Cluster cluster.Cluster
+	Nodes   []Node
 }
 
 func (c *CataBalancer) Start(ctx context.Context) error {
-	//TODO implement me
-	panic("implement me")
+	return nil
 }
 
 func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Member) error {
-	//TODO implement me
-	panic("implement me")
+	fmt.Println("catabalancer update members ", members)
+	if len(c.Nodes) > 0 {
+		return nil
+	}
+	// TODO rather than only run once let this update nodes list, removing and adding new ones
+	for _, member := range members {
+		c.Nodes = append(c.Nodes, Node{
+			ID: member.Name,
+		})
+	}
+	return nil
 }
 
 func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error) {
-	//TODO implement me
-	panic("implement me")
+	var err error
+	latf := 0.0
+	if lat != "" {
+		latf, err = strconv.ParseFloat(lat, 64)
+		if err != nil {
+			return "", "", err
+		}
+	}
+	lonf := 0.0
+	if lon != "" {
+		lonf, err = strconv.ParseFloat(lon, 64)
+		if err != nil {
+			return "", "", err
+		}
+	}
+	node, err := SelectNode(c.Nodes, playbackID, latf, lonf)
+	if err != nil {
+		return "", "", err
+	}
+	return node.ID, "video+" + playbackID, nil
 }
 
 func (c *CataBalancer) MistUtilLoadBalance(ctx context.Context, stream, lat, lon string) (string, error) {
-	//TODO implement me
-	panic("implement me")
+	return "", nil
 }
 
 func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error) {
-	//TODO implement me
-	panic("implement me")
+	return "", nil
 }
 
 func (c *CataBalancer) MistUtilLoadStreamStats(ctx context.Context, stream string) error {
-	//TODO implement me
-	panic("implement me")
+	return nil
 }
 
-func NewBalancer() *CataBalancer {
-	return &CataBalancer{}
+func NewBalancer(c cluster.Cluster) *CataBalancer {
+
+	return &CataBalancer{
+		Cluster: c,
+	}
 }
 
 func (c *CataBalancer) UpdateNodes(id string, nodeMetrics NodeMetrics) {
 	// TODO change c.Nodes to a map so that we don't have to worry about the size of the slice changing?
+	log.LogNoRequestID("catabalancer updatenodes", "id", id, "ram", nodeMetrics.RAMUsagePercentage, "cpu", nodeMetrics.CPUUsagePercentage)
 	for i := range c.Nodes {
 		if c.Nodes[i].ID == id {
 			c.Nodes[i].NodeMetrics = nodeMetrics
@@ -117,6 +146,7 @@ func SelectNode(nodes []Node, streamID string, requestLatitude, requestLongitude
 	}
 
 	topNodes := selectTopNodes(nodes, streamID, requestLatitude, requestLongitude, 3)
+	log.LogNoRequestID("catabalancer select nodes", "topNodes", topNodes)
 	return topNodes[rand.Intn(len(topNodes))].Node, nil
 }
 

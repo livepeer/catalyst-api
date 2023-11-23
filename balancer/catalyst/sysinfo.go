@@ -1,4 +1,4 @@
-package middleware
+package catalyst
 
 import (
 	"github.com/shirou/gopsutil/v3/cpu"

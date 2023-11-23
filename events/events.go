@@ -3,8 +3,11 @@ package events
 import (
 	"encoding/json"
 	"fmt"
-
+	"github.com/hashicorp/serf/serf"
 	"github.com/livepeer/catalyst-api/balancer/catalyst"
+	"github.com/livepeer/catalyst-api/cluster"
+	"github.com/livepeer/catalyst-api/log"
+	"time"
 )
 
 const streamEventResource = "stream"
@@ -77,4 +80,43 @@ func Unmarshal(payload []byte) (Event, error) {
 		return event, nil
 	}
 	return nil, fmt.Errorf("unable to unmarshal event, unknown resource '%s'", generic.Resource)
+}
+
+func StartMetricSending(nodeName string, c cluster.Cluster) {
+	ticker := time.NewTicker(5 * time.Second)
+	go func() {
+		for range ticker.C {
+			log.LogNoRequestID("catabalancer sending node stats")
+			sysinfo, err := catalyst.GetSystemInfo()
+			if err != nil {
+				log.LogNoRequestID("catabalancer failed to get sys info", "err", err)
+				break
+			}
+			log.LogNoRequestID("catabalancer sys info ", "cpus", len(sysinfo.CPUInfo))
+
+			event := NodeStatsEvent{
+				Resource: "nodeStats",
+				NodeID:   nodeName,
+				NodeMetrics: catalyst.NodeMetrics{
+					CPUUsagePercentage:       int64(sysinfo.LoadInfo.Load5 * 100), // TODO how can we convert load into a percentage? i think we need to take into account the number of cpus
+					RAMUsagePercentage:       int64(sysinfo.MemInfo.UsedPercent),
+					BandwidthUsagePercentage: 0,
+				},
+			}
+			payload, err := json.Marshal(event)
+			if err != nil {
+				log.LogNoRequestID("catabalancer failed to marhsal node stats", "err", err)
+				break
+			}
+
+			err = c.BroadcastEvent(serf.UserEvent{
+				Name:    "node-stats",
+				Payload: payload,
+			})
+			if err != nil {
+				log.LogNoRequestID("catabalancer failed to send sys info", "err", err)
+				break
+			}
+		}
+	}()
 }
