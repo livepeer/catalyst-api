@@ -12,7 +12,7 @@ import (
 
 type CataBalancer struct {
 	Cluster cluster.Cluster
-	Nodes   []Node
+	Nodes   map[string]*Node
 }
 
 func (c *CataBalancer) Start(ctx context.Context) error {
@@ -24,16 +24,28 @@ func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Memb
 	if len(c.Nodes) > 0 {
 		return nil
 	}
-	// TODO rather than only run once let this update nodes list, removing and adding new ones
+	// TODO surround by a lock?
+	latestNodes := make(map[string]bool)
 	for _, member := range members {
-		c.Nodes = append(c.Nodes, Node{
-			ID: member.Name,
-		})
+		if _, ok := c.Nodes[member.Name]; !ok {
+			c.Nodes[member.Name] = &Node{
+				ID: member.Name,
+			}
+		}
+		latestNodes[member.Name] = true
+	}
+
+	// remove old nodes
+	for name := range c.Nodes {
+		if !latestNodes[name] {
+			delete(c.Nodes, name)
+		}
 	}
 	return nil
 }
 
 func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error) {
+	fmt.Println("catabalancer getbestnode", redirectPrefixes)
 	var err error
 	latf := 0.0
 	if lat != "" {
@@ -49,10 +61,15 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 			return "", "", err
 		}
 	}
-	node, err := SelectNode(c.Nodes, playbackID, latf, lonf)
+	var nodesList []Node
+	for _, node := range c.Nodes {
+		nodesList = append(nodesList, *node)
+	}
+	node, err := SelectNode(nodesList, playbackID, latf, lonf)
 	if err != nil {
 		return "", "", err
 	}
+	// TODO video+ is hard coded
 	return node.ID, "video+" + playbackID, nil
 }
 
@@ -72,27 +89,27 @@ func NewBalancer(c cluster.Cluster) *CataBalancer {
 
 	return &CataBalancer{
 		Cluster: c,
+		Nodes:   make(map[string]*Node),
 	}
 }
 
-func (c *CataBalancer) UpdateNodes(id string, nodeMetrics NodeMetrics) {
-	// TODO change c.Nodes to a map so that we don't have to worry about the size of the slice changing?
+func (c *CataBalancer) UpdateNodes(id string, nodeMetrics NodeMetrics, latitude float64, longitude float64) {
 	log.LogNoRequestID("catabalancer updatenodes", "id", id, "ram", nodeMetrics.RAMUsagePercentage, "cpu", nodeMetrics.CPUUsagePercentage)
-	for i := range c.Nodes {
-		if c.Nodes[i].ID == id {
-			c.Nodes[i].NodeMetrics = nodeMetrics
-			break
-		}
+	if _, ok := c.Nodes[id]; !ok {
+		log.LogNoRequestID("catabalancer updatenodes node not found", "id", id)
+		return
 	}
+	c.Nodes[id].NodeMetrics = nodeMetrics
+	c.Nodes[id].GeoLatitude = latitude
+	c.Nodes[id].GeoLongitude = longitude
 }
 
 func (c *CataBalancer) UpdateStreams(id string, streams map[string]Stream) {
-	for i := range c.Nodes {
-		if c.Nodes[i].ID == id {
-			c.Nodes[i].Streams = streams
-			break
-		}
+	if _, ok := c.Nodes[id]; !ok {
+		log.LogNoRequestID("catabalancer updatestreams node not found", "id", id)
+		return
 	}
+	c.Nodes[id].Streams = streams
 }
 
 // TODO: This is temporary until we have the real struct definition

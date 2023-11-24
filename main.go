@@ -312,7 +312,7 @@ func main() {
 		return handleClusterEvents(ctx, mapic, cataBalancer, c)
 	})
 
-	events.StartMetricSending(cli.NodeName, c)
+	events.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, c)
 
 	err = group.Wait()
 	glog.Infof("Shutdown complete. Reason for shutdown: %s", err)
@@ -360,7 +360,7 @@ func processClusterEvent(mapic mistapiconnector.IMac, cataBalancer *catalyst.Cat
 			mapic.NukeStream(event.PlaybackID)
 			return
 		case *events.NodeStatsEvent:
-			cataBalancer.UpdateNodes(event.NodeID, event.NodeMetrics)
+			cataBalancer.UpdateNodes(event.NodeID, event.NodeMetrics, event.NodeLatitude, event.NodeLongitude)
 		case *events.NodeStreamsEvent:
 			cataBalancer.UpdateStreams(event.NodeID, event.Streams)
 		default:

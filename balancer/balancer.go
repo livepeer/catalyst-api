@@ -16,7 +16,7 @@ type Balancer interface {
 	MistUtilLoadBalance(ctx context.Context, stream, lat, lon string) (string, error)
 	MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error)
 	MistUtilLoadStreamStats(ctx context.Context, stream string) error
-	UpdateNodes(id string, nodeMetrics catalyst.NodeMetrics)
+	UpdateNodes(id string, nodeMetrics catalyst.NodeMetrics, latitude float64, longitude float64)
 	UpdateStreams(id string, streams map[string]catalyst.Stream)
 }
 

@@ -32,9 +32,11 @@ type NukeEvent struct {
 }
 
 type NodeStatsEvent struct {
-	Resource    string               `json:"resource"`
-	NodeID      string               `json:"node_id"`
-	NodeMetrics catalyst.NodeMetrics `json:"node_metrics"`
+	Resource      string               `json:"resource"`
+	NodeID        string               `json:"node_id"`
+	NodeMetrics   catalyst.NodeMetrics `json:"node_metrics"`
+	NodeLatitude  float64              `json:"node_latitude"`
+	NodeLongitude float64              `json:"node_longitude"`
 }
 
 type NodeStreamsEvent struct {
@@ -82,7 +84,7 @@ func Unmarshal(payload []byte) (Event, error) {
 	return nil, fmt.Errorf("unable to unmarshal event, unknown resource '%s'", generic.Resource)
 }
 
-func StartMetricSending(nodeName string, c cluster.Cluster) {
+func StartMetricSending(nodeName string, latitude float64, longitude float64, c cluster.Cluster) {
 	ticker := time.NewTicker(5 * time.Second)
 	go func() {
 		for range ticker.C {
@@ -102,6 +104,8 @@ func StartMetricSending(nodeName string, c cluster.Cluster) {
 					RAMUsagePercentage:       int64(sysinfo.MemInfo.UsedPercent),
 					BandwidthUsagePercentage: 0,
 				},
+				NodeLatitude:  latitude,
+				NodeLongitude: longitude,
 			}
 			payload, err := json.Marshal(event)
 			if err != nil {
