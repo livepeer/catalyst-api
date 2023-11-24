@@ -30,7 +30,7 @@ func geoScores(nodes []ScoredNode, requestLatitude, requestLongitude float64) []
 		c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 
 		// Distance in kilometers
-		nodes[i].GeoDistance = earthRadius * c
+		nodes[i].GeoDistance = math.Round(earthRadius * c)
 	}
 
 	// Order nodes by distance

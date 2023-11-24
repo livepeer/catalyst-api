@@ -20,7 +20,6 @@ import (
 	"github.com/livepeer/catalyst-api/api"
 	"github.com/livepeer/catalyst-api/balancer"
 	"github.com/livepeer/catalyst-api/balancer/catalyst"
-	mist_balancer "github.com/livepeer/catalyst-api/balancer/mist"
 	"github.com/livepeer/catalyst-api/c2pa"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
@@ -260,20 +259,20 @@ func main() {
 		mapic = mistapiconnector.NewMapic(&cli, broker, mist)
 	}
 
-	// Start balancer
-	bal := mist_balancer.NewBalancer(&balancer.Config{
-		Args:                     cli.BalancerArgs,
-		MistUtilLoadPort:         uint32(cli.MistLoadBalancerPort),
-		MistLoadBalancerTemplate: cli.MistLoadBalancerTemplate,
-		MistHost:                 cli.MistHost,
-		MistPort:                 cli.MistPort,
-		NodeName:                 cli.NodeName,
-	})
-
 	c := cluster.NewCluster(&cli)
 
+	// Start balancer
+	//bal := mist_balancer.NewBalancer(&balancer.Config{
+	//	Args:                     cli.BalancerArgs,
+	//	MistUtilLoadPort:         uint32(cli.MistLoadBalancerPort),
+	//	MistLoadBalancerTemplate: cli.MistLoadBalancerTemplate,
+	//	MistHost:                 cli.MistHost,
+	//	MistPort:                 cli.MistPort,
+	//	NodeName:                 cli.NodeName,
+	//})
+
 	cataBalancer := catalyst.NewBalancer(c)
-	bal = cataBalancer // NOTE: comment this out if you want to flip back to old mist balancer
+	bal := cataBalancer // NOTE: comment this out if you want to flip back to old mist balancer
 
 	// Initialize root context; cancelling this prompts all components to shut down cleanly
 	group, ctx := errgroup.WithContext(context.Background())
