@@ -8,12 +8,14 @@ import (
 	"math/rand"
 	"sort"
 	"strconv"
+	"sync"
 )
 
 type CataBalancer struct {
-	Cluster  cluster.Cluster
-	Nodes    map[string]*Node
-	NodeName string // TODO do we need to know which the current node is in the logic anywhere? remove if not
+	Cluster   cluster.Cluster
+	Nodes     map[string]*Node
+	NodeName  string // TODO do we need to know which the current node is in the logic anywhere? remove if not
+	nodesLock sync.Mutex
 }
 
 func (c *CataBalancer) Start(ctx context.Context) error {
@@ -21,11 +23,14 @@ func (c *CataBalancer) Start(ctx context.Context) error {
 }
 
 func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Member) error {
-	fmt.Println("catabalancer update members ", members)
 	if len(c.Nodes) > 0 {
 		return nil
 	}
-	// TODO surround by a lock?
+
+	// I'm assuming UpdateMembers can be called concurrently, so we need to lock while updating the nodes map
+	c.nodesLock.Lock()
+	defer c.nodesLock.Unlock()
+
 	latestNodes := make(map[string]bool)
 	for _, member := range members {
 		if _, ok := c.Nodes[member.Name]; !ok {
@@ -46,7 +51,6 @@ func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Memb
 }
 
 func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error) {
-	fmt.Println("catabalancer getbestnode", redirectPrefixes)
 	var err error
 	latf := 0.0
 	if lat != "" {
@@ -145,6 +149,9 @@ type ScoredNode struct {
 
 func (n Node) HasStream(streamID string) bool {
 	_, ok := n.Streams[streamID]
+	if ok {
+		log.LogNoRequestID("catabalancer found stream on node", "node", n.Name, "streamid", streamID)
+	}
 	return ok
 }
 
@@ -164,6 +171,7 @@ func SelectNode(nodes []Node, streamID string, requestLatitude, requestLongitude
 	}
 
 	topNodes := selectTopNodes(nodes, streamID, requestLatitude, requestLongitude, 3)
+	// TODO figure out what logging we need
 	log.LogNoRequestID("catabalancer select nodes", "topNodes", topNodes)
 	return topNodes[rand.Intn(len(topNodes))].Node, nil
 }

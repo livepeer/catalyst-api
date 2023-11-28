@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"github.com/hashicorp/serf/serf"
 	"github.com/livepeer/catalyst-api/balancer/catalyst"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/log"
+	"strings"
 	"time"
 )
 
@@ -84,7 +86,7 @@ func Unmarshal(payload []byte) (Event, error) {
 	return nil, fmt.Errorf("unable to unmarshal event, unknown resource '%s'", generic.Resource)
 }
 
-func StartMetricSending(nodeName string, latitude float64, longitude float64, c cluster.Cluster) {
+func StartMetricSending(nodeName string, latitude float64, longitude float64, c cluster.Cluster, mist clients.MistAPIClient) {
 	ticker := time.NewTicker(5 * time.Second)
 	go func() {
 		for range ticker.C {
@@ -96,7 +98,7 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 			}
 
 			event := NodeStatsEvent{
-				Resource: "nodeStats",
+				Resource: nodeStatsEventResource,
 				NodeID:   nodeName,
 				NodeMetrics: catalyst.NodeMetrics{
 					CPUUsagePercentage:       sysinfo.CPUUsagePercentage,
@@ -118,6 +120,43 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 			})
 			if err != nil {
 				log.LogNoRequestID("catabalancer failed to send sys info", "err", err)
+				break
+			}
+
+			// send streams event
+			mistState, err := mist.GetState()
+			if err != nil {
+				log.LogNoRequestID("catabalancer failed to get mist state", "err", err)
+			}
+			streams := make(map[string]catalyst.Stream)
+			for playbackID := range mistState.ActiveStreams {
+				parts := strings.Split(playbackID, "+")
+				if len(parts) == 2 {
+					playbackID = parts[1] // take the playbackID after the prefix e.g. 'video+'
+				}
+				streams[playbackID] = catalyst.Stream{
+					ID: playbackID,
+				}
+			}
+
+			// TODO should we just roll streams info into the same metrics event above?
+			streamsEvent := NodeStreamsEvent{
+				Resource: nodeStreamsEventResource,
+				NodeID:   nodeName,
+				Streams:  streams,
+			}
+			payload, err = json.Marshal(streamsEvent)
+			if err != nil {
+				log.LogNoRequestID("catabalancer failed to marhsal node stats", "err", err)
+				break
+			}
+
+			err = c.BroadcastEvent(serf.UserEvent{
+				Name:    "node-streams",
+				Payload: payload,
+			})
+			if err != nil {
+				log.LogNoRequestID("catabalancer failed to send streams info", "err", err)
 				break
 			}
 		}

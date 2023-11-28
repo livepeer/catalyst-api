@@ -312,7 +312,7 @@ func main() {
 		return handleClusterEvents(ctx, mapic, bal, cataBalancer, c)
 	})
 
-	events.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, c)
+	events.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, c, mist)
 
 	err = group.Wait()
 	glog.Infof("Shutdown complete. Reason for shutdown: %s", err)
