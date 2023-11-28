@@ -8,31 +8,31 @@ import (
 )
 
 var NodeGeos = []ScoredNode{
-	{Node: Node{ID: "lax-1", GeoLatitude: 33.94, GeoLongitude: -118.41}},
-	{Node: Node{ID: "lax-2", GeoLatitude: 33.94, GeoLongitude: -118.41}},
-	{Node: Node{ID: "lax-3", GeoLatitude: 33.94, GeoLongitude: -118.41}},
-	{Node: Node{ID: "mdw-1", GeoLatitude: 41.88, GeoLongitude: -87.63}},
-	{Node: Node{ID: "mdw-2", GeoLatitude: 41.88, GeoLongitude: -87.63}},
-	{Node: Node{ID: "mdw-3", GeoLatitude: 41.88, GeoLongitude: -87.63}},
-	{Node: Node{ID: "mdw-4", GeoLatitude: 41.88, GeoLongitude: -87.63}},
-	{Node: Node{ID: "mdw-5", GeoLatitude: 41.88, GeoLongitude: -87.63}},
-	{Node: Node{ID: "nyc-1", GeoLatitude: 40.71, GeoLongitude: -74.01}},
-	{Node: Node{ID: "nyc-2", GeoLatitude: 40.71, GeoLongitude: -74.01}},
-	{Node: Node{ID: "lon-1", GeoLatitude: 51.51, GeoLongitude: 0.13}},
-	{Node: Node{ID: "lon-2", GeoLatitude: 51.51, GeoLongitude: 0.13}},
-	{Node: Node{ID: "lon-3", GeoLatitude: 51.51, GeoLongitude: 0.13}},
-	{Node: Node{ID: "lon-4", GeoLatitude: 51.51, GeoLongitude: 0.13}},
-	{Node: Node{ID: "sao-1", GeoLatitude: -23.55, GeoLongitude: -46.63}},
-	{Node: Node{ID: "sao-2", GeoLatitude: -23.55, GeoLongitude: -46.63}},
-	{Node: Node{ID: "fra-1", GeoLatitude: 50.11, GeoLongitude: 8.68}},
-	{Node: Node{ID: "fra-2", GeoLatitude: 50.11, GeoLongitude: 8.68}},
-	{Node: Node{ID: "fra-3", GeoLatitude: 50.11, GeoLongitude: 8.68}},
-	{Node: Node{ID: "fra-4", GeoLatitude: 50.11, GeoLongitude: 8.68}},
-	{Node: Node{ID: "fra-5", GeoLatitude: 50.11, GeoLongitude: 8.68}},
-	{Node: Node{ID: "prg-1", GeoLatitude: 50.08, GeoLongitude: 14.44}},
-	{Node: Node{ID: "prg-2", GeoLatitude: 50.08, GeoLongitude: 14.44}},
-	{Node: Node{ID: "sin-1", GeoLatitude: 1.35, GeoLongitude: 103.82}},
-	{Node: Node{ID: "sin-2", GeoLatitude: 1.35, GeoLongitude: 103.82}},
+	{Node: Node{Name: "lax-1", GeoLatitude: 33.94, GeoLongitude: -118.41}},
+	{Node: Node{Name: "lax-2", GeoLatitude: 33.94, GeoLongitude: -118.41}},
+	{Node: Node{Name: "lax-3", GeoLatitude: 33.94, GeoLongitude: -118.41}},
+	{Node: Node{Name: "mdw-1", GeoLatitude: 41.88, GeoLongitude: -87.63}},
+	{Node: Node{Name: "mdw-2", GeoLatitude: 41.88, GeoLongitude: -87.63}},
+	{Node: Node{Name: "mdw-3", GeoLatitude: 41.88, GeoLongitude: -87.63}},
+	{Node: Node{Name: "mdw-4", GeoLatitude: 41.88, GeoLongitude: -87.63}},
+	{Node: Node{Name: "mdw-5", GeoLatitude: 41.88, GeoLongitude: -87.63}},
+	{Node: Node{Name: "nyc-1", GeoLatitude: 40.71, GeoLongitude: -74.01}},
+	{Node: Node{Name: "nyc-2", GeoLatitude: 40.71, GeoLongitude: -74.01}},
+	{Node: Node{Name: "lon-1", GeoLatitude: 51.51, GeoLongitude: 0.13}},
+	{Node: Node{Name: "lon-2", GeoLatitude: 51.51, GeoLongitude: 0.13}},
+	{Node: Node{Name: "lon-3", GeoLatitude: 51.51, GeoLongitude: 0.13}},
+	{Node: Node{Name: "lon-4", GeoLatitude: 51.51, GeoLongitude: 0.13}},
+	{Node: Node{Name: "sao-1", GeoLatitude: -23.55, GeoLongitude: -46.63}},
+	{Node: Node{Name: "sao-2", GeoLatitude: -23.55, GeoLongitude: -46.63}},
+	{Node: Node{Name: "fra-1", GeoLatitude: 50.11, GeoLongitude: 8.68}},
+	{Node: Node{Name: "fra-2", GeoLatitude: 50.11, GeoLongitude: 8.68}},
+	{Node: Node{Name: "fra-3", GeoLatitude: 50.11, GeoLongitude: 8.68}},
+	{Node: Node{Name: "fra-4", GeoLatitude: 50.11, GeoLongitude: 8.68}},
+	{Node: Node{Name: "fra-5", GeoLatitude: 50.11, GeoLongitude: 8.68}},
+	{Node: Node{Name: "prg-1", GeoLatitude: 50.08, GeoLongitude: 14.44}},
+	{Node: Node{Name: "prg-2", GeoLatitude: 50.08, GeoLongitude: 14.44}},
+	{Node: Node{Name: "sin-1", GeoLatitude: 1.35, GeoLongitude: 103.82}},
+	{Node: Node{Name: "sin-2", GeoLatitude: 1.35, GeoLongitude: 103.82}},
 }
 
 func TestGeoScores(t *testing.T) {
@@ -77,13 +77,13 @@ func getGeoScores(requestLatitude, requestLongitude float64) (good, okay, bad []
 	scoredNodes := geoScores(NodeGeos, requestLatitude, requestLongitude)
 	for _, scoredNode := range scoredNodes {
 		if scoredNode.GeoScore == 2 {
-			good = append(good, scoredNode.ID)
+			good = append(good, scoredNode.Name)
 		}
 		if scoredNode.GeoScore == 1 {
-			okay = append(okay, scoredNode.ID)
+			okay = append(okay, scoredNode.Name)
 		}
 		if scoredNode.GeoScore == 0 {
-			bad = append(bad, scoredNode.ID)
+			bad = append(bad, scoredNode.Name)
 		}
 	}
 

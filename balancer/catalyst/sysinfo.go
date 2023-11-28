@@ -2,16 +2,14 @@ package catalyst
 
 import (
 	"github.com/shirou/gopsutil/v3/cpu"
-	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/load"
 	"github.com/shirou/gopsutil/v3/mem"
 )
 
 type SystemInfo struct {
-	CPUInfo  []cpu.InfoStat
-	MemInfo  *mem.VirtualMemoryStat
-	DiskInfo []disk.UsageStat
-	LoadInfo *load.AvgStat
+	CPUUsagePercentage       float64
+	RAMUsagePercentage       float64
+	BandwidthUsagePercentage float64
 }
 
 /*
@@ -33,32 +31,17 @@ func main() {
 func GetSystemInfo() (*SystemInfo, error) {
 	sysInfo := &SystemInfo{}
 
-	// Get CPU information
-	cpuInfo, err := cpu.Info()
-	if err != nil {
-		return nil, err
-	}
-	sysInfo.CPUInfo = cpuInfo
-
 	// Get memory information
 	memInfo, err := mem.VirtualMemory()
 	if err != nil {
 		return nil, err
 	}
-	sysInfo.MemInfo = memInfo
+	sysInfo.RAMUsagePercentage = memInfo.UsedPercent
 
-	// Get disk information
-	partitions, err := disk.Partitions(true)
+	// Get CPU information
+	cpuInfo, err := cpu.Info()
 	if err != nil {
 		return nil, err
-	}
-
-	for _, p := range partitions {
-		diskInfo, err := disk.Usage(p.Mountpoint)
-		if err != nil {
-			return nil, err
-		}
-		sysInfo.DiskInfo = append(sysInfo.DiskInfo, *diskInfo)
 	}
 
 	// Get load info
@@ -66,7 +49,10 @@ func GetSystemInfo() (*SystemInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	sysInfo.LoadInfo = loadInfo
+	// TODO somebody check my maths here. taking the load average over 5 minutes, which is in the range 0-1 so multiply by 100 and divide by number of CPUs
+	sysInfo.CPUUsagePercentage = loadInfo.Load5 * 100 / float64(len(cpuInfo))
+
+	// TODO bandwidth usage
 
 	return sysInfo, nil
 }

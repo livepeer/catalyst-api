@@ -271,7 +271,7 @@ func main() {
 	//	NodeName:                 cli.NodeName,
 	//})
 
-	cataBalancer := catalyst.NewBalancer(c)
+	cataBalancer := catalyst.NewBalancer(c, cli.NodeName)
 	bal := cataBalancer // NOTE: comment this out if you want to flip back to old mist balancer
 
 	// Initialize root context; cancelling this prompts all components to shut down cleanly

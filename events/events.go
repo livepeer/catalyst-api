@@ -94,15 +94,14 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 				log.LogNoRequestID("catabalancer failed to get sys info", "err", err)
 				break
 			}
-			log.LogNoRequestID("catabalancer sys info ", "cpus", len(sysinfo.CPUInfo))
 
 			event := NodeStatsEvent{
 				Resource: "nodeStats",
 				NodeID:   nodeName,
 				NodeMetrics: catalyst.NodeMetrics{
-					CPUUsagePercentage:       int64(sysinfo.LoadInfo.Load5 * 100), // TODO how can we convert load into a percentage? i think we need to take into account the number of cpus
-					RAMUsagePercentage:       int64(sysinfo.MemInfo.UsedPercent),
-					BandwidthUsagePercentage: 0,
+					CPUUsagePercentage:       sysinfo.CPUUsagePercentage,
+					RAMUsagePercentage:       sysinfo.RAMUsagePercentage,
+					BandwidthUsagePercentage: sysinfo.BandwidthUsagePercentage,
 				},
 				NodeLatitude:  latitude,
 				NodeLongitude: longitude,

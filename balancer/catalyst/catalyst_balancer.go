@@ -11,8 +11,9 @@ import (
 )
 
 type CataBalancer struct {
-	Cluster cluster.Cluster
-	Nodes   map[string]*Node
+	Cluster  cluster.Cluster
+	Nodes    map[string]*Node
+	NodeName string
 }
 
 func (c *CataBalancer) Start(ctx context.Context) error {
@@ -29,7 +30,7 @@ func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Memb
 	for _, member := range members {
 		if _, ok := c.Nodes[member.Name]; !ok {
 			c.Nodes[member.Name] = &Node{
-				ID: member.Name,
+				Name: member.Name,
 			}
 		}
 		latestNodes[member.Name] = true
@@ -70,7 +71,7 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 		return "", "", err
 	}
 	// TODO video+ is hard coded
-	return node.ID, "video+" + playbackID, nil
+	return node.Name, "video+" + playbackID, nil
 }
 
 func (c *CataBalancer) MistUtilLoadBalance(ctx context.Context, stream, lat, lon string) (string, error) {
@@ -85,11 +86,11 @@ func (c *CataBalancer) MistUtilLoadStreamStats(ctx context.Context, stream strin
 	return nil
 }
 
-func NewBalancer(c cluster.Cluster) *CataBalancer {
-
+func NewBalancer(c cluster.Cluster, name string) *CataBalancer {
 	return &CataBalancer{
-		Cluster: c,
-		Nodes:   make(map[string]*Node),
+		Cluster:  c,
+		Nodes:    make(map[string]*Node),
+		NodeName: name,
 	}
 }
 
@@ -114,7 +115,7 @@ func (c *CataBalancer) UpdateStreams(id string, streams map[string]Stream) {
 
 // TODO: This is temporary until we have the real struct definition
 type Node struct {
-	ID      string
+	Name    string
 	Streams map[string]Stream // Stream ID -> Stream
 	NodeMetrics
 	GeoLatitude  float64
@@ -126,9 +127,9 @@ type Stream struct {
 }
 
 type NodeMetrics struct {
-	CPUUsagePercentage       int64
-	RAMUsagePercentage       int64
-	BandwidthUsagePercentage int64
+	CPUUsagePercentage       float64
+	RAMUsagePercentage       float64
+	BandwidthUsagePercentage float64
 }
 
 // All of the scores are in the range 0-2, where:
