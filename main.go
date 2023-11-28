@@ -20,6 +20,7 @@ import (
 	"github.com/livepeer/catalyst-api/api"
 	"github.com/livepeer/catalyst-api/balancer"
 	"github.com/livepeer/catalyst-api/balancer/catalyst"
+	mist_balancer "github.com/livepeer/catalyst-api/balancer/mist"
 	"github.com/livepeer/catalyst-api/c2pa"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
@@ -262,17 +263,17 @@ func main() {
 	c := cluster.NewCluster(&cli)
 
 	// Start balancer
-	//bal := mist_balancer.NewBalancer(&balancer.Config{
-	//	Args:                     cli.BalancerArgs,
-	//	MistUtilLoadPort:         uint32(cli.MistLoadBalancerPort),
-	//	MistLoadBalancerTemplate: cli.MistLoadBalancerTemplate,
-	//	MistHost:                 cli.MistHost,
-	//	MistPort:                 cli.MistPort,
-	//	NodeName:                 cli.NodeName,
-	//})
+	bal := mist_balancer.NewBalancer(&balancer.Config{
+		Args:                     cli.BalancerArgs,
+		MistUtilLoadPort:         uint32(cli.MistLoadBalancerPort),
+		MistLoadBalancerTemplate: cli.MistLoadBalancerTemplate,
+		MistHost:                 cli.MistHost,
+		MistPort:                 cli.MistPort,
+		NodeName:                 cli.NodeName,
+	})
 
+	// Temporary secondary balancer to test cataBalancer logic alongside existing mist balancer
 	cataBalancer := catalyst.NewBalancer(c, cli.NodeName)
-	bal := cataBalancer // NOTE: comment this out if you want to flip back to old mist balancer
 
 	// Initialize root context; cancelling this prompts all components to shut down cleanly
 	group, ctx := errgroup.WithContext(context.Background())
@@ -282,11 +283,11 @@ func main() {
 	})
 
 	group.Go(func() error {
-		return api.ListenAndServe(ctx, cli, vodEngine, bal, c)
+		return api.ListenAndServe(ctx, cli, vodEngine, bal, cataBalancer, c)
 	})
 
 	group.Go(func() error {
-		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker, metricsDB)
+		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, cataBalancer, c, broker, metricsDB)
 	})
 
 	if cli.ShouldMapic() {
@@ -304,11 +305,11 @@ func main() {
 	})
 
 	group.Go(func() error {
-		return reconcileBalancer(ctx, bal, c)
+		return reconcileBalancer(ctx, bal, cataBalancer, c)
 	})
 
 	group.Go(func() error {
-		return handleClusterEvents(ctx, mapic, cataBalancer, c)
+		return handleClusterEvents(ctx, mapic, bal, cataBalancer, c)
 	})
 
 	events.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, c)
@@ -318,7 +319,7 @@ func main() {
 }
 
 // Eventually this will be the main loop of the state machine, but we just have one variable right now.
-func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Cluster) error {
+func reconcileBalancer(ctx context.Context, bal balancer.Balancer, cataBalancer balancer.Balancer, c cluster.Cluster) error {
 	memberCh := c.MemberChan()
 	for {
 		select {
@@ -329,23 +330,27 @@ func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Clu
 			if err != nil {
 				return fmt.Errorf("failed to update load balancer from member list: %w", err)
 			}
+			err = cataBalancer.UpdateMembers(ctx, list)
+			if err != nil {
+				log.Printf("failed to update catabalancer from member list: %s\n", err)
+			}
 		}
 	}
 }
 
-func handleClusterEvents(ctx context.Context, mapic mistapiconnector.IMac, cataBalancer *catalyst.CataBalancer, c cluster.Cluster) error {
+func handleClusterEvents(ctx context.Context, mapic mistapiconnector.IMac, bal balancer.Balancer, cataBalancer balancer.Balancer, c cluster.Cluster) error {
 	eventCh := c.EventChan()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case e := <-eventCh:
-			processClusterEvent(mapic, cataBalancer, e)
+			processClusterEvent(mapic, bal, cataBalancer, e)
 		}
 	}
 }
 
-func processClusterEvent(mapic mistapiconnector.IMac, cataBalancer *catalyst.CataBalancer, e serf.UserEvent) {
+func processClusterEvent(mapic mistapiconnector.IMac, bal balancer.Balancer, cataBalancer balancer.Balancer, e serf.UserEvent) {
 	go func() {
 		e, err := events.Unmarshal(e.Payload)
 		if err != nil {
@@ -359,8 +364,10 @@ func processClusterEvent(mapic mistapiconnector.IMac, cataBalancer *catalyst.Cat
 			mapic.NukeStream(event.PlaybackID)
 			return
 		case *events.NodeStatsEvent:
+			bal.UpdateNodes(event.NodeID, event.NodeMetrics, event.NodeLatitude, event.NodeLongitude)
 			cataBalancer.UpdateNodes(event.NodeID, event.NodeMetrics, event.NodeLatitude, event.NodeLongitude)
 		case *events.NodeStreamsEvent:
+			bal.UpdateStreams(event.NodeID, event.Streams)
 			cataBalancer.UpdateStreams(event.NodeID, event.Streams)
 		default:
 			glog.Errorf("unsupported serf event: %v", e)

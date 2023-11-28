@@ -28,8 +28,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker, metricsDB *sql.DB) error {
-	router := NewCatalystAPIRouterInternal(cli, vodEngine, mapic, bal, c, broker, metricsDB)
+func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, cataBalancer balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker, metricsDB *sql.DB) error {
+	router := NewCatalystAPIRouterInternal(cli, vodEngine, mapic, bal, cataBalancer, c, broker, metricsDB)
 	server := http.Server{Addr: cli.HTTPInternalAddress, Handler: router}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -55,7 +55,7 @@ func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipe
 	return server.Shutdown(ctx)
 }
 
-func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker, metricsDB *sql.DB) *httprouter.Router {
+func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, cataBalancer balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker, metricsDB *sql.DB) *httprouter.Router {
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
 	withAuth := middleware.IsAuthorized
@@ -64,9 +64,10 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	withCapacityChecking := capacityMiddleware.HasCapacity
 
 	geoHandlers := &geolocation.GeolocationHandlersCollection{
-		Config:   cli,
-		Balancer: bal,
-		Cluster:  c,
+		Config:       cli,
+		Balancer:     bal,
+		CataBalancer: cataBalancer,
+		Cluster:      c,
 	}
 
 	spkiPublicKey, _ := crypto.ConvertToSpki(cli.VodDecryptPublicKey)

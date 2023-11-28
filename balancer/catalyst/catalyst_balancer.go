@@ -13,7 +13,7 @@ import (
 type CataBalancer struct {
 	Cluster  cluster.Cluster
 	Nodes    map[string]*Node
-	NodeName string
+	NodeName string // TODO do we need to know which the current node is in the logic anywhere? remove if not
 }
 
 func (c *CataBalancer) Start(ctx context.Context) error {
