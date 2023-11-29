@@ -53,6 +53,11 @@ type TranscodeSegmentRequest struct {
 	IsClip         bool
 }
 
+type TranscodedSegmentInfo struct {
+	RenditionName string
+	SegmentIndex  int
+}
+
 func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo video.InputVideo, broadcaster clients.BroadcasterClient) ([]video.OutputVideo, int, error) {
 	log.AddContext(transcodeRequest.RequestID, "source_manifest", transcodeRequest.SourceManifestURL, "stream_name", streamName)
 	log.Log(transcodeRequest.RequestID, "RunTranscodeProcess (v2) Beginning")
@@ -140,6 +145,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				})
 		} else {
 			for _, profile := range transcodeProfiles {
+
 				renditionList.AddRenditionSegment(profile.Name,
 					&video.TSegmentList{
 						SegmentDataTable: make(map[int][]byte),
@@ -148,9 +154,18 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		}
 	}
 
+	// Create a buffered channel for segment information
+	segmentChannel := make(chan TranscodedSegmentInfo, 10) // Buffer size of 10
+
+	var wg sync.WaitGroup
+
 	var jobs *ParallelTranscoding
 	jobs = NewParallelTranscoding(sourceSegmentURLs, func(segment segmentInfo) error {
-		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, hlsTargetURL, transcodedStats, &renditionList, broadcaster)
+		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, hlsTargetURL, transcodedStats, &renditionList, broadcaster, segmentChannel)
+
+		wg.Add(1)       // Increment the WaitGroup counter
+		defer wg.Done() // Decrement the counter when the function exits
+
 		segmentsCount++
 		if err != nil {
 			return err
@@ -162,11 +177,39 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		}
 		return nil
 	})
+
+	// Start the disk-writing goroutine
+	go func() {
+		var segmentBatch []TranscodedSegmentInfo
+
+		for segInfo := range segmentChannel {
+			segmentBatch = append(segmentBatch, segInfo)
+			if len(segmentBatch) >= 1 {
+				//writeSegmentsToDisk(segmentBatch)
+				fmt.Println("XXX: writing to disk here because > 10", segInfo.RenditionName, segInfo.SegmentIndex)
+				//access and delete via mutexes
+				segmentBatch = nil
+			}
+		}
+		// Handle any remaining segments after the channel is closed
+		if len(segmentBatch) > 0 {
+			//writeSegmentsToDisk(segmentBatch)
+			fmt.Println("XXX: writing to disk here after channel close")
+		}
+	}()
+
 	jobs.Start()
 	if err = jobs.Wait(); err != nil {
 		// return first error to caller
 		return outputs, segmentsCount, err
 	}
+
+	// Wait for all transcoding jobs to complete
+	wg.Wait()
+	// Close the channel to signal that no more segments will be sent
+	close(segmentChannel)
+
+	fmt.Println("XXX: DONE")
 
 	// Build the manifests and push them to storage
 	manifestURL, err := clients.GenerateAndUploadManifests(sourceManifest, hlsTargetURL.String(), transcodedStats, transcodeRequest.IsClip)
@@ -432,6 +475,7 @@ func transcodeSegment(
 	transcodedStats []*video.RenditionStats,
 	renditionList *video.TRenditionList,
 	broadcaster clients.BroadcasterClient,
+	segmentChannel chan<- TranscodedSegmentInfo,
 ) error {
 	start := time.Now()
 
@@ -516,6 +560,12 @@ func transcodeSegment(
 				// be generated i.e. all profiles for mp4 inputs and only highest quality
 				// rendition for hls inputs like recordings.
 				segmentsList.AddSegmentData(segment.Index, transcodedSegment.MediaData)
+
+				segmentChannel <- TranscodedSegmentInfo{
+					RenditionName: transcodedSegment.Name, // Use actual rendition name
+					SegmentIndex:  segment.Index,          // Use actual segment index
+				}
+
 			}
 		}
 
