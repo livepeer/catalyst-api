@@ -138,19 +138,26 @@ func ConcatTS(tsFileName string, segmentsList *TSegmentList, useStreamBasedConca
 		}()
 
 		// Write each segment to disk and add segment filename to the text file
-		for segName, segData := range segmentsList.GetSortedSegments() {
+		for segName := range segmentsList.GetSortedSegments() {
 			// Open a new file to write each segment to disk
 			segmentFilename := fileBaseWithoutExt + "_" + strconv.Itoa(segName) + ".ts"
-			segmentFile, err := os.Create(segmentFilename)
+			/*			segmentFile, err := os.Create(segmentFilename)
+						if err != nil {
+							return totalBytes, fmt.Errorf("error creating individual segment file (%s) err: %w", segmentFilename, err)
+						}
+						defer segmentFile.Close()
+						// Write the segment data to disk
+						segBytes, err := segmentFile.Write(segmentsList.SegmentDataTable[segData])
+						if err != nil {
+							return totalBytes, fmt.Errorf("error writing segment %d err: %w", segName, err)
+						}
+			*/
+			fileInfo, err := os.Stat(segmentFilename)
 			if err != nil {
-				return totalBytes, fmt.Errorf("error creating individual segment file (%s) err: %w", segmentFilename, err)
+				return totalBytes, fmt.Errorf("error stat segment %d  err: %w", segName, err)
 			}
-			defer segmentFile.Close()
-			// Write the segment data to disk
-			segBytes, err := segmentFile.Write(segmentsList.SegmentDataTable[segData])
-			if err != nil {
-				return totalBytes, fmt.Errorf("error writing segment %d err: %w", segName, err)
-			}
+			segBytes := fileInfo.Size()
+
 			segmentFilenames = append(segmentFilenames, segmentFilename)
 			totalBytes = totalBytes + int64(segBytes)
 			// Add filename to the text file
