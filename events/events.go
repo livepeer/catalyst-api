@@ -86,6 +86,7 @@ func Unmarshal(payload []byte) (Event, error) {
 	return nil, fmt.Errorf("unable to unmarshal event, unknown resource '%s'", generic.Resource)
 }
 
+// TODO move this somewhere more appropriate
 func StartMetricSending(nodeName string, latitude float64, longitude float64, c cluster.Cluster, mist clients.MistAPIClient) {
 	ticker := time.NewTicker(5 * time.Second)
 	go func() {
@@ -123,6 +124,10 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 				break
 			}
 
+			if mist == nil {
+				continue
+			}
+
 			// send streams event
 			mistState, err := mist.GetState()
 			if err != nil {
@@ -139,7 +144,6 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 				}
 			}
 
-			// TODO should we just roll streams info into the same metrics event above?
 			streamsEvent := NodeStreamsEvent{
 				Resource: nodeStreamsEventResource,
 				NodeID:   nodeName,
@@ -151,6 +155,9 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 				break
 			}
 
+			// TODO may need one message per stream
+			// TODO on stream_buffer mist trigger also fire these
+			// TODO we can add user count per stream
 			err = c.BroadcastEvent(serf.UserEvent{
 				Name:    "node-streams",
 				Payload: payload,

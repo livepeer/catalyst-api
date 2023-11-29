@@ -14,7 +14,6 @@ import (
 type CataBalancer struct {
 	Cluster   cluster.Cluster
 	Nodes     map[string]*Node
-	NodeName  string // TODO do we need to know which the current node is in the logic anywhere? remove if not
 	nodesLock sync.Mutex
 }
 
@@ -78,23 +77,15 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 	return node.Name, "video+" + playbackID, nil
 }
 
-func (c *CataBalancer) MistUtilLoadBalance(ctx context.Context, stream, lat, lon string) (string, error) {
-	return "", nil
-}
-
 func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error) {
+	// TODO need to implement
 	return "", nil
 }
 
-func (c *CataBalancer) MistUtilLoadStreamStats(ctx context.Context, stream string) error {
-	return nil
-}
-
-func NewBalancer(c cluster.Cluster, name string) *CataBalancer {
+func NewBalancer(c cluster.Cluster) *CataBalancer {
 	return &CataBalancer{
-		Cluster:  c,
-		Nodes:    make(map[string]*Node),
-		NodeName: name,
+		Cluster: c,
+		Nodes:   make(map[string]*Node),
 	}
 }
 

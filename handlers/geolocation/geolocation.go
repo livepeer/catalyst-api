@@ -18,10 +18,9 @@ import (
 )
 
 type GeolocationHandlersCollection struct {
-	Balancer     balancer.Balancer
-	Cluster      cluster.Cluster
-	Config       config.Cli
-	CataBalancer balancer.Balancer
+	Balancer balancer.Balancer
+	Cluster  cluster.Cluster
+	Config   config.Cli
 }
 
 // this package handles geolocation for playback and origin discovery for node replication
@@ -54,8 +53,6 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 					w.WriteHeader(http.StatusBadGateway)
 					return
 				}
-				_, cataFullPlaybackID, cataErr := c.CataBalancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix)
-				glog.Warningf("catabalancer bestnode fullPlaybackID:%s cataFullPlaybackID:%s cataErr:%s", fullPlaybackID, cataFullPlaybackID, cataErr)
 
 				newURL, _ := url.Parse(r.URL.String())
 				newURL.Scheme = protocol(r)
@@ -96,8 +93,6 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			w.WriteHeader(http.StatusBadGateway)
 			return
 		}
-		cataBestNode, cataFullPlaybackID, cataErr := c.CataBalancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix)
-		glog.Warningf("catabalancer bestnode bestNode:%s fullPlaybackID:%s cataBestNode:%s cataFullPlaybackID:%s cataErr:%s", bestNode, fullPlaybackID, cataBestNode, cataFullPlaybackID, cataErr)
 
 		rPath := fmt.Sprintf(pathTmpl, fullPlaybackID)
 		rURL := fmt.Sprintf("%s://%s%s?%s", protocol(r), bestNode, rPath, r.URL.RawQuery)

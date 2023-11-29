@@ -17,8 +17,8 @@ import (
 	"github.com/livepeer/catalyst-api/pipeline"
 )
 
-func ListenAndServe(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, cataBalancer balancer.Balancer, c cluster.Cluster) error {
-	router := NewCatalystAPIRouter(cli, vodEngine, bal, cataBalancer, c)
+func ListenAndServe(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster) error {
+	router := NewCatalystAPIRouter(cli, vodEngine, bal, c)
 	server := http.Server{Addr: cli.HTTPAddress, Handler: router}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -44,7 +44,7 @@ func ListenAndServe(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coo
 	return server.Shutdown(ctx)
 }
 
-func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, cataBalancer balancer.Balancer, c cluster.Cluster) *httprouter.Router {
+func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster) *httprouter.Router {
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
 	withCORS := middleware.AllowCORS()
@@ -52,10 +52,9 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
 	geoHandlers := &geolocation.GeolocationHandlersCollection{
-		Balancer:     bal,
-		Cluster:      c,
-		Config:       cli,
-		CataBalancer: cataBalancer,
+		Balancer: bal,
+		Cluster:  c,
+		Config:   cli,
 	}
 
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
