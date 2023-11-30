@@ -9,11 +9,13 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"time"
 )
 
 type CataBalancer struct {
 	Nodes         map[string]*Node
-	nodesLock     sync.Mutex
+	metricsLock   sync.Mutex
+	streamsLock   sync.Mutex
 	Streams       map[string]Streams     // Node name -> Streams
 	IngestStreams map[string]Streams     // Node name -> Streams
 	NodeMetrics   map[string]NodeMetrics // Node name -> NodeMetrics
@@ -21,14 +23,14 @@ type CataBalancer struct {
 
 type Streams map[string]Stream // Stream ID -> Stream
 
-// TODO: This is temporary until we have the real struct definition
 type Node struct {
-	Name    string
-	DTSCTag string
+	Name string
+	DTSC string
 }
 
 type Stream struct {
-	ID string
+	ID       string
+	LastSeen time.Time // last time we saw a stream message for this stream, old streams can be removed on a timeout
 }
 
 type NodeMetrics struct {
@@ -67,27 +69,38 @@ func (c *CataBalancer) Start(ctx context.Context) error {
 }
 
 func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Member) error {
-	if len(c.Nodes) > 0 {
-		return nil
-	}
-
-	// I'm assuming UpdateMembers can be called concurrently, so we need to lock while updating the nodes map
-	c.nodesLock.Lock()
-	defer c.nodesLock.Unlock()
+	log.LogNoRequestID("catabalancer UpdateMembers", "members", fmt.Sprintf("%+v", members))
+	c.metricsLock.Lock()
+	defer c.metricsLock.Unlock()
+	c.streamsLock.Lock()
+	defer c.streamsLock.Unlock()
 
 	latestNodes := make(map[string]*Node)
 	for _, member := range members {
-		if _, ok := c.Nodes[member.Name]; !ok {
-			latestNodes[member.Name] = &Node{
-				Name:    member.Name,
-				DTSCTag: member.Tags["dtsc"],
-			}
+		latestNodes[member.Name] = &Node{
+			Name: member.Name,
+			DTSC: member.Tags["dtsc"],
 		}
 	}
 
 	// remove stream data for nodes no longer present
+	for nodeName := range c.Streams {
+		if _, ok := latestNodes[nodeName]; !ok {
+			delete(c.Streams, nodeName)
+		}
+	}
+	for nodeName := range c.IngestStreams {
+		if _, ok := latestNodes[nodeName]; !ok {
+			delete(c.IngestStreams, nodeName)
+		}
+	}
 
 	// remove metric data for nodes no longer present
+	for nodeName := range c.NodeMetrics {
+		if _, ok := latestNodes[nodeName]; !ok {
+			delete(c.NodeMetrics, nodeName)
+		}
+	}
 
 	c.Nodes = latestNodes
 	return nil
@@ -111,6 +124,7 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 	}
 	var nodesList []ScoredNode
 	for nodeName, node := range c.Nodes {
+		removeOldStreams(c.Streams[nodeName])
 		nodesList = append(nodesList, ScoredNode{
 			Node:        *node,
 			Streams:     c.Streams[nodeName],
@@ -202,9 +216,10 @@ func selectTopNodes(scoredNodes []ScoredNode, streamID string, requestLatitude, 
 
 func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error) {
 	for _, node := range c.Nodes {
-		if c.IngestStreams[node.Name] != nil {
+		removeOldStreams(c.IngestStreams[node.Name])
+		if _, ok := c.IngestStreams[node.Name]; ok {
 			if _, ok := c.IngestStreams[node.Name][stream]; ok {
-				return "dtsc://" + node.DTSCTag, nil
+				return node.DTSC, nil
 			}
 		}
 	}
@@ -212,6 +227,8 @@ func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon 
 }
 
 func (c *CataBalancer) UpdateNodes(id string, nodeMetrics NodeMetrics) {
+	c.metricsLock.Lock()
+	defer c.metricsLock.Unlock()
 	log.LogNoRequestID("catabalancer updatenodes", "id", id, "ram", nodeMetrics.RAMUsagePercentage, "cpu", nodeMetrics.CPUUsagePercentage)
 	if _, ok := c.Nodes[id]; !ok {
 		log.LogNoRequestID("catabalancer updatenodes node not found", "id", id)
@@ -220,20 +237,36 @@ func (c *CataBalancer) UpdateNodes(id string, nodeMetrics NodeMetrics) {
 	c.NodeMetrics[id] = nodeMetrics
 }
 
-func (c *CataBalancer) UpdateStreams(id string, stream string, isIngest bool) {
+var streamTimeout = 5 * time.Second // should match how often we send the update messages
+
+func (c *CataBalancer) UpdateStreams(id string, streamID string, isIngest bool) {
+	c.streamsLock.Lock()
+	defer c.streamsLock.Unlock()
 	if _, ok := c.Nodes[id]; !ok {
 		log.LogNoRequestID("catabalancer updatestreams node not found", "id", id)
 		return
 	}
+	// remove old streams
+	removeOldStreams(c.Streams[id])
+	removeOldStreams(c.IngestStreams[id])
+
 	if isIngest {
 		if c.IngestStreams[id] == nil {
 			c.IngestStreams[id] = make(Streams)
 		}
-		c.IngestStreams[id][stream] = Stream{ID: stream}
+		c.IngestStreams[id][streamID] = Stream{ID: streamID, LastSeen: time.Now()}
 		return
 	}
 	if c.Streams[id] == nil {
 		c.Streams[id] = make(Streams)
 	}
-	c.Streams[id][stream] = Stream{ID: stream}
+	c.Streams[id][streamID] = Stream{ID: streamID, LastSeen: time.Now()}
+}
+
+func removeOldStreams(streams Streams) {
+	for s, stream := range streams {
+		if stream.LastSeen.Before(time.Now().Add(-streamTimeout)) {
+			delete(streams, s)
+		}
+	}
 }

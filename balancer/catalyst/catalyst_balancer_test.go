@@ -3,7 +3,10 @@ package catalyst
 import (
 	"context"
 	"github.com/livepeer/catalyst-api/cluster"
+	"golang.org/x/sync/errgroup"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -257,7 +260,7 @@ func TestMistUtilLoadSource(t *testing.T) {
 	err := c.UpdateMembers(context.Background(), []cluster.Member{{
 		Name: "node",
 		Tags: map[string]string{
-			"dtsc": "nodedtsc",
+			"dtsc": "dtsc://nodedtsc",
 		},
 	}})
 	require.NoError(t, err)
@@ -276,11 +279,68 @@ func TestMistUtilLoadSource(t *testing.T) {
 
 	c.UpdateStreams("node", "stream", false)
 	c.UpdateStreams("node", "ingest", true)
-	require.Equal(t, map[string]Streams{
-		"node": {"stream": Stream{ID: "stream"}},
-	}, c.Streams)
+	require.Len(t, c.Streams, 1)
+	require.Equal(t, "stream", c.Streams["node"]["stream"].ID)
 
 	source, err := c.MistUtilLoadSource(context.Background(), "ingest", "", "")
 	require.NoError(t, err)
 	require.Equal(t, "dtsc://nodedtsc", source)
+
+	err = c.UpdateMembers(context.Background(), []cluster.Member{})
+	require.NoError(t, err)
+	require.Empty(t, c.IngestStreams)
+	source, err = c.MistUtilLoadSource(context.Background(), "ingest", "", "")
+	require.EqualError(t, err, "no node found for ingest stream: ingest")
+	require.Empty(t, source)
+}
+
+func TestStreamTimeout(t *testing.T) {
+	c := NewBalancer()
+	err := c.UpdateMembers(context.Background(), []cluster.Member{{
+		Name: "node",
+		Tags: map[string]string{
+			"dtsc": "dtsc://nodedtsc",
+		},
+	}})
+	require.NoError(t, err)
+
+	streamTimeout = 5 * time.Second
+	c.UpdateStreams("node", "stream", false)
+	c.UpdateStreams("node", "ingest", true)
+
+	require.Equal(t, "stream", c.Streams["node"]["stream"].ID)
+	require.Equal(t, "ingest", c.IngestStreams["node"]["ingest"].ID)
+
+	streamTimeout = -5 * time.Second
+	c.UpdateStreams("node", "ingest", true)
+	require.Empty(t, c.Streams["node"])
+	c.UpdateStreams("node", "stream", false)
+	require.Empty(t, c.IngestStreams["node"])
+}
+
+// needs to be run with go test -race
+func TestConcurrentUpdates(t *testing.T) {
+	c := NewBalancer()
+
+	err := c.UpdateMembers(context.Background(), []cluster.Member{{Name: "node"}})
+	require.NoError(t, err)
+
+	errGroup := errgroup.Group{}
+	for i := 0; i < 100; i++ {
+		i := i
+		errGroup.Go(func() error {
+			c.UpdateNodes("node", NodeMetrics{CPUUsagePercentage: float64(i)})
+			return nil
+		})
+		errGroup.Go(func() error {
+			c.UpdateStreams("node", strconv.Itoa(i), false)
+			return nil
+		})
+	}
+	// simulate some member updates at the same time
+	for i := 0; i < 100; i++ {
+		err = c.UpdateMembers(context.Background(), []cluster.Member{{Name: "node"}})
+		require.NoError(t, err)
+	}
+	require.NoError(t, errGroup.Wait())
 }
