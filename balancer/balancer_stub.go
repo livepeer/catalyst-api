@@ -50,8 +50,8 @@ func (b *BalancerStub) MistUtilLoadStreamStats(ctx context.Context, stream strin
 	return fmt.Errorf("not implemented")
 }
 
-func (b *BalancerStub) UpdateNodes(id string, nodeMetrics catalyst.NodeMetrics, latitude float64, longitude float64) {
+func (b *BalancerStub) UpdateNodes(id string, nodeMetrics catalyst.NodeMetrics) {
 }
 
-func (b *BalancerStub) UpdateStreams(id string, streams map[string]catalyst.Stream) {
+func (b *BalancerStub) UpdateStreams(id string, stream string, isIngest bool) {
 }

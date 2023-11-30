@@ -421,10 +421,10 @@ func (b *MistBalancer) mistAddr() string {
 	return fmt.Sprintf("http://%s:%d", b.config.MistHost, b.config.MistPort)
 }
 
-func (b *MistBalancer) UpdateNodes(id string, nodeMetrics catalyst.NodeMetrics, latitude float64, longitude float64) {
+func (b *MistBalancer) UpdateNodes(id string, nodeMetrics catalyst.NodeMetrics) {
 	//noop
 }
 
-func (b *MistBalancer) UpdateStreams(id string, streams map[string]catalyst.Stream) {
+func (b *MistBalancer) UpdateStreams(id string, stream string, isIngest bool) {
 	//noop
 }

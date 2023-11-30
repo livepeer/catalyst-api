@@ -362,9 +362,9 @@ func processClusterEvent(mapic mistapiconnector.IMac, bal balancer.Balancer, e s
 			mapic.NukeStream(event.PlaybackID)
 			return
 		case *events.NodeStatsEvent:
-			bal.UpdateNodes(event.NodeID, event.NodeMetrics, event.NodeLatitude, event.NodeLongitude)
+			bal.UpdateNodes(event.NodeID, event.NodeMetrics)
 		case *events.NodeStreamsEvent:
-			bal.UpdateStreams(event.NodeID, event.Streams)
+			bal.UpdateStreams(event.NodeID, event.Stream, event.IsIngest)
 		default:
 			glog.Errorf("unsupported serf event: %v", e)
 		}

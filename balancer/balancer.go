@@ -15,8 +15,8 @@ type Balancer interface {
 	UpdateMembers(ctx context.Context, members []cluster.Member) error
 	GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error)
 	MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error)
-	UpdateNodes(id string, nodeMetrics catalyst.NodeMetrics, latitude float64, longitude float64)
-	UpdateStreams(id string, streams map[string]catalyst.Stream)
+	UpdateNodes(id string, nodeMetrics catalyst.NodeMetrics)
+	UpdateStreams(id string, stream string, isIngest bool)
 }
 
 type CombinedBalancer struct {
@@ -65,14 +65,14 @@ func (c CombinedBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, l
 	return dtscURL, err
 }
 
-func (c CombinedBalancer) UpdateNodes(id string, nodeMetrics catalyst.NodeMetrics, latitude float64, longitude float64) {
-	c.Catabalancer.UpdateNodes(id, nodeMetrics, latitude, longitude)
-	c.MistBalancer.UpdateNodes(id, nodeMetrics, latitude, longitude)
+func (c CombinedBalancer) UpdateNodes(id string, nodeMetrics catalyst.NodeMetrics) {
+	c.Catabalancer.UpdateNodes(id, nodeMetrics)
+	c.MistBalancer.UpdateNodes(id, nodeMetrics)
 }
 
-func (c CombinedBalancer) UpdateStreams(id string, streams map[string]catalyst.Stream) {
-	c.Catabalancer.UpdateStreams(id, streams)
-	c.MistBalancer.UpdateStreams(id, streams)
+func (c CombinedBalancer) UpdateStreams(id string, stream string, isIngest bool) {
+	c.Catabalancer.UpdateStreams(id, stream, false)
+	c.MistBalancer.UpdateStreams(id, stream, false)
 }
 
 type Config struct {

@@ -12,9 +12,53 @@ import (
 )
 
 type CataBalancer struct {
-	Cluster   cluster.Cluster
-	Nodes     map[string]*Node
-	nodesLock sync.Mutex
+	Cluster       cluster.Cluster
+	Nodes         map[string]*Node
+	nodesLock     sync.Mutex
+	Streams       map[string]Streams     // Node name -> Streams
+	IngestStreams map[string]Streams     // Node name -> Streams
+	NodeMetrics   map[string]NodeMetrics // Node name -> NodeMetrics
+}
+
+type Streams map[string]Stream // Stream ID -> Stream
+
+// TODO: This is temporary until we have the real struct definition
+type Node struct {
+	Name    string
+	DTSCTag string
+}
+
+type Stream struct {
+	ID string
+}
+
+type NodeMetrics struct {
+	CPUUsagePercentage       float64
+	RAMUsagePercentage       float64
+	BandwidthUsagePercentage float64
+	GeoLatitude              float64
+	GeoLongitude             float64
+}
+
+// All of the scores are in the range 0-2, where:
+// 2 = Good
+// 1 = Okay
+// 0 = Bad
+type ScoredNode struct {
+	Score       int64
+	GeoScore    int64
+	GeoDistance float64
+	Node
+	Streams       Streams
+	IngestStreams Streams
+	NodeMetrics
+}
+
+func NewBalancer(c cluster.Cluster) *CataBalancer {
+	return &CataBalancer{
+		Cluster: c,
+		Nodes:   make(map[string]*Node),
+	}
 }
 
 func (c *CataBalancer) Start(ctx context.Context) error {
@@ -30,22 +74,21 @@ func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Memb
 	c.nodesLock.Lock()
 	defer c.nodesLock.Unlock()
 
-	latestNodes := make(map[string]bool)
+	latestNodes := make(map[string]*Node)
 	for _, member := range members {
 		if _, ok := c.Nodes[member.Name]; !ok {
-			c.Nodes[member.Name] = &Node{
-				Name: member.Name,
+			latestNodes[member.Name] = &Node{
+				Name:    member.Name,
+				DTSCTag: member.Tags["dtsc"],
 			}
 		}
-		latestNodes[member.Name] = true
 	}
 
-	// remove old nodes
-	for name := range c.Nodes {
-		if !latestNodes[name] {
-			delete(c.Nodes, name)
-		}
-	}
+	// remove stream data for nodes no longer present
+
+	// remove metric data for nodes no longer present
+
+	c.Nodes = latestNodes
 	return nil
 }
 
@@ -65,9 +108,13 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 			return "", "", err
 		}
 	}
-	var nodesList []Node
-	for _, node := range c.Nodes {
-		nodesList = append(nodesList, *node)
+	var nodesList []ScoredNode
+	for nodeName, node := range c.Nodes {
+		nodesList = append(nodesList, ScoredNode{
+			Node:        *node,
+			Streams:     c.Streams[nodeName],
+			NodeMetrics: c.NodeMetrics[nodeName],
+		})
 	}
 	node, err := SelectNode(nodesList, playbackID, latf, lonf)
 	if err != nil {
@@ -77,68 +124,7 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 	return node.Name, "video+" + playbackID, nil
 }
 
-func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error) {
-	// TODO need to implement
-	return "", nil
-}
-
-func NewBalancer(c cluster.Cluster) *CataBalancer {
-	return &CataBalancer{
-		Cluster: c,
-		Nodes:   make(map[string]*Node),
-	}
-}
-
-func (c *CataBalancer) UpdateNodes(id string, nodeMetrics NodeMetrics, latitude float64, longitude float64) {
-	log.LogNoRequestID("catabalancer updatenodes", "id", id, "ram", nodeMetrics.RAMUsagePercentage, "cpu", nodeMetrics.CPUUsagePercentage)
-	if _, ok := c.Nodes[id]; !ok {
-		log.LogNoRequestID("catabalancer updatenodes node not found", "id", id)
-		return
-	}
-	c.Nodes[id].NodeMetrics = nodeMetrics
-	c.Nodes[id].GeoLatitude = latitude
-	c.Nodes[id].GeoLongitude = longitude
-}
-
-func (c *CataBalancer) UpdateStreams(id string, streams map[string]Stream) {
-	if _, ok := c.Nodes[id]; !ok {
-		log.LogNoRequestID("catabalancer updatestreams node not found", "id", id)
-		return
-	}
-	c.Nodes[id].Streams = streams
-}
-
-// TODO: This is temporary until we have the real struct definition
-type Node struct {
-	Name    string
-	Streams map[string]Stream // Stream ID -> Stream
-	NodeMetrics
-	GeoLatitude  float64
-	GeoLongitude float64
-}
-
-type Stream struct {
-	ID string
-}
-
-type NodeMetrics struct {
-	CPUUsagePercentage       float64
-	RAMUsagePercentage       float64
-	BandwidthUsagePercentage float64
-}
-
-// All of the scores are in the range 0-2, where:
-// 2 = Good
-// 1 = Okay
-// 0 = Bad
-type ScoredNode struct {
-	Score       int64
-	GeoScore    int64
-	GeoDistance float64
-	Node
-}
-
-func (n Node) HasStream(streamID string) bool {
+func (n ScoredNode) HasStream(streamID string) bool {
 	_, ok := n.Streams[streamID]
 	if ok {
 		log.LogNoRequestID("catabalancer found stream on node", "node", n.Name, "streamid", streamID)
@@ -146,7 +132,7 @@ func (n Node) HasStream(streamID string) bool {
 	return ok
 }
 
-func (n Node) GetLoadScore() int {
+func (n ScoredNode) GetLoadScore() int {
 	if n.CPUUsagePercentage > 85 || n.BandwidthUsagePercentage > 85 || n.RAMUsagePercentage > 85 {
 		return 0
 	}
@@ -156,7 +142,7 @@ func (n Node) GetLoadScore() int {
 	return 2
 }
 
-func SelectNode(nodes []Node, streamID string, requestLatitude, requestLongitude float64) (Node, error) {
+func SelectNode(nodes []ScoredNode, streamID string, requestLatitude, requestLongitude float64) (Node, error) {
 	if len(nodes) == 0 {
 		return Node{}, fmt.Errorf("no nodes to select from")
 	}
@@ -164,15 +150,11 @@ func SelectNode(nodes []Node, streamID string, requestLatitude, requestLongitude
 	topNodes := selectTopNodes(nodes, streamID, requestLatitude, requestLongitude, 3)
 	// TODO figure out what logging we need
 	log.LogNoRequestID("catabalancer select nodes", "topNodes", topNodes)
+	// TODO return error if none found?
 	return topNodes[rand.Intn(len(topNodes))].Node, nil
 }
 
-func selectTopNodes(nodes []Node, streamID string, requestLatitude, requestLongitude float64, numNodes int) []ScoredNode {
-	var scoredNodes []ScoredNode
-	for _, node := range nodes {
-		scoredNodes = append(scoredNodes, ScoredNode{Node: node, Score: 0})
-	}
-
+func selectTopNodes(scoredNodes []ScoredNode, streamID string, requestLatitude, requestLongitude float64, numNodes int) []ScoredNode {
 	scoredNodes = geoScores(scoredNodes, requestLatitude, requestLongitude)
 
 	// 1. Has Stream and Is Local and Isn't Overloaded
@@ -215,4 +197,42 @@ func selectTopNodes(nodes []Node, streamID string, requestLatitude, requestLongi
 	}
 
 	return scoredNodes[:numNodes]
+}
+
+func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error) {
+	for _, node := range c.Nodes {
+		if c.IngestStreams[node.Name] != nil {
+			if _, ok := c.IngestStreams[node.Name][stream]; ok {
+				return "dtsc://" + node.DTSCTag, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("no node found for ingest stream: %s", stream)
+}
+
+func (c *CataBalancer) UpdateNodes(id string, nodeMetrics NodeMetrics) {
+	log.LogNoRequestID("catabalancer updatenodes", "id", id, "ram", nodeMetrics.RAMUsagePercentage, "cpu", nodeMetrics.CPUUsagePercentage)
+	if _, ok := c.Nodes[id]; !ok {
+		log.LogNoRequestID("catabalancer updatenodes node not found", "id", id)
+		return
+	}
+	c.NodeMetrics[id] = nodeMetrics
+}
+
+func (c *CataBalancer) UpdateStreams(id string, stream string, isIngest bool) {
+	if _, ok := c.Nodes[id]; !ok {
+		log.LogNoRequestID("catabalancer updatestreams node not found", "id", id)
+		return
+	}
+	if isIngest {
+		if c.IngestStreams[id] == nil {
+			c.IngestStreams[id] = make(Streams)
+		}
+		c.IngestStreams[id][stream] = Stream{ID: stream}
+		return
+	}
+	if c.Streams[id] == nil {
+		c.Streams[id] = make(Streams)
+	}
+	c.Streams[id][stream] = Stream{ID: stream}
 }

@@ -34,17 +34,16 @@ type NukeEvent struct {
 }
 
 type NodeStatsEvent struct {
-	Resource      string               `json:"resource"`
-	NodeID        string               `json:"node_id"`
-	NodeMetrics   catalyst.NodeMetrics `json:"node_metrics"`
-	NodeLatitude  float64              `json:"node_latitude"`
-	NodeLongitude float64              `json:"node_longitude"`
+	Resource    string               `json:"resource"`
+	NodeID      string               `json:"node_id"`
+	NodeMetrics catalyst.NodeMetrics `json:"node_metrics"`
 }
 
 type NodeStreamsEvent struct {
-	Resource string                     `json:"resource"`
-	NodeID   string                     `json:"node_id"`
-	Streams  map[string]catalyst.Stream `json:"streams"`
+	Resource string `json:"resource"`
+	NodeID   string `json:"node_id"`
+	Stream   string `json:"stream"`
+	IsIngest bool   `json:"is_ingest"`
 }
 
 func Unmarshal(payload []byte) (Event, error) {
@@ -95,7 +94,7 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 			sysinfo, err := catalyst.GetSystemInfo()
 			if err != nil {
 				log.LogNoRequestID("catabalancer failed to get sys info", "err", err)
-				break
+				continue
 			}
 
 			event := NodeStatsEvent{
@@ -105,14 +104,14 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 					CPUUsagePercentage:       sysinfo.CPUUsagePercentage,
 					RAMUsagePercentage:       sysinfo.RAMUsagePercentage,
 					BandwidthUsagePercentage: sysinfo.BandwidthUsagePercentage,
+					GeoLatitude:              latitude,
+					GeoLongitude:             longitude,
 				},
-				NodeLatitude:  latitude,
-				NodeLongitude: longitude,
 			}
 			payload, err := json.Marshal(event)
 			if err != nil {
 				log.LogNoRequestID("catabalancer failed to marhsal node stats", "err", err)
-				break
+				continue
 			}
 
 			err = c.BroadcastEvent(serf.UserEvent{
@@ -121,7 +120,7 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 			})
 			if err != nil {
 				log.LogNoRequestID("catabalancer failed to send sys info", "err", err)
-				break
+				continue
 			}
 
 			if mist == nil {
@@ -133,38 +132,35 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 			if err != nil {
 				log.LogNoRequestID("catabalancer failed to get mist state", "err", err)
 			}
-			streams := make(map[string]catalyst.Stream)
-			for playbackID := range mistState.ActiveStreams {
-				parts := strings.Split(playbackID, "+")
+			for stream := range mistState.ActiveStreams {
+				parts := strings.Split(stream, "+")
+				playbackID := stream
 				if len(parts) == 2 {
 					playbackID = parts[1] // take the playbackID after the prefix e.g. 'video+'
 				}
-				streams[playbackID] = catalyst.Stream{
-					ID: playbackID,
+
+				streamsEvent := NodeStreamsEvent{
+					Resource: nodeStreamsEventResource,
+					NodeID:   nodeName,
+					Stream:   playbackID,
+					IsIngest: mistState.IsIngestStream(stream),
 				}
-			}
+				payload, err = json.Marshal(streamsEvent)
+				if err != nil {
+					log.LogNoRequestID("catabalancer failed to marhsal node stats", "err", err)
+					continue
+				}
 
-			streamsEvent := NodeStreamsEvent{
-				Resource: nodeStreamsEventResource,
-				NodeID:   nodeName,
-				Streams:  streams,
-			}
-			payload, err = json.Marshal(streamsEvent)
-			if err != nil {
-				log.LogNoRequestID("catabalancer failed to marhsal node stats", "err", err)
-				break
-			}
-
-			// TODO may need one message per stream
-			// TODO on stream_buffer mist trigger also fire these
-			// TODO we can add user count per stream
-			err = c.BroadcastEvent(serf.UserEvent{
-				Name:    "node-streams",
-				Payload: payload,
-			})
-			if err != nil {
-				log.LogNoRequestID("catabalancer failed to send streams info", "err", err)
-				break
+				// TODO on stream_buffer mist trigger also fire these
+				// TODO we can add user count per stream
+				err = c.BroadcastEvent(serf.UserEvent{
+					Name:    "node-streams",
+					Payload: payload,
+				})
+				if err != nil {
+					log.LogNoRequestID("catabalancer failed to send streams info", "err", err)
+					continue
+				}
 			}
 		}
 	}()
