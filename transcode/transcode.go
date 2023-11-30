@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -54,6 +55,7 @@ type TranscodeSegmentRequest struct {
 }
 
 type TranscodedSegmentInfo struct {
+	RequestID     string
 	RenditionName string
 	SegmentIndex  int
 }
@@ -178,25 +180,35 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return nil
 	})
 
-	// Start the disk-writing goroutine
-	go func() {
-		var segmentBatch []TranscodedSegmentInfo
+	if transcodeRequest.GenerateMP4 {
+		// Create folder to hold transmux-ed files in local storage temporarily
+		TransmuxStorageDir, err := os.MkdirTemp(os.TempDir(), "transmux_stage_")
+		if err != nil && !os.IsExist(err) {
+			log.Log(transcodeRequest.RequestID, "failed to create temp dir for transmuxing", "dir", TransmuxStorageDir, "err", err)
+			return outputs, segmentsCount, err
+		}
+		defer os.RemoveAll(TransmuxStorageDir)
 
-		for segInfo := range segmentChannel {
-			segmentBatch = append(segmentBatch, segInfo)
-			if len(segmentBatch) >= 1 {
-				//writeSegmentsToDisk(segmentBatch)
-				fmt.Println("XXX: writing to disk here because > 10", segInfo.RenditionName, segInfo.SegmentIndex)
-				//access and delete via mutexes
-				segmentBatch = nil
+		// Start the disk-writing goroutine
+		go func(transmuxTopLevelDir string, renditionList *video.TRenditionList) {
+			var segmentBatch []TranscodedSegmentInfo
+
+			for segInfo := range segmentChannel {
+				segmentBatch = append(segmentBatch, segInfo)
+				if len(segmentBatch) >= 1 {
+					writeSegmentsToDisk(transmuxTopLevelDir, renditionList, segmentBatch)
+					fmt.Println("XXX: writing to disk here because > 10", segInfo.RenditionName, segInfo.SegmentIndex)
+					//access and delete via mutexes
+					segmentBatch = nil
+				}
 			}
-		}
-		// Handle any remaining segments after the channel is closed
-		if len(segmentBatch) > 0 {
-			//writeSegmentsToDisk(segmentBatch)
-			fmt.Println("XXX: writing to disk here after channel close")
-		}
-	}()
+			// Handle any remaining segments after the channel is closed
+			if len(segmentBatch) > 0 {
+				writeSegmentsToDisk(transmuxTopLevelDir, renditionList, segmentBatch)
+				fmt.Println("XXX: writing to disk here after channel close")
+			}
+		}(TransmuxStorageDir, &renditionList)
+	}
 
 	jobs.Start()
 	if err = jobs.Wait(); err != nil {
@@ -210,6 +222,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	close(segmentChannel)
 
 	fmt.Println("XXX: DONE")
+return outputs, segmentsCount, err
 
 	// Build the manifests and push them to storage
 	manifestURL, err := clients.GenerateAndUploadManifests(sourceManifest, hlsTargetURL.String(), transcodedStats, transcodeRequest.IsClip)
@@ -402,6 +415,26 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	return outputs, segmentsCount, nil
 }
 
+func writeSegmentsToDisk(transmuxTopLevelDir string, renditionList *video.TRenditionList, segmentBatch []TranscodedSegmentInfo) (int64, error) {
+	for _, segInfo := range segmentBatch {
+
+		segmentList := renditionList.GetSegmentList(segInfo.RenditionName)
+		segmentData := segmentList.GetSegment(segInfo.SegmentIndex)
+		segmentFilename := filepath.Join(transmuxTopLevelDir, segInfo.RequestID+"_"+segInfo.RenditionName+"_"+strconv.Itoa(segInfo.SegmentIndex)+".ts")
+		segmentFile, err := os.Create(segmentFilename)
+		if err != nil {
+			return 0, fmt.Errorf("error creating .ts file to write transcoded segment data err: %w", err)
+		}
+		defer segmentFile.Close()
+		_, err = segmentFile.Write(segmentData)
+		if err != nil {
+			return 0, fmt.Errorf("error writing segment err: %w", err)
+		}
+
+	}
+	return 0, nil
+}
+
 func uploadMp4Files(basePath *url.URL, mp4OutputFiles []string, prefix string) ([]video.OutputVideoFile, error) {
 	var mp4OutputsPre []video.OutputVideoFile
 	// e. Upload all mp4 related output files
@@ -562,6 +595,7 @@ func transcodeSegment(
 				segmentsList.AddSegmentData(segment.Index, transcodedSegment.MediaData)
 
 				segmentChannel <- TranscodedSegmentInfo{
+					RequestID:     transcodeRequest.RequestID,
 					RenditionName: transcodedSegment.Name, // Use actual rendition name
 					SegmentIndex:  segment.Index,          // Use actual segment index
 				}
