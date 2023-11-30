@@ -12,7 +12,6 @@ import (
 )
 
 type CataBalancer struct {
-	Cluster       cluster.Cluster
 	Nodes         map[string]*Node
 	nodesLock     sync.Mutex
 	Streams       map[string]Streams     // Node name -> Streams
@@ -54,10 +53,12 @@ type ScoredNode struct {
 	NodeMetrics
 }
 
-func NewBalancer(c cluster.Cluster) *CataBalancer {
+func NewBalancer() *CataBalancer {
 	return &CataBalancer{
-		Cluster: c,
-		Nodes:   make(map[string]*Node),
+		Nodes:         make(map[string]*Node),
+		Streams:       make(map[string]Streams),
+		IngestStreams: make(map[string]Streams),
+		NodeMetrics:   make(map[string]NodeMetrics),
 	}
 }
 

@@ -272,7 +272,7 @@ func main() {
 		NodeName:                 cli.NodeName,
 	})
 
-	cataBalancer := catalyst.NewBalancer(c)
+	cataBalancer := catalyst.NewBalancer()
 	// Temporary combined balancer to test cataBalancer logic alongside existing mist balancer
 	bal := balancer.CombinedBalancer{Catabalancer: cataBalancer, MistBalancer: mistBalancer}
 

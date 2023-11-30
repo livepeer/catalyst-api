@@ -1,6 +1,8 @@
 package catalyst
 
 import (
+	"context"
+	"github.com/livepeer/catalyst-api/cluster"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -239,4 +241,46 @@ func scores(node1 ScoredNode, node2 ScoredNode) ScoredNode {
 	node1.GeoScore = node2.GeoScore
 	node1.GeoDistance = node2.GeoDistance
 	return node1
+}
+
+func TestNoNodes(t *testing.T) {
+	c := NewBalancer()
+	c.UpdateNodes("id", NodeMetrics{})
+	c.UpdateStreams("id", "stream", false)
+	source, err := c.MistUtilLoadSource(context.Background(), "stream", "", "")
+	require.EqualError(t, err, "no node found for ingest stream: stream")
+	require.Empty(t, source)
+}
+
+func TestMistUtilLoadSource(t *testing.T) {
+	c := NewBalancer()
+	err := c.UpdateMembers(context.Background(), []cluster.Member{{
+		Name: "node",
+		Tags: map[string]string{
+			"dtsc": "nodedtsc",
+		},
+	}})
+	require.NoError(t, err)
+
+	metrics := NodeMetrics{
+		CPUUsagePercentage:       10,
+		RAMUsagePercentage:       10,
+		BandwidthUsagePercentage: 10,
+		GeoLatitude:              10,
+		GeoLongitude:             10,
+	}
+	c.UpdateNodes("node", metrics)
+	require.Equal(t, map[string]NodeMetrics{
+		"node": metrics,
+	}, c.NodeMetrics)
+
+	c.UpdateStreams("node", "stream", false)
+	c.UpdateStreams("node", "ingest", true)
+	require.Equal(t, map[string]Streams{
+		"node": {"stream": Stream{ID: "stream"}},
+	}, c.Streams)
+
+	source, err := c.MistUtilLoadSource(context.Background(), "ingest", "", "")
+	require.NoError(t, err)
+	require.Equal(t, "dtsc://nodedtsc", source)
 }
