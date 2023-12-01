@@ -18,7 +18,6 @@ var CPUOverloadedNode = ScoredNode{
 		RAMUsagePercentage:       0,
 		BandwidthUsagePercentage: 0,
 	},
-	Streams: map[string]Stream{},
 }
 
 var RAMOverloadedNode = ScoredNode{
@@ -28,7 +27,6 @@ var RAMOverloadedNode = ScoredNode{
 		RAMUsagePercentage:       100,
 		BandwidthUsagePercentage: 0,
 	},
-	Streams: map[string]Stream{},
 }
 
 var BandwidthOverloadedNode = ScoredNode{
@@ -38,7 +36,6 @@ var BandwidthOverloadedNode = ScoredNode{
 		RAMUsagePercentage:       0,
 		BandwidthUsagePercentage: 100,
 	},
-	Streams: map[string]Stream{},
 }
 
 func TestItReturnsItselfWhenNoOtherNodesPresent(t *testing.T) {
@@ -46,6 +43,16 @@ func TestItReturnsItselfWhenNoOtherNodesPresent(t *testing.T) {
 	// it'll still pick itself if it's the only option
 	_, err := SelectNode([]ScoredNode{}, "some-stream-id", 0, 0)
 	require.EqualError(t, err, "no nodes to select from")
+}
+
+func TestItReturnsBadNodeIfOnlyAvailable(t *testing.T) {
+	selectionNodes := []ScoredNode{
+		CPUOverloadedNode,
+	}
+
+	n, err := SelectNode(selectionNodes, "some-stream-id", 0, 0)
+	require.NoError(t, err)
+	require.Equal(t, CPUOverloadedNode.Node, n)
 }
 
 func TestItDoesntChooseOverloadedNodes(t *testing.T) {
@@ -103,13 +110,13 @@ func TestItChoosesRandomlyFromTheBestNodes(t *testing.T) {
 // then that's the ideal situation and we should prefer that over everything else
 func TestItPrefersLocalUnloadedServersWithStreamAlready(t *testing.T) {
 	selectionNodes := []ScoredNode{
-		{Node: Node{Name: "good-node-1"}, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}},
-		{Node: Node{Name: "good-node-2"}, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}},
-		{Node: Node{Name: "good-node-3"}, Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name"}}},
+		{Node: Node{Name: "good-node-1"}, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want", LastSeen: time.Now()}}},
+		{Node: Node{Name: "good-node-2"}, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want", LastSeen: time.Now()}}},
+		{Node: Node{Name: "good-node-3"}, Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name", LastSeen: time.Now()}}},
 		RAMOverloadedNode,
 		BandwidthOverloadedNode,
-		{Node: Node{Name: "good-node-4"}, Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name"}}},
-		{Node: Node{Name: "good-node-5"}, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}},
+		{Node: Node{Name: "good-node-4"}, Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name", LastSeen: time.Now()}}},
+		{Node: Node{Name: "good-node-5"}, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want", LastSeen: time.Now()}}},
 	}
 
 	foundNodes := map[string]bool{}
@@ -134,8 +141,8 @@ func TestItPrefersLocalUnloadedServersWithStreamAlready(t *testing.T) {
 func TestItPrefersLocalUnloadedServersWithoutStream(t *testing.T) {
 	selectionNodes := []ScoredNode{
 		{Node: Node{Name: "local-with-stream-high-cpu"}, NodeMetrics: NodeMetrics{CPUUsagePercentage: 90}, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}},
-		{Node: Node{Name: "local-without-stream"}, Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name"}}},
-		{Node: Node{Name: "local-without-stream-2"}, Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name"}}},
+		{Node: Node{Name: "local-without-stream"}, Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name", LastSeen: time.Now()}}},
+		{Node: Node{Name: "local-without-stream-2"}, Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name", LastSeen: time.Now()}}},
 		RAMOverloadedNode,
 		BandwidthOverloadedNode,
 		{Node: Node{Name: "far-with-stream"}, NodeMetrics: NodeMetrics{GeoLatitude: 100, GeoLongitude: 100}, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}},
@@ -162,14 +169,14 @@ func TestItChoosesLeastBad(t *testing.T) {
 	requestLatitude, requestLongitude := 51.7520, 1.2577 // Oxford
 	highCPULocal := ScoredNode{Node: Node{Name: "local-high-cpu"}, NodeMetrics: NodeMetrics{CPUUsagePercentage: 90, GeoLatitude: requestLatitude, GeoLongitude: requestLongitude}}
 	highCPUWithStream := ScoredNode{Node: Node{Name: "far-high-cpu"}, NodeMetrics: NodeMetrics{CPUUsagePercentage: 90, GeoLatitude: 1.35, GeoLongitude: 103.82},
-		Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}} // Sin
+		Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want", LastSeen: time.Now()}}} // Sin
 	highCPU := ScoredNode{Node: Node{Name: "far-medium-cpu"}, NodeMetrics: NodeMetrics{CPUUsagePercentage: 90, GeoLatitude: 1.35, GeoLongitude: 103.82}}    // Sin
 	mediumCPU := ScoredNode{Node: Node{Name: "far-medium-cpu"}, NodeMetrics: NodeMetrics{CPUUsagePercentage: 80, GeoLatitude: 1.35, GeoLongitude: 103.82}}  // Sin
 	lowCPU := ScoredNode{Node: Node{Name: "far-low-cpu"}, NodeMetrics: NodeMetrics{CPUUsagePercentage: 40, GeoLatitude: 1.35, GeoLongitude: 103.82}}        // Sin
 	lowCPUOkDistance := ScoredNode{Node: Node{Name: "low-cpu"}, NodeMetrics: NodeMetrics{CPUUsagePercentage: 40, GeoLatitude: 41.88, GeoLongitude: -87.63}} // Mdw
 	mediumMem := ScoredNode{Node: Node{Name: "far-medium-mem"}, NodeMetrics: NodeMetrics{RAMUsagePercentage: 80, GeoLatitude: 1.35, GeoLongitude: 103.82}}  // Sin
 	mediumMemWithStream := ScoredNode{Node: Node{Name: "far-medium-mem-with-stream"}, NodeMetrics: NodeMetrics{RAMUsagePercentage: 80, GeoLatitude: 1.35, GeoLongitude: 103.82},
-		Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}} // Sin
+		Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want", LastSeen: time.Now()}}} // Sin
 
 	tests := []struct {
 		name  string
@@ -246,11 +253,24 @@ func scores(node1 ScoredNode, node2 ScoredNode) ScoredNode {
 	return node1
 }
 
-func TestNoNodes(t *testing.T) {
+func TestNoIngestStream(t *testing.T) {
 	c := NewBalancer()
+	// first test no nodes available
 	c.UpdateNodes("id", NodeMetrics{})
 	c.UpdateStreams("id", "stream", false)
 	source, err := c.MistUtilLoadSource(context.Background(), "stream", "", "")
+	require.EqualError(t, err, "no node found for ingest stream: stream")
+	require.Empty(t, source)
+
+	// test node present but ingest stream not available
+	err = c.UpdateMembers(context.Background(), []cluster.Member{{
+		Name: "node",
+		Tags: map[string]string{
+			"dtsc": "dtsc://nodedtsc",
+		},
+	}})
+	require.NoError(t, err)
+	source, err = c.MistUtilLoadSource(context.Background(), "stream", "", "")
 	require.EqualError(t, err, "no node found for ingest stream: stream")
 	require.Empty(t, source)
 }
@@ -312,6 +332,10 @@ func TestStreamTimeout(t *testing.T) {
 	require.Equal(t, "ingest", c.IngestStreams["node"]["ingest"].ID)
 
 	streamTimeout = -5 * time.Second
+	// MistUtilLoadSource should detect the expiry and not return the stream
+	source, err := c.MistUtilLoadSource(context.Background(), "ingest", "", "")
+	require.EqualError(t, err, "no node found for ingest stream: ingest")
+	require.Empty(t, source)
 	c.UpdateStreams("node", "ingest", true)
 	require.Empty(t, c.Streams["node"])
 	c.UpdateStreams("node", "stream", false)

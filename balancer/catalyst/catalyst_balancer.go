@@ -125,7 +125,6 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 	}
 	var nodesList []ScoredNode
 	for nodeName, node := range c.Nodes {
-		removeOldStreams(c.Streams[nodeName])
 		nodesList = append(nodesList, ScoredNode{
 			Node:        *node,
 			Streams:     c.Streams[nodeName],
@@ -141,11 +140,12 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 }
 
 func (n ScoredNode) HasStream(streamID string) bool {
-	_, ok := n.Streams[streamID]
-	if ok {
+	s, ok := n.Streams[streamID]
+	found := ok && !isStreamExpired(s)
+	if found {
 		log.LogNoRequestID("catabalancer found stream on node", "node", n.Name, "streamid", streamID)
 	}
-	return ok
+	return found
 }
 
 func (n ScoredNode) GetLoadScore() int {
@@ -217,11 +217,8 @@ func selectTopNodes(scoredNodes []ScoredNode, streamID string, requestLatitude, 
 
 func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error) {
 	for _, node := range c.Nodes {
-		removeOldStreams(c.IngestStreams[node.Name])
-		if _, ok := c.IngestStreams[node.Name]; ok {
-			if _, ok := c.IngestStreams[node.Name][stream]; ok {
-				return node.DTSC, nil
-			}
+		if s, ok := c.IngestStreams[node.Name][stream]; ok && !isStreamExpired(s) {
+			return node.DTSC, nil
 		}
 	}
 	return "", fmt.Errorf("no node found for ingest stream: %s", stream)
@@ -264,9 +261,13 @@ func (c *CataBalancer) UpdateStreams(id string, streamID string, isIngest bool) 
 	c.Streams[id][streamID] = Stream{ID: streamID, LastSeen: time.Now()}
 }
 
+func isStreamExpired(stream Stream) bool {
+	return time.Now().Sub(stream.LastSeen) >= streamTimeout
+}
+
 func removeOldStreams(streams Streams) {
 	for s, stream := range streams {
-		if stream.LastSeen.Before(time.Now().Add(-streamTimeout)) {
+		if isStreamExpired(stream) {
 			delete(streams, s)
 		}
 	}
