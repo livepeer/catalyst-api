@@ -19,7 +19,6 @@ type Balancer interface {
 	UpdateStreams(id string, stream string, isIngest bool)
 }
 
-// TODO add config to turn on catabalancer
 type CombinedBalancer struct {
 	Catabalancer        Balancer
 	MistBalancer        Balancer

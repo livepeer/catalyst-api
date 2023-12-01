@@ -1,11 +1,13 @@
 package catalyst
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/load"
 	"github.com/shirou/gopsutil/v3/mem"
-	"time"
 )
 
 type LoadAverage struct {
@@ -37,6 +39,8 @@ func GetSystemUsage() (SystemUsage, error) {
 	}
 	if len(cpuPercents) > 0 {
 		systemUsage.CPUUsagePercentage = cpuPercents[0]
+	} else {
+		return SystemUsage{}, fmt.Errorf("cpu usage not found")
 	}
 
 	// Get memory usage
