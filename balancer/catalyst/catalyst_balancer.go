@@ -37,6 +37,7 @@ type NodeMetrics struct {
 	CPUUsagePercentage       float64
 	RAMUsagePercentage       float64
 	BandwidthUsagePercentage float64
+	LoadAvg                  float64
 	GeoLatitude              float64
 	GeoLongitude             float64
 }

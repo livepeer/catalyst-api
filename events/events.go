@@ -91,9 +91,9 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 	go func() {
 		for range ticker.C {
 			log.LogNoRequestID("catabalancer sending node stats")
-			sysinfo, err := catalyst.GetSystemInfo()
+			sysusage, err := catalyst.GetSystemUsage()
 			if err != nil {
-				log.LogNoRequestID("catabalancer failed to get sys info", "err", err)
+				log.LogNoRequestID("catabalancer failed to get sys usage", "err", err)
 				continue
 			}
 
@@ -101,9 +101,10 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 				Resource: nodeStatsEventResource,
 				NodeID:   nodeName,
 				NodeMetrics: catalyst.NodeMetrics{
-					CPUUsagePercentage:       sysinfo.CPUUsagePercentage,
-					RAMUsagePercentage:       sysinfo.RAMUsagePercentage,
-					BandwidthUsagePercentage: sysinfo.BandwidthUsagePercentage,
+					CPUUsagePercentage:       sysusage.CPUUsagePercentage,
+					RAMUsagePercentage:       sysusage.RAMUsagePercentage,
+					BandwidthUsagePercentage: sysusage.BWUsagePercentage,
+					LoadAvg:                  sysusage.LoadAvg.Load5Min,
 					GeoLatitude:              latitude,
 					GeoLongitude:             longitude,
 				},
