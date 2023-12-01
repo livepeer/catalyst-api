@@ -21,11 +21,16 @@ type Balancer interface {
 
 // TODO add config to turn on catabalancer
 type CombinedBalancer struct {
-	Catabalancer Balancer
-	MistBalancer Balancer
+	Catabalancer        Balancer
+	MistBalancer        Balancer
+	CatabalancerEnabled bool
 }
 
 func (c CombinedBalancer) Start(ctx context.Context) error {
+	if c.CatabalancerEnabled {
+		return c.Catabalancer.Start(ctx)
+	}
+
 	if err := c.Catabalancer.Start(ctx); err != nil {
 		log.LogNoRequestID("catabalancer Start failed", "err", err)
 	}
@@ -33,6 +38,10 @@ func (c CombinedBalancer) Start(ctx context.Context) error {
 }
 
 func (c CombinedBalancer) UpdateMembers(ctx context.Context, members []cluster.Member) error {
+	if c.CatabalancerEnabled {
+		return c.Catabalancer.UpdateMembers(ctx, members)
+	}
+
 	if err := c.Catabalancer.UpdateMembers(ctx, members); err != nil {
 		log.LogNoRequestID("catabalancer UpdateMembers failed", "err", err)
 	}
@@ -41,6 +50,10 @@ func (c CombinedBalancer) UpdateMembers(ctx context.Context, members []cluster.M
 
 func (c CombinedBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error) {
 	cataBestNode, cataFullPlaybackID, cataErr := c.Catabalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix)
+	if c.CatabalancerEnabled {
+		return cataBestNode, cataFullPlaybackID, cataErr
+	}
+
 	bestNode, fullPlaybackID, err := c.MistBalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix)
 	log.LogNoRequestID("catabalancer GetBestNode",
 		"bestNode", bestNode,
@@ -56,6 +69,10 @@ func (c CombinedBalancer) GetBestNode(ctx context.Context, redirectPrefixes []st
 
 func (c CombinedBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error) {
 	cataDtscURL, cataErr := c.Catabalancer.MistUtilLoadSource(ctx, stream, lat, lon)
+	if c.CatabalancerEnabled {
+		return cataDtscURL, cataErr
+	}
+
 	dtscURL, err := c.MistBalancer.MistUtilLoadSource(ctx, stream, lat, lon)
 	log.LogNoRequestID("catabalancer MistUtilLoadSource",
 		"dtscURL", dtscURL,

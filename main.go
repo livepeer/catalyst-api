@@ -76,6 +76,7 @@ func main() {
 	fs.IntVar(&config.MaxInFlightJobs, "max-inflight-jobs", 8, "Maximum number of concurrent VOD jobs to support in catalyst-api")
 	fs.IntVar(&config.MaxInFlightClipJobs, "max-inflight-clip-jobs", 20, "Maximum number of concurrent clipping jobs to support in catalyst-api")
 	fs.IntVar(&config.TranscodingParallelJobs, "parallel-transcode-jobs", 2, "Number of parallel transcode jobs")
+	fs.BoolVar(&cli.CataBalancerEnabled, "catabalancer-enabled", false, "Enable catabalancer load balancer")
 
 	// mist-api-connector parameters
 	fs.IntVar(&cli.MistPort, "mist-port", 4242, "Port to connect to Mist")
@@ -274,7 +275,11 @@ func main() {
 
 	cataBalancer := catalyst.NewBalancer()
 	// Temporary combined balancer to test cataBalancer logic alongside existing mist balancer
-	bal := balancer.CombinedBalancer{Catabalancer: cataBalancer, MistBalancer: mistBalancer}
+	bal := balancer.CombinedBalancer{
+		Catabalancer:        cataBalancer,
+		MistBalancer:        mistBalancer,
+		CatabalancerEnabled: cli.CataBalancerEnabled,
+	}
 
 	// Initialize root context; cancelling this prompts all components to shut down cleanly
 	group, ctx := errgroup.WithContext(context.Background())

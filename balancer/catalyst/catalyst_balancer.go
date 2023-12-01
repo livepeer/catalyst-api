@@ -262,7 +262,7 @@ func (c *CataBalancer) UpdateStreams(id string, streamID string, isIngest bool) 
 }
 
 func isStreamExpired(stream Stream) bool {
-	return time.Now().Sub(stream.LastSeen) >= streamTimeout
+	return time.Since(stream.LastSeen) >= streamTimeout
 }
 
 func removeOldStreams(streams Streams) {
