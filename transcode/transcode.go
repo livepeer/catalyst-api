@@ -199,13 +199,19 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				segmentBatch = append(segmentBatch, segInfo)
 				// Begin writing to disk if at-least 50% of buffered channel is full
 				if len(segmentBatch) >= SegmentChannelSize/2 {
-					writeSegmentsToDisk(transmuxTopLevelDir, renditionList, segmentBatch)
+					err := writeSegmentsToDisk(transmuxTopLevelDir, renditionList, segmentBatch)
+					if err != nil {
+						return
+					}
 					segmentBatch = nil
 				}
 			}
 			// Handle any remaining segments after the channel is closed
 			if len(segmentBatch) > 0 {
-				writeSegmentsToDisk(transmuxTopLevelDir, renditionList, segmentBatch)
+				err := writeSegmentsToDisk(transmuxTopLevelDir, renditionList, segmentBatch)
+				if err != nil {
+					return
+				}
 			}
 		}(TransmuxStorageDir, &renditionList)
 	}
@@ -400,7 +406,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	return outputs, segmentsCount, nil
 }
 
-func writeSegmentsToDisk(transmuxTopLevelDir string, renditionList *video.TRenditionList, segmentBatch []TranscodedSegmentInfo) (int64, error) {
+func writeSegmentsToDisk(transmuxTopLevelDir string, renditionList *video.TRenditionList, segmentBatch []TranscodedSegmentInfo) error {
 	for _, segInfo := range segmentBatch {
 
 		// All accesses to renditionList and segmentList is protected by a mutex behind the scenes
@@ -409,18 +415,18 @@ func writeSegmentsToDisk(transmuxTopLevelDir string, renditionList *video.TRendi
 		segmentFilename := filepath.Join(transmuxTopLevelDir, segInfo.RequestID+"_"+segInfo.RenditionName+"_"+strconv.Itoa(segInfo.SegmentIndex)+".ts")
 		segmentFile, err := os.Create(segmentFilename)
 		if err != nil {
-			return 0, fmt.Errorf("error creating .ts file to write transcoded segment data err: %w", err)
+			return fmt.Errorf("error creating .ts file to write transcoded segment data err: %w", err)
 		}
 		defer segmentFile.Close()
 		_, err = segmentFile.Write(segmentData)
 		if err != nil {
-			return 0, fmt.Errorf("error writing segment err: %w", err)
+			return fmt.Errorf("error writing segment err: %w", err)
 		}
 		// "Delete" buffered segment data from memory in hopes the garbage-collector releases it
 		segmentList.RemoveSegmentData(segInfo.SegmentIndex)
 
 	}
-	return 0, nil
+	return nil
 }
 
 func uploadMp4Files(basePath *url.URL, mp4OutputFiles []string, prefix string) ([]video.OutputVideoFile, error) {
