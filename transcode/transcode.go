@@ -23,7 +23,6 @@ import (
 
 const (
 	UploadTimeout      = 5 * time.Minute
-	TransmuxStorageDir = "/tmp/transmux_stage"
 )
 
 type TranscodeSegmentRequest struct {
@@ -180,9 +179,11 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return nil
 	})
 
+	var TransmuxStorageDir string
 	if transcodeRequest.GenerateMP4 {
+		var err error
 		// Create folder to hold transmux-ed files in local storage temporarily
-		TransmuxStorageDir, err := os.MkdirTemp(os.TempDir(), "transmux_stage_")
+		TransmuxStorageDir, err = os.MkdirTemp(os.TempDir(), "transmux_stage_" + transcodeRequest.RequestID + "_")
 		if err != nil && !os.IsExist(err) {
 			log.Log(transcodeRequest.RequestID, "failed to create temp dir for transmuxing", "dir", TransmuxStorageDir, "err", err)
 			return outputs, segmentsCount, err
@@ -221,9 +222,6 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// Close the channel to signal that no more segments will be sent
 	close(segmentChannel)
 
-	fmt.Println("XXX: DONE")
-return outputs, segmentsCount, err
-
 	// Build the manifests and push them to storage
 	manifestURL, err := clients.GenerateAndUploadManifests(sourceManifest, hlsTargetURL.String(), transcodedStats, transcodeRequest.IsClip)
 	if err != nil {
@@ -250,13 +248,13 @@ return outputs, segmentsCount, err
 		var concatFiles []string
 		for rendition, segments := range renditionList.RenditionSegmentTable {
 			// Create folder to hold transmux-ed files in local storage temporarily
-			TransmuxStorageDir, err := os.MkdirTemp(os.TempDir(), "transmux_stage_")
+/*			TransmuxStorageDir, err := os.MkdirTemp(os.TempDir(), "transmux_stage_")
 			if err != nil && !os.IsExist(err) {
 				log.Log(transcodeRequest.RequestID, "failed to create temp dir for transmuxing", "dir", TransmuxStorageDir, "err", err)
 				return outputs, segmentsCount, err
 			}
 			defer os.RemoveAll(TransmuxStorageDir)
-
+*/
 			// Create a single .ts file for a given rendition by concatenating all segments in order
 			if rendition == "low-bitrate" {
 				// skip mp4 generation for low-bitrate profile
@@ -269,11 +267,11 @@ return outputs, segmentsCount, err
 			// For now, use the stream based concat for clipping only and file based concat for everything else.
 			// Eventually, all mp4 generation can be moved to stream based concat once proven effective.
 			var totalBytes int64
-			if transcodeRequest.IsClip {
+//			if transcodeRequest.IsClip {
 				totalBytes, err = video.ConcatTS(concatTsFileName, segments, true)
-			} else {
-				totalBytes, err = video.ConcatTS(concatTsFileName, segments, false)
-			}
+//			} else {
+//				totalBytes, err = video.ConcatTS(concatTsFileName, segments, false)
+//			}
 			if err != nil {
 				log.Log(transcodeRequest.RequestID, "error concatenating .ts", "file", concatTsFileName, "err", err)
 				continue
