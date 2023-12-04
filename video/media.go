@@ -39,6 +39,12 @@ func (s *TSegmentList) AddSegmentData(segIdx int, data []byte) {
 	s.mu.Unlock()
 }
 
+func (s *TSegmentList) RemoveSegmentData(segIdx int) {
+	s.mu.Lock()
+	s.SegmentDataTable[segIdx] = []byte{}
+	s.mu.Unlock()
+}
+
 func (s *TSegmentList) GetSegment(segIdx int) []byte {
 	s.mu.Lock()
 	defer s.mu.Unlock()
