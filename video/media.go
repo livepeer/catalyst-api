@@ -1,11 +1,7 @@
 package video
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
-	"strconv"
 	"sync"
 )
 
@@ -33,36 +29,19 @@ import (
 */
 
 type TSegmentList struct {
-	mu               sync.Mutex
-	SegmentDataTable map[int][]byte
+	mu          sync.Mutex
+	SegmentList []int
 }
 
-func (s *TSegmentList) AddSegmentData(segIdx int, data []byte) {
-	s.mu.Lock()
-	s.SegmentDataTable[segIdx] = data
-	s.mu.Unlock()
-}
-
-func (s *TSegmentList) RemoveSegmentData(segIdx int) {
-	s.mu.Lock()
-	s.SegmentDataTable[segIdx] = []byte{}
-	s.mu.Unlock()
-}
-
-func (s *TSegmentList) GetSegment(segIdx int) []byte {
+func (s *TSegmentList) AddSegment(segIdx int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.SegmentDataTable[segIdx]
+	s.SegmentList = append(s.SegmentList, segIdx)
 }
 
 func (s *TSegmentList) GetSortedSegments() []int {
-	segmentsTable := s.SegmentDataTable
-	segments := make([]int, 0, len(segmentsTable))
-	for k := range segmentsTable {
-		segments = append(segments, k)
-	}
-	sort.Ints(segments)
-	return segments
+	sort.Ints(s.SegmentList)
+	return s.SegmentList
 }
 
 type TRenditionList struct {
@@ -72,8 +51,8 @@ type TRenditionList struct {
 
 func (r *TRenditionList) AddRenditionSegment(rendName string, sList *TSegmentList) {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.RenditionSegmentTable[rendName] = sList
-	r.mu.Unlock()
 }
 
 func (r *TRenditionList) GetSegmentList(rendName string) *TSegmentList {
@@ -91,33 +70,4 @@ type RenditionStats struct {
 	DurationMs       float64
 	ManifestLocation string
 	BitsPerSecond    uint32
-}
-
-type TranscodedSegmentInfo struct {
-	RequestID     string
-	RenditionName string
-	SegmentIndex  int
-}
-
-func WriteSegmentsToDisk(transmuxTopLevelDir string, renditionList *TRenditionList, segmentBatch []TranscodedSegmentInfo) error {
-	for _, segInfo := range segmentBatch {
-
-		// All accesses to renditionList and segmentList is protected by a mutex behind the scenes
-		segmentList := renditionList.GetSegmentList(segInfo.RenditionName)
-		segmentData := segmentList.GetSegment(segInfo.SegmentIndex)
-		segmentFilename := filepath.Join(transmuxTopLevelDir, segInfo.RequestID+"_"+segInfo.RenditionName+"_"+strconv.Itoa(segInfo.SegmentIndex)+".ts")
-		segmentFile, err := os.Create(segmentFilename)
-		if err != nil {
-			return fmt.Errorf("error creating .ts file to write transcoded segment data err: %w", err)
-		}
-		defer segmentFile.Close()
-		_, err = segmentFile.Write(segmentData)
-		if err != nil {
-			return fmt.Errorf("error writing segment err: %w", err)
-		}
-		// "Delete" buffered segment data from memory in hopes the garbage-collector releases it
-		segmentList.RemoveSegmentData(segInfo.SegmentIndex)
-
-	}
-	return nil
 }

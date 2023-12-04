@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,11 +19,12 @@ import (
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/video"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
-	UploadTimeout      = 5 * time.Minute
-	SegmentChannelSize = 10
+	UploadTimeout       = 5 * time.Minute
+	SegmentWritersCount = 10
 )
 
 type TranscodeSegmentRequest struct {
@@ -139,29 +141,32 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				}
 			}
 			renditionList.AddRenditionSegment(maxProfile.Name,
-				&video.TSegmentList{
-					SegmentDataTable: make(map[int][]byte),
-				})
+				&video.TSegmentList{})
 		} else {
 			for _, profile := range transcodeProfiles {
 				renditionList.AddRenditionSegment(profile.Name,
-					&video.TSegmentList{
-						SegmentDataTable: make(map[int][]byte),
-					})
+					&video.TSegmentList{})
 			}
 		}
 	}
 
-	// Create a buffered channel where transcoded segments are sent to be written to disk
-	segmentChannel := make(chan video.TranscodedSegmentInfo, SegmentChannelSize)
-
-	// Create a waitgroup to synchronize when the disk writing goroutine finishes
-	var wg sync.WaitGroup
+	var TransmuxStorageDir string
+	if transcodeRequest.GenerateMP4 {
+		var err error
+		// Create folder to hold transmux-ed files in local storage temporarily
+		TransmuxStorageDir, err = os.MkdirTemp(os.TempDir(), "transmux_stage_"+transcodeRequest.RequestID+"_")
+		if err != nil && !os.IsExist(err) {
+			log.Log(transcodeRequest.RequestID, "failed to create temp dir for transmuxing", "dir", TransmuxStorageDir, "err", err)
+			return outputs, segmentsCount, err
+		}
+		defer os.RemoveAll(TransmuxStorageDir)
+	}
+	segFileWriter := newSegmentFileWriter(TransmuxStorageDir)
 
 	// Setup parallel transcode sessions
 	var jobs *ParallelTranscoding
 	jobs = NewParallelTranscoding(sourceSegmentURLs, func(segment segmentInfo) error {
-		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, hlsTargetURL, transcodedStats, &renditionList, broadcaster, segmentChannel)
+		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, hlsTargetURL, transcodedStats, &renditionList, broadcaster, segFileWriter)
 		segmentsCount++
 		if err != nil {
 			return err
@@ -174,45 +179,6 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return nil
 	})
 
-	var TransmuxStorageDir string
-	if transcodeRequest.GenerateMP4 {
-		var err error
-		// Create folder to hold transmux-ed files in local storage temporarily
-		TransmuxStorageDir, err = os.MkdirTemp(os.TempDir(), "transmux_stage_"+transcodeRequest.RequestID+"_")
-		if err != nil && !os.IsExist(err) {
-			log.Log(transcodeRequest.RequestID, "failed to create temp dir for transmuxing", "dir", TransmuxStorageDir, "err", err)
-			return outputs, segmentsCount, err
-		}
-		defer os.RemoveAll(TransmuxStorageDir)
-
-		// Start the disk-writing (consumer) goroutine
-		wg.Add(1)
-		go func(transmuxTopLevelDir string, renditionList *video.TRenditionList) {
-			var segmentBatch []video.TranscodedSegmentInfo
-			defer wg.Done()
-
-			// Keep checking for new segments in the buffered channel
-			for segInfo := range segmentChannel {
-				segmentBatch = append(segmentBatch, segInfo)
-				// Begin writing to disk if at-least 50% of buffered channel is full
-				if len(segmentBatch) >= SegmentChannelSize/2 {
-					err := video.WriteSegmentsToDisk(transmuxTopLevelDir, renditionList, segmentBatch)
-					if err != nil {
-						return
-					}
-					segmentBatch = nil
-				}
-			}
-			// Handle any remaining segments after the channel is closed
-			if len(segmentBatch) > 0 {
-				err := video.WriteSegmentsToDisk(transmuxTopLevelDir, renditionList, segmentBatch)
-				if err != nil {
-					return
-				}
-			}
-		}(TransmuxStorageDir, &renditionList)
-	}
-
 	// Start the transcoding (producer) goroutines
 	jobs.Start()
 	if err = jobs.Wait(); err != nil {
@@ -220,11 +186,10 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, err
 	}
 
-	// If the disk-writing gorouine was started, then close the segment channel to
-	// signal that no more segments will be sent. This will be a no-op if MP4s are not requested.
-	close(segmentChannel)
 	// Wait for disk-writing goroutine to finish. This will be a no-op if MP4s are not requested.
-	wg.Wait()
+	if err = segFileWriter.wait(); err != nil {
+		return outputs, segmentsCount, fmt.Errorf("error writing segments to disk: %w", err)
+	}
 
 	// Build the manifests and push them to storage
 	manifestURL, err := clients.GenerateAndUploadManifests(sourceManifest, hlsTargetURL.String(), transcodedStats, transcodeRequest.IsClip)
@@ -416,6 +381,37 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	return outputs, segmentsCount, nil
 }
 
+type segmentFileWriter struct {
+	group               errgroup.Group
+	transmuxTopLevelDir string
+}
+
+func newSegmentFileWriter(transmuxTopLevelDir string) *segmentFileWriter {
+	s := &segmentFileWriter{transmuxTopLevelDir: transmuxTopLevelDir}
+	s.group.SetLimit(SegmentWritersCount)
+	return s
+}
+
+func (s *segmentFileWriter) wait() error {
+	return s.group.Wait()
+}
+
+func (s *segmentFileWriter) writeSegment(requestID string, renditionName string, segIndex int, segmentData []byte) {
+	s.group.Go(func() error {
+		segmentFilename := filepath.Join(s.transmuxTopLevelDir, requestID+"_"+renditionName+"_"+strconv.Itoa(segIndex)+".ts")
+		segmentFile, err := os.Create(segmentFilename)
+		if err != nil {
+			return fmt.Errorf("error creating .ts file to write transcoded segment data err: %w", err)
+		}
+		defer segmentFile.Close()
+		_, err = segmentFile.Write(segmentData)
+		if err != nil {
+			return fmt.Errorf("error writing segment err: %w", err)
+		}
+		return nil
+	})
+}
+
 func uploadMp4Files(basePath *url.URL, mp4OutputFiles []string, prefix string) ([]video.OutputVideoFile, error) {
 	var mp4OutputsPre []video.OutputVideoFile
 	// e. Upload all mp4 related output files
@@ -489,7 +485,7 @@ func transcodeSegment(
 	transcodedStats []*video.RenditionStats,
 	renditionList *video.TRenditionList,
 	broadcaster clients.BroadcasterClient,
-	segmentChannel chan<- video.TranscodedSegmentInfo,
+	segFilewriter *segmentFileWriter,
 ) error {
 	start := time.Now()
 
@@ -569,20 +565,13 @@ func transcodeSegment(
 			// get inner segments table from outer rendition table
 			segmentsList := renditionList.GetSegmentList(transcodedSegment.Name)
 			if segmentsList != nil {
-				// add new entry for segment # and corresponding byte stream if the profile
+				// add new entry for segment # if the profile
 				// exists in the renditionList which contains only profiles for which mp4s will
 				// be generated i.e. all profiles for mp4 inputs and only highest quality
 				// rendition for hls inputs like recordings.
-				segmentsList.AddSegmentData(segment.Index, transcodedSegment.MediaData)
+				segmentsList.AddSegment(segment.Index)
 
-				// send this transcoded segment to the segment channel so that it can be written
-				// to disk in parallel
-				segmentChannel <- video.TranscodedSegmentInfo{
-					RequestID:     transcodeRequest.RequestID,
-					RenditionName: transcodedSegment.Name, // Use actual rendition name
-					SegmentIndex:  segment.Index,          // Use actual segment index
-				}
-
+				segFilewriter.writeSegment(transcodeRequest.RequestID, transcodedSegment.Name, segment.Index, transcodedSegment.MediaData)
 			}
 		}
 
