@@ -17,7 +17,6 @@ type UserNewPayload struct {
 	URL          *url.URL
 	FullURL      string
 	SessionID    string
-	Cookies      []*http.Cookie
 	AccessKey    string
 	JWT          string
 }
@@ -47,10 +46,17 @@ func ParseUserNewPayload(payload MistTriggerBody) (UserNewPayload, error) {
 func (d *MistCallbackHandlersCollection) TriggerUserNew(ctx context.Context, w http.ResponseWriter, req *http.Request, body MistTriggerBody) {
 	payload, err := ParseUserNewPayload(body)
 	cookies := req.Cookies()
-	accessKey := req.Header.Get("X-Livepeer-Access-Key")
-	jwt := req.Header.Get("X-Livepeer-JWT")
 
-	payload.Cookies = cookies // would remove probably when everything's working
+	var accessKey, jwt string
+	for _, cookie := range cookies {
+		switch cookie.Name {
+		case "Livepeer-Access-Key":
+			accessKey = cookie.Value
+		case "Livepeer-Jwt":
+			jwt = cookie.Value
+		}
+	}
+
 	payload.AccessKey = accessKey
 	payload.JWT = jwt
 
