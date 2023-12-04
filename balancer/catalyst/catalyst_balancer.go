@@ -14,8 +14,7 @@ import (
 
 type CataBalancer struct {
 	Nodes         map[string]*Node
-	metricsLock   sync.Mutex
-	streamsLock   sync.Mutex
+	nodesLock     sync.Mutex
 	Streams       map[string]Streams     // Node name -> Streams
 	IngestStreams map[string]Streams     // Node name -> Streams
 	NodeMetrics   map[string]NodeMetrics // Node name -> NodeMetrics
@@ -71,10 +70,8 @@ func (c *CataBalancer) Start(ctx context.Context) error {
 
 func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Member) error {
 	log.LogNoRequestID("catabalancer UpdateMembers", "members", fmt.Sprintf("%+v", members))
-	c.metricsLock.Lock()
-	defer c.metricsLock.Unlock()
-	c.streamsLock.Lock()
-	defer c.streamsLock.Unlock()
+	c.nodesLock.Lock()
+	defer c.nodesLock.Unlock()
 
 	latestNodes := make(map[string]*Node)
 	for _, member := range members {
@@ -123,20 +120,30 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 			return "", "", err
 		}
 	}
+
+	node, err := SelectNode(c.createScoredNodes(), playbackID, latf, lonf)
+	if err != nil {
+		return "", "", err
+	}
+	// TODO video+ is hard coded
+	return node.Name, "video+" + playbackID, nil
+}
+
+func (c *CataBalancer) createScoredNodes() []ScoredNode {
+	c.nodesLock.Lock()
+	defer c.nodesLock.Unlock()
 	var nodesList []ScoredNode
 	for nodeName, node := range c.Nodes {
+		if _, ok := c.NodeMetrics[nodeName]; !ok {
+			continue
+		}
 		nodesList = append(nodesList, ScoredNode{
 			Node:        *node,
 			Streams:     c.Streams[nodeName],
 			NodeMetrics: c.NodeMetrics[nodeName],
 		})
 	}
-	node, err := SelectNode(nodesList, playbackID, latf, lonf)
-	if err != nil {
-		return "", "", err
-	}
-	// TODO video+ is hard coded
-	return node.Name, "video+" + playbackID, nil
+	return nodesList
 }
 
 func (n ScoredNode) HasStream(streamID string) bool {
@@ -216,6 +223,8 @@ func selectTopNodes(scoredNodes []ScoredNode, streamID string, requestLatitude, 
 }
 
 func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error) {
+	c.nodesLock.Lock()
+	defer c.nodesLock.Unlock()
 	for _, node := range c.Nodes {
 		if s, ok := c.IngestStreams[node.Name][stream]; ok && !isStreamExpired(s) {
 			return node.DTSC, nil
@@ -225,8 +234,8 @@ func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon 
 }
 
 func (c *CataBalancer) UpdateNodes(id string, nodeMetrics NodeMetrics) {
-	c.metricsLock.Lock()
-	defer c.metricsLock.Unlock()
+	c.nodesLock.Lock()
+	defer c.nodesLock.Unlock()
 	log.LogNoRequestID("catabalancer updatenodes", "id", id, "ram", nodeMetrics.RAMUsagePercentage, "cpu", nodeMetrics.CPUUsagePercentage)
 	if _, ok := c.Nodes[id]; !ok {
 		log.LogNoRequestID("catabalancer updatenodes node not found", "id", id)
@@ -237,28 +246,28 @@ func (c *CataBalancer) UpdateNodes(id string, nodeMetrics NodeMetrics) {
 
 var streamTimeout = 5 * time.Second // should match how often we send the update messages
 
-func (c *CataBalancer) UpdateStreams(id string, streamID string, isIngest bool) {
-	c.streamsLock.Lock()
-	defer c.streamsLock.Unlock()
-	if _, ok := c.Nodes[id]; !ok {
-		log.LogNoRequestID("catabalancer updatestreams node not found", "id", id)
+func (c *CataBalancer) UpdateStreams(nodeName string, streamID string, isIngest bool) {
+	c.nodesLock.Lock()
+	defer c.nodesLock.Unlock()
+	if _, ok := c.Nodes[nodeName]; !ok {
+		log.LogNoRequestID("catabalancer updatestreams node not found", "nodeName", nodeName)
 		return
 	}
 	// remove old streams
-	removeOldStreams(c.Streams[id])
-	removeOldStreams(c.IngestStreams[id])
+	removeOldStreams(c.Streams[nodeName])
+	removeOldStreams(c.IngestStreams[nodeName])
 
 	if isIngest {
-		if c.IngestStreams[id] == nil {
-			c.IngestStreams[id] = make(Streams)
+		if c.IngestStreams[nodeName] == nil {
+			c.IngestStreams[nodeName] = make(Streams)
 		}
-		c.IngestStreams[id][streamID] = Stream{ID: streamID, LastSeen: time.Now()}
+		c.IngestStreams[nodeName][streamID] = Stream{ID: streamID, LastSeen: time.Now()}
 		return
 	}
-	if c.Streams[id] == nil {
-		c.Streams[id] = make(Streams)
+	if c.Streams[nodeName] == nil {
+		c.Streams[nodeName] = make(Streams)
 	}
-	c.Streams[id][streamID] = Stream{ID: streamID, LastSeen: time.Now()}
+	c.Streams[nodeName][streamID] = Stream{ID: streamID, LastSeen: time.Now()}
 }
 
 func isStreamExpired(stream Stream) bool {
