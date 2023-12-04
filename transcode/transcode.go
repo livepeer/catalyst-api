@@ -164,8 +164,6 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	jobs = NewParallelTranscoding(sourceSegmentURLs, func(segment segmentInfo) error {
 		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, hlsTargetURL, transcodedStats, &renditionList, broadcaster, segmentChannel)
 
-		wg.Add(1)       // Increment the WaitGroup counter
-		defer wg.Done() // Decrement the counter when the function exits
 
 		segmentsCount++
 		if err != nil {
@@ -191,12 +189,14 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		defer os.RemoveAll(TransmuxStorageDir)
 
 		// Start the disk-writing goroutine
+		wg.Add(1)       // Increment the WaitGroup counter
 		go func(transmuxTopLevelDir string, renditionList *video.TRenditionList) {
 			var segmentBatch []TranscodedSegmentInfo
+			defer wg.Done()
 
 			for segInfo := range segmentChannel {
 				segmentBatch = append(segmentBatch, segInfo)
-				if len(segmentBatch) >= 1 {
+				if len(segmentBatch) >= 5 {
 					writeSegmentsToDisk(transmuxTopLevelDir, renditionList, segmentBatch)
 					fmt.Println("XXX: writing to disk here because > 10", segInfo.RenditionName, segInfo.SegmentIndex)
 					//access and delete via mutexes
@@ -217,10 +217,9 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, err
 	}
 
-	// Wait for all transcoding jobs to complete
-	wg.Wait()
 	// Close the channel to signal that no more segments will be sent
 	close(segmentChannel)
+	wg.Wait()
 
 	// Build the manifests and push them to storage
 	manifestURL, err := clients.GenerateAndUploadManifests(sourceManifest, hlsTargetURL.String(), transcodedStats, transcodeRequest.IsClip)
