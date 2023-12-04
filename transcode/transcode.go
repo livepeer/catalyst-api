@@ -23,6 +23,7 @@ import (
 
 const (
 	UploadTimeout      = 5 * time.Minute
+	SegmentChannelSize = 10
 )
 
 type TranscodeSegmentRequest struct {
@@ -146,7 +147,6 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				})
 		} else {
 			for _, profile := range transcodeProfiles {
-
 				renditionList.AddRenditionSegment(profile.Name,
 					&video.TSegmentList{
 						SegmentDataTable: make(map[int][]byte),
@@ -156,7 +156,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Create a buffered channel for segment information
-	segmentChannel := make(chan TranscodedSegmentInfo, 10) // Buffer size of 10
+	segmentChannel := make(chan TranscodedSegmentInfo, SegmentChannelSize)
 
 	var wg sync.WaitGroup
 
@@ -183,7 +183,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	if transcodeRequest.GenerateMP4 {
 		var err error
 		// Create folder to hold transmux-ed files in local storage temporarily
-		TransmuxStorageDir, err = os.MkdirTemp(os.TempDir(), "transmux_stage_" + transcodeRequest.RequestID + "_")
+		TransmuxStorageDir, err = os.MkdirTemp(os.TempDir(), "transmux_stage_"+transcodeRequest.RequestID+"_")
 		if err != nil && !os.IsExist(err) {
 			log.Log(transcodeRequest.RequestID, "failed to create temp dir for transmuxing", "dir", TransmuxStorageDir, "err", err)
 			return outputs, segmentsCount, err
@@ -248,13 +248,13 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		var concatFiles []string
 		for rendition, segments := range renditionList.RenditionSegmentTable {
 			// Create folder to hold transmux-ed files in local storage temporarily
-/*			TransmuxStorageDir, err := os.MkdirTemp(os.TempDir(), "transmux_stage_")
-			if err != nil && !os.IsExist(err) {
-				log.Log(transcodeRequest.RequestID, "failed to create temp dir for transmuxing", "dir", TransmuxStorageDir, "err", err)
-				return outputs, segmentsCount, err
-			}
-			defer os.RemoveAll(TransmuxStorageDir)
-*/
+			/*			TransmuxStorageDir, err := os.MkdirTemp(os.TempDir(), "transmux_stage_")
+						if err != nil && !os.IsExist(err) {
+							log.Log(transcodeRequest.RequestID, "failed to create temp dir for transmuxing", "dir", TransmuxStorageDir, "err", err)
+							return outputs, segmentsCount, err
+						}
+						defer os.RemoveAll(TransmuxStorageDir)
+			*/
 			// Create a single .ts file for a given rendition by concatenating all segments in order
 			if rendition == "low-bitrate" {
 				// skip mp4 generation for low-bitrate profile
@@ -267,11 +267,11 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			// For now, use the stream based concat for clipping only and file based concat for everything else.
 			// Eventually, all mp4 generation can be moved to stream based concat once proven effective.
 			var totalBytes int64
-//			if transcodeRequest.IsClip {
-				totalBytes, err = video.ConcatTS(concatTsFileName, segments, true)
-//			} else {
-//				totalBytes, err = video.ConcatTS(concatTsFileName, segments, false)
-//			}
+			//			if transcodeRequest.IsClip {
+			totalBytes, err = video.ConcatTS(concatTsFileName, segments, true)
+			//			} else {
+			//				totalBytes, err = video.ConcatTS(concatTsFileName, segments, false)
+			//			}
 			if err != nil {
 				log.Log(transcodeRequest.RequestID, "error concatenating .ts", "file", concatTsFileName, "err", err)
 				continue

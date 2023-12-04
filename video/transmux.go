@@ -141,17 +141,17 @@ func ConcatTS(tsFileName string, segmentsList *TSegmentList, useStreamBasedConca
 		for segName, _ := range segmentsList.GetSortedSegments() {
 			// Open a new file to write each segment to disk
 			segmentFilename := fileBaseWithoutExt + "_" + strconv.Itoa(segName) + ".ts"
-/*			segmentFile, err := os.Create(segmentFilename)
-			if err != nil {
-				return totalBytes, fmt.Errorf("error creating individual segment file (%s) err: %w", segmentFilename, err)
-			}
-			defer segmentFile.Close()
-			// Write the segment data to disk
-			segBytes, err := segmentFile.Write(segmentsList.SegmentDataTable[segData])
-			if err != nil {
-				return totalBytes, fmt.Errorf("error writing segment %d err: %w", segName, err)
-			}
-*/
+			/*			segmentFile, err := os.Create(segmentFilename)
+						if err != nil {
+							return totalBytes, fmt.Errorf("error creating individual segment file (%s) err: %w", segmentFilename, err)
+						}
+						defer segmentFile.Close()
+						// Write the segment data to disk
+						segBytes, err := segmentFile.Write(segmentsList.SegmentDataTable[segData])
+						if err != nil {
+							return totalBytes, fmt.Errorf("error writing segment %d err: %w", segName, err)
+						}
+			*/
 			fileInfo, err := os.Stat(segmentFilename)
 			if err != nil {
 				return totalBytes, fmt.Errorf("error stat segment %d  err: %w", segName, err)
