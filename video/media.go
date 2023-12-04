@@ -1,7 +1,11 @@
 package video
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
+	"strconv"
 	"sync"
 )
 
@@ -87,4 +91,33 @@ type RenditionStats struct {
 	DurationMs       float64
 	ManifestLocation string
 	BitsPerSecond    uint32
+}
+
+type TranscodedSegmentInfo struct {
+	RequestID     string
+	RenditionName string
+	SegmentIndex  int
+}
+
+func WriteSegmentsToDisk(transmuxTopLevelDir string, renditionList *TRenditionList, segmentBatch []TranscodedSegmentInfo) error {
+	for _, segInfo := range segmentBatch {
+
+		// All accesses to renditionList and segmentList is protected by a mutex behind the scenes
+		segmentList := renditionList.GetSegmentList(segInfo.RenditionName)
+		segmentData := segmentList.GetSegment(segInfo.SegmentIndex)
+		segmentFilename := filepath.Join(transmuxTopLevelDir, segInfo.RequestID+"_"+segInfo.RenditionName+"_"+strconv.Itoa(segInfo.SegmentIndex)+".ts")
+		segmentFile, err := os.Create(segmentFilename)
+		if err != nil {
+			return fmt.Errorf("error creating .ts file to write transcoded segment data err: %w", err)
+		}
+		defer segmentFile.Close()
+		_, err = segmentFile.Write(segmentData)
+		if err != nil {
+			return fmt.Errorf("error writing segment err: %w", err)
+		}
+		// "Delete" buffered segment data from memory in hopes the garbage-collector releases it
+		segmentList.RemoveSegmentData(segInfo.SegmentIndex)
+
+	}
+	return nil
 }

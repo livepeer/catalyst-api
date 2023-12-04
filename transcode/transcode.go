@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,12 +51,6 @@ type TranscodeSegmentRequest struct {
 	LocalSourceTmp string                                 `json:"-"`
 	GenerateMP4    bool
 	IsClip         bool
-}
-
-type TranscodedSegmentInfo struct {
-	RequestID     string
-	RenditionName string
-	SegmentIndex  int
 }
 
 func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName string, inputInfo video.InputVideo, broadcaster clients.BroadcasterClient) ([]video.OutputVideo, int, error) {
@@ -156,7 +149,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Create a buffered channel where transcoded segments are sent to be written to disk
-	segmentChannel := make(chan TranscodedSegmentInfo, SegmentChannelSize)
+	segmentChannel := make(chan video.TranscodedSegmentInfo, SegmentChannelSize)
 
 	// Create a waitgroup to synchronize when the disk writing goroutine finishes
 	var wg sync.WaitGroup
@@ -191,7 +184,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		// Start the disk-writing (consumer) goroutine
 		wg.Add(1)
 		go func(transmuxTopLevelDir string, renditionList *video.TRenditionList) {
-			var segmentBatch []TranscodedSegmentInfo
+			var segmentBatch []video.TranscodedSegmentInfo
 			defer wg.Done()
 
 			// Keep checking for new segments in the buffered channel
@@ -199,7 +192,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				segmentBatch = append(segmentBatch, segInfo)
 				// Begin writing to disk if at-least 50% of buffered channel is full
 				if len(segmentBatch) >= SegmentChannelSize/2 {
-					err := writeSegmentsToDisk(transmuxTopLevelDir, renditionList, segmentBatch)
+					err := video.WriteSegmentsToDisk(transmuxTopLevelDir, renditionList, segmentBatch)
 					if err != nil {
 						return
 					}
@@ -208,7 +201,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			}
 			// Handle any remaining segments after the channel is closed
 			if len(segmentBatch) > 0 {
-				err := writeSegmentsToDisk(transmuxTopLevelDir, renditionList, segmentBatch)
+				err := video.WriteSegmentsToDisk(transmuxTopLevelDir, renditionList, segmentBatch)
 				if err != nil {
 					return
 				}
@@ -406,29 +399,6 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	return outputs, segmentsCount, nil
 }
 
-func writeSegmentsToDisk(transmuxTopLevelDir string, renditionList *video.TRenditionList, segmentBatch []TranscodedSegmentInfo) error {
-	for _, segInfo := range segmentBatch {
-
-		// All accesses to renditionList and segmentList is protected by a mutex behind the scenes
-		segmentList := renditionList.GetSegmentList(segInfo.RenditionName)
-		segmentData := segmentList.GetSegment(segInfo.SegmentIndex)
-		segmentFilename := filepath.Join(transmuxTopLevelDir, segInfo.RequestID+"_"+segInfo.RenditionName+"_"+strconv.Itoa(segInfo.SegmentIndex)+".ts")
-		segmentFile, err := os.Create(segmentFilename)
-		if err != nil {
-			return fmt.Errorf("error creating .ts file to write transcoded segment data err: %w", err)
-		}
-		defer segmentFile.Close()
-		_, err = segmentFile.Write(segmentData)
-		if err != nil {
-			return fmt.Errorf("error writing segment err: %w", err)
-		}
-		// "Delete" buffered segment data from memory in hopes the garbage-collector releases it
-		segmentList.RemoveSegmentData(segInfo.SegmentIndex)
-
-	}
-	return nil
-}
-
 func uploadMp4Files(basePath *url.URL, mp4OutputFiles []string, prefix string) ([]video.OutputVideoFile, error) {
 	var mp4OutputsPre []video.OutputVideoFile
 	// e. Upload all mp4 related output files
@@ -502,7 +472,7 @@ func transcodeSegment(
 	transcodedStats []*video.RenditionStats,
 	renditionList *video.TRenditionList,
 	broadcaster clients.BroadcasterClient,
-	segmentChannel chan<- TranscodedSegmentInfo,
+	segmentChannel chan<- video.TranscodedSegmentInfo,
 ) error {
 	start := time.Now()
 
@@ -590,7 +560,7 @@ func transcodeSegment(
 
 				// send this transcoded segment to the segment channel so that it can be written
 				// to disk in parallel
-				segmentChannel <- TranscodedSegmentInfo{
+				segmentChannel <- video.TranscodedSegmentInfo{
 					RequestID:     transcodeRequest.RequestID,
 					RenditionName: transcodedSegment.Name, // Use actual rendition name
 					SegmentIndex:  segment.Index,          // Use actual segment index
