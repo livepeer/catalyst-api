@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/livepeer/catalyst-api/balancer/catalyst"
+	"github.com/livepeer/catalyst-api/balancer/catabalancer"
 	"io"
 	"net/http"
 	"net/url"
@@ -421,7 +421,7 @@ func (b *MistBalancer) mistAddr() string {
 	return fmt.Sprintf("http://%s:%d", b.config.MistHost, b.config.MistPort)
 }
 
-func (b *MistBalancer) UpdateNodes(id string, nodeMetrics catalyst.NodeMetrics) {
+func (b *MistBalancer) UpdateNodes(id string, nodeMetrics catabalancer.NodeMetrics) {
 	//noop
 }
 

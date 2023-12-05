@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/hashicorp/serf/serf"
-	"github.com/livepeer/catalyst-api/balancer/catalyst"
+	"github.com/livepeer/catalyst-api/balancer/catabalancer"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/log"
@@ -34,9 +34,9 @@ type NukeEvent struct {
 }
 
 type NodeStatsEvent struct {
-	Resource    string               `json:"resource"`
-	NodeID      string               `json:"node_id"`
-	NodeMetrics catalyst.NodeMetrics `json:"node_metrics"`
+	Resource    string                   `json:"resource"`
+	NodeID      string                   `json:"node_id"`
+	NodeMetrics catabalancer.NodeMetrics `json:"node_metrics"`
 }
 
 type NodeStreamsEvent struct {
@@ -91,7 +91,7 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 	go func() {
 		for range ticker.C {
 			log.LogNoRequestID("catabalancer sending node stats")
-			sysusage, err := catalyst.GetSystemUsage()
+			sysusage, err := catabalancer.GetSystemUsage()
 			if err != nil {
 				log.LogNoRequestID("catabalancer failed to get sys usage", "err", err)
 				continue
@@ -100,7 +100,7 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 			event := NodeStatsEvent{
 				Resource: nodeStatsEventResource,
 				NodeID:   nodeName,
-				NodeMetrics: catalyst.NodeMetrics{
+				NodeMetrics: catabalancer.NodeMetrics{
 					CPUUsagePercentage:       sysusage.CPUUsagePercentage,
 					RAMUsagePercentage:       sysusage.RAMUsagePercentage,
 					BandwidthUsagePercentage: sysusage.BWUsagePercentage,

@@ -1,4 +1,4 @@
-package catalyst
+package catabalancer
 
 import (
 	"math"

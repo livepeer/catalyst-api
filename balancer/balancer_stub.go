@@ -5,7 +5,7 @@ package balancer
 import (
 	"context"
 	"fmt"
-	"github.com/livepeer/catalyst-api/balancer/catalyst"
+	"github.com/livepeer/catalyst-api/balancer/catabalancer"
 
 	"github.com/livepeer/catalyst-api/cluster"
 )
@@ -50,7 +50,7 @@ func (b *BalancerStub) MistUtilLoadStreamStats(ctx context.Context, stream strin
 	return fmt.Errorf("not implemented")
 }
 
-func (b *BalancerStub) UpdateNodes(id string, nodeMetrics catalyst.NodeMetrics) {
+func (b *BalancerStub) UpdateNodes(id string, nodeMetrics catabalancer.NodeMetrics) {
 }
 
 func (b *BalancerStub) UpdateStreams(id string, stream string, isIngest bool) {

@@ -5,7 +5,7 @@ package balancer
 import (
 	"context"
 
-	"github.com/livepeer/catalyst-api/balancer/catalyst"
+	"github.com/livepeer/catalyst-api/balancer/catabalancer"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/log"
 )
@@ -15,7 +15,7 @@ type Balancer interface {
 	UpdateMembers(ctx context.Context, members []cluster.Member) error
 	GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error)
 	MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error)
-	UpdateNodes(id string, nodeMetrics catalyst.NodeMetrics)
+	UpdateNodes(id string, nodeMetrics catabalancer.NodeMetrics)
 	UpdateStreams(id string, stream string, isIngest bool)
 }
 
@@ -82,7 +82,7 @@ func (c CombinedBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, l
 	return dtscURL, err
 }
 
-func (c CombinedBalancer) UpdateNodes(id string, nodeMetrics catalyst.NodeMetrics) {
+func (c CombinedBalancer) UpdateNodes(id string, nodeMetrics catabalancer.NodeMetrics) {
 	c.Catabalancer.UpdateNodes(id, nodeMetrics)
 	c.MistBalancer.UpdateNodes(id, nodeMetrics)
 }

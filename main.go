@@ -19,7 +19,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/livepeer/catalyst-api/api"
 	"github.com/livepeer/catalyst-api/balancer"
-	"github.com/livepeer/catalyst-api/balancer/catalyst"
+	"github.com/livepeer/catalyst-api/balancer/catabalancer"
 	mist_balancer "github.com/livepeer/catalyst-api/balancer/mist"
 	"github.com/livepeer/catalyst-api/c2pa"
 	"github.com/livepeer/catalyst-api/clients"
@@ -275,7 +275,7 @@ func main() {
 
 	bal := mistBalancer
 	if cli.CataBalancer == "enabled" || cli.CataBalancer == "background" {
-		cataBalancer := catalyst.NewBalancer()
+		cataBalancer := catabalancer.NewBalancer(cli.NodeName)
 		// Temporary combined balancer to test cataBalancer logic alongside existing mist balancer
 		bal = balancer.CombinedBalancer{
 			Catabalancer:        cataBalancer,

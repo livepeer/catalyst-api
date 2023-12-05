@@ -1,4 +1,4 @@
-package catalyst
+package catabalancer
 
 import (
 	"context"
@@ -39,10 +39,11 @@ var BandwidthOverloadedNode = ScoredNode{
 }
 
 func TestItReturnsItselfWhenNoOtherNodesPresent(t *testing.T) {
-	// Make the node handling the request unfavourable in terms of stats, to make sure
-	// it'll still pick itself if it's the only option
-	_, err := SelectNode([]ScoredNode{}, "some-stream-id", 0, 0)
-	require.EqualError(t, err, "no nodes to select from")
+	c := NewBalancer("me")
+	nodeName, prefix, err := c.GetBestNode(context.Background(), nil, "playbackID", "", "", "")
+	require.NoError(t, err)
+	require.Equal(t, "me", nodeName)
+	require.Equal(t, "video+playbackID", prefix)
 }
 
 func TestItReturnsBadNodeIfOnlyAvailable(t *testing.T) {
@@ -254,7 +255,7 @@ func scores(node1 ScoredNode, node2 ScoredNode) ScoredNode {
 }
 
 func TestNoIngestStream(t *testing.T) {
-	c := NewBalancer()
+	c := NewBalancer("")
 	// first test no nodes available
 	c.UpdateNodes("id", NodeMetrics{})
 	c.UpdateStreams("id", "stream", false)
@@ -276,7 +277,7 @@ func TestNoIngestStream(t *testing.T) {
 }
 
 func TestMistUtilLoadSource(t *testing.T) {
-	c := NewBalancer()
+	c := NewBalancer("")
 	err := c.UpdateMembers(context.Background(), []cluster.Member{{
 		Name: "node",
 		Tags: map[string]string{
@@ -315,7 +316,7 @@ func TestMistUtilLoadSource(t *testing.T) {
 }
 
 func TestStreamTimeout(t *testing.T) {
-	c := NewBalancer()
+	c := NewBalancer("")
 	err := c.UpdateMembers(context.Background(), []cluster.Member{{
 		Name: "node",
 		Tags: map[string]string{
@@ -344,7 +345,7 @@ func TestStreamTimeout(t *testing.T) {
 
 // needs to be run with go test -race
 func TestConcurrentUpdates(t *testing.T) {
-	c := NewBalancer()
+	c := NewBalancer("")
 
 	err := c.UpdateMembers(context.Background(), []cluster.Member{{Name: "node"}})
 	require.NoError(t, err)

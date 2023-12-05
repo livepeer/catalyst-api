@@ -1,4 +1,4 @@
-package catalyst
+package catabalancer
 
 import (
 	"fmt"
@@ -62,35 +62,4 @@ func GetSystemUsage() (SystemUsage, error) {
 	}
 
 	return systemUsage, nil
-}
-
-func GetSystemInfo() (*SystemInfo, error) {
-	sysInfo := &SystemInfo{}
-
-	cpuInfo, err := cpu.Info()
-	if err != nil {
-		return nil, err
-	}
-	sysInfo.CPUInfo = cpuInfo
-
-	memInfo, err := mem.VirtualMemory()
-	if err != nil {
-		return nil, err
-	}
-	sysInfo.MemInfo = memInfo
-
-	partitions, err := disk.Partitions(true)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, p := range partitions {
-		diskInfo, err := disk.Usage(p.Mountpoint)
-		if err != nil {
-			return nil, err
-		}
-		sysInfo.DiskInfo = append(sysInfo.DiskInfo, *diskInfo)
-	}
-
-	return sysInfo, nil
 }

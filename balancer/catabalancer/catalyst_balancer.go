@@ -1,4 +1,4 @@
-package catalyst
+package catabalancer
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 )
 
 type CataBalancer struct {
+	NodeName      string // Node name of this instance
 	Nodes         map[string]*Node
 	nodesLock     sync.Mutex
 	Streams       map[string]Streams     // Node name -> Streams
@@ -55,8 +56,9 @@ type ScoredNode struct {
 	NodeMetrics
 }
 
-func NewBalancer() *CataBalancer {
+func NewBalancer(nodeName string) *CataBalancer {
 	return &CataBalancer{
+		NodeName:      nodeName,
 		Nodes:         make(map[string]*Node),
 		Streams:       make(map[string]Streams),
 		IngestStreams: make(map[string]Streams),
@@ -121,12 +123,18 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 		}
 	}
 
-	node, err := SelectNode(c.createScoredNodes(), playbackID, latf, lonf)
-	if err != nil {
-		return "", "", err
+	// default to ourself if there are no other nodes
+	nodeName := c.NodeName
+
+	if len(c.Nodes) > 0 {
+		node, err := SelectNode(c.createScoredNodes(), playbackID, latf, lonf)
+		if err != nil {
+			return "", "", err
+		}
+		nodeName = node.Name
 	}
-	// TODO video+ is hard coded
-	return node.Name, "video+" + playbackID, nil
+
+	return nodeName, "video+" + playbackID, nil
 }
 
 func (c *CataBalancer) createScoredNodes() []ScoredNode {
@@ -173,7 +181,10 @@ func SelectNode(nodes []ScoredNode, streamID string, requestLatitude, requestLon
 	topNodes := selectTopNodes(nodes, streamID, requestLatitude, requestLongitude, 3)
 	// TODO figure out what logging we need
 	log.LogNoRequestID("catabalancer select nodes", "topNodes", topNodes)
-	// TODO return error if none found?
+
+	if len(topNodes) == 0 {
+		return Node{}, fmt.Errorf("selectTopNodes returned no nodes")
+	}
 	return topNodes[rand.Intn(len(topNodes))].Node, nil
 }
 
@@ -250,7 +261,7 @@ func (c *CataBalancer) UpdateStreams(nodeName string, streamID string, isIngest 
 	c.nodesLock.Lock()
 	defer c.nodesLock.Unlock()
 	if _, ok := c.Nodes[nodeName]; !ok {
-		log.LogNoRequestID("catabalancer updatestreams node not found", "nodeName", nodeName)
+		log.LogNoRequestID("catabalancer UpdateStreams node not found", "nodeName", nodeName)
 		return
 	}
 	// remove old streams

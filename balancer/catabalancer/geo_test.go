@@ -1,4 +1,4 @@
-package catalyst
+package catabalancer
 
 import (
 	"slices"
@@ -33,6 +33,7 @@ var NodeGeos = []ScoredNode{
 	{Node: Node{Name: "prg-2"}, NodeMetrics: NodeMetrics{GeoLatitude: 50.08, GeoLongitude: 14.44}},
 	{Node: Node{Name: "sin-1"}, NodeMetrics: NodeMetrics{GeoLatitude: 1.35, GeoLongitude: 103.82}},
 	{Node: Node{Name: "sin-2"}, NodeMetrics: NodeMetrics{GeoLatitude: 1.35, GeoLongitude: 103.82}},
+	// add syd
 }
 
 func TestGeoScores(t *testing.T) {
