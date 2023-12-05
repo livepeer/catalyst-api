@@ -137,20 +137,16 @@ func ConcatTS(tsFileName string, segmentsList *TSegmentList, useStreamBasedConca
 			}
 		}()
 
-		// Write each segment to disk and add segment filename to the text file
-		for segName, segData := range segmentsList.GetSortedSegments() {
-			// Open a new file to write each segment to disk
+		// Add segment filename to the text file
+		for segName := range segmentsList.GetSortedSegments() {
+			// Check each segment that was written to disk in the disk-writing goroutine
 			segmentFilename := fileBaseWithoutExt + "_" + strconv.Itoa(segName) + ".ts"
-			segmentFile, err := os.Create(segmentFilename)
+			fileInfo, err := os.Stat(segmentFilename)
 			if err != nil {
-				return totalBytes, fmt.Errorf("error creating individual segment file (%s) err: %w", segmentFilename, err)
+				return totalBytes, fmt.Errorf("error stat segment %s  err: %w", segmentFilename, err)
 			}
-			defer segmentFile.Close()
-			// Write the segment data to disk
-			segBytes, err := segmentFile.Write(segmentsList.SegmentDataTable[segData])
-			if err != nil {
-				return totalBytes, fmt.Errorf("error writing segment %d err: %w", segName, err)
-			}
+			segBytes := fileInfo.Size()
+
 			segmentFilenames = append(segmentFilenames, segmentFilename)
 			totalBytes = totalBytes + int64(segBytes)
 			// Add filename to the text file
