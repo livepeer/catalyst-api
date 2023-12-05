@@ -49,11 +49,27 @@ type NodeMetrics struct {
 type ScoredNode struct {
 	Score       int64
 	GeoScore    int64
+	StreamScore int64
 	GeoDistance float64
 	Node
 	Streams       Streams
 	IngestStreams Streams
 	NodeMetrics
+}
+
+func (s ScoredNode) String() string {
+	return fmt.Sprintf("(Name:%s Score:%d GeoScore:%d StreamScore:%d GeoDistance:%.2f Lat:%.2f Lon:%.2f CPU:%.2f RAM:%.2f BW:%.2f)",
+		s.Name,
+		s.Score,
+		s.GeoScore,
+		s.StreamScore,
+		s.GeoDistance,
+		s.GeoLatitude,
+		s.GeoLongitude,
+		s.CPUUsagePercentage,
+		s.RAMUsagePercentage,
+		s.BandwidthUsagePercentage,
+	)
 }
 
 func NewBalancer(nodeName string) *CataBalancer {
@@ -132,6 +148,8 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 			return "", "", err
 		}
 		nodeName = node.Name
+	} else {
+		log.LogNoRequestID("catabalancer no nodes found, choosing myself", "chosenNode", nodeName, "streamID", playbackID, "reqLat", lat, "reqLon", lon)
 	}
 
 	return nodeName, "video+" + playbackID, nil
@@ -157,9 +175,6 @@ func (c *CataBalancer) createScoredNodes() []ScoredNode {
 func (n ScoredNode) HasStream(streamID string) bool {
 	s, ok := n.Streams[streamID]
 	found := ok && !isStreamExpired(s)
-	if found {
-		log.LogNoRequestID("catabalancer found stream on node", "node", n.Name, "streamid", streamID)
-	}
 	return found
 }
 
@@ -179,13 +194,13 @@ func SelectNode(nodes []ScoredNode, streamID string, requestLatitude, requestLon
 	}
 
 	topNodes := selectTopNodes(nodes, streamID, requestLatitude, requestLongitude, 3)
-	// TODO figure out what logging we need
-	log.LogNoRequestID("catabalancer select nodes", "topNodes", topNodes)
 
 	if len(topNodes) == 0 {
 		return Node{}, fmt.Errorf("selectTopNodes returned no nodes")
 	}
-	return topNodes[rand.Intn(len(topNodes))].Node, nil
+	chosen := topNodes[rand.Intn(len(topNodes))].Node
+	log.LogNoRequestID("catabalancer select nodes", "chosenNode", chosen.Name, "topNodes", topNodes, "streamID", streamID, "reqLat", requestLatitude, "reqLon", requestLongitude)
+	return chosen, nil
 }
 
 func selectTopNodes(scoredNodes []ScoredNode, streamID string, requestLatitude, requestLongitude float64, numNodes int) []ScoredNode {
@@ -195,6 +210,7 @@ func selectTopNodes(scoredNodes []ScoredNode, streamID string, requestLatitude, 
 	localHasStreamNotOverloaded := []ScoredNode{}
 	for _, node := range scoredNodes {
 		if node.GeoScore == 2 && node.HasStream(streamID) && node.GetLoadScore() == 2 {
+			node.StreamScore = 2
 			localHasStreamNotOverloaded = append(localHasStreamNotOverloaded, node)
 		}
 	}
@@ -218,6 +234,7 @@ func selectTopNodes(scoredNodes []ScoredNode, streamID string, requestLatitude, 
 		node.Score += node.GeoScore
 		node.Score += int64(node.GetLoadScore())
 		if node.HasStream(streamID) {
+			node.StreamScore = 2
 			node.Score += 2
 		}
 		scoredNodes[i] = node

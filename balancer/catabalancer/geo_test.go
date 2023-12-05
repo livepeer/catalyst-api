@@ -33,7 +33,7 @@ var NodeGeos = []ScoredNode{
 	{Node: Node{Name: "prg-2"}, NodeMetrics: NodeMetrics{GeoLatitude: 50.08, GeoLongitude: 14.44}},
 	{Node: Node{Name: "sin-1"}, NodeMetrics: NodeMetrics{GeoLatitude: 1.35, GeoLongitude: 103.82}},
 	{Node: Node{Name: "sin-2"}, NodeMetrics: NodeMetrics{GeoLatitude: 1.35, GeoLongitude: 103.82}},
-	// add syd
+	{Node: Node{Name: "syd-0"}, NodeMetrics: NodeMetrics{GeoLatitude: -33, GeoLongitude: 151}},
 }
 
 func TestGeoScores(t *testing.T) {
@@ -41,37 +41,37 @@ func TestGeoScores(t *testing.T) {
 	good, okay, bad := getGeoScores(51.7520, 1.2577)
 	require.Equal(t, []string{"fra-1", "fra-2", "fra-3", "fra-4", "fra-5", "lon-1", "lon-2", "lon-3", "lon-4", "prg-1", "prg-2"}, good)
 	require.Equal(t, []string{"mdw-1", "mdw-2", "mdw-3", "mdw-4", "mdw-5", "nyc-1", "nyc-2"}, okay)
-	require.Equal(t, []string{"lax-1", "lax-2", "lax-3", "sao-1", "sao-2", "sin-1", "sin-2"}, bad)
+	require.Equal(t, []string{"lax-1", "lax-2", "lax-3", "sao-1", "sao-2", "sin-1", "sin-2", "syd-0"}, bad)
 
 	// New York - Central / East USA should be good, Europe, West Coast should be okay
 	good, okay, bad = getGeoScores(40.7128, -74.0060)
 	require.Equal(t, []string{"mdw-1", "mdw-2", "mdw-3", "mdw-4", "mdw-5", "nyc-1", "nyc-2"}, good)
 	require.Equal(t, []string{"fra-1", "fra-2", "fra-3", "fra-4", "fra-5", "lax-1", "lax-2", "lax-3", "lon-1", "lon-2", "lon-3", "lon-4", "prg-1", "prg-2"}, okay)
-	require.Equal(t, []string{"sao-1", "sao-2", "sin-1", "sin-2"}, bad)
+	require.Equal(t, []string{"sao-1", "sao-2", "sin-1", "sin-2", "syd-0"}, bad)
 
 	// Lima - SAO should be good, USA and Western Europe should be okay
 	good, okay, bad = getGeoScores(-12.046374, -77.042793)
 	require.Equal(t, []string{"sao-1", "sao-2"}, good)
 	require.Equal(t, []string{"fra-1", "fra-2", "fra-3", "fra-4", "fra-5", "lax-1", "lax-2", "lax-3", "lon-1", "lon-2", "lon-3", "lon-4", "mdw-1", "mdw-2", "mdw-3", "mdw-4", "mdw-5", "nyc-1", "nyc-2"}, okay)
-	require.Equal(t, []string{"prg-1", "prg-2", "sin-1", "sin-2"}, bad)
+	require.Equal(t, []string{"prg-1", "prg-2", "sin-1", "sin-2", "syd-0"}, bad)
 
 	// Delhi - SIN good, Europe okay
 	good, okay, bad = getGeoScores(28.644800, 77.216721)
 	require.Equal(t, []string{"sin-1", "sin-2"}, good)
-	require.Equal(t, []string{"fra-1", "fra-2", "fra-3", "fra-4", "fra-5", "lon-1", "lon-2", "lon-3", "lon-4", "prg-1", "prg-2"}, okay)
+	require.Equal(t, []string{"fra-1", "fra-2", "fra-3", "fra-4", "fra-5", "lon-1", "lon-2", "lon-3", "lon-4", "prg-1", "prg-2", "syd-0"}, okay)
 	require.Equal(t, []string{"lax-1", "lax-2", "lax-3", "mdw-1", "mdw-2", "mdw-3", "mdw-4", "mdw-5", "nyc-1", "nyc-2", "sao-1", "sao-2"}, bad)
 
 	// Southern tip of Argentina - SAO good, USA okay
 	good, okay, bad = getGeoScores(-54.93355, -67.60963)
 	require.Equal(t, []string{"sao-1", "sao-2"}, good)
-	require.Equal(t, []string{"lax-1", "lax-2", "lax-3", "mdw-1", "mdw-2", "mdw-3", "mdw-4", "mdw-5", "nyc-1", "nyc-2"}, okay)
+	require.Equal(t, []string{"lax-1", "lax-2", "lax-3", "mdw-1", "mdw-2", "mdw-3", "mdw-4", "mdw-5", "nyc-1", "nyc-2", "syd-0"}, okay)
 	require.Equal(t, []string{"fra-1", "fra-2", "fra-3", "fra-4", "fra-5", "lon-1", "lon-2", "lon-3", "lon-4", "prg-1", "prg-2", "sin-1", "sin-2"}, bad)
 
 	// Auckland (New Zealand) - Singapore good, USA + SAO okay
 	good, okay, bad = getGeoScores(-36.848461, 174.763336)
-	require.Equal(t, []string{"sin-1", "sin-2"}, good)
-	require.Equal(t, []string{"lax-1", "lax-2", "lax-3", "mdw-1", "mdw-2", "mdw-3", "mdw-4", "mdw-5", "nyc-1", "nyc-2", "sao-1", "sao-2"}, okay)
-	require.Equal(t, []string{"fra-1", "fra-2", "fra-3", "fra-4", "fra-5", "lon-1", "lon-2", "lon-3", "lon-4", "prg-1", "prg-2"}, bad)
+	require.Equal(t, []string{"syd-0"}, good)
+	require.Equal(t, []string{"sin-1", "sin-2"}, okay)
+	require.Equal(t, []string{"fra-1", "fra-2", "fra-3", "fra-4", "fra-5", "lax-1", "lax-2", "lax-3", "lon-1", "lon-2", "lon-3", "lon-4", "mdw-1", "mdw-2", "mdw-3", "mdw-4", "mdw-5", "nyc-1", "nyc-2", "prg-1", "prg-2", "sao-1", "sao-2"}, bad)
 }
 
 func getGeoScores(requestLatitude, requestLongitude float64) (good, okay, bad []string) {
