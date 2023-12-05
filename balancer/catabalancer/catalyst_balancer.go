@@ -172,7 +172,7 @@ func (c *CataBalancer) createScoredNodes() []ScoredNode {
 	return nodesList
 }
 
-func (n ScoredNode) HasStream(streamID string) bool {
+func (n *ScoredNode) HasStream(streamID string) bool {
 	s, ok := n.Streams[streamID]
 	found := ok && !isStreamExpired(s)
 	return found
@@ -199,7 +199,7 @@ func SelectNode(nodes []ScoredNode, streamID string, requestLatitude, requestLon
 		return Node{}, fmt.Errorf("selectTopNodes returned no nodes")
 	}
 	chosen := topNodes[rand.Intn(len(topNodes))].Node
-	log.LogNoRequestID("catabalancer select nodes", "chosenNode", chosen.Name, "topNodes", topNodes, "streamID", streamID, "reqLat", requestLatitude, "reqLon", requestLongitude)
+	log.LogNoRequestID("catabalancer found node", "chosenNode", chosen.Name, "topNodes", fmt.Sprintf("%v", topNodes), "streamID", streamID, "reqLat", requestLatitude, "reqLon", requestLongitude)
 	return chosen, nil
 }
 

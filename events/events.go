@@ -85,7 +85,6 @@ func Unmarshal(payload []byte) (Event, error) {
 	return nil, fmt.Errorf("unable to unmarshal event, unknown resource '%s'", generic.Resource)
 }
 
-// TODO move this somewhere more appropriate
 func StartMetricSending(nodeName string, latitude float64, longitude float64, c cluster.Cluster, mist clients.MistAPIClient) {
 	ticker := time.NewTicker(5 * time.Second)
 	go func() {
@@ -152,8 +151,6 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 					continue
 				}
 
-				// TODO on stream_buffer mist trigger also fire these
-				// TODO we can add user count per stream
 				err = c.BroadcastEvent(serf.UserEvent{
 					Name:    "node-streams",
 					Payload: payload,
