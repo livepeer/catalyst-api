@@ -70,7 +70,7 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 	router.GET("/asset/hls/:playbackID/*file", playback)
 	router.HEAD("/asset/hls/:playbackID/*file", playback)
 	for _, path := range [...]string{"/asset/hls/:playbackID/*file", "/webrtc/:playbackID"} {
-		router.OPTIONS(path, withLogging(withCORS(handlers.PreflightOptionsHandler())))
+		router.OPTIONS(path, playback)
 	}
 
 	// Handling incoming playback redirection requests
