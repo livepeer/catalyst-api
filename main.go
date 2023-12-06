@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rsa"
 	"database/sql"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -20,11 +19,14 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/livepeer/catalyst-api/api"
 	"github.com/livepeer/catalyst-api/balancer"
+	"github.com/livepeer/catalyst-api/balancer/catabalancer"
+	mist_balancer "github.com/livepeer/catalyst-api/balancer/mist"
 	"github.com/livepeer/catalyst-api/c2pa"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/crypto"
+	"github.com/livepeer/catalyst-api/events"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/middleware"
@@ -74,6 +76,7 @@ func main() {
 	fs.IntVar(&config.MaxInFlightJobs, "max-inflight-jobs", 8, "Maximum number of concurrent VOD jobs to support in catalyst-api")
 	fs.IntVar(&config.MaxInFlightClipJobs, "max-inflight-clip-jobs", 20, "Maximum number of concurrent clipping jobs to support in catalyst-api")
 	fs.IntVar(&config.TranscodingParallelJobs, "parallel-transcode-jobs", 2, "Number of parallel transcode jobs")
+	fs.StringVar(&cli.CataBalancer, "catabalancer", "", "Enable catabalancer load balancer")
 
 	// mist-api-connector parameters
 	fs.IntVar(&cli.MistPort, "mist-port", 4242, "Port to connect to Mist")
@@ -258,8 +261,10 @@ func main() {
 		mapic = mistapiconnector.NewMapic(&cli, broker, mist)
 	}
 
+	c := cluster.NewCluster(&cli)
+
 	// Start balancer
-	bal := balancer.NewBalancer(&balancer.Config{
+	mistBalancer := mist_balancer.NewBalancer(&balancer.Config{
 		Args:                     cli.BalancerArgs,
 		MistUtilLoadPort:         uint32(cli.MistLoadBalancerPort),
 		MistLoadBalancerTemplate: cli.MistLoadBalancerTemplate,
@@ -268,7 +273,16 @@ func main() {
 		NodeName:                 cli.NodeName,
 	})
 
-	c := cluster.NewCluster(&cli)
+	bal := mistBalancer
+	if cli.CataBalancer == "enabled" || cli.CataBalancer == "background" {
+		cataBalancer := catabalancer.NewBalancer(cli.NodeName)
+		// Temporary combined balancer to test cataBalancer logic alongside existing mist balancer
+		bal = balancer.CombinedBalancer{
+			Catabalancer:        cataBalancer,
+			MistBalancer:        mistBalancer,
+			CatabalancerEnabled: cli.CataBalancer == "enabled",
+		}
+	}
 
 	// Initialize root context; cancelling this prompts all components to shut down cleanly
 	group, ctx := errgroup.WithContext(context.Background())
@@ -300,12 +314,15 @@ func main() {
 	})
 
 	group.Go(func() error {
+		// TODO these errors cause the app to shut down?
 		return reconcileBalancer(ctx, bal, c)
 	})
 
 	group.Go(func() error {
-		return handleClusterEvents(ctx, mapic, c)
+		return handleClusterEvents(ctx, mapic, bal, c)
 	})
+
+	events.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, c, mist)
 
 	err = group.Wait()
 	glog.Infof("Shutdown complete. Reason for shutdown: %s", err)
@@ -327,38 +344,35 @@ func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Clu
 	}
 }
 
-func handleClusterEvents(ctx context.Context, mapic mistapiconnector.IMac, c cluster.Cluster) error {
+func handleClusterEvents(ctx context.Context, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster) error {
 	eventCh := c.EventChan()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case e := <-eventCh:
-			processClusterEvent(mapic, e)
+			processClusterEvent(mapic, bal, e)
 		}
 	}
 }
 
-func processClusterEvent(mapic mistapiconnector.IMac, e serf.UserEvent) {
-	type EventPayload struct {
-		Resource   string `json:"resource"`
-		PlaybackID string `json:"playback_id"`
-	}
-
+func processClusterEvent(mapic mistapiconnector.IMac, bal balancer.Balancer, e serf.UserEvent) {
 	go func() {
-		var eventPayload EventPayload
-		err := json.Unmarshal(e.Payload, &eventPayload)
+		e, err := events.Unmarshal(e.Payload)
 		if err != nil {
-			glog.Errorf("cannot unmarshall received serf event: %v", e)
+			glog.Errorf("cannot unmarshal received serf event: %v", e)
 			return
 		}
-		switch eventPayload.Resource {
-		case "stream":
-			mapic.RefreshStreamIfNeeded(eventPayload.PlaybackID)
+		switch event := e.(type) {
+		case *events.StreamEvent:
+			mapic.RefreshStreamIfNeeded(event.PlaybackID)
+		case *events.NukeEvent:
+			mapic.NukeStream(event.PlaybackID)
 			return
-		case "nuke":
-			mapic.NukeStream(eventPayload.PlaybackID)
-			return
+		case *events.NodeStatsEvent:
+			bal.UpdateNodes(event.NodeID, event.NodeMetrics)
+		case *events.NodeStreamsEvent:
+			bal.UpdateStreams(event.NodeID, event.Stream, event.IsIngest)
 		default:
 			glog.Errorf("unsupported serf event: %v", e)
 		}
