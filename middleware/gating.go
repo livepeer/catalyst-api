@@ -32,6 +32,14 @@ func (h *GatingHandler) GatingCheck(next httprouter.Handle) httprouter.Handle {
 		accessKey := req.URL.Query().Get("accessKey")
 		jwt := req.URL.Query().Get("jwt")
 
+		if accessKey == "" {
+			accessKey = req.Header.Get("Livepeer-Access-Key")
+		}
+
+		if jwt == "" {
+			jwt = req.Header.Get("Livepeer-Jwt")
+		}
+
 		payload := misttriggers.UserNewPayload{
 			URL: req.URL,
 		}
