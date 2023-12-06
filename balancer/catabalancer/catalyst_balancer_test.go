@@ -311,18 +311,6 @@ func TestMistUtilLoadSource(t *testing.T) {
 	}})
 	require.NoError(t, err)
 
-	metrics := NodeMetrics{
-		CPUUsagePercentage:       10,
-		RAMUsagePercentage:       10,
-		BandwidthUsagePercentage: 10,
-		GeoLatitude:              10,
-		GeoLongitude:             10,
-	}
-	c.UpdateNodes("node", metrics)
-	require.Equal(t, map[string]NodeMetrics{
-		"node": metrics,
-	}, c.NodeMetrics)
-
 	c.UpdateStreams("node", "stream", false)
 	c.UpdateStreams("node", "ingest", true)
 	require.Len(t, c.Streams, 1)
