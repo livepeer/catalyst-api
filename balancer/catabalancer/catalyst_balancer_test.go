@@ -2,8 +2,10 @@ package catabalancer
 
 import (
 	"context"
+	"fmt"
 	"github.com/livepeer/catalyst-api/cluster"
 	"golang.org/x/sync/errgroup"
+	"math/rand"
 	"strconv"
 	"testing"
 	"time"
@@ -43,6 +45,28 @@ func TestItReturnsItselfWhenNoOtherNodesPresent(t *testing.T) {
 	nodeName, prefix, err := c.GetBestNode(context.Background(), nil, "playbackID", "", "", "")
 	require.NoError(t, err)
 	require.Equal(t, "me", nodeName)
+	require.Equal(t, "video+playbackID", prefix)
+}
+
+func TestStaleNodes(t *testing.T) {
+	c := NewBalancer("me")
+	err := c.UpdateMembers(context.Background(), []cluster.Member{{Name: "node1"}})
+	require.NoError(t, err)
+
+	// node is stale, old timestamp
+	c.UpdateNodes("node1", NodeMetrics{})
+	c.metricTimeout = -5 * time.Second
+	nodeName, prefix, err := c.GetBestNode(context.Background(), nil, "playbackID", "", "", "")
+	require.NoError(t, err)
+	require.Equal(t, "me", nodeName) // we expect node1 to be ignored
+	require.Equal(t, "video+playbackID", prefix)
+
+	// node is fresh, recent timestamp
+	c.UpdateNodes("node1", NodeMetrics{})
+	c.metricTimeout = 5 * time.Second
+	nodeName, prefix, err = c.GetBestNode(context.Background(), nil, "playbackID", "", "", "")
+	require.NoError(t, err)
+	require.Equal(t, "node1", nodeName) // we expect node1 this time
 	require.Equal(t, "video+playbackID", prefix)
 }
 
@@ -111,13 +135,13 @@ func TestItChoosesRandomlyFromTheBestNodes(t *testing.T) {
 // then that's the ideal situation and we should prefer that over everything else
 func TestItPrefersLocalUnloadedServersWithStreamAlready(t *testing.T) {
 	selectionNodes := []ScoredNode{
-		{Node: Node{Name: "good-node-1"}, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want", LastSeen: time.Now()}}},
-		{Node: Node{Name: "good-node-2"}, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want", LastSeen: time.Now()}}},
-		{Node: Node{Name: "good-node-3"}, Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name", LastSeen: time.Now()}}},
+		{Node: Node{Name: "good-node-1"}, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want", Timestamp: time.Now()}}},
+		{Node: Node{Name: "good-node-2"}, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want", Timestamp: time.Now()}}},
+		{Node: Node{Name: "good-node-3"}, Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name", Timestamp: time.Now()}}},
 		RAMOverloadedNode,
 		BandwidthOverloadedNode,
-		{Node: Node{Name: "good-node-4"}, Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name", LastSeen: time.Now()}}},
-		{Node: Node{Name: "good-node-5"}, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want", LastSeen: time.Now()}}},
+		{Node: Node{Name: "good-node-4"}, Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name", Timestamp: time.Now()}}},
+		{Node: Node{Name: "good-node-5"}, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want", Timestamp: time.Now()}}},
 	}
 
 	foundNodes := map[string]bool{}
@@ -142,8 +166,8 @@ func TestItPrefersLocalUnloadedServersWithStreamAlready(t *testing.T) {
 func TestItPrefersLocalUnloadedServersWithoutStream(t *testing.T) {
 	selectionNodes := []ScoredNode{
 		{Node: Node{Name: "local-with-stream-high-cpu"}, NodeMetrics: NodeMetrics{CPUUsagePercentage: 90}, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}},
-		{Node: Node{Name: "local-without-stream"}, Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name", LastSeen: time.Now()}}},
-		{Node: Node{Name: "local-without-stream-2"}, Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name", LastSeen: time.Now()}}},
+		{Node: Node{Name: "local-without-stream"}, Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name", Timestamp: time.Now()}}},
+		{Node: Node{Name: "local-without-stream-2"}, Streams: map[string]Stream{"other-steam-name": {ID: "other-steam-name", Timestamp: time.Now()}}},
 		RAMOverloadedNode,
 		BandwidthOverloadedNode,
 		{Node: Node{Name: "far-with-stream"}, NodeMetrics: NodeMetrics{GeoLatitude: 100, GeoLongitude: 100}, Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want"}}},
@@ -170,14 +194,14 @@ func TestItChoosesLeastBad(t *testing.T) {
 	requestLatitude, requestLongitude := 51.7520, 1.2577 // Oxford
 	highCPULocal := ScoredNode{Node: Node{Name: "local-high-cpu"}, NodeMetrics: NodeMetrics{CPUUsagePercentage: 90, GeoLatitude: requestLatitude, GeoLongitude: requestLongitude}}
 	highCPUWithStream := ScoredNode{Node: Node{Name: "far-high-cpu"}, NodeMetrics: NodeMetrics{CPUUsagePercentage: 90, GeoLatitude: 1.35, GeoLongitude: 103.82},
-		Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want", LastSeen: time.Now()}}} // Sin
+		Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want", Timestamp: time.Now()}}} // Sin
 	highCPU := ScoredNode{Node: Node{Name: "far-medium-cpu"}, NodeMetrics: NodeMetrics{CPUUsagePercentage: 90, GeoLatitude: 1.35, GeoLongitude: 103.82}}    // Sin
 	mediumCPU := ScoredNode{Node: Node{Name: "far-medium-cpu"}, NodeMetrics: NodeMetrics{CPUUsagePercentage: 80, GeoLatitude: 1.35, GeoLongitude: 103.82}}  // Sin
 	lowCPU := ScoredNode{Node: Node{Name: "far-low-cpu"}, NodeMetrics: NodeMetrics{CPUUsagePercentage: 40, GeoLatitude: 1.35, GeoLongitude: 103.82}}        // Sin
 	lowCPUOkDistance := ScoredNode{Node: Node{Name: "low-cpu"}, NodeMetrics: NodeMetrics{CPUUsagePercentage: 40, GeoLatitude: 41.88, GeoLongitude: -87.63}} // Mdw
 	mediumMem := ScoredNode{Node: Node{Name: "far-medium-mem"}, NodeMetrics: NodeMetrics{RAMUsagePercentage: 80, GeoLatitude: 1.35, GeoLongitude: 103.82}}  // Sin
 	mediumMemWithStream := ScoredNode{Node: Node{Name: "far-medium-mem-with-stream"}, NodeMetrics: NodeMetrics{RAMUsagePercentage: 80, GeoLatitude: 1.35, GeoLongitude: 103.82},
-		Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want", LastSeen: time.Now()}}} // Sin
+		Streams: map[string]Stream{"stream-name-we-want": {ID: "stream-name-we-want", Timestamp: time.Now()}}} // Sin
 
 	tests := []struct {
 		name  string
@@ -224,7 +248,7 @@ func TestItChoosesLeastBad(t *testing.T) {
 			name:  "medium loaded node with the stream",
 			nodes: []ScoredNode{highCPULocal, lowCPU, mediumMem, mediumMemWithStream},
 			want: []ScoredNode{
-				scores(mediumMemWithStream, ScoredNode{Score: 3, GeoScore: 0, GeoDistance: 10749}),
+				scores(mediumMemWithStream, ScoredNode{Score: 3, GeoScore: 0, GeoDistance: 10749, StreamScore: 2}),
 				scores(highCPULocal, ScoredNode{Score: 2, GeoScore: 2, GeoDistance: 0}),
 				scores(lowCPU, ScoredNode{Score: 2, GeoScore: 0, GeoDistance: 10749}),
 			},
@@ -235,7 +259,7 @@ func TestItChoosesLeastBad(t *testing.T) {
 			want: []ScoredNode{
 				scores(highCPULocal, ScoredNode{Score: 2, GeoScore: 2, GeoDistance: 0}),
 				scores(lowCPU, ScoredNode{Score: 2, GeoScore: 0, GeoDistance: 10749}),
-				scores(highCPUWithStream, ScoredNode{Score: 2, GeoScore: 0, GeoDistance: 10749}),
+				scores(highCPUWithStream, ScoredNode{Score: 2, GeoScore: 0, GeoDistance: 10749, StreamScore: 2}),
 			},
 		},
 	}
@@ -251,6 +275,7 @@ func scores(node1 ScoredNode, node2 ScoredNode) ScoredNode {
 	node1.Score = node2.Score
 	node1.GeoScore = node2.GeoScore
 	node1.GeoDistance = node2.GeoDistance
+	node1.StreamScore = node2.StreamScore
 	return node1
 }
 
@@ -325,14 +350,14 @@ func TestStreamTimeout(t *testing.T) {
 	}})
 	require.NoError(t, err)
 
-	streamTimeout = 5 * time.Second
+	c.metricTimeout = 5 * time.Second
 	c.UpdateStreams("node", "stream", false)
 	c.UpdateStreams("node", "ingest", true)
 
 	require.Equal(t, "stream", c.Streams["node"]["stream"].ID)
 	require.Equal(t, "ingest", c.IngestStreams["node"]["ingest"].ID)
 
-	streamTimeout = -5 * time.Second
+	c.metricTimeout = -5 * time.Second
 	// MistUtilLoadSource should detect the expiry and not return the stream
 	source, err := c.MistUtilLoadSource(context.Background(), "ingest", "", "")
 	require.EqualError(t, err, "no node found for ingest stream: ingest")
@@ -368,4 +393,52 @@ func TestConcurrentUpdates(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.NoError(t, errGroup.Wait())
+}
+
+func TestSimulate(t *testing.T) {
+	// update these values to test the lock contention with higher numbers of nodes etc
+	nodeCount := 1
+	streamsPerNode := 2
+	expectedResponseTime := 100 * time.Millisecond
+	loadBalanceCallCount := 5
+
+	updateEvery := 5 * time.Second
+
+	c := NewBalancer("node0")
+	var nodes []cluster.Member
+	for i := 0; i < nodeCount; i++ {
+		nodes = append(nodes, cluster.Member{Name: fmt.Sprintf("node%d", i)})
+	}
+	err := c.UpdateMembers(context.Background(), nodes)
+	require.NoError(t, err)
+
+	for i := 0; i < nodeCount; i++ {
+		i := i
+		go (func() {
+			duration := time.Duration(rand.Int63n(updateEvery.Milliseconds())) * time.Millisecond
+			time.Sleep(duration)
+			for {
+				start := time.Now()
+				c.UpdateNodes(fmt.Sprintf("node%d", i), NodeMetrics{CPUUsagePercentage: 10})
+				require.LessOrEqual(t, time.Since(start), expectedResponseTime)
+				for k := 0; k < streamsPerNode; k++ {
+					start := time.Now()
+					c.UpdateStreams(fmt.Sprintf("node%d", i), strconv.Itoa(k), false)
+					require.LessOrEqual(t, time.Since(start), expectedResponseTime)
+				}
+
+				time.Sleep(updateEvery)
+			}
+		})()
+	}
+
+	// TODO add in updatemembers calls and source load balance calls
+
+	for j := 0; j < loadBalanceCallCount; j++ {
+		start := time.Now()
+		_, _, err = c.GetBestNode(context.Background(), nil, "playbackID", "0", "0", "")
+		require.NoError(t, err)
+		require.LessOrEqual(t, time.Since(start), expectedResponseTime)
+		time.Sleep(100 * time.Millisecond)
+	}
 }

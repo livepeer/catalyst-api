@@ -19,6 +19,7 @@ type CataBalancer struct {
 	Streams       map[string]Streams     // Node name -> Streams
 	IngestStreams map[string]Streams     // Node name -> Streams
 	NodeMetrics   map[string]NodeMetrics // Node name -> NodeMetrics
+	metricTimeout time.Duration
 }
 
 type Streams map[string]Stream // Stream ID -> Stream
@@ -29,8 +30,8 @@ type Node struct {
 }
 
 type Stream struct {
-	ID       string
-	LastSeen time.Time // last time we saw a stream message for this stream, old streams can be removed on a timeout
+	ID        string
+	Timestamp time.Time // the time we received these stream details, old streams can be removed on a timeout
 }
 
 type NodeMetrics struct {
@@ -40,6 +41,7 @@ type NodeMetrics struct {
 	LoadAvg                  float64
 	GeoLatitude              float64
 	GeoLongitude             float64
+	Timestamp                time.Time // the time we received these node metrics
 }
 
 // All of the scores are in the range 0-2, where:
@@ -79,6 +81,7 @@ func NewBalancer(nodeName string) *CataBalancer {
 		Streams:       make(map[string]Streams),
 		IngestStreams: make(map[string]Streams),
 		NodeMetrics:   make(map[string]NodeMetrics),
+		metricTimeout: UpdateEvery,
 	}
 }
 
@@ -87,7 +90,7 @@ func (c *CataBalancer) Start(ctx context.Context) error {
 }
 
 func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Member) error {
-	log.LogNoRequestID("catabalancer UpdateMembers", "members", fmt.Sprintf("%+v", members))
+	//log.LogNoRequestID("catabalancer UpdateMembers", "members", fmt.Sprintf("%+v", members))
 	c.nodesLock.Lock()
 	defer c.nodesLock.Unlock()
 
@@ -142,8 +145,9 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 	// default to ourself if there are no other nodes
 	nodeName := c.NodeName
 
-	if len(c.Nodes) > 0 {
-		node, err := SelectNode(c.createScoredNodes(), playbackID, latf, lonf)
+	scoredNodes := c.createScoredNodes()
+	if len(scoredNodes) > 0 {
+		node, err := SelectNode(scoredNodes, playbackID, latf, lonf)
 		if err != nil {
 			return "", "", err
 		}
@@ -160,12 +164,17 @@ func (c *CataBalancer) createScoredNodes() []ScoredNode {
 	defer c.nodesLock.Unlock()
 	var nodesList []ScoredNode
 	for nodeName, node := range c.Nodes {
-		if _, ok := c.NodeMetrics[nodeName]; !ok {
+		if metrics, ok := c.NodeMetrics[nodeName]; !ok || isStale(metrics.Timestamp, c.metricTimeout) {
 			continue
+		}
+		// make a copy of the streams map so that we can release the nodesLock (UpdateStreams will be making changes in the background)
+		streams := make(Streams)
+		for streamID, stream := range c.Streams[nodeName] {
+			streams[streamID] = stream
 		}
 		nodesList = append(nodesList, ScoredNode{
 			Node:        *node,
-			Streams:     c.Streams[nodeName],
+			Streams:     streams,
 			NodeMetrics: c.NodeMetrics[nodeName],
 		})
 	}
@@ -174,7 +183,7 @@ func (c *CataBalancer) createScoredNodes() []ScoredNode {
 
 func (n *ScoredNode) HasStream(streamID string) bool {
 	s, ok := n.Streams[streamID]
-	found := ok && !isStreamExpired(s)
+	found := ok && !isStale(s.Timestamp, UpdateEvery)
 	return found
 }
 
@@ -215,7 +224,8 @@ func selectTopNodes(scoredNodes []ScoredNode, streamID string, requestLatitude, 
 		}
 	}
 	if len(localHasStreamNotOverloaded) > 0 { // TODO: Should this be > 1 or > 2 so that we can ensure there's always some randomness?
-		return localHasStreamNotOverloaded
+		shuffle(localHasStreamNotOverloaded)
+		return truncateReturned(localHasStreamNotOverloaded, numNodes)
 	}
 
 	// 2. Is Local and Isn't Overloaded
@@ -226,7 +236,8 @@ func selectTopNodes(scoredNodes []ScoredNode, streamID string, requestLatitude, 
 		}
 	}
 	if len(localNotOverloaded) > 0 { // TODO: Should this be > 1 or > 2 so that we can ensure there's always some randomness?
-		return localNotOverloaded
+		shuffle(localNotOverloaded)
+		return truncateReturned(localNotOverloaded, numNodes)
 	}
 
 	// 3. Weighted least-bad option
@@ -243,6 +254,16 @@ func selectTopNodes(scoredNodes []ScoredNode, streamID string, requestLatitude, 
 	sort.Slice(scoredNodes, func(i, j int) bool {
 		return scoredNodes[i].Score > scoredNodes[j].Score
 	})
+	return truncateReturned(scoredNodes, numNodes)
+}
+
+func shuffle(scoredNodes []ScoredNode) {
+	rand.Shuffle(len(scoredNodes), func(i, j int) {
+		scoredNodes[i], scoredNodes[j] = scoredNodes[j], scoredNodes[i]
+	})
+}
+
+func truncateReturned(scoredNodes []ScoredNode, numNodes int) []ScoredNode {
 	if len(scoredNodes) < numNodes {
 		return scoredNodes
 	}
@@ -254,7 +275,7 @@ func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon 
 	c.nodesLock.Lock()
 	defer c.nodesLock.Unlock()
 	for _, node := range c.Nodes {
-		if s, ok := c.IngestStreams[node.Name][stream]; ok && !isStreamExpired(s) {
+		if s, ok := c.IngestStreams[node.Name][stream]; ok && !isStale(s.Timestamp, c.metricTimeout) {
 			return node.DTSC, nil
 		}
 	}
@@ -264,15 +285,16 @@ func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon 
 func (c *CataBalancer) UpdateNodes(id string, nodeMetrics NodeMetrics) {
 	c.nodesLock.Lock()
 	defer c.nodesLock.Unlock()
-	log.LogNoRequestID("catabalancer updatenodes", "id", id, "ram", nodeMetrics.RAMUsagePercentage, "cpu", nodeMetrics.CPUUsagePercentage)
+
 	if _, ok := c.Nodes[id]; !ok {
 		log.LogNoRequestID("catabalancer updatenodes node not found", "id", id)
 		return
 	}
+	nodeMetrics.Timestamp = time.Now()
 	c.NodeMetrics[id] = nodeMetrics
 }
 
-var streamTimeout = 5 * time.Second // should match how often we send the update messages
+var UpdateEvery = 5 * time.Second
 
 func (c *CataBalancer) UpdateStreams(nodeName string, streamID string, isIngest bool) {
 	c.nodesLock.Lock()
@@ -282,29 +304,29 @@ func (c *CataBalancer) UpdateStreams(nodeName string, streamID string, isIngest 
 		return
 	}
 	// remove old streams
-	removeOldStreams(c.Streams[nodeName])
-	removeOldStreams(c.IngestStreams[nodeName])
+	removeOldStreams(c.Streams[nodeName], c.metricTimeout)
+	removeOldStreams(c.IngestStreams[nodeName], c.metricTimeout)
 
 	if isIngest {
 		if c.IngestStreams[nodeName] == nil {
 			c.IngestStreams[nodeName] = make(Streams)
 		}
-		c.IngestStreams[nodeName][streamID] = Stream{ID: streamID, LastSeen: time.Now()}
+		c.IngestStreams[nodeName][streamID] = Stream{ID: streamID, Timestamp: time.Now()}
 		return
 	}
 	if c.Streams[nodeName] == nil {
 		c.Streams[nodeName] = make(Streams)
 	}
-	c.Streams[nodeName][streamID] = Stream{ID: streamID, LastSeen: time.Now()}
+	c.Streams[nodeName][streamID] = Stream{ID: streamID, Timestamp: time.Now()}
 }
 
-func isStreamExpired(stream Stream) bool {
-	return time.Since(stream.LastSeen) >= streamTimeout
+func isStale(timestamp time.Time, stale time.Duration) bool {
+	return time.Since(timestamp) >= stale
 }
 
-func removeOldStreams(streams Streams) {
+func removeOldStreams(streams Streams, stale time.Duration) {
 	for s, stream := range streams {
-		if isStreamExpired(stream) {
+		if isStale(stream.Timestamp, stale) {
 			delete(streams, s)
 		}
 	}

@@ -86,7 +86,7 @@ func Unmarshal(payload []byte) (Event, error) {
 }
 
 func StartMetricSending(nodeName string, latitude float64, longitude float64, c cluster.Cluster, mist clients.MistAPIClient) {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(catabalancer.UpdateEvery)
 	go func() {
 		for range ticker.C {
 			log.LogNoRequestID("catabalancer sending node stats")
