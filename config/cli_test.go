@@ -71,6 +71,39 @@ func TestCommaSlice(t *testing.T) {
 	require.Equal(t, setEmpty, []string{})
 }
 
+func TestCommaWithPctSliceFlag(t *testing.T) {
+	fs := flag.NewFlagSet("cli-test", flag.PanicOnError)
+	var single, multi, keepDefault, empty map[string]float64
+	CommaWithPctSliceFlag(fs, &single, "single", map[string]float64{}, "")
+	CommaWithPctSliceFlag(fs, &multi, "multi", map[string]float64{}, "")
+	CommaWithPctSliceFlag(fs, &keepDefault, "default", map[string]float64{}, "")
+	CommaWithPctSliceFlag(fs, &empty, "empty", map[string]float64{}, "")
+
+	err := fs.Parse([]string{
+		"-single=one:30",
+		"-multi=one:10.5,two:99.9,three:0",
+		"-empty=",
+	})
+	require.NoError(t, err)
+	require.Equal(t, single, map[string]float64{"one": 30.0})
+	require.Equal(t, multi, map[string]float64{"one": 10.5, "two": 99.9, "three": 0.0})
+	require.Equal(t, keepDefault, map[string]float64{})
+	require.Equal(t, empty, map[string]float64{})
+
+	defer func() {
+		err3 := recover()
+		if err3 != nil {
+			require.Equal(t, err3.(error).Error(), "invalid value \"one:103\" for flag -single: invalid config one:103 - should be between 0.0 and 100.00")
+		} else {
+			panic(err3)
+		}
+	}()
+	err2 := fs.Parse([]string{
+		"-single=one:103",
+	})
+	require.Equal(t, err2, nil)
+}
+
 func TestCommaMap(t *testing.T) {
 	fs := flag.NewFlagSet("cli-test", flag.PanicOnError)
 	var single, multi, keepDefault, setEmpty map[string]string

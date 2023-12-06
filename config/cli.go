@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -61,11 +62,15 @@ type Cli struct {
 	SourcePlaybackHosts       map[string]string
 	DefaultQuality            int
 	MaxBitrateFactor          float64
-	CdnRedirectPrefix         *url.URL
-	CdnRedirectPlaybackIDs    []string
-	C2PAPrivateKeyPath        string
-	C2PACertsPath             string
-	CataBalancer              string
+
+	// mapping playbackId to value between 0.0 to 100.0
+	CdnRedirectPlaybackPct             map[string]float64
+	CdnRedirectPrefix                  *url.URL
+	CdnRedirectPrefixCatalystSubdomain bool
+
+	C2PAPrivateKeyPath string
+	C2PACertsPath      string
+	CataBalancer       string
 }
 
 // Return our own URL for callback trigger purposes
@@ -208,6 +213,36 @@ func CommaSliceFlag(fs *flag.FlagSet, dest *[]string, name string, value []strin
 			return nil
 		}
 		*dest = split
+		return nil
+	})
+}
+
+// handles -foo=value1:10.3,value2:99.9,value3:0.1,value4:100,value5:0
+func CommaWithPctSliceFlag(fs *flag.FlagSet, dest *map[string]float64, name string, value map[string]float64, usage string) {
+	*dest = value
+	fs.Func(name, usage, func(s string) error {
+		elements := strings.Split(s, ",")
+		if len(elements) == 0 || (len(elements) == 1 && elements[0] == "") {
+			*dest = map[string]float64{}
+			return nil
+		}
+		for _, redirect := range elements {
+			elements := strings.Split(redirect, ":")
+			if len(elements) == 2 {
+				percentage, err := strconv.ParseFloat(elements[1], 64)
+				if err != nil || percentage > 100.0 || percentage < 0.0 {
+					return fmt.Errorf("invalid config %s - should be between 0.0 and 100.00", redirect)
+				} else {
+					(*dest)[elements[0]] = percentage
+				}
+			} else if len(elements) == 1 {
+				glog.Infof("Assuming 100% CDN traffic for %s playbackId", elements[0])
+				(*dest)[elements[0]] = 100.0
+			} else {
+				return fmt.Errorf("unexpected format of %s", redirect)
+			}
+		}
+
 		return nil
 	})
 }

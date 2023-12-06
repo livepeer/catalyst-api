@@ -3,6 +3,7 @@ package geolocation
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -28,6 +29,7 @@ type GeolocationHandlersCollection struct {
 // Redirect an incoming user to: CDN (only for /hls), closest node (geolocate)
 // or another service (like mist HLS) on the current host for playback.
 func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
+
 	return func(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 		host := r.Host
 		pathType, prefix, playbackID, pathTmpl := parsePlaybackID(r.URL.Path)
@@ -36,7 +38,8 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 		lon := r.Header.Get("X-Longitude")
 
 		if c.Config.CdnRedirectPrefix != nil && (pathType == "hls" || pathType == "webrtc") {
-			if contains(c.Config.CdnRedirectPlaybackIDs, playbackID) {
+			cdnPercentage, toBeRedirected := c.Config.CdnRedirectPlaybackPct[playbackID]
+			if toBeRedirected && cdnPercentage > rand.Float64()*100 {
 				if pathType == "webrtc" {
 					// For webRTC streams on the `CdnRedirectPlaybackIDs` list we return `406`
 					// so the player can fallback to a new HLS request. For webRTC streams not
@@ -47,7 +50,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 					return
 				}
 
-				_, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix)
+				bestNode, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix)
 				if err != nil {
 					glog.Errorf("failed to find either origin or fallback server for playbackID=%s err=%s", playbackID, err)
 					w.WriteHeader(http.StatusBadGateway)
@@ -56,7 +59,11 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 
 				newURL, _ := url.Parse(r.URL.String())
 				newURL.Scheme = protocol(r)
-				newURL.Host = c.Config.CdnRedirectPrefix.Host
+				if c.Config.CdnRedirectPrefixCatalystSubdomain {
+					newURL.Host = bestNode + "." + c.Config.CdnRedirectPrefix.Host
+				} else {
+					newURL.Host = c.Config.CdnRedirectPrefix.Host
+				}
 				newURL.Path, _ = url.JoinPath(c.Config.CdnRedirectPrefix.Path, fmt.Sprintf(pathTmpl, fullPlaybackID))
 				http.Redirect(w, r, newURL.String(), http.StatusTemporaryRedirect)
 				metrics.Metrics.CDNRedirectCount.WithLabelValues(playbackID).Inc()
@@ -212,13 +219,4 @@ func protocol(r *http.Request) string {
 		return "https"
 	}
 	return "http"
-}
-
-func contains[T comparable](list []T, v T) bool {
-	for _, elm := range list {
-		if elm == v {
-			return true
-		}
-	}
-	return false
 }

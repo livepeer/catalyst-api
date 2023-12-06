@@ -348,7 +348,7 @@ func TestCdnRedirect(t *testing.T) {
 	n := mockHandlers(t)
 	n.Config.NodeHost = closestNodeAddr
 	n.Config.CdnRedirectPrefix, _ = url.Parse("https://external-cdn.com/mist")
-	n.Config.CdnRedirectPlaybackIDs = []string{CdnRedirectedPlaybackID}
+	n.Config.CdnRedirectPlaybackPct = map[string]float64{CdnRedirectedPlaybackID: 100}
 
 	// to be redirected to the closest node
 	requireReq(t, fmt.Sprintf("/hls/%s/index.m3u8", playbackID)).
@@ -374,7 +374,7 @@ func TestCdnRedirectWebRTC(t *testing.T) {
 	n := mockHandlers(t)
 	n.Config.NodeHost = closestNodeAddr
 	n.Config.CdnRedirectPrefix, _ = url.Parse("https://external-cdn.com/mist")
-	n.Config.CdnRedirectPlaybackIDs = []string{CdnRedirectedPlaybackID}
+	n.Config.CdnRedirectPlaybackPct = map[string]float64{CdnRedirectedPlaybackID: 100}
 
 	// playbackID is configured to be redirected to CDN but it's /webrtc
 	requireReq(t, fmt.Sprintf("/webrtc/%s", CdnRedirectedPlaybackID)).
@@ -391,25 +391,40 @@ func TestCdnRedirectHLS(t *testing.T) {
 	n := mockHandlers(t)
 	n.Config.NodeHost = closestNodeAddr
 	n.Config.CdnRedirectPrefix, _ = url.Parse("https://external-cdn.com/mist")
-	n.Config.CdnRedirectPlaybackIDs = []string{CdnRedirectedPlaybackID}
+	n.Config.CdnRedirectPlaybackPct = map[string]float64{CdnRedirectedPlaybackID: 100}
+	n.Config.CdnRedirectPrefixCatalystSubdomain = true
 
 	// this playbackID is configured to be redirected to CDN
 	requireReq(t, fmt.Sprintf("/hls/%s/index.m3u8", CdnRedirectedPlaybackID)).
 		result(n).
 		hasStatus(http.StatusTemporaryRedirect).
-		hasHeader("Location", fmt.Sprintf("http://external-cdn.com/mist/hls/video+%s/index.m3u8", CdnRedirectedPlaybackID))
+		hasHeader("Location", fmt.Sprintf("http://someurl.com.external-cdn.com/mist/hls/video+%s/index.m3u8", CdnRedirectedPlaybackID))
 
 	require.Equal(t, testutil.ToFloat64(metrics.Metrics.CDNRedirectCount), float64(1))
 	require.Equal(t, testutil.ToFloat64(metrics.Metrics.CDNRedirectCount.WithLabelValues("unknown")), float64(0))
 	require.Equal(t, testutil.ToFloat64(metrics.Metrics.CDNRedirectCount.WithLabelValues(CdnRedirectedPlaybackID)), float64(1))
 
+	// this playbackID is configured to be redirected to CDN. Just don't inject catalyst subdomain
+	n.Config.CdnRedirectPrefixCatalystSubdomain = false
+	requireReq(t, fmt.Sprintf("/hls/%s/index.m3u8", CdnRedirectedPlaybackID)).
+		result(n).
+		hasStatus(http.StatusTemporaryRedirect).
+		hasHeader("Location", fmt.Sprintf("http://external-cdn.com/mist/hls/video+%s/index.m3u8", CdnRedirectedPlaybackID))
+
+	n.Config.CdnRedirectPlaybackPct = map[string]float64{CdnRedirectedPlaybackID: 0}
+
+	// don't redirect as playbackId redirect is set on 0.0%
+	requireReq(t, fmt.Sprintf("/hls/%s/index.m3u8", CdnRedirectedPlaybackID)).
+		result(n).
+		hasStatus(http.StatusTemporaryRedirect).
+		hasHeader("Location", fmt.Sprintf("http://%s/hls/%s/index.m3u8", closestNodeAddr, CdnRedirectedPlaybackID))
 }
 
 func TestCdnRedirectHLSUnknownPlaybackId(t *testing.T) {
 	n := mockHandlers(t)
 	n.Config.NodeHost = closestNodeAddr
 	n.Config.CdnRedirectPrefix, _ = url.Parse("https://external-cdn.com/mist")
-	n.Config.CdnRedirectPlaybackIDs = []string{CdnRedirectedPlaybackID, UnknownPlaybackID}
+	n.Config.CdnRedirectPlaybackPct = map[string]float64{CdnRedirectedPlaybackID: 100, UnknownPlaybackID: 100}
 
 	// Mist doesn't know this playbackID at all
 	requireReq(t, fmt.Sprintf("/hls/%s/index.m3u8", UnknownPlaybackID)).
