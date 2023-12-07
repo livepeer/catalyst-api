@@ -280,10 +280,10 @@ func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon 
 	for _, node := range c.Nodes {
 		if s, ok := c.IngestStreams[node.Name][stream]; ok && !isStale(s.Timestamp, c.metricTimeout) {
 			dtsc := node.DTSC
-			if dtsc == "" {
-				dtsc = "dtsc://" + node.Name
-			}
-			log.LogNoRequestID("catabalancer MistUtilLoadSource found node", "DTSC", node.DTSC, "nodeName", node.Name, "stream", stream)
+			//if dtsc == "" {
+			dtsc = "dtsc://" + node.Name
+			//}
+			log.LogNoRequestID("catabalancer MistUtilLoadSource found node", "DTSC", dtsc, "nodeName", node.Name, "stream", stream)
 			return dtsc, nil
 		}
 	}
