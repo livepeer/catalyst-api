@@ -8,7 +8,6 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/log"
-	"strings"
 	"time"
 )
 
@@ -132,20 +131,11 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 				log.LogNoRequestID("catabalancer failed to get mist state", "err", err)
 			}
 			for stream := range mistState.ActiveStreams {
-				playbackID := stream
-				isIngest := mistState.IsIngestStream(stream)
-				if !isIngest {
-					parts := strings.Split(stream, "+")
-					if len(parts) == 2 {
-						playbackID = parts[1] // take the playbackID after the prefix e.g. 'video+'
-					}
-				}
-
 				streamsEvent := NodeStreamsEvent{
 					Resource: nodeStreamsEventResource,
 					NodeID:   nodeName,
-					Stream:   playbackID,
-					IsIngest: isIngest,
+					Stream:   stream,
+					IsIngest: mistState.IsIngestStream(stream),
 				}
 				payload, err = json.Marshal(streamsEvent)
 				if err != nil {

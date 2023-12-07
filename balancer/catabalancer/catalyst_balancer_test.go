@@ -318,7 +318,7 @@ func TestMistUtilLoadSource(t *testing.T) {
 
 	source, err := c.MistUtilLoadSource(context.Background(), "ingest", "", "")
 	require.NoError(t, err)
-	require.Equal(t, "dtsc://nodedtsc", source)
+	require.Equal(t, "dtsc://node", source)
 
 	err = c.UpdateMembers(context.Background(), []cluster.Member{})
 	require.NoError(t, err)

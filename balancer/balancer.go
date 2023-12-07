@@ -13,7 +13,7 @@ type Balancer interface {
 	Start(ctx context.Context) error
 	UpdateMembers(ctx context.Context, members []cluster.Member) error
 	GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error)
-	MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error)
+	MistUtilLoadSource(ctx context.Context, streamID, lat, lon string) (string, error)
 	UpdateNodes(id string, nodeMetrics catabalancer.NodeMetrics)
 	UpdateStreams(id string, stream string, isIngest bool)
 }
