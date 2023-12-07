@@ -285,7 +285,7 @@ func TestNoIngestStream(t *testing.T) {
 	c.UpdateNodes("id", NodeMetrics{})
 	c.UpdateStreams("id", "stream", false)
 	source, err := c.MistUtilLoadSource(context.Background(), "stream", "", "")
-	require.EqualError(t, err, "no node found for ingest stream: stream")
+	require.EqualError(t, err, "catabalancer no node found for ingest stream: stream")
 	require.Empty(t, source)
 
 	// test node present but ingest stream not available
@@ -297,7 +297,7 @@ func TestNoIngestStream(t *testing.T) {
 	}})
 	require.NoError(t, err)
 	source, err = c.MistUtilLoadSource(context.Background(), "stream", "", "")
-	require.EqualError(t, err, "no node found for ingest stream: stream")
+	require.EqualError(t, err, "catabalancer no node found for ingest stream: stream")
 	require.Empty(t, source)
 }
 
@@ -318,13 +318,13 @@ func TestMistUtilLoadSource(t *testing.T) {
 
 	source, err := c.MistUtilLoadSource(context.Background(), "ingest", "", "")
 	require.NoError(t, err)
-	require.Equal(t, "dtsc://nodedtsc", source)
+	require.Equal(t, "dtsc://node", source)
 
 	err = c.UpdateMembers(context.Background(), []cluster.Member{})
 	require.NoError(t, err)
 	require.Empty(t, c.IngestStreams)
 	source, err = c.MistUtilLoadSource(context.Background(), "ingest", "", "")
-	require.EqualError(t, err, "no node found for ingest stream: ingest")
+	require.EqualError(t, err, "catabalancer no node found for ingest stream: ingest")
 	require.Empty(t, source)
 }
 
@@ -348,7 +348,7 @@ func TestStreamTimeout(t *testing.T) {
 	c.metricTimeout = -5 * time.Second
 	// MistUtilLoadSource should detect the expiry and not return the stream
 	source, err := c.MistUtilLoadSource(context.Background(), "ingest", "", "")
-	require.EqualError(t, err, "no node found for ingest stream: ingest")
+	require.EqualError(t, err, "catabalancer no node found for ingest stream: ingest")
 	require.Empty(t, source)
 	c.UpdateStreams("node", "ingest", true)
 	require.Empty(t, c.Streams["node"])

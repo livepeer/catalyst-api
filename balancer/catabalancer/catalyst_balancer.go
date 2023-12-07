@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -30,8 +31,9 @@ type Node struct {
 }
 
 type Stream struct {
-	ID        string
-	Timestamp time.Time // the time we received these stream details, old streams can be removed on a timeout
+	ID         string
+	PlaybackID string
+	Timestamp  time.Time // the time we received these stream details, old streams can be removed on a timeout
 }
 
 type NodeMetrics struct {
@@ -90,7 +92,6 @@ func (c *CataBalancer) Start(ctx context.Context) error {
 }
 
 func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Member) error {
-	//log.LogNoRequestID("catabalancer UpdateMembers", "members", fmt.Sprintf("%+v", members))
 	c.nodesLock.Lock()
 	defer c.nodesLock.Unlock()
 
@@ -156,7 +157,11 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 		log.LogNoRequestID("catabalancer no nodes found, choosing myself", "chosenNode", nodeName, "streamID", playbackID, "reqLat", lat, "reqLon", lon)
 	}
 
-	return nodeName, "video+" + playbackID, nil
+	prefix := "video"
+	if len(redirectPrefixes) > 0 {
+		prefix = redirectPrefixes[0]
+	}
+	return nodeName, fmt.Sprintf("%s+%s", prefix, playbackID), nil
 }
 
 func (c *CataBalancer) createScoredNodes() []ScoredNode {
@@ -271,15 +276,17 @@ func truncateReturned(scoredNodes []ScoredNode, numNodes int) []ScoredNode {
 	return scoredNodes[:numNodes]
 }
 
-func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error) {
+func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, streamID, lat, lon string) (string, error) {
 	c.nodesLock.Lock()
 	defer c.nodesLock.Unlock()
 	for _, node := range c.Nodes {
-		if s, ok := c.IngestStreams[node.Name][stream]; ok && !isStale(s.Timestamp, c.metricTimeout) {
-			return node.DTSC, nil
+		if s, ok := c.IngestStreams[node.Name][streamID]; ok && !isStale(s.Timestamp, c.metricTimeout) {
+			dtsc := "dtsc://" + node.Name
+			log.LogNoRequestID("catabalancer MistUtilLoadSource found node", "DTSC", dtsc, "nodeName", node.Name, "stream", streamID)
+			return dtsc, nil
 		}
 	}
-	return "", fmt.Errorf("no node found for ingest stream: %s", stream)
+	return "", fmt.Errorf("catabalancer no node found for ingest stream: %s", streamID)
 }
 
 func (c *CataBalancer) UpdateNodes(id string, nodeMetrics NodeMetrics) {
@@ -307,17 +314,23 @@ func (c *CataBalancer) UpdateStreams(nodeName string, streamID string, isIngest 
 	removeOldStreams(c.Streams[nodeName], c.metricTimeout)
 	removeOldStreams(c.IngestStreams[nodeName], c.metricTimeout)
 
+	playbackID := streamID
+	parts := strings.Split(streamID, "+")
+	if len(parts) == 2 {
+		playbackID = parts[1] // take the playbackID after the prefix e.g. 'video+'
+	}
+
 	if isIngest {
 		if c.IngestStreams[nodeName] == nil {
 			c.IngestStreams[nodeName] = make(Streams)
 		}
-		c.IngestStreams[nodeName][streamID] = Stream{ID: streamID, Timestamp: time.Now()}
+		c.IngestStreams[nodeName][streamID] = Stream{ID: streamID, PlaybackID: playbackID, Timestamp: time.Now()}
 		return
 	}
 	if c.Streams[nodeName] == nil {
 		c.Streams[nodeName] = make(Streams)
 	}
-	c.Streams[nodeName][streamID] = Stream{ID: streamID, Timestamp: time.Now()}
+	c.Streams[nodeName][playbackID] = Stream{ID: streamID, PlaybackID: playbackID, Timestamp: time.Now()}
 }
 
 func isStale(timestamp time.Time, stale time.Duration) bool {
