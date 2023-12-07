@@ -90,7 +90,6 @@ func (c *CataBalancer) Start(ctx context.Context) error {
 }
 
 func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Member) error {
-	//log.LogNoRequestID("catabalancer UpdateMembers", "members", fmt.Sprintf("%+v", members))
 	c.nodesLock.Lock()
 	defer c.nodesLock.Unlock()
 
@@ -156,7 +155,11 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 		log.LogNoRequestID("catabalancer no nodes found, choosing myself", "chosenNode", nodeName, "streamID", playbackID, "reqLat", lat, "reqLon", lon)
 	}
 
-	return nodeName, "video+" + playbackID, nil
+	prefix := "video"
+	if len(redirectPrefixes) > 0 {
+		prefix = redirectPrefixes[0]
+	}
+	return nodeName, fmt.Sprintf("%s+%s", prefix, playbackID), nil
 }
 
 func (c *CataBalancer) createScoredNodes() []ScoredNode {
@@ -276,10 +279,15 @@ func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon 
 	defer c.nodesLock.Unlock()
 	for _, node := range c.Nodes {
 		if s, ok := c.IngestStreams[node.Name][stream]; ok && !isStale(s.Timestamp, c.metricTimeout) {
-			return node.DTSC, nil
+			dtsc := node.DTSC
+			if dtsc == "" {
+				dtsc = "dtsc://" + node.Name
+			}
+			log.LogNoRequestID("catabalancer MistUtilLoadSource found node", "DTSC", node.DTSC, "nodeName", node.Name, "stream", stream)
+			return dtsc, nil
 		}
 	}
-	return "", fmt.Errorf("no node found for ingest stream: %s", stream)
+	return "", fmt.Errorf("catabalancer no node found for ingest stream: %s", stream)
 }
 
 func (c *CataBalancer) UpdateNodes(id string, nodeMetrics NodeMetrics) {

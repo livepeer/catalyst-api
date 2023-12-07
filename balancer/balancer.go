@@ -4,7 +4,6 @@ package balancer
 
 import (
 	"context"
-
 	"github.com/livepeer/catalyst-api/balancer/catabalancer"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/log"
@@ -88,8 +87,8 @@ func (c CombinedBalancer) UpdateNodes(id string, nodeMetrics catabalancer.NodeMe
 }
 
 func (c CombinedBalancer) UpdateStreams(id string, stream string, isIngest bool) {
-	c.Catabalancer.UpdateStreams(id, stream, false)
-	c.MistBalancer.UpdateStreams(id, stream, false)
+	c.Catabalancer.UpdateStreams(id, stream, isIngest)
+	c.MistBalancer.UpdateStreams(id, stream, isIngest)
 }
 
 type Config struct {

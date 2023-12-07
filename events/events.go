@@ -89,7 +89,6 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 	ticker := time.NewTicker(catabalancer.UpdateEvery)
 	go func() {
 		for range ticker.C {
-			log.LogNoRequestID("catabalancer sending node stats")
 			sysusage, err := catabalancer.GetSystemUsage()
 			if err != nil {
 				log.LogNoRequestID("catabalancer failed to get sys usage", "err", err)
@@ -133,17 +132,20 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 				log.LogNoRequestID("catabalancer failed to get mist state", "err", err)
 			}
 			for stream := range mistState.ActiveStreams {
-				parts := strings.Split(stream, "+")
 				playbackID := stream
-				if len(parts) == 2 {
-					playbackID = parts[1] // take the playbackID after the prefix e.g. 'video+'
+				isIngest := mistState.IsIngestStream(stream)
+				if !isIngest {
+					parts := strings.Split(stream, "+")
+					if len(parts) == 2 {
+						playbackID = parts[1] // take the playbackID after the prefix e.g. 'video+'
+					}
 				}
 
 				streamsEvent := NodeStreamsEvent{
 					Resource: nodeStreamsEventResource,
 					NodeID:   nodeName,
 					Stream:   playbackID,
-					IsIngest: mistState.IsIngestStream(stream),
+					IsIngest: isIngest,
 				}
 				payload, err = json.Marshal(streamsEvent)
 				if err != nil {
