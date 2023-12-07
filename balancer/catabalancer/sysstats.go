@@ -1,7 +1,12 @@
 package catabalancer
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -29,6 +34,23 @@ type SystemInfo struct {
 	DiskInfo []disk.UsageStat
 }
 
+type BandwidthData struct {
+	JSONVersion   string    `json:"jsonversion"`
+	VnstatVersion string    `json:"vnstatversion"`
+	Interface     string    `json:"interface"`
+	SampleTime    int       `json:"sampletime"`
+	Rx            Bandwidth `json:"rx"`
+	Tx            Bandwidth `json:"tx"`
+}
+
+type Bandwidth struct {
+	RateString       string `json:"ratestring"`
+	BytesPerSecond   int    `json:"bytespersecond"`
+	PacketsPerSecond int    `json:"packetspersecond"`
+	Bytes            int    `json:"bytes"`
+	Packets          int    `json:"packets"`
+}
+
 func GetSystemUsage() (SystemUsage, error) {
 	var systemUsage SystemUsage
 
@@ -50,6 +72,13 @@ func GetSystemUsage() (SystemUsage, error) {
 	}
 	systemUsage.RAMUsagePercentage = vmStat.UsedPercent
 
+	// Get BW usage
+	bw, err := GetBandwidthUsage()
+	if err != nil {
+		return systemUsage, err
+	}
+	systemUsage.BWUsagePercentage = bw
+
 	// Get Load Average
 	avg, err := load.Avg()
 	if err != nil {
@@ -62,4 +91,47 @@ func GetSystemUsage() (SystemUsage, error) {
 	}
 
 	return systemUsage, nil
+}
+
+// Get bandwidth usage using the vnstat utility.
+// 'vnstat --json --iface en0 -tr 2.5' calculates traffic for given interface
+// over the specified duration in seconds
+func GetBandwidthUsage() (float64, error) {
+	iface := "eth0"
+	trafficArgs := []string{"-tr", "2.5"}
+	args := append([]string{"--json", "--iface", iface}, trafficArgs...)
+
+	// Run vnstat
+	cmd := exec.Command("vnstat", args...)
+	cmd.Env = os.Environ()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return -1, err
+	}
+
+	// Parse json output
+	var data BandwidthData
+	err = json.Unmarshal([]byte(output), &data)
+	if err != nil {
+		return -1, err
+	}
+
+	// Get bandwidth in Mbits/s
+	totalBW := (float64(data.Rx.BytesPerSecond + data.Tx.BytesPerSecond)) / 8 / 1e6
+
+	// Get the NIC's speed
+	nicSpeedFilePath := fmt.Sprintf("/sys/class/net/%s/speed", iface)
+	speedContent, err := os.ReadFile(nicSpeedFilePath)
+	if err != nil {
+		return -1, err
+	}
+	speedStr := strings.TrimSpace(string(speedContent))
+	speed, err := strconv.ParseFloat(speedStr, 64)
+	if err != nil {
+		return -1, err
+	}
+
+	// Calculate bandwidth usage
+	totalBWPercent := (totalBW / speed) * 100
+	return totalBWPercent, nil
 }
