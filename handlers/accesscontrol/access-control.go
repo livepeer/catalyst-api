@@ -15,7 +15,6 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/config"
-	catErrs "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/pquerna/cachecontrol/cacheobject"
 )
@@ -97,7 +96,8 @@ func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, paylo
 	} else if jwt != "" {
 		pub, err := extractKeyFromJwt(jwt, acReq.Stream)
 		if err != nil {
-			return false, fmt.Errorf("failed to extract key from jwt: %w %w", catErrs.InvalidJWT, err)
+			glog.Infof("Unable to extract key from jwt for playbackId=%v jwt=%v", acReq.Stream, jwt)
+			return false, nil
 		}
 		acReq.Pub = pub
 
