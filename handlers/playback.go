@@ -40,17 +40,6 @@ func (p *PlaybackHandler) Handle(w http.ResponseWriter, req *http.Request, param
 		gatingParam = req.URL.Query().Get(gatingParamName)
 	}
 
-	if gatingParam == "" {
-		gatingParam = req.Header.Get("Livepeer-Access-Key")
-		if gatingParam == "" {
-			gatingParam = req.Header.Get("Livepeer-Jwt")
-		}
-
-		if gatingParam != "" {
-			gatingParamName = "headerBased"
-		}
-	}
-
 	playbackReq := playback.Request{
 		RequestID:       requestID,
 		PlaybackID:      params.ByName("playbackID"),
@@ -93,8 +82,6 @@ func (p *PlaybackHandler) Handle(w http.ResponseWriter, req *http.Request, param
 func handleError(err error, req *http.Request, requestID string, w http.ResponseWriter) {
 	log.LogError(requestID, "error in playback handler", err, "url", req.URL)
 	switch {
-	case errors.Is(err, catErrs.EmptyGatingParamError):
-		catErrs.WriteHTTPBadRequest(w, "gating param empty", nil)
 	case errors.Is(err, catErrs.ObjectNotFoundError):
 		catErrs.WriteHTTPNotFound(w, "not found", nil)
 	case errors.Is(err, catErrs.UnauthorisedError):
