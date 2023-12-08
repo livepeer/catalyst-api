@@ -41,7 +41,9 @@ func (h *GatingHandler) GatingCheck(next httprouter.Handle) httprouter.Handle {
 		}
 
 		payload := misttriggers.UserNewPayload{
-			URL: req.URL,
+			URL:       req.URL,
+			AccessKey: accessKey,
+			JWT:       jwt,
 		}
 
 		playbackAccessControlAllowed, err := h.AccessControl.IsAuthorized(playbackID, &payload)
