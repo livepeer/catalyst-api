@@ -40,6 +40,14 @@ func (p *PlaybackHandler) Handle(w http.ResponseWriter, req *http.Request, param
 		gatingParam = req.URL.Query().Get(gatingParamName)
 	}
 
+	if gatingParam == "" {
+		gatingParam = req.Header.Get("Livepeer-Access-Key")
+		if gatingParam == "" {
+			gatingParam = req.Header.Get("Livepeer-Jwt")
+			gatingParamName = "jwt"
+		}
+	}
+
 	playbackReq := playback.Request{
 		RequestID:       requestID,
 		PlaybackID:      params.ByName("playbackID"),
