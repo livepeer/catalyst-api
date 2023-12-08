@@ -83,7 +83,7 @@ func NewBalancer(nodeName string) *CataBalancer {
 		Streams:       make(map[string]Streams),
 		IngestStreams: make(map[string]Streams),
 		NodeMetrics:   make(map[string]NodeMetrics),
-		metricTimeout: UpdateEvery,
+		metricTimeout: 16 * time.Second,
 	}
 }
 
