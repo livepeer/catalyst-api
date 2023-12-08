@@ -77,8 +77,7 @@ func IsUnretriable(err error) bool {
 }
 
 var (
-	EmptyGatingParamError = errors.New("EmptyGatingParamError")
-	ObjectNotFoundError   = errors.New("ObjectNotFoundError")
-	UnauthorisedError     = errors.New("UnauthorisedError")
-	InvalidJWT            = errors.New("InvalidJWTError")
+	ObjectNotFoundError = errors.New("ObjectNotFoundError")
+	UnauthorisedError   = errors.New("UnauthorisedError")
+	InvalidJWT          = errors.New("InvalidJWTError")
 )

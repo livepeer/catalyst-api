@@ -50,10 +50,6 @@ func Handle(buckets []*url.URL, req Request) (*Response, error) {
 	// don't close the body for non-manifest files where we return above as we simply proxying the body back
 	defer f.Body.Close()
 
-	if req.GatingParam == "" {
-		return nil, fmt.Errorf("invalid request: %w", caterrs.EmptyGatingParamError)
-	}
-
 	p, listType, err := m3u8.DecodeFrom(f.Body, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read manifest contents: %w", err)
@@ -93,6 +89,9 @@ func Handle(buckets []*url.URL, req Request) (*Response, error) {
 }
 
 func appendAccessKey(uri, gatingParam, gatingParamName string) (string, error) {
+	if gatingParam == "" {
+		return uri, nil
+	}
 	variantURI, err := url.Parse(uri)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse variant uri: %w", err)

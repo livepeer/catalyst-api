@@ -82,8 +82,6 @@ func (p *PlaybackHandler) Handle(w http.ResponseWriter, req *http.Request, param
 func handleError(err error, req *http.Request, requestID string, w http.ResponseWriter) {
 	log.LogError(requestID, "error in playback handler", err, "url", req.URL)
 	switch {
-	case errors.Is(err, catErrs.EmptyGatingParamError):
-		catErrs.WriteHTTPBadRequest(w, "gating param empty", nil)
 	case errors.Is(err, catErrs.ObjectNotFoundError):
 		catErrs.WriteHTTPNotFound(w, "not found", nil)
 	case errors.Is(err, catErrs.UnauthorisedError):

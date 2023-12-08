@@ -99,7 +99,7 @@ func TestManifest(t *testing.T) {
 			name:           "empty access key",
 			playbackID:     "dbe3q3g6q2kia036",
 			file:           "index.m3u8",
-			expectedStatus: http.StatusBadRequest,
+			expectedStatus: http.StatusOK,
 		},
 		{
 			name:           "invalid m3u8",
