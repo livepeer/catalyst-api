@@ -93,6 +93,9 @@ func Handle(buckets []*url.URL, req Request) (*Response, error) {
 }
 
 func appendAccessKey(uri, gatingParam, gatingParamName string) (string, error) {
+	if gatingParamName == "headerBased" {
+		return uri, nil
+	}
 	variantURI, err := url.Parse(uri)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse variant uri: %w", err)

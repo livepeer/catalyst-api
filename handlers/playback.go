@@ -44,7 +44,10 @@ func (p *PlaybackHandler) Handle(w http.ResponseWriter, req *http.Request, param
 		gatingParam = req.Header.Get("Livepeer-Access-Key")
 		if gatingParam == "" {
 			gatingParam = req.Header.Get("Livepeer-Jwt")
-			gatingParamName = "jwt"
+		}
+
+		if gatingParam != "" {
+			gatingParamName = "headerBased"
 		}
 	}
 
