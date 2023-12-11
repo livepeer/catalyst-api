@@ -83,7 +83,7 @@ func NewBalancer(nodeName string) *CataBalancer {
 		Streams:       make(map[string]Streams),
 		IngestStreams: make(map[string]Streams),
 		NodeMetrics:   make(map[string]NodeMetrics),
-		metricTimeout: UpdateEvery,
+		metricTimeout: 16 * time.Second,
 	}
 }
 
@@ -175,7 +175,9 @@ func (c *CataBalancer) createScoredNodes() []ScoredNode {
 		// make a copy of the streams map so that we can release the nodesLock (UpdateStreams will be making changes in the background)
 		streams := make(Streams)
 		for streamID, stream := range c.Streams[nodeName] {
-			streams[streamID] = stream
+			if !isStale(stream.Timestamp, c.metricTimeout) {
+				streams[streamID] = stream
+			}
 		}
 		nodesList = append(nodesList, ScoredNode{
 			Node:        *node,
@@ -187,9 +189,8 @@ func (c *CataBalancer) createScoredNodes() []ScoredNode {
 }
 
 func (n *ScoredNode) HasStream(streamID string) bool {
-	s, ok := n.Streams[streamID]
-	found := ok && !isStale(s.Timestamp, UpdateEvery)
-	return found
+	_, ok := n.Streams[streamID]
+	return ok
 }
 
 func (n ScoredNode) GetLoadScore() int {
@@ -325,7 +326,6 @@ func (c *CataBalancer) UpdateStreams(nodeName string, streamID string, isIngest 
 			c.IngestStreams[nodeName] = make(Streams)
 		}
 		c.IngestStreams[nodeName][streamID] = Stream{ID: streamID, PlaybackID: playbackID, Timestamp: time.Now()}
-		return
 	}
 	if c.Streams[nodeName] == nil {
 		c.Streams[nodeName] = make(Streams)

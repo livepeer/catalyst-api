@@ -279,6 +279,21 @@ func scores(node1 ScoredNode, node2 ScoredNode) ScoredNode {
 	return node1
 }
 
+func TestSetMetrics(t *testing.T) {
+	// simple check that node metrics make it through to the load balancing algo
+	c := NewBalancer("")
+	err := c.UpdateMembers(context.Background(), []cluster.Member{{Name: "node1"}, {Name: "node2"}})
+	require.NoError(t, err)
+
+	c.UpdateNodes("node1", NodeMetrics{CPUUsagePercentage: 90})
+	c.UpdateNodes("node2", NodeMetrics{CPUUsagePercentage: 0})
+
+	node, fullPlaybackID, err := c.GetBestNode(context.Background(), nil, "1234", "", "", "")
+	require.NoError(t, err)
+	require.Equal(t, "node2", node)
+	require.Equal(t, "video+1234", fullPlaybackID)
+}
+
 func TestNoIngestStream(t *testing.T) {
 	c := NewBalancer("")
 	// first test no nodes available
@@ -337,23 +352,32 @@ func TestStreamTimeout(t *testing.T) {
 		},
 	}})
 	require.NoError(t, err)
+	c.UpdateNodes("node", NodeMetrics{})
 
 	c.metricTimeout = 5 * time.Second
-	c.UpdateStreams("node", "stream", false)
-	c.UpdateStreams("node", "ingest", true)
+	c.UpdateStreams("node", "video+stream", false)
+	c.UpdateStreams("node", "video+ingest", true)
 
-	require.Equal(t, "stream", c.Streams["node"]["stream"].ID)
-	require.Equal(t, "ingest", c.IngestStreams["node"]["ingest"].ID)
+	// Source load balance call should work
+	source, err := c.MistUtilLoadSource(context.Background(), "video+ingest", "", "")
+	require.NoError(t, err)
+	require.Equal(t, "dtsc://node", source)
+	// Playback load balance calls should work
+	nodes := selectTopNodes(c.createScoredNodes(), "stream", 0, 0, 1)
+	require.Equal(t, int64(2), nodes[0].StreamScore)
+	nodes = selectTopNodes(c.createScoredNodes(), "ingest", 0, 0, 1)
+	require.Equal(t, int64(2), nodes[0].StreamScore)
 
 	c.metricTimeout = -5 * time.Second
-	// MistUtilLoadSource should detect the expiry and not return the stream
-	source, err := c.MistUtilLoadSource(context.Background(), "ingest", "", "")
-	require.EqualError(t, err, "catabalancer no node found for ingest stream: ingest")
+	// Re-run the same load balance calls as above, now no results should be returned due to expiry
+	source, err = c.MistUtilLoadSource(context.Background(), "video+ingest", "", "")
+	require.EqualError(t, err, "catabalancer no node found for ingest stream: video+ingest")
 	require.Empty(t, source)
-	c.UpdateStreams("node", "ingest", true)
-	require.Empty(t, c.Streams["node"])
-	c.UpdateStreams("node", "stream", false)
-	require.Empty(t, c.IngestStreams["node"])
+
+	nodes = selectTopNodes(c.createScoredNodes(), "stream", 0, 0, 1)
+	require.Empty(t, nodes)
+	nodes = selectTopNodes(c.createScoredNodes(), "ingest", 0, 0, 1)
+	require.Empty(t, nodes)
 }
 
 // needs to be run with go test -race

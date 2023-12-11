@@ -3,6 +3,8 @@ package catabalancer
 import (
 	"math"
 	"sort"
+
+	"github.com/livepeer/catalyst-api/log"
 )
 
 // Earth radius in kilometers
@@ -15,6 +17,11 @@ func toRadians(deg float64) float64 {
 
 // Rate the nodes as Good / Okay / Bad based on distance from the request
 func geoScores(nodes []ScoredNode, requestLatitude, requestLongitude float64) []ScoredNode {
+	if len(nodes) < 1 {
+		log.LogNoRequestID("catabalancer no nodes found for geoScores")
+		return nodes
+	}
+
 	// Calculate distance from request for each node
 	for i := range nodes {
 		// Convert latitude and longitude from degrees to radians
