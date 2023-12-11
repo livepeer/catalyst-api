@@ -294,6 +294,17 @@ func TestSetMetrics(t *testing.T) {
 	require.Equal(t, "video+1234", fullPlaybackID)
 }
 
+func TestUnknownNode(t *testing.T) {
+	// check that the node metrics call creates the unknown node
+	c := NewBalancer("")
+
+	c.UpdateNodes("node1", NodeMetrics{CPUUsagePercentage: 90})
+
+	node, _, err := c.GetBestNode(context.Background(), nil, "1234", "", "", "")
+	require.NoError(t, err)
+	require.Equal(t, "node1", node)
+}
+
 func TestNoIngestStream(t *testing.T) {
 	c := NewBalancer("")
 	// first test no nodes available

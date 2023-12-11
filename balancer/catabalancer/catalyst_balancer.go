@@ -290,14 +290,19 @@ func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, streamID, lat, lo
 	return "", fmt.Errorf("catabalancer no node found for ingest stream: %s", streamID)
 }
 
+func (c *CataBalancer) checkAndCreateNode(nodeName string) {
+	if _, ok := c.Nodes[nodeName]; !ok {
+		c.Nodes[nodeName] = &Node{
+			Name: nodeName,
+		}
+	}
+}
+
 func (c *CataBalancer) UpdateNodes(id string, nodeMetrics NodeMetrics) {
 	c.nodesLock.Lock()
 	defer c.nodesLock.Unlock()
 
-	if _, ok := c.Nodes[id]; !ok {
-		log.LogNoRequestID("catabalancer updatenodes node not found", "id", id)
-		return
-	}
+	c.checkAndCreateNode(id)
 	nodeMetrics.Timestamp = time.Now()
 	c.NodeMetrics[id] = nodeMetrics
 }
@@ -307,10 +312,8 @@ var UpdateEvery = 5 * time.Second
 func (c *CataBalancer) UpdateStreams(nodeName string, streamID string, isIngest bool) {
 	c.nodesLock.Lock()
 	defer c.nodesLock.Unlock()
-	if _, ok := c.Nodes[nodeName]; !ok {
-		log.LogNoRequestID("catabalancer UpdateStreams node not found", "nodeName", nodeName)
-		return
-	}
+
+	c.checkAndCreateNode(nodeName)
 	// remove old streams
 	removeOldStreams(c.Streams[nodeName], c.metricTimeout)
 	removeOldStreams(c.IngestStreams[nodeName], c.metricTimeout)
