@@ -293,7 +293,7 @@ func main() {
 	})
 
 	group.Go(func() error {
-		return api.ListenAndServe(ctx, cli, vodEngine, bal, c)
+		return api.ListenAndServe(ctx, cli, vodEngine, bal, c, mapic)
 	})
 
 	group.Go(func() error {

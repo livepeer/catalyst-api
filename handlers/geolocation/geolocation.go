@@ -3,6 +3,7 @@ package geolocation
 import (
 	"context"
 	"fmt"
+	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -22,6 +23,7 @@ type GeolocationHandlersCollection struct {
 	Balancer balancer.Balancer
 	Cluster  cluster.Cluster
 	Config   config.Cli
+	Mapic    mistapiconnector.IMac
 }
 
 // this package handles geolocation for playback and origin discovery for node replication
@@ -39,6 +41,11 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 
 		if c.Config.CdnRedirectPrefix != nil && (pathType == "hls" || pathType == "webrtc") {
 			cdnPercentage, toBeRedirected := c.Config.CdnRedirectPlaybackPct[playbackID]
+			info, _ := c.Mapic.GetStreamInfo(prefix + "+" + playbackID)
+			if info != nil && info.RouteToCDN {
+				toBeRedirected = true
+				cdnPercentage = 100
+			}
 			if toBeRedirected && cdnPercentage > rand.Float64()*100 {
 				if pathType == "webrtc" {
 					// For webRTC streams on the `CdnRedirectPlaybackIDs` list we return `406`

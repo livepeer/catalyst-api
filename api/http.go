@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"net/http"
 	"time"
 
@@ -17,8 +18,8 @@ import (
 	"github.com/livepeer/catalyst-api/pipeline"
 )
 
-func ListenAndServe(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster) error {
-	router := NewCatalystAPIRouter(cli, vodEngine, bal, c)
+func ListenAndServe(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster, mapic mistapiconnector.IMac) error {
+	router := NewCatalystAPIRouter(cli, vodEngine, bal, c, mapic)
 	server := http.Server{Addr: cli.HTTPAddress, Handler: router}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -44,7 +45,7 @@ func ListenAndServe(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coo
 	return server.Shutdown(ctx)
 }
 
-func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster) *httprouter.Router {
+func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster, mapic mistapiconnector.IMac) *httprouter.Router {
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
 	withCORS := middleware.AllowCORS()
@@ -55,6 +56,7 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 		Balancer: bal,
 		Cluster:  c,
 		Config:   cli,
+		Mapic:    mapic,
 	}
 
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))

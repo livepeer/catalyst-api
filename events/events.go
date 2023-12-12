@@ -86,6 +86,7 @@ func Unmarshal(payload []byte) (Event, error) {
 
 func StartMetricSending(nodeName string, latitude float64, longitude float64, c cluster.Cluster, mist clients.MistAPIClient) {
 	ticker := time.NewTicker(catabalancer.UpdateEvery)
+	defer ticker.Stop()
 	go func() {
 		for range ticker.C {
 			sysusage, err := catabalancer.GetSystemUsage()

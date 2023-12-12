@@ -41,6 +41,7 @@ type (
 		MetricsHandler() http.Handler
 		RefreshStreamIfNeeded(playbackID string)
 		NukeStream(playbackID string)
+		GetStreamInfo(string) (*api.Stream, error)
 	}
 
 	pushStatus struct {
@@ -102,6 +103,14 @@ type (
 		metricsCollector          *metricsCollector
 	}
 )
+
+func (mc *mac) GetStreamInfo(id string) (*api.Stream, error) {
+	info, err := mc.getStreamInfo(id)
+	if err != nil {
+		return nil, err
+	}
+	return info.stream, nil
+}
 
 func (mc *mac) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
