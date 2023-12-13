@@ -97,6 +97,9 @@ func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Memb
 
 	latestNodes := make(map[string]*Node)
 	for _, member := range members {
+		if member.Tags["node"] != "media" { // ignore testing nodes from load balancing
+			continue
+		}
 		latestNodes[member.Name] = &Node{
 			Name: member.Name,
 			DTSC: member.Tags["dtsc"],

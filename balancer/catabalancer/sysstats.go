@@ -73,10 +73,7 @@ func GetSystemUsage() (SystemUsage, error) {
 	systemUsage.RAMUsagePercentage = vmStat.UsedPercent
 
 	// Get BW usage
-	bw, err := GetBandwidthUsage()
-	if err != nil {
-		return systemUsage, err
-	}
+	bw, _ := GetBandwidthUsage() // ignore errors for now until we have vnstat rolled out everywhere
 	systemUsage.BWUsagePercentage = bw
 
 	// Get Load Average
