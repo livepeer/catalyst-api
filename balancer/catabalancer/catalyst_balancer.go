@@ -284,13 +284,16 @@ func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, streamID, lat, lo
 	c.nodesLock.Lock()
 	defer c.nodesLock.Unlock()
 	for _, node := range c.Nodes {
-		if s, ok := c.IngestStreams[node.Name][streamID]; ok && !isStale(s.Timestamp, c.metricTimeout) {
+		if s, ok := c.IngestStreams[node.Name][streamID]; ok {
+			if isStale(s.Timestamp, c.metricTimeout) {
+				return "", fmt.Errorf("catabalancer no node found for ingest stream: %s stale: true", streamID)
+			}
 			dtsc := "dtsc://" + node.Name
 			log.LogNoRequestID("catabalancer MistUtilLoadSource found node", "DTSC", dtsc, "nodeName", node.Name, "stream", streamID)
 			return dtsc, nil
 		}
 	}
-	return "", fmt.Errorf("catabalancer no node found for ingest stream: %s", streamID)
+	return "", fmt.Errorf("catabalancer no node found for ingest stream: %s stale: false", streamID)
 }
 
 func (c *CataBalancer) checkAndCreateNode(nodeName string) {

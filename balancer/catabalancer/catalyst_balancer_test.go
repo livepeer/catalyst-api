@@ -312,7 +312,7 @@ func TestNoIngestStream(t *testing.T) {
 	c.UpdateNodes("id", NodeMetrics{})
 	c.UpdateStreams("id", "stream", false)
 	source, err := c.MistUtilLoadSource(context.Background(), "stream", "", "")
-	require.EqualError(t, err, "catabalancer no node found for ingest stream: stream")
+	require.EqualError(t, err, "catabalancer no node found for ingest stream: stream stale: false")
 	require.Empty(t, source)
 
 	// test node present but ingest stream not available
@@ -324,7 +324,7 @@ func TestNoIngestStream(t *testing.T) {
 	}})
 	require.NoError(t, err)
 	source, err = c.MistUtilLoadSource(context.Background(), "stream", "", "")
-	require.EqualError(t, err, "catabalancer no node found for ingest stream: stream")
+	require.EqualError(t, err, "catabalancer no node found for ingest stream: stream stale: false")
 	require.Empty(t, source)
 }
 
@@ -351,7 +351,7 @@ func TestMistUtilLoadSource(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, c.IngestStreams)
 	source, err = c.MistUtilLoadSource(context.Background(), "ingest", "", "")
-	require.EqualError(t, err, "catabalancer no node found for ingest stream: ingest")
+	require.EqualError(t, err, "catabalancer no node found for ingest stream: ingest stale: false")
 	require.Empty(t, source)
 }
 
@@ -383,7 +383,7 @@ func TestStreamTimeout(t *testing.T) {
 	c.metricTimeout = -5 * time.Second
 	// Re-run the same load balance calls as above, now no results should be returned due to expiry
 	source, err = c.MistUtilLoadSource(context.Background(), "video+ingest", "", "")
-	require.EqualError(t, err, "catabalancer no node found for ingest stream: video+ingest")
+	require.EqualError(t, err, "catabalancer no node found for ingest stream: video+ingest stale: true")
 	require.Empty(t, source)
 
 	nodes = selectTopNodes(c.createScoredNodes(), "stream", 0, 0, 1)
