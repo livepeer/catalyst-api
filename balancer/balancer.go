@@ -61,6 +61,7 @@ func (c CombinedBalancer) GetBestNode(ctx context.Context, redirectPrefixes []st
 		"cataErr", cataErr,
 		"nodeMatch", cataBestNode == bestNode,
 		"playbackIDMatch", cataFullPlaybackID == fullPlaybackID,
+		"playbackID", playbackID,
 	)
 	return bestNode, fullPlaybackID, err
 }
@@ -77,6 +78,7 @@ func (c CombinedBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, l
 		"cataDtscURL", cataDtscURL,
 		"cataErr", cataErr,
 		"urlMatch", dtscURL == cataDtscURL,
+		"stream", stream,
 	)
 	return dtscURL, err
 }
