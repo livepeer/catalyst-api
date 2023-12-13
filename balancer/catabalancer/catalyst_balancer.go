@@ -14,13 +14,14 @@ import (
 )
 
 type CataBalancer struct {
-	NodeName      string // Node name of this instance
-	Nodes         map[string]*Node
-	nodesLock     sync.Mutex
-	Streams       map[string]Streams     // Node name -> Streams
-	IngestStreams map[string]Streams     // Node name -> Streams
-	NodeMetrics   map[string]NodeMetrics // Node name -> NodeMetrics
-	metricTimeout time.Duration
+	NodeName            string // Node name of this instance
+	Nodes               map[string]*Node
+	nodesLock           sync.Mutex
+	Streams             map[string]Streams     // Node name -> Streams
+	IngestStreams       map[string]Streams     // Node name -> Streams
+	NodeMetrics         map[string]NodeMetrics // Node name -> NodeMetrics
+	metricTimeout       time.Duration
+	ingestStreamTimeout time.Duration
 }
 
 type Streams map[string]Stream // Stream ID -> Stream
@@ -78,12 +79,13 @@ func (s ScoredNode) String() string {
 
 func NewBalancer(nodeName string) *CataBalancer {
 	return &CataBalancer{
-		NodeName:      nodeName,
-		Nodes:         make(map[string]*Node),
-		Streams:       make(map[string]Streams),
-		IngestStreams: make(map[string]Streams),
-		NodeMetrics:   make(map[string]NodeMetrics),
-		metricTimeout: 16 * time.Second,
+		NodeName:            nodeName,
+		Nodes:               make(map[string]*Node),
+		Streams:             make(map[string]Streams),
+		IngestStreams:       make(map[string]Streams),
+		NodeMetrics:         make(map[string]NodeMetrics),
+		metricTimeout:       16 * time.Second,
+		ingestStreamTimeout: 20 * time.Minute,
 	}
 }
 
@@ -172,15 +174,22 @@ func (c *CataBalancer) createScoredNodes() []ScoredNode {
 	defer c.nodesLock.Unlock()
 	var nodesList []ScoredNode
 	for nodeName, node := range c.Nodes {
-		if metrics, ok := c.NodeMetrics[nodeName]; !ok || isStale(metrics.Timestamp, c.metricTimeout) {
+		metrics, ok := c.NodeMetrics[nodeName]
+		if !ok {
+			continue
+		}
+		if isStale(metrics.Timestamp, c.metricTimeout) {
+			log.LogNoRequestID("catabalancer ignoring node with stale metrics", "nodeName", nodeName, "timestamp", metrics.Timestamp)
 			continue
 		}
 		// make a copy of the streams map so that we can release the nodesLock (UpdateStreams will be making changes in the background)
 		streams := make(Streams)
 		for streamID, stream := range c.Streams[nodeName] {
-			if !isStale(stream.Timestamp, c.metricTimeout) {
-				streams[streamID] = stream
+			if isStale(stream.Timestamp, c.metricTimeout) {
+				log.LogNoRequestID("catabalancer ignoring stale stream info", "nodeName", nodeName, "streamID", streamID, "timestamp", stream.Timestamp)
+				continue
 			}
+			streams[streamID] = stream
 		}
 		nodesList = append(nodesList, ScoredNode{
 			Node:        *node,
@@ -285,7 +294,7 @@ func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, streamID, lat, lo
 	defer c.nodesLock.Unlock()
 	for _, node := range c.Nodes {
 		if s, ok := c.IngestStreams[node.Name][streamID]; ok {
-			if isStale(s.Timestamp, c.metricTimeout) {
+			if isStale(s.Timestamp, c.ingestStreamTimeout) {
 				return "", fmt.Errorf("catabalancer no node found for ingest stream: %s stale: true", streamID)
 			}
 			dtsc := "dtsc://" + node.Name
@@ -325,7 +334,7 @@ func (c *CataBalancer) UpdateStreams(nodeName string, streamID string, isIngest 
 	c.checkAndCreateNode(nodeName)
 	// remove old streams
 	removeOldStreams(c.Streams[nodeName], c.metricTimeout)
-	removeOldStreams(c.IngestStreams[nodeName], c.metricTimeout)
+	removeOldStreams(c.IngestStreams[nodeName], c.ingestStreamTimeout)
 
 	playbackID := streamID
 	parts := strings.Split(streamID, "+")
@@ -336,6 +345,12 @@ func (c *CataBalancer) UpdateStreams(nodeName string, streamID string, isIngest 
 	if isIngest {
 		if c.IngestStreams[nodeName] == nil {
 			c.IngestStreams[nodeName] = make(Streams)
+		}
+		// check if a previous node had the stream and remove that entry if so
+		for _, node := range c.Nodes {
+			if _, ok := c.IngestStreams[node.Name][streamID]; ok {
+				delete(c.IngestStreams[node.Name], streamID)
+			}
 		}
 		c.IngestStreams[nodeName][streamID] = Stream{ID: streamID, PlaybackID: playbackID, Timestamp: time.Now()}
 	}
