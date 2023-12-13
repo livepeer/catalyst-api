@@ -120,7 +120,11 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 				log.LogNoRequestID("catabalancer failed to send sys info", "err", err)
 				continue
 			}
-
+		}
+	}()
+	streamTicker := time.NewTicker(catabalancer.UpdateEvery)
+	go func() {
+		for range streamTicker.C {
 			if mist == nil {
 				continue
 			}
@@ -129,6 +133,7 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 			mistState, err := mist.GetState()
 			if err != nil {
 				log.LogNoRequestID("catabalancer failed to get mist state", "err", err)
+				continue
 			}
 			for stream := range mistState.ActiveStreams {
 				streamsEvent := NodeStreamsEvent{
@@ -137,7 +142,7 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 					Stream:   stream,
 					IsIngest: mistState.IsIngestStream(stream),
 				}
-				payload, err = json.Marshal(streamsEvent)
+				payload, err := json.Marshal(streamsEvent)
 				if err != nil {
 					log.LogNoRequestID("catabalancer failed to marhsal node stats", "err", err)
 					continue
