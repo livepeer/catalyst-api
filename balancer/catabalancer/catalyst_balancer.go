@@ -292,13 +292,13 @@ func truncateReturned(scoredNodes []ScoredNode, numNodes int) []ScoredNode {
 func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, streamID, lat, lon string) (string, error) {
 	c.nodesLock.Lock()
 	defer c.nodesLock.Unlock()
-	for _, node := range c.Nodes {
-		if s, ok := c.IngestStreams[node.Name][streamID]; ok {
+	for nodeName := range c.Nodes {
+		if s, ok := c.IngestStreams[nodeName][streamID]; ok {
 			if isStale(s.Timestamp, c.ingestStreamTimeout) {
 				return "", fmt.Errorf("catabalancer no node found for ingest stream: %s stale: true", streamID)
 			}
-			dtsc := "dtsc://" + node.Name
-			log.LogNoRequestID("catabalancer MistUtilLoadSource found node", "DTSC", dtsc, "nodeName", node.Name, "stream", streamID)
+			dtsc := "dtsc://" + nodeName
+			log.LogNoRequestID("catabalancer MistUtilLoadSource found node", "DTSC", dtsc, "nodeName", nodeName, "stream", streamID)
 			return dtsc, nil
 		}
 	}
@@ -346,11 +346,9 @@ func (c *CataBalancer) UpdateStreams(nodeName string, streamID string, isIngest 
 		if c.IngestStreams[nodeName] == nil {
 			c.IngestStreams[nodeName] = make(Streams)
 		}
-		// check if a previous node had the stream and remove that entry if so
-		for _, node := range c.Nodes {
-			if _, ok := c.IngestStreams[node.Name][streamID]; ok {
-				delete(c.IngestStreams[node.Name], streamID)
-			}
+		// if a previous node had the stream, remove that entry
+		for name := range c.Nodes {
+			delete(c.IngestStreams[name], streamID)
 		}
 		c.IngestStreams[nodeName][streamID] = Stream{ID: streamID, PlaybackID: playbackID, Timestamp: time.Now()}
 	}
