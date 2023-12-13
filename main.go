@@ -323,7 +323,9 @@ func main() {
 		return handleClusterEvents(ctx, mapic, bal, c)
 	})
 
-	events.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, c, mist)
+	if cli.Tags["node"] == "media" { // don't announce load balancing availability for testing nodes
+		events.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, c, mist)
+	}
 
 	err = group.Wait()
 	glog.Infof("Shutdown complete. Reason for shutdown: %s", err)

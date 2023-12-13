@@ -299,6 +299,7 @@ func TestUnknownNode(t *testing.T) {
 	c := NewBalancer("")
 
 	c.UpdateNodes("node1", NodeMetrics{CPUUsagePercentage: 90})
+	c.UpdateNodes("bgw-node1", NodeMetrics{CPUUsagePercentage: 10})
 
 	node, _, err := c.GetBestNode(context.Background(), nil, "1234", "", "", "")
 	require.NoError(t, err)
