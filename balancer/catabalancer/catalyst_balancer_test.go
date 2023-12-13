@@ -367,6 +367,7 @@ func TestStreamTimeout(t *testing.T) {
 	c.UpdateNodes("node", NodeMetrics{})
 
 	c.metricTimeout = 5 * time.Second
+	c.ingestStreamTimeout = 5 * time.Second
 	c.UpdateStreams("node", "video+stream", false)
 	c.UpdateStreams("node", "video+ingest", true)
 
@@ -380,7 +381,14 @@ func TestStreamTimeout(t *testing.T) {
 	nodes = selectTopNodes(c.createScoredNodes(), "ingest", 0, 0, 1)
 	require.Equal(t, int64(2), nodes[0].StreamScore)
 
+	// test that a new ingest node will overwrite the previous data
+	c.UpdateStreams("node2", "video+ingest", true)
+	source, err = c.MistUtilLoadSource(context.Background(), "video+ingest", "", "")
+	require.NoError(t, err)
+	require.Equal(t, "dtsc://node2", source)
+
 	c.metricTimeout = -5 * time.Second
+	c.ingestStreamTimeout = -5 * time.Second
 	// Re-run the same load balance calls as above, now no results should be returned due to expiry
 	source, err = c.MistUtilLoadSource(context.Background(), "video+ingest", "", "")
 	require.EqualError(t, err, "catabalancer no node found for ingest stream: video+ingest stale: true")
