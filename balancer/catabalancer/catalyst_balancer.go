@@ -294,6 +294,9 @@ func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, streamID, lat, lo
 }
 
 func (c *CataBalancer) checkAndCreateNode(nodeName string) {
+	if strings.HasPrefix(nodeName, "bgw") { // hack to ensure we ignore bgw nodes
+		return
+	}
 	if _, ok := c.Nodes[nodeName]; !ok {
 		c.Nodes[nodeName] = &Node{
 			Name: nodeName,
