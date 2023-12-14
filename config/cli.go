@@ -70,7 +70,10 @@ type Cli struct {
 
 	C2PAPrivateKeyPath string
 	C2PACertsPath      string
-	CataBalancer       string
+
+	CataBalancer                    string
+	CataBalancerMetricTimeout       time.Duration
+	CataBalancerIngestStreamTimeout time.Duration
 }
 
 // Return our own URL for callback trigger purposes

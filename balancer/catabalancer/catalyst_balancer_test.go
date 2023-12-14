@@ -41,7 +41,7 @@ var BandwidthOverloadedNode = ScoredNode{
 }
 
 func TestItReturnsItselfWhenNoOtherNodesPresent(t *testing.T) {
-	c := NewBalancer("me")
+	c := NewBalancer("me", time.Second, time.Second)
 	nodeName, prefix, err := c.GetBestNode(context.Background(), nil, "playbackID", "", "", "")
 	require.NoError(t, err)
 	require.Equal(t, "me", nodeName)
@@ -49,7 +49,7 @@ func TestItReturnsItselfWhenNoOtherNodesPresent(t *testing.T) {
 }
 
 func TestStaleNodes(t *testing.T) {
-	c := NewBalancer("me")
+	c := NewBalancer("me", time.Second, time.Second)
 	err := c.UpdateMembers(context.Background(), []cluster.Member{{Name: "node1"}})
 	require.NoError(t, err)
 
@@ -281,7 +281,7 @@ func scores(node1 ScoredNode, node2 ScoredNode) ScoredNode {
 
 func TestSetMetrics(t *testing.T) {
 	// simple check that node metrics make it through to the load balancing algo
-	c := NewBalancer("")
+	c := NewBalancer("", time.Second, time.Second)
 	err := c.UpdateMembers(context.Background(), []cluster.Member{{Name: "node1"}, {Name: "node2"}})
 	require.NoError(t, err)
 
@@ -296,7 +296,7 @@ func TestSetMetrics(t *testing.T) {
 
 func TestUnknownNode(t *testing.T) {
 	// check that the node metrics call creates the unknown node
-	c := NewBalancer("")
+	c := NewBalancer("", time.Second, time.Second)
 
 	c.UpdateNodes("node1", NodeMetrics{CPUUsagePercentage: 90})
 	c.UpdateNodes("bgw-node1", NodeMetrics{CPUUsagePercentage: 10})
@@ -307,7 +307,7 @@ func TestUnknownNode(t *testing.T) {
 }
 
 func TestNoIngestStream(t *testing.T) {
-	c := NewBalancer("")
+	c := NewBalancer("", time.Second, time.Second)
 	// first test no nodes available
 	c.UpdateNodes("id", NodeMetrics{})
 	c.UpdateStreams("id", "stream", false)
@@ -329,7 +329,7 @@ func TestNoIngestStream(t *testing.T) {
 }
 
 func TestMistUtilLoadSource(t *testing.T) {
-	c := NewBalancer("")
+	c := NewBalancer("", time.Second, time.Second)
 	err := c.UpdateMembers(context.Background(), []cluster.Member{{
 		Name: "node",
 		Tags: map[string]string{
@@ -356,7 +356,7 @@ func TestMistUtilLoadSource(t *testing.T) {
 }
 
 func TestStreamTimeout(t *testing.T) {
-	c := NewBalancer("")
+	c := NewBalancer("", time.Second, time.Second)
 	err := c.UpdateMembers(context.Background(), []cluster.Member{{
 		Name: "node",
 		Tags: map[string]string{
@@ -402,7 +402,7 @@ func TestStreamTimeout(t *testing.T) {
 
 // needs to be run with go test -race
 func TestConcurrentUpdates(t *testing.T) {
-	c := NewBalancer("")
+	c := NewBalancer("", time.Second, time.Second)
 
 	err := c.UpdateMembers(context.Background(), []cluster.Member{{Name: "node"}})
 	require.NoError(t, err)
@@ -436,7 +436,7 @@ func TestSimulate(t *testing.T) {
 
 	updateEvery := 5 * time.Second
 
-	c := NewBalancer("node0")
+	c := NewBalancer("node0", time.Second, time.Second)
 	var nodes []cluster.Member
 	for i := 0; i < nodeCount; i++ {
 		nodes = append(nodes, cluster.Member{Name: fmt.Sprintf("node%d", i)})
