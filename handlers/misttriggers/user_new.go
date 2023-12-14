@@ -69,7 +69,7 @@ func (d *MistCallbackHandlersCollection) TriggerUserNew(ctx context.Context, w h
 	resp, err := d.broker.TriggerUserNew(ctx, &payload)
 	if err != nil {
 		glog.Infof("Error handling USER_NEW payload error=%q payload=%q", err, string(body))
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("false")) // nolint:errcheck
 		return
 	}

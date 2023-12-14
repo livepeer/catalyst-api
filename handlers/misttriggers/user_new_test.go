@@ -90,7 +90,7 @@ func TestItCanHandleFailureToHandle(t *testing.T) {
 		rr := doUserNewRequest(t, userNewPayload, func(ctx context.Context, p *UserNewPayload) (bool, error) {
 			return state, fmt.Errorf("something went wrong")
 		})
-		require.Equal(t, rr.Result().StatusCode, 200)
+		require.Equal(t, rr.Result().StatusCode, 500)
 		require.Equal(t, rr.Body.String(), "false")
 	}
 }
