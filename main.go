@@ -77,6 +77,8 @@ func main() {
 	fs.IntVar(&config.MaxInFlightClipJobs, "max-inflight-clip-jobs", 20, "Maximum number of concurrent clipping jobs to support in catalyst-api")
 	fs.IntVar(&config.TranscodingParallelJobs, "parallel-transcode-jobs", 2, "Number of parallel transcode jobs")
 	fs.StringVar(&cli.CataBalancer, "catabalancer", "", "Enable catabalancer load balancer")
+	fs.DurationVar(&cli.CataBalancerMetricTimeout, "catabalancer-metric-timeout", 26*time.Second, "Catabalancer timeout for node metrics")
+	fs.DurationVar(&cli.CataBalancerIngestStreamTimeout, "catabalancer-ingest-stream-timeout", 20*time.Minute, "Catabalancer timeout for ingest stream metrics")
 
 	// mist-api-connector parameters
 	fs.IntVar(&cli.MistPort, "mist-port", 4242, "Port to connect to Mist")
@@ -276,7 +278,7 @@ func main() {
 
 	bal := mistBalancer
 	if cli.CataBalancer == "enabled" || cli.CataBalancer == "background" {
-		cataBalancer := catabalancer.NewBalancer(cli.NodeName)
+		cataBalancer := catabalancer.NewBalancer(cli.NodeName, cli.CataBalancerMetricTimeout, cli.CataBalancerIngestStreamTimeout)
 		// Temporary combined balancer to test cataBalancer logic alongside existing mist balancer
 		bal = balancer.CombinedBalancer{
 			Catabalancer:        cataBalancer,

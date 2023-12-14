@@ -77,15 +77,15 @@ func (s ScoredNode) String() string {
 	)
 }
 
-func NewBalancer(nodeName string) *CataBalancer {
+func NewBalancer(nodeName string, metricTimeout time.Duration, ingestStreamTimeout time.Duration) *CataBalancer {
 	return &CataBalancer{
 		NodeName:            nodeName,
 		Nodes:               make(map[string]*Node),
 		Streams:             make(map[string]Streams),
 		IngestStreams:       make(map[string]Streams),
 		NodeMetrics:         make(map[string]NodeMetrics),
-		metricTimeout:       16 * time.Second,
-		ingestStreamTimeout: 20 * time.Minute,
+		metricTimeout:       metricTimeout,
+		ingestStreamTimeout: ingestStreamTimeout,
 	}
 }
 
