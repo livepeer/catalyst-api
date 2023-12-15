@@ -18,14 +18,36 @@ type Balancer interface {
 	UpdateStreams(id string, stream string, isIngest bool)
 }
 
+// CombinedBalancerEnabled checks if catabalancer is enabled in any way
+// enabled - catabalancer fully enabled
+// background - only run in background, no results are used
+// playback - use catabalancer for playback requests only
+// ingest - use catabalancer for ingest requests only
+func CombinedBalancerEnabled(cata string) bool {
+	return cata == "enabled" || cata == "background" || cata == "playback" || cata == "ingest"
+}
+
+func NewCombinedBalancer(cataBalancer, mistBalancer Balancer, catabalancerEnabled string) CombinedBalancer {
+	playback := catabalancerEnabled == "enabled" || catabalancerEnabled == "playback"
+	ingest := catabalancerEnabled == "enabled" || catabalancerEnabled == "ingest"
+	log.LogNoRequestID("catabalancer modes enabled", "playback", playback, "ingest", ingest)
+	return CombinedBalancer{
+		Catabalancer:                cataBalancer,
+		MistBalancer:                mistBalancer,
+		CatabalancerPlaybackEnabled: playback,
+		CatabalancerIngestEnabled:   ingest,
+	}
+}
+
 type CombinedBalancer struct {
-	Catabalancer        Balancer
-	MistBalancer        Balancer
-	CatabalancerEnabled bool
+	Catabalancer                Balancer
+	MistBalancer                Balancer
+	CatabalancerPlaybackEnabled bool
+	CatabalancerIngestEnabled   bool
 }
 
 func (c CombinedBalancer) Start(ctx context.Context) error {
-	if c.CatabalancerEnabled {
+	if c.CatabalancerPlaybackEnabled && c.CatabalancerIngestEnabled {
 		return c.Catabalancer.Start(ctx)
 	}
 
@@ -36,7 +58,7 @@ func (c CombinedBalancer) Start(ctx context.Context) error {
 }
 
 func (c CombinedBalancer) UpdateMembers(ctx context.Context, members []cluster.Member) error {
-	if c.CatabalancerEnabled {
+	if c.CatabalancerPlaybackEnabled && c.CatabalancerIngestEnabled {
 		return c.Catabalancer.UpdateMembers(ctx, members)
 	}
 
@@ -48,7 +70,7 @@ func (c CombinedBalancer) UpdateMembers(ctx context.Context, members []cluster.M
 
 func (c CombinedBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error) {
 	cataBestNode, cataFullPlaybackID, cataErr := c.Catabalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix)
-	if c.CatabalancerEnabled {
+	if c.CatabalancerPlaybackEnabled {
 		return cataBestNode, cataFullPlaybackID, cataErr
 	}
 
@@ -68,7 +90,7 @@ func (c CombinedBalancer) GetBestNode(ctx context.Context, redirectPrefixes []st
 
 func (c CombinedBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error) {
 	cataDtscURL, cataErr := c.Catabalancer.MistUtilLoadSource(ctx, stream, lat, lon)
-	if c.CatabalancerEnabled {
+	if c.CatabalancerIngestEnabled {
 		return cataDtscURL, cataErr
 	}
 

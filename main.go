@@ -277,14 +277,10 @@ func main() {
 	})
 
 	bal := mistBalancer
-	if cli.CataBalancer == "enabled" || cli.CataBalancer == "background" {
+	if balancer.CombinedBalancerEnabled(cli.CataBalancer) {
 		cataBalancer := catabalancer.NewBalancer(cli.NodeName, cli.CataBalancerMetricTimeout, cli.CataBalancerIngestStreamTimeout)
 		// Temporary combined balancer to test cataBalancer logic alongside existing mist balancer
-		bal = balancer.CombinedBalancer{
-			Catabalancer:        cataBalancer,
-			MistBalancer:        mistBalancer,
-			CatabalancerEnabled: cli.CataBalancer == "enabled",
-		}
+		bal = balancer.NewCombinedBalancer(cataBalancer, mistBalancer, cli.CataBalancer)
 	}
 
 	// Initialize root context; cancelling this prompts all components to shut down cleanly
