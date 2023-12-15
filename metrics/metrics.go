@@ -29,6 +29,8 @@ type CatalystAPIMetrics struct {
 	PlaybackRequestDurationSec  *prometheus.SummaryVec
 	CDNRedirectCount            *prometheus.CounterVec
 	CDNRedirectWebRTC406        *prometheus.CounterVec
+	UserEventBufferSize         prometheus.Gauge
+	MemberEventBufferSize       prometheus.Gauge
 
 	JobsInFlight         prometheus.Gauge
 	HTTPRequestsInFlight prometheus.Gauge
@@ -59,6 +61,14 @@ func NewMetrics() *CatalystAPIMetrics {
 		HTTPRequestsInFlight: promauto.NewGauge(prometheus.GaugeOpts{
 			Name: "http_requests_in_flight",
 			Help: "A count of the http requests in flight",
+		}),
+		UserEventBufferSize: promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "user_event_buffer_size",
+			Help: "A count of the user events currently held in the buffer",
+		}),
+		MemberEventBufferSize: promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "member_event_buffer_size",
+			Help: "A count of the member events currently held in the buffer",
 		}),
 
 		// /api/vod request metrics
