@@ -105,7 +105,11 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	serfConfig.Tags = c.config.Tags
 	serfConfig.EventCh = c.serfCh
 	serfConfig.ProtocolVersion = 5
+<<<<<<< Updated upstream
 	serfConfig.EventBuffer = c.config.SerfEventBuffer
+=======
+	serfConfig.EventBuffer
+>>>>>>> Stashed changes
 
 	c.serf, err = serf.Create(serfConfig)
 	if err != nil {
@@ -269,6 +273,7 @@ func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 			case e := <-c.serfCh:
 				metrics.Metrics.UserEventBufferSize.Set(float64(len(c.eventCh)))
 				metrics.Metrics.MemberEventBufferSize.Set(float64(len(inbox)))
+				metrics.Metrics.SerfEventBufferSize.Set(float64(len(c.serfCh)))
 
 				switch evt := e.(type) {
 				case serf.UserEvent:
