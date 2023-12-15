@@ -269,6 +269,7 @@ func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 			case e := <-c.serfCh:
 				metrics.Metrics.UserEventBufferSize.Set(float64(len(c.eventCh)))
 				metrics.Metrics.MemberEventBufferSize.Set(float64(len(inbox)))
+				metrics.Metrics.SerfEventBufferSize.Set(float64(len(c.serfCh)))
 
 				switch evt := e.(type) {
 				case serf.UserEvent:
