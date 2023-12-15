@@ -56,9 +56,9 @@ var mediaFilter = map[string]string{"node": "media"}
 func NewCluster(config *config.Cli) Cluster {
 	c := ClusterImpl{
 		config:   config,
-		serfCh:   make(chan serf.Event, c.config.SerfQueueSize),
+		serfCh:   make(chan serf.Event, config.SerfQueueSize),
 		memberCh: make(chan []Member),
-		eventCh:  make(chan serf.UserEvent, c.config.SerfQueueSize),
+		eventCh:  make(chan serf.UserEvent, config.SerfQueueSize),
 	}
 	return &c
 }
@@ -105,6 +105,7 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	serfConfig.Tags = c.config.Tags
 	serfConfig.EventCh = c.serfCh
 	serfConfig.ProtocolVersion = 5
+	serfConfig.EventBuffer = c.config.SerfEventBuffer
 
 	c.serf, err = serf.Create(serfConfig)
 	if err != nil {
