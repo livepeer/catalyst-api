@@ -106,6 +106,7 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	serfConfig.EventCh = c.serfCh
 	serfConfig.ProtocolVersion = 5
 	serfConfig.EventBuffer = c.config.SerfEventBuffer
+	serfConfig.MaxQueueDepth = c.config.SerfMaxQueueDepth
 
 	c.serf, err = serf.Create(serfConfig)
 	if err != nil {
