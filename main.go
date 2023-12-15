@@ -370,13 +370,16 @@ func processClusterEvent(mapic mistapiconnector.IMac, bal balancer.Balancer, e s
 		}
 		switch event := e.(type) {
 		case *events.StreamEvent:
+			glog.Infof("received serf StreamEvent: %v", event.PlaybackID)
 			mapic.RefreshStreamIfNeeded(event.PlaybackID)
 		case *events.NukeEvent:
 			mapic.NukeStream(event.PlaybackID)
 			return
 		case *events.NodeStatsEvent:
+			glog.Infof("received serf NodeStatsEvent: %s", event.NodeID)
 			bal.UpdateNodes(event.NodeID, event.NodeMetrics)
 		case *events.NodeStreamsEvent:
+			glog.Infof("received serf NodeStreamsEvent. Node: %s. Stream: %s. Is Ingest: %v", event.NodeID, event.Stream, event.IsIngest)
 			bal.UpdateStreams(event.NodeID, event.Stream, event.IsIngest)
 		default:
 			glog.Errorf("unsupported serf event: %v", e)
