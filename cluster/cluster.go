@@ -290,6 +290,8 @@ func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 						// Overflow event gets dropped
 						glog.Infof("Overflow MemberEvent, dropped: %v", evt)
 					}
+				default:
+					glog.Infof("Ignoring serf event, dropped: %v", evt.EventType().String())
 				}
 			}
 		}
