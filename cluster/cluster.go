@@ -54,9 +54,9 @@ var mediaFilter = map[string]string{"node": "media"}
 func NewCluster(config *config.Cli) Cluster {
 	c := ClusterImpl{
 		config:   config,
-		serfCh:   make(chan serf.Event, 64),
+		serfCh:   make(chan serf.Event, 4096),
 		memberCh: make(chan []Member),
-		eventCh:  make(chan serf.UserEvent, 64),
+		eventCh:  make(chan serf.UserEvent, 4096),
 	}
 	return &c
 }
@@ -256,7 +256,7 @@ func (c *ClusterImpl) BroadcastEvent(event serf.UserEvent) error {
 }
 
 func (c *ClusterImpl) handleEvents(ctx context.Context) error {
-	inbox := make(chan serf.Event, 1)
+	inbox := make(chan serf.Event, 4096)
 	go func() {
 		for {
 			select {
@@ -272,7 +272,7 @@ func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 						// Event moved to eventCh
 					default:
 						// Overflow event gets dropped
-						glog.V(3).Infof("Overflow UserEvent, dropped: %v", evt)
+						glog.Infof("Overflow UserEvent, dropped: %v", evt)
 					}
 				case serf.MemberEvent:
 					select {
@@ -282,7 +282,7 @@ func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 						// Event is now in the inbox
 					default:
 						// Overflow event gets dropped
-						glog.V(3).Infof("Overflow MemberEvent, dropped: %v", evt)
+						glog.Infof("Overflow MemberEvent, dropped: %v", evt)
 					}
 				}
 			}
