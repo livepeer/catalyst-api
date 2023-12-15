@@ -3,12 +3,13 @@ package events
 import (
 	"encoding/json"
 	"fmt"
+	"time"
+
 	"github.com/hashicorp/serf/serf"
 	"github.com/livepeer/catalyst-api/balancer/catabalancer"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/log"
-	"time"
 )
 
 const streamEventResource = "stream"
@@ -88,6 +89,7 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 	ticker := time.NewTicker(catabalancer.UpdateEvery)
 	go func() {
 		for range ticker.C {
+			log.LogNoRequestID("catabalancer NodeStats update loop - starting")
 			sysusage, err := catabalancer.GetSystemUsage()
 			if err != nil {
 				log.LogNoRequestID("catabalancer failed to get sys usage", "err", err)
@@ -120,11 +122,13 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 				log.LogNoRequestID("catabalancer failed to send sys info", "err", err)
 				continue
 			}
+			log.LogNoRequestID("catabalancer NodeStats update loop - completed")
 		}
 	}()
 	streamTicker := time.NewTicker(catabalancer.UpdateEvery)
 	go func() {
 		for range streamTicker.C {
+			log.LogNoRequestID("catabalancer NodeStreams update loop - starting")
 			if mist == nil {
 				continue
 			}
@@ -157,6 +161,7 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 					continue
 				}
 			}
+			log.LogNoRequestID("catabalancer NodeStreams update loop - completed")
 		}
 	}()
 }
