@@ -56,9 +56,9 @@ var mediaFilter = map[string]string{"node": "media"}
 func NewCluster(config *config.Cli) Cluster {
 	c := ClusterImpl{
 		config:   config,
-		serfCh:   make(chan serf.Event, 4096),
+		serfCh:   make(chan serf.Event, c.config.SerfQueueSize),
 		memberCh: make(chan []Member),
-		eventCh:  make(chan serf.UserEvent, 4096),
+		eventCh:  make(chan serf.UserEvent, c.config.SerfQueueSize),
 	}
 	return &c
 }
@@ -259,7 +259,7 @@ func (c *ClusterImpl) BroadcastEvent(event serf.UserEvent) error {
 }
 
 func (c *ClusterImpl) handleEvents(ctx context.Context) error {
-	inbox := make(chan serf.Event, 4096)
+	inbox := make(chan serf.Event, c.config.SerfQueueSize)
 	go func() {
 		for {
 			select {
