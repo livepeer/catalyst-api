@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/memberlist"
 	"github.com/hashicorp/serf/serf"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
 )
 
@@ -253,6 +254,7 @@ func (c *ClusterImpl) EventChan() <-chan serf.UserEvent {
 }
 
 func (c *ClusterImpl) BroadcastEvent(event serf.UserEvent) error {
+	log.LogNoRequestID("catabalancer BroadcastEvent", "name", event.Name)
 	return c.serf.UserEvent(event.Name, event.Payload, event.Coalesce)
 }
 
