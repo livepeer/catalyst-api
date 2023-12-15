@@ -74,6 +74,8 @@ type Cli struct {
 	CataBalancer                    string
 	CataBalancerMetricTimeout       time.Duration
 	CataBalancerIngestStreamTimeout time.Duration
+	SerfQueueSize                   int
+	SerfEventBuffer                 int
 }
 
 // Return our own URL for callback trigger purposes
