@@ -105,11 +105,7 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	serfConfig.Tags = c.config.Tags
 	serfConfig.EventCh = c.serfCh
 	serfConfig.ProtocolVersion = 5
-<<<<<<< Updated upstream
 	serfConfig.EventBuffer = c.config.SerfEventBuffer
-=======
-	serfConfig.EventBuffer
->>>>>>> Stashed changes
 
 	c.serf, err = serf.Create(serfConfig)
 	if err != nil {
