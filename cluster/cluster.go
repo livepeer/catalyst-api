@@ -16,6 +16,7 @@ import (
 	"github.com/hashicorp/memberlist"
 	"github.com/hashicorp/serf/serf"
 	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/metrics"
 )
 
 type Cluster interface {
@@ -263,6 +264,9 @@ func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 			case <-ctx.Done():
 				return
 			case e := <-c.serfCh:
+				metrics.Metrics.UserEventBufferSize.Set(float64(len(c.eventCh)))
+				metrics.Metrics.MemberEventBufferSize.Set(float64(len(inbox)))
+
 				switch evt := e.(type) {
 				case serf.UserEvent:
 					select {
