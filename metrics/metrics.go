@@ -31,6 +31,7 @@ type CatalystAPIMetrics struct {
 	CDNRedirectWebRTC406        *prometheus.CounterVec
 	UserEventBufferSize         prometheus.Gauge
 	MemberEventBufferSize       prometheus.Gauge
+	SerfEventBufferSize         prometheus.Gauge
 
 	JobsInFlight         prometheus.Gauge
 	HTTPRequestsInFlight prometheus.Gauge
@@ -69,6 +70,10 @@ func NewMetrics() *CatalystAPIMetrics {
 		MemberEventBufferSize: promauto.NewGauge(prometheus.GaugeOpts{
 			Name: "member_event_buffer_size",
 			Help: "A count of the member events currently held in the buffer",
+		}),
+		SerfEventBufferSize: promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "serf_event_buffer_size",
+			Help: "A count of the serf events currently held in the buffer",
 		}),
 
 		// /api/vod request metrics
