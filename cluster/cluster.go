@@ -99,6 +99,7 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	memberlistConfig.AdvertisePort = aport
 	memberlistConfig.EnableCompression = true
 	memberlistConfig.SecretKey = encryptBytes
+	memberlistConfig.RetransmitMult = 1
 	serfConfig := serf.DefaultConfig()
 	serfConfig.MemberlistConfig = memberlistConfig
 	serfConfig.NodeName = c.config.NodeName
