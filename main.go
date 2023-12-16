@@ -280,13 +280,13 @@ func main() {
 	})
 
 	bal := mistBalancer
-	if cli.CataBalancer == "enabled" || cli.CataBalancer == "background" {
+	if balancer.CombinedBalancerEnabled(cli.CataBalancer) {
 		cataBalancer := catabalancer.NewBalancer(cli.NodeName, cli.CataBalancerMetricTimeout, cli.CataBalancerIngestStreamTimeout)
 		// Temporary combined balancer to test cataBalancer logic alongside existing mist balancer
-		bal = balancer.CombinedBalancer{
-			Catabalancer:        cataBalancer,
-			MistBalancer:        mistBalancer,
-			CatabalancerEnabled: cli.CataBalancer == "enabled",
+		bal = balancer.NewCombinedBalancer(cataBalancer, mistBalancer, cli.CataBalancer)
+
+		if cli.Tags["node"] == "media" { // don't announce load balancing availability for testing nodes
+			events.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, c, mist)
 		}
 	}
 
@@ -327,10 +327,6 @@ func main() {
 	group.Go(func() error {
 		return handleClusterEvents(ctx, mapic, bal, c)
 	})
-
-	if cli.Tags["node"] == "media" { // don't announce load balancing availability for testing nodes
-		events.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, c, mist)
-	}
 
 	err = group.Wait()
 	glog.Infof("Shutdown complete. Reason for shutdown: %s", err)
