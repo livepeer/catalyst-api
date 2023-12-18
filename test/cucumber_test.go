@@ -84,6 +84,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^I receive a "([^"]*)" callback within "(\d+)" seconds$`, stepContext.CheckCallback)
 	ctx.Step(`^a source copy (has|has not) been written to disk$`, stepContext.SourceCopyWrittenToDisk)
 	ctx.Step(`^a row is written to the "([^"]*)" database table containing the following values$`, stepContext.CheckDatabase)
+	ctx.Step(`^a row is written within "(\d+)" seconds to the "([^"]*)" database table containing the following values$`, stepContext.CheckDatabasePoll)
 	ctx.Step(`^thumbnails are written to storage within "(\d+)" seconds$`, stepContext.ThumbnailsWrittenToStorage)
 
 	// Mediaconvert Steps

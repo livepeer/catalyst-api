@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cucumber/godog"
 	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
@@ -157,4 +158,17 @@ func (s *StepContext) CheckDatabase(table string, keyValues *godog.Table) error 
 		}
 	}
 	return nil
+}
+
+func (s *StepContext) CheckDatabasePoll(seconds int, table string, keyValues *godog.Table) error {
+	var err error
+	for i := 0; i < 2*seconds; i++ {
+		err = s.CheckDatabase(table, keyValues)
+		if err == nil {
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	return fmt.Errorf("failed to meet database criteria in %d seconds: %w", seconds, err)
 }
