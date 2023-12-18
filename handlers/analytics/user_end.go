@@ -28,6 +28,11 @@ func (a *AnalyticsHandler) HandleUserEnd(ctx context.Context, payload *misttrigg
 
 	// No need to block our response to Mist; everything else in a goroutine
 	go func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				glog.Errorf("panic writing to analytics database err=%s payload=%v", rec, payload)
+			}
+		}()
 		insertDynStmt := `insert into "` + USER_END_TABLE_NAME + `"(
 			"uuid",
 			"timestamp_ms",
