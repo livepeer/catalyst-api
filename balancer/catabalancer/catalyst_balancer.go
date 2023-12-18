@@ -326,7 +326,6 @@ func (c *CataBalancer) UpdateNodes(id string, nodeMetrics NodeMetrics) {
 }
 
 var UpdateNodeStatsEvery = 5 * time.Second
-var UpdateStreamsEvery = 10 * time.Second
 
 func (c *CataBalancer) UpdateStreams(nodeName string, streamID string, isIngest bool) {
 	c.nodesLock.Lock()
