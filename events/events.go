@@ -106,7 +106,7 @@ func Unmarshal(payload []byte) (Event, error) {
 }
 
 func StartMetricSending(nodeName string, latitude float64, longitude float64, c cluster.Cluster, mist clients.MistAPIClient) {
-	ticker := time.NewTicker(catabalancer.UpdateEvery)
+	ticker := time.NewTicker(catabalancer.UpdateNodeStatsEvery)
 	go func() {
 		for range ticker.C {
 			log.LogNoRequestID("catabalancer NodeStats update loop - starting")
@@ -145,7 +145,7 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 			log.LogNoRequestID("catabalancer NodeStats update loop - completed")
 		}
 	}()
-	streamTicker := time.NewTicker(catabalancer.UpdateEvery)
+	streamTicker := time.NewTicker(catabalancer.UpdateStreamsEvery)
 	go func() {
 		for range streamTicker.C {
 			log.LogNoRequestID("catabalancer NodeStreams update loop - starting")
