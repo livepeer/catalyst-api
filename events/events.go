@@ -15,8 +15,7 @@ import (
 
 const streamEventResource = "stream"
 const nukeEventResource = "nuke"
-const nodeStatsEventResource = "nodeStats"
-const nodeStreamsEventResource = "nodeStreams"
+const nodeUpdateEventResource = "nodeUpdate"
 
 type Event interface{}
 
@@ -34,23 +33,18 @@ type NukeEvent struct {
 	PlaybackID string `json:"playback_id"`
 }
 
-type NodeStatsEvent struct {
+type NodeUpdateEvent struct {
 	Resource    string                   `json:"resource"`
 	NodeID      string                   `json:"node_id"`
 	NodeMetrics catabalancer.NodeMetrics `json:"node_metrics"`
+	Streams     string                   `json:"streams"`
 }
 
-type NodeStreamsEvent struct {
-	Resource string `json:"resource"`
-	NodeID   string `json:"node_id"`
-	Streams  string `json:"streams"`
-}
-
-func (n *NodeStreamsEvent) SetStreams(streamIDs []string, ingestStreamIDs []string) {
+func (n *NodeUpdateEvent) SetStreams(streamIDs []string, ingestStreamIDs []string) {
 	n.Streams = strings.Join(streamIDs, "|") + "~" + strings.Join(ingestStreamIDs, "|")
 }
 
-func (n *NodeStreamsEvent) GetStreams() []string {
+func (n *NodeUpdateEvent) GetStreams() []string {
 	before, _, _ := strings.Cut(n.Streams, "~")
 	if len(before) > 0 {
 		return strings.Split(before, "|")
@@ -58,7 +52,7 @@ func (n *NodeStreamsEvent) GetStreams() []string {
 	return []string{}
 }
 
-func (n *NodeStreamsEvent) GetIngestStreams() []string {
+func (n *NodeUpdateEvent) GetIngestStreams() []string {
 	_, after, _ := strings.Cut(n.Streams, "~")
 	if len(after) > 0 {
 		return strings.Split(after, "|")
@@ -87,15 +81,8 @@ func Unmarshal(payload []byte) (Event, error) {
 			return nil, err
 		}
 		return event, nil
-	case nodeStatsEventResource:
-		event := &NodeStatsEvent{}
-		err := json.Unmarshal(payload, event)
-		if err != nil {
-			return nil, err
-		}
-		return event, nil
-	case nodeStreamsEventResource:
-		event := &NodeStreamsEvent{}
+	case nodeUpdateEventResource:
+		event := &NodeUpdateEvent{}
 		err := json.Unmarshal(payload, event)
 		if err != nil {
 			return nil, err
@@ -116,8 +103,14 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 				continue
 			}
 
-			event := NodeStatsEvent{
-				Resource: nodeStatsEventResource,
+			mistState, err := mist.GetState()
+			if err != nil {
+				log.LogNoRequestID("catabalancer failed to get mist state", "err", err)
+				continue
+			}
+
+			event := NodeUpdateEvent{
+				Resource: nodeUpdateEventResource,
 				NodeID:   nodeName,
 				NodeMetrics: catabalancer.NodeMetrics{
 					CPUUsagePercentage:       sysusage.CPUUsagePercentage,
@@ -128,42 +121,7 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 					GeoLongitude:             longitude,
 				},
 			}
-			payload, err := json.Marshal(event)
-			if err != nil {
-				log.LogNoRequestID("catabalancer failed to marhsal node stats", "err", err)
-				continue
-			}
 
-			err = c.BroadcastEvent(serf.UserEvent{
-				Name:    "node-stats",
-				Payload: payload,
-			})
-			if err != nil {
-				log.LogNoRequestID("catabalancer failed to send sys info", "err", err)
-				continue
-			}
-			log.LogNoRequestID("catabalancer NodeStats update loop - completed")
-		}
-	}()
-	streamTicker := time.NewTicker(catabalancer.UpdateStreamsEvery)
-	go func() {
-		for range streamTicker.C {
-			log.LogNoRequestID("catabalancer NodeStreams update loop - starting")
-			if mist == nil {
-				continue
-			}
-
-			// send streams event
-			mistState, err := mist.GetState()
-			if err != nil {
-				log.LogNoRequestID("catabalancer failed to get mist state", "err", err)
-				continue
-			}
-
-			streamsEvent := NodeStreamsEvent{
-				Resource: nodeStreamsEventResource,
-				NodeID:   nodeName,
-			}
 			var nonIngestStreams, ingestStreams []string
 			for streamID := range mistState.ActiveStreams {
 				if mistState.IsIngestStream(streamID) {
@@ -172,23 +130,23 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 					nonIngestStreams = append(nonIngestStreams, streamID)
 				}
 			}
-			streamsEvent.SetStreams(nonIngestStreams, ingestStreams)
+			event.SetStreams(nonIngestStreams, ingestStreams)
 
-			payload, err := json.Marshal(streamsEvent)
+			payload, err := json.Marshal(event)
 			if err != nil {
-				log.LogNoRequestID("catabalancer failed to marhsal node stats", "err", err)
+				log.LogNoRequestID("catabalancer failed to marhsal node update", "err", err)
 				continue
 			}
 
 			err = c.BroadcastEvent(serf.UserEvent{
-				Name:    "node-streams",
+				Name:    "node-update",
 				Payload: payload,
 			})
 			if err != nil {
-				log.LogNoRequestID("catabalancer failed to send streams info", "err", err)
+				log.LogNoRequestID("catabalancer failed to send node update", "err", err)
 				continue
 			}
+			log.LogNoRequestID("catabalancer NodeUpdate loop - completed")
 		}
-		log.LogNoRequestID("catabalancer NodeStreams update loop - completed")
 	}()
 }

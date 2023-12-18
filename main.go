@@ -375,11 +375,9 @@ func processClusterEvent(mapic mistapiconnector.IMac, bal balancer.Balancer, e s
 		case *events.NukeEvent:
 			mapic.NukeStream(event.PlaybackID)
 			return
-		case *events.NodeStatsEvent:
-			glog.Infof("received serf NodeStatsEvent: %s", event.NodeID)
+		case *events.NodeUpdateEvent:
+			glog.Infof("received serf NodeUpdateEvent. Node: %s. Ingest Streams: %v. Non-Ingest Streams: %v", event.NodeID, strings.Join(event.GetIngestStreams(), ","), strings.Join(event.GetStreams(), ","))
 			bal.UpdateNodes(event.NodeID, event.NodeMetrics)
-		case *events.NodeStreamsEvent:
-			glog.Infof("received serf NodeStreamsEvent. Node: %s. Ingest Streams: %v. Non-Ingest Streams: %v", event.NodeID, strings.Join(event.GetIngestStreams(), ","), strings.Join(event.GetStreams(), ","))
 			for _, stream := range event.GetStreams() {
 				bal.UpdateStreams(event.NodeID, stream, false)
 			}
