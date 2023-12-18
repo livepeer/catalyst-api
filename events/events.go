@@ -168,6 +168,8 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 			for streamID := range mistState.ActiveStreams {
 				if mistState.IsIngestStream(streamID) {
 					ingestStreams = append(ingestStreams, streamID)
+				} else {
+					nonIngestStreams = append(nonIngestStreams, streamID)
 				}
 			}
 			streamsEvent.SetStreams(nonIngestStreams, ingestStreams)
