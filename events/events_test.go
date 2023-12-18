@@ -1,6 +1,7 @@
 package events
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -45,4 +46,43 @@ func TestItFailsBadShapes(t *testing.T) {
 		_, err := Unmarshal(payload)
 		require.Error(t, err)
 	}
+}
+
+func TestItCanMarshalAndUnMarshalStreamIDs(t *testing.T) {
+	n := NodeStreamsEvent{}
+	n.SetStreams([]string{"noningest1", "noningest2"}, []string{"ingest1", "ingest2"})
+	jsonBytes, err := json.Marshal(n)
+	require.NoError(t, err)
+
+	var n2 NodeStreamsEvent
+	require.NoError(t, json.Unmarshal(jsonBytes, &n2))
+
+	require.Equal(t, []string{"noningest1", "noningest2"}, n2.GetStreams())
+	require.Equal(t, []string{"ingest1", "ingest2"}, n2.GetIngestStreams())
+}
+
+func TestItCanMarshalAndUnMarshalStreamIDsWithNoIngestStreams(t *testing.T) {
+	n := NodeStreamsEvent{}
+	n.SetStreams([]string{"noningest1", "noningest2"}, []string{})
+	jsonBytes, err := json.Marshal(n)
+	require.NoError(t, err)
+
+	var n2 NodeStreamsEvent
+	require.NoError(t, json.Unmarshal(jsonBytes, &n2))
+
+	require.Equal(t, []string{"noningest1", "noningest2"}, n2.GetStreams())
+	require.Equal(t, []string{}, n2.GetIngestStreams())
+}
+
+func TestItCanMarshalAndUnMarshalStreamIDsWithNoNonIngestStreams(t *testing.T) {
+	n := NodeStreamsEvent{}
+	n.SetStreams([]string{}, []string{"ingest1", "ingest2"})
+	jsonBytes, err := json.Marshal(n)
+	require.NoError(t, err)
+
+	var n2 NodeStreamsEvent
+	require.NoError(t, json.Unmarshal(jsonBytes, &n2))
+
+	require.Equal(t, []string{}, n2.GetStreams())
+	require.Equal(t, []string{"ingest1", "ingest2"}, n2.GetIngestStreams())
 }

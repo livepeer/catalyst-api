@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -378,8 +379,14 @@ func processClusterEvent(mapic mistapiconnector.IMac, bal balancer.Balancer, e s
 			glog.Infof("received serf NodeStatsEvent: %s", event.NodeID)
 			bal.UpdateNodes(event.NodeID, event.NodeMetrics)
 		case *events.NodeStreamsEvent:
-			glog.Infof("received serf NodeStreamsEvent. Node: %s. Stream: %s. Is Ingest: %v", event.NodeID, event.Stream, event.IsIngest)
-			bal.UpdateStreams(event.NodeID, event.Stream, event.IsIngest)
+			glog.Infof("received serf NodeStreamsEvent. Node: %s. Streams: %s. Is Ingest: false", strings.Join(event.GetStreams(), ","))
+			for _, stream := range event.GetStreams() {
+				bal.UpdateStreams(event.NodeID, stream, false)
+			}
+			glog.Infof("received serf NodeStreamsEvent. Node: %s. Streams: %s. Is Ingest: true", strings.Join(event.GetIngestStreams(), ","))
+			for _, stream := range event.GetIngestStreams() {
+				bal.UpdateStreams(event.NodeID, stream, true)
+			}
 		default:
 			glog.Errorf("unsupported serf event: %v", e)
 		}

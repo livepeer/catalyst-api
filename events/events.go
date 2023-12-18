@@ -3,6 +3,7 @@ package events
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/serf/serf"
@@ -42,8 +43,27 @@ type NodeStatsEvent struct {
 type NodeStreamsEvent struct {
 	Resource string `json:"resource"`
 	NodeID   string `json:"node_id"`
-	Stream   string `json:"stream"`
-	IsIngest bool   `json:"is_ingest"`
+	Streams  string `json:"streams"`
+}
+
+func (n *NodeStreamsEvent) SetStreams(streamIDs []string, ingestStreamIDs []string) {
+	n.Streams = strings.Join(streamIDs, "|") + "~" + strings.Join(ingestStreamIDs, "|")
+}
+
+func (n *NodeStreamsEvent) GetStreams() []string {
+	before, _, _ := strings.Cut(n.Streams, "~")
+	if len(before) > 0 {
+		return strings.Split(before, "|")
+	}
+	return []string{}
+}
+
+func (n *NodeStreamsEvent) GetIngestStreams() []string {
+	_, after, _ := strings.Cut(n.Streams, "~")
+	if len(after) > 0 {
+		return strings.Split(after, "|")
+	}
+	return []string{}
 }
 
 func Unmarshal(payload []byte) (Event, error) {
@@ -139,29 +159,34 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 				log.LogNoRequestID("catabalancer failed to get mist state", "err", err)
 				continue
 			}
-			for stream := range mistState.ActiveStreams {
-				streamsEvent := NodeStreamsEvent{
-					Resource: nodeStreamsEventResource,
-					NodeID:   nodeName,
-					Stream:   stream,
-					IsIngest: mistState.IsIngestStream(stream),
-				}
-				payload, err := json.Marshal(streamsEvent)
-				if err != nil {
-					log.LogNoRequestID("catabalancer failed to marhsal node stats", "err", err)
-					continue
-				}
 
-				err = c.BroadcastEvent(serf.UserEvent{
-					Name:    "node-streams",
-					Payload: payload,
-				})
-				if err != nil {
-					log.LogNoRequestID("catabalancer failed to send streams info", "err", err)
-					continue
+			streamsEvent := NodeStreamsEvent{
+				Resource: nodeStreamsEventResource,
+				NodeID:   nodeName,
+			}
+			var nonIngestStreams, ingestStreams []string
+			for streamID := range mistState.ActiveStreams {
+				if mistState.IsIngestStream(streamID) {
+					ingestStreams = append(ingestStreams, streamID)
 				}
 			}
-			log.LogNoRequestID("catabalancer NodeStreams update loop - completed")
+			streamsEvent.SetStreams(nonIngestStreams, ingestStreams)
+
+			payload, err := json.Marshal(streamsEvent)
+			if err != nil {
+				log.LogNoRequestID("catabalancer failed to marhsal node stats", "err", err)
+				continue
+			}
+
+			err = c.BroadcastEvent(serf.UserEvent{
+				Name:    "node-streams",
+				Payload: payload,
+			})
+			if err != nil {
+				log.LogNoRequestID("catabalancer failed to send streams info", "err", err)
+				continue
+			}
 		}
+		log.LogNoRequestID("catabalancer NodeStreams update loop - completed")
 	}()
 }
