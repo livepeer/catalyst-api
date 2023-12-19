@@ -8,7 +8,7 @@ Feature: Mist trigger handling
         When Mist calls the "USER_END" trigger with "valid-user-end" and ID "abc-123"
         And receives a response within "3" seconds
         Then Mist gets an HTTP response with code "200"
-        And a row is written to the "user_end_trigger" database table containing the following values
+        And a row is written within "3" seconds to the "user_end_trigger" database table containing the following values
             | column           | value                  |
             | uuid             | abc-123                |
             | stream_id        | video+111dip9jqar876kl |
