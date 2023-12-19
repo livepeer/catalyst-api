@@ -36,7 +36,7 @@ type PlaybackAccessControlRequest struct {
 	Pub       string `json:"pub"`
 	AccessKey string `json:"accessKey"`
 	Stream    string `json:"stream"`
-	Jwt       string `json:"jwt",omitempty`
+	Jwt       string `json:"jwt,omitempty"`
 }
 
 type GateAPICaller interface {
