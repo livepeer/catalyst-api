@@ -99,7 +99,7 @@ func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, paylo
 		for _, blocked := range ac.blockedJWTs {
 			if jwt == blocked {
 				glog.Errorf("blocking JWT. playbackId=%v jwt=%v", acReq.Stream, jwt)
-				return false, fmt.Errorf("JWT is blocked: %s", jwt)
+				return false, nil
 			}
 		}
 
