@@ -20,9 +20,10 @@ import (
 )
 
 type AccessControlHandlersCollection struct {
-	cache      map[string]map[string]*PlaybackAccessControlEntry
-	mutex      sync.RWMutex
-	gateClient GateAPICaller
+	cache       map[string]map[string]*PlaybackAccessControlEntry
+	mutex       sync.RWMutex
+	gateClient  GateAPICaller
+	blockedJWTs []string
 }
 
 type PlaybackAccessControlEntry struct {
@@ -54,6 +55,7 @@ func NewAccessControlHandlersCollection(cli config.Cli) *AccessControlHandlersCo
 			gateURL: cli.GateURL,
 			Client:  &http.Client{},
 		},
+		blockedJWTs: cli.BlockedJWTs,
 	}
 }
 
@@ -94,6 +96,13 @@ func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, paylo
 		acReq.AccessKey = accessKey
 		cacheKey = "accessKey_" + accessKey
 	} else if jwt != "" {
+		for _, blocked := range ac.blockedJWTs {
+			if jwt == blocked {
+				glog.Errorf("blocking JWT. playbackId=%v jwt=%v", acReq.Stream, jwt)
+				return false, fmt.Errorf("JWT is blocked: %s", jwt)
+			}
+		}
+
 		pub, err := extractKeyFromJwt(jwt, acReq.Stream)
 		if err != nil {
 			glog.Infof("Unable to extract key from jwt for playbackId=%v jwt=%v", acReq.Stream, jwt)
