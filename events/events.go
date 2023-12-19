@@ -35,7 +35,7 @@ type NukeEvent struct {
 
 // JSON representation is deliberately truncated to keep the message size small
 type NodeUpdateEvent struct {
-	Resource    string                   `json:"r,omitempty"`
+	Resource    string                   `json:"resource,omitempty"`
 	NodeID      string                   `json:"n,omitempty"`
 	NodeMetrics catabalancer.NodeMetrics `json:"nm,omitempty"`
 	Streams     string                   `json:"s,omitempty"`
