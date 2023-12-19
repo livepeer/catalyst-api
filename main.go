@@ -80,6 +80,7 @@ func main() {
 	fs.StringVar(&cli.CataBalancer, "catabalancer", "", "Enable catabalancer load balancer")
 	fs.DurationVar(&cli.CataBalancerMetricTimeout, "catabalancer-metric-timeout", 26*time.Second, "Catabalancer timeout for node metrics")
 	fs.DurationVar(&cli.CataBalancerIngestStreamTimeout, "catabalancer-ingest-stream-timeout", 20*time.Minute, "Catabalancer timeout for ingest stream metrics")
+	config.CommaSliceFlag(fs, &cli.BlockedJWTs, "gate-blocked-jwts", []string{}, "List of blocked JWTs for token gating")
 
 	// mist-api-connector parameters
 	fs.IntVar(&cli.MistPort, "mist-port", 4242, "Port to connect to Mist")

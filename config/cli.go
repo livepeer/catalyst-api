@@ -62,6 +62,7 @@ type Cli struct {
 	SourcePlaybackHosts       map[string]string
 	DefaultQuality            int
 	MaxBitrateFactor          float64
+	BlockedJWTs               []string
 
 	// mapping playbackId to value between 0.0 to 100.0
 	CdnRedirectPlaybackPct             map[string]float64
