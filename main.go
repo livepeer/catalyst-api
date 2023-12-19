@@ -361,11 +361,11 @@ func handleClusterEvents(ctx context.Context, mapic mistapiconnector.IMac, bal b
 	}
 }
 
-func processClusterEvent(mapic mistapiconnector.IMac, bal balancer.Balancer, e serf.UserEvent) {
+func processClusterEvent(mapic mistapiconnector.IMac, bal balancer.Balancer, userEvent serf.UserEvent) {
 	go func() {
-		e, err := events.Unmarshal(e.Payload)
+		e, err := events.Unmarshal(userEvent.Payload)
 		if err != nil {
-			glog.Errorf("cannot unmarshal received serf event: %v", e)
+			glog.Errorf("cannot unmarshal received serf event: %v", userEvent)
 			return
 		}
 		switch event := e.(type) {
@@ -376,7 +376,8 @@ func processClusterEvent(mapic mistapiconnector.IMac, bal balancer.Balancer, e s
 			mapic.NukeStream(event.PlaybackID)
 			return
 		case *events.NodeUpdateEvent:
-			glog.Infof("received serf NodeUpdateEvent. Node: %s. Ingest Streams: %v. Non-Ingest Streams: %v", event.NodeID, strings.Join(event.GetIngestStreams(), ","), strings.Join(event.GetStreams(), ","))
+			glog.Infof("received serf NodeUpdateEvent. Node: %s. Length: %d bytes. Ingest Streams: %v. Non-Ingest Streams: %v", event.NodeID, len(userEvent.Payload), strings.Join(event.GetIngestStreams(), ","), strings.Join(event.GetStreams(), ","))
+
 			bal.UpdateNodes(event.NodeID, event.NodeMetrics)
 			for _, stream := range event.GetStreams() {
 				bal.UpdateStreams(event.NodeID, stream, false)
