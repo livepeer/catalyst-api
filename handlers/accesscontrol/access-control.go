@@ -36,6 +36,7 @@ type PlaybackAccessControlRequest struct {
 	Pub       string `json:"pub"`
 	AccessKey string `json:"accessKey"`
 	Stream    string `json:"stream"`
+	Jwt       string `json:"jwt",omitempty`
 }
 
 type GateAPICaller interface {
@@ -100,6 +101,7 @@ func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, paylo
 			return false, nil
 		}
 		acReq.Pub = pub
+		acReq.Jwt = jwt
 
 		acReq.Type = "jwt"
 		cacheKey = "jwtPubKey_" + acReq.Pub
