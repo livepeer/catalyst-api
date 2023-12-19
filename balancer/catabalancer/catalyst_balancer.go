@@ -3,14 +3,15 @@ package catabalancer
 import (
 	"context"
 	"fmt"
-	"github.com/livepeer/catalyst-api/cluster"
-	"github.com/livepeer/catalyst-api/log"
 	"math/rand"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/livepeer/catalyst-api/cluster"
+	"github.com/livepeer/catalyst-api/log"
 )
 
 type CataBalancer struct {
@@ -37,14 +38,15 @@ type Stream struct {
 	Timestamp  time.Time // the time we received these stream details, old streams can be removed on a timeout
 }
 
+// JSON representation is deliberately truncated to keep the message size small
 type NodeMetrics struct {
-	CPUUsagePercentage       float64
-	RAMUsagePercentage       float64
-	BandwidthUsagePercentage float64
-	LoadAvg                  float64
-	GeoLatitude              float64
-	GeoLongitude             float64
-	Timestamp                time.Time // the time we received these node metrics
+	CPUUsagePercentage       float64   `json:"c,omitempty"`
+	RAMUsagePercentage       float64   `json:"r,omitempty"`
+	BandwidthUsagePercentage float64   `json:"b,omitempty"`
+	LoadAvg                  float64   `json:"l,omitempty"`
+	GeoLatitude              float64   `json:"la,omitempty"`
+	GeoLongitude             float64   `json:"lo,omitempty"`
+	Timestamp                time.Time `json:"t,omitempty"` // the time we received these node metrics
 }
 
 // All of the scores are in the range 0-2, where:
