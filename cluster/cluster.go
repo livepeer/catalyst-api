@@ -101,6 +101,7 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	memberlistConfig.SecretKey = encryptBytes
 	memberlistConfig.RetransmitMult = 1
 	serfConfig := serf.DefaultConfig()
+	serfConfig.UserEventSizeLimit = 1024
 	serfConfig.MemberlistConfig = memberlistConfig
 	serfConfig.NodeName = c.config.NodeName
 	serfConfig.Tags = c.config.Tags

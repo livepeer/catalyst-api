@@ -33,11 +33,12 @@ type NukeEvent struct {
 	PlaybackID string `json:"playback_id"`
 }
 
+// JSON representation is deliberately truncated to keep the message size small
 type NodeUpdateEvent struct {
-	Resource    string                   `json:"resource"`
-	NodeID      string                   `json:"node_id"`
-	NodeMetrics catabalancer.NodeMetrics `json:"node_metrics"`
-	Streams     string                   `json:"streams"`
+	Resource    string                   `json:"r,omitempty"`
+	NodeID      string                   `json:"n,omitempty"`
+	NodeMetrics catabalancer.NodeMetrics `json:"nm,omitempty"`
+	Streams     string                   `json:"s,omitempty"`
 }
 
 func (n *NodeUpdateEvent) SetStreams(streamIDs []string, ingestStreamIDs []string) {
