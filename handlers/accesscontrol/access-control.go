@@ -127,11 +127,13 @@ func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(playback
 	ac.mutex.RUnlock()
 
 	if isExpired(entry) {
+		glog.V(7).Infof("Cache expired for playbackId=%v cacheKey=%v", playbackID, cacheKey)
 		err := ac.cachePlaybackAccessControlInfo(playbackID, cacheKey, requestBody)
 		if err != nil {
 			return false, err
 		}
 	} else if isStale(entry) {
+		glog.V(7).Infof("Cache stale for playbackId=%v cacheKey=%v\n", playbackID, cacheKey)
 		go func() {
 			ac.mutex.RLock()
 			stillStale := isStale(ac.cache[playbackID][cacheKey])
