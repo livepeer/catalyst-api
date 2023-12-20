@@ -5,6 +5,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
 	"net/url"
@@ -109,6 +110,7 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	serfConfig.ProtocolVersion = 5
 	serfConfig.EventBuffer = c.config.SerfEventBuffer
 	serfConfig.MaxQueueDepth = c.config.SerfMaxQueueDepth
+	serfConfig.LogOutput = io.Discard
 
 	c.serf, err = serf.Create(serfConfig)
 	if err != nil {
