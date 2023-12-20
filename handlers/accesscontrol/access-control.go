@@ -69,7 +69,6 @@ func (ac *AccessControlHandlersCollection) HandleUserNew(ctx context.Context, pa
 	}
 
 	if playbackAccessControlAllowed {
-		glog.Infof("Playback access control allowed for playbackId=%v", playbackID)
 		return true, nil
 	}
 
@@ -105,7 +104,7 @@ func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, paylo
 
 		pub, err := extractKeyFromJwt(jwt, acReq.Stream)
 		if err != nil {
-			glog.Infof("Unable to extract key from jwt for playbackId=%v jwt=%v", acReq.Stream, jwt)
+			glog.Infof("Unable to extract key from jwt for playbackId=%v jwt=%v err=%s", acReq.Stream, jwt, err)
 			return false, nil
 		}
 		acReq.Pub = pub
@@ -116,8 +115,7 @@ func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, paylo
 
 	body, err := json.Marshal(acReq)
 	if err != nil {
-		glog.Errorf("Unable to get playback access control info, JSON marshalling failed. playbackId=%v", acReq.Stream)
-		return false, err
+		return false, fmt.Errorf("json marshalling failed: %w", err)
 	}
 
 	return ac.GetPlaybackAccessControlInfo(acReq.Stream, cacheKey, body)
@@ -129,13 +127,11 @@ func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(playback
 	ac.mutex.RUnlock()
 
 	if isExpired(entry) {
-		glog.Infof("Cache expired for playbackId=%v cacheKey=%v", playbackID, cacheKey)
 		err := ac.cachePlaybackAccessControlInfo(playbackID, cacheKey, requestBody)
 		if err != nil {
 			return false, err
 		}
 	} else if isStale(entry) {
-		glog.Infof("Cache stale for playbackId=%v cacheKey=%v\n", playbackID, cacheKey)
 		go func() {
 			ac.mutex.RLock()
 			stillStale := isStale(ac.cache[playbackID][cacheKey])
@@ -147,15 +143,11 @@ func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(playback
 				}
 			}
 		}()
-	} else {
-		glog.Infof("Cache hit for playbackId=%v cacheKey=%v", playbackID, cacheKey)
 	}
 
 	ac.mutex.RLock()
 	entry = ac.cache[playbackID][cacheKey]
 	ac.mutex.RUnlock()
-
-	glog.Infof("playbackId=%v cacheKey=%v playback allowed=%v", playbackID, cacheKey, entry.Allow)
 
 	return entry.Allow, nil
 }
@@ -214,21 +206,17 @@ type PlaybackGateClaims struct {
 
 func (c *PlaybackGateClaims) Valid() error {
 	if err := c.RegisteredClaims.Valid(); err != nil {
-		glog.Errorf("Invalid registered claims %v", err)
 		return err
 	}
 	if c.Subject == "" {
-		glog.Errorf("Missing subject claim for playbackId=%v", c.Subject)
 		return errors.New("missing sub claim")
 	}
 	if c.PublicKey == "" {
-		glog.Infof("Missing pub claim for playbackId=%v", c.Subject)
 		return errors.New("missing pub claim")
 	}
 	if c.ExpiresAt == nil {
 		return errors.New("missing exp claim")
 	} else if time.Until(c.ExpiresAt.Time) > 7*24*time.Hour {
-		glog.Errorf("exp claim is too far in the future for playbackId=%v", c.Subject)
 		return errors.New("exp claim too far in the future")
 	}
 	return nil
@@ -244,7 +232,6 @@ func extractKeyFromJwt(tokenString, playbackID string) (string, error) {
 		return "", fmt.Errorf("playbackId mismatch playbackId=%v != claimed=%v jwt=%s", playbackID, claims.Subject, tokenString)
 	}
 
-	glog.Infof("Access control request for playbackId=%v pubkey=%v", playbackID, claims.PublicKey)
 	return claims.PublicKey, nil
 }
 
@@ -260,13 +247,10 @@ func decodeJwt(tokenString string) (*PlaybackGateClaims, error) {
 	})
 
 	if err != nil {
-		glog.Errorf("Unable to parse jwt token %v", err)
-		return nil, err
+		return nil, fmt.Errorf("unable to parse jwt %w", err)
 	} else if err = token.Claims.Valid(); err != nil {
-		glog.Errorf("Invalid claims: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("invalid claims: %w", err)
 	} else if !token.Valid {
-		glog.Errorf("Invalid token=%v for playbackId=%v", tokenString, token.Claims.(*PlaybackGateClaims).Subject)
 		return nil, errors.New("invalid token")
 	}
 	return token.Claims.(*PlaybackGateClaims), nil
