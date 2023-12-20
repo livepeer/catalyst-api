@@ -69,7 +69,7 @@ func TestAllowedAccessValidTokenWithPrefix(t *testing.T) {
 	require.Equal(t, "true", result)
 }
 
-func TestAllowdAccessAbsentToken(t *testing.T) {
+func TestAllowedAccessAbsentToken(t *testing.T) {
 	token := ""
 	payload := []byte(fmt.Sprint(playbackID, "\n1\n2\n3\nhttp://localhost:8080/hls/", playbackID, "/index.m3u8?stream=", playbackID, "&jwt=", token, "\n5"))
 
@@ -79,6 +79,14 @@ func TestAllowdAccessAbsentToken(t *testing.T) {
 
 func TestDeniedAccessInvalidToken(t *testing.T) {
 	token := "x"
+	payload := []byte(fmt.Sprint(playbackID, "\n1\n2\n3\nhttp://localhost:8080/hls/", playbackID, "/index.m3u8?stream=", playbackID, "&jwt=", token, "\n5"))
+
+	result := executeFlow(payload, testTriggerHandler(), allowAccess)
+	require.Equal(t, "false", result)
+}
+
+func TestDeniedMissingPlaybackID(t *testing.T) {
+	token, _ := craftToken(privateKey, publicKey, "", expiration)
 	payload := []byte(fmt.Sprint(playbackID, "\n1\n2\n3\nhttp://localhost:8080/hls/", playbackID, "/index.m3u8?stream=", playbackID, "&jwt=", token, "\n5"))
 
 	result := executeFlow(payload, testTriggerHandler(), allowAccess)
