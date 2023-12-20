@@ -46,7 +46,7 @@ func (h *GatingHandler) GatingCheck(next httprouter.Handle) httprouter.Handle {
 			JWT:       jwt,
 		}
 
-		playbackAccessControlAllowed, err := h.AccessControl.IsAuthorized(playbackID, &payload)
+		playbackAccessControlAllowed, err := h.AccessControl.IsAuthorized(req.Context(), playbackID, &payload)
 		if err != nil {
 			log.LogError(requestID, "unable to get playback access control info", err, "playbackID", playbackID, "accessKey", accessKey, "jwt", jwt)
 			if errors.Is(err, catErrs.InvalidJWT) {

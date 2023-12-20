@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/catalyst-api/log"
 )
 
 type UserNewPayload struct {
@@ -61,7 +62,9 @@ func (d *MistCallbackHandlersCollection) TriggerUserNew(ctx context.Context, w h
 	payload.JWT = jwt
 
 	if err != nil {
-		glog.Infof("Error parsing USER_NEW payload error=%q payload=%q", err, string(body))
+		log.LogCtx(ctx, "Error parsing USER_NEW payload",
+			"err", err,
+			"body", string(body))
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("false")) // nolint:errcheck
 		return
