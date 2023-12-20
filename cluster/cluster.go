@@ -5,12 +5,12 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"io"
 	"math/rand"
 	"net"
 	"net/url"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -64,6 +64,18 @@ func NewCluster(config *config.Cli) Cluster {
 	return &c
 }
 
+type serfLogger struct{}
+
+func (s serfLogger) Write(p []byte) (int, error) {
+	logLine := string(p)
+	if strings.Contains(logLine, "[DEBUG]") || strings.Contains(logLine, "[INFO]") {
+		return 0, nil
+	}
+
+	glog.Info(logLine)
+	return len(p), nil
+}
+
 // Start the connection to this cluster
 func (c *ClusterImpl) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
@@ -110,7 +122,7 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	serfConfig.ProtocolVersion = 5
 	serfConfig.EventBuffer = c.config.SerfEventBuffer
 	serfConfig.MaxQueueDepth = c.config.SerfMaxQueueDepth
-	serfConfig.LogOutput = io.Discard
+	serfConfig.LogOutput = serfLogger{}
 
 	c.serf, err = serf.Create(serfConfig)
 	if err != nil {
