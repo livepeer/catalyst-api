@@ -49,7 +49,7 @@ func WithLogValues(ctx context.Context, args ...string) context.Context {
 func LogCtx(ctx context.Context, message string, args ...any) {
 	var requestID string
 	meta, _ := ctx.Value(clogContextKey).(metadata)
-	if meta == nil {
+	if meta != nil {
 		requestID, _ = meta["request_id"].(string)
 	}
 	allArgs := append([]any{}, meta.Flat()...)

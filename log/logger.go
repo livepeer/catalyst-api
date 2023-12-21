@@ -1,6 +1,7 @@
 package log
 
 import (
+	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -57,8 +58,10 @@ func getLogger(requestID string) kitlog.Logger {
 	return newLogger
 }
 
+var logDestination io.Writer = os.Stderr
+
 func newLogger() kitlog.Logger {
-	newLogger := kitlog.NewLogfmtLogger(kitlog.NewSyncWriter(os.Stderr))
+	newLogger := kitlog.NewLogfmtLogger(kitlog.NewSyncWriter(logDestination))
 	return kitlog.With(newLogger, "ts", kitlog.DefaultTimestampUTC)
 }
 
