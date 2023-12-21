@@ -5,8 +5,9 @@ package log
 
 import (
 	"context"
-
-	kitlog "github.com/go-kit/log"
+	"path/filepath"
+	"runtime"
+	"strconv"
 )
 
 // unique type to prevent assignment.
@@ -56,10 +57,20 @@ func LogCtx(ctx context.Context, message string, args ...any) {
 	}
 	allArgs := append([]any{}, meta.Flat()...)
 	allArgs = append(allArgs, args...)
-	allArgs = append(allArgs, "caller", kitlog.Caller(2)())
+	allArgs = append(allArgs, "caller", caller(2))
 	if requestID == "" {
 		LogNoRequestID(message, allArgs...)
 	} else {
 		Log(requestID, message, allArgs...)
 	}
+}
+
+func caller(depth int) string {
+	_, myfile, _, _ := runtime.Caller(0)
+	// This assumes that the root directory of catalyst-api is one level above this folder.
+	// If that changes, please update this rootDir resolution.
+	rootDir := filepath.Join(filepath.Dir(myfile), "..")
+	_, file, line, _ := runtime.Caller(depth)
+	rel, _ := filepath.Rel(rootDir, file)
+	return rel + ":" + strconv.Itoa(line)
 }
