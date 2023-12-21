@@ -22,16 +22,18 @@ type VODPipelineMetrics struct {
 }
 
 type CatalystAPIMetrics struct {
-	Version                     *prometheus.CounterVec
-	UploadVODRequestCount       prometheus.Counter
-	UploadVODRequestDurationSec *prometheus.SummaryVec
-	TranscodeSegmentDurationSec prometheus.Histogram
-	PlaybackRequestDurationSec  *prometheus.SummaryVec
-	CDNRedirectCount            *prometheus.CounterVec
-	CDNRedirectWebRTC406        *prometheus.CounterVec
-	UserEventBufferSize         prometheus.Gauge
-	MemberEventBufferSize       prometheus.Gauge
-	SerfEventBufferSize         prometheus.Gauge
+	Version                         *prometheus.CounterVec
+	UploadVODRequestCount           prometheus.Counter
+	UploadVODRequestDurationSec     *prometheus.SummaryVec
+	TranscodeSegmentDurationSec     prometheus.Histogram
+	PlaybackRequestDurationSec      *prometheus.SummaryVec
+	CDNRedirectCount                *prometheus.CounterVec
+	CDNRedirectWebRTC406            *prometheus.CounterVec
+	UserEventBufferSize             prometheus.Gauge
+	MemberEventBufferSize           prometheus.Gauge
+	SerfEventBufferSize             prometheus.Gauge
+	AccessControlRequestCount       *prometheus.CounterVec
+	AccessControlRequestDurationSec *prometheus.SummaryVec
 
 	JobsInFlight         prometheus.Gauge
 	HTTPRequestsInFlight prometheus.Gauge
@@ -102,8 +104,16 @@ func NewMetrics() *CatalystAPIMetrics {
 			Name: "cdn_redirect_webrtc_406",
 			Help: "Number of WebRTC requests rejected with HTTP 406 because of playback should be seved from external CDN",
 		}, []string{"playbackID"}),
-		// Clients metrics
+		AccessControlRequestCount: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "access_control_request_count",
+			Help: "The total number of access control requests",
+		}, []string{"allowed", "playbackID"}),
+		AccessControlRequestDurationSec: promauto.NewSummaryVec(prometheus.SummaryOpts{
+			Name: "access_control_request_duration_seconds",
+			Help: "The latency of the access control requests",
+		}, []string{"allowed", "playbackID"}),
 
+		// Clients metrics
 		TranscodingStatusUpdate: ClientMetrics{
 			RetryCount: promauto.NewGaugeVec(prometheus.GaugeOpts{
 				Name: "transcoding_status_update_retry_count",
