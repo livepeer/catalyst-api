@@ -29,13 +29,13 @@ func AddContext(requestID string, keyvals ...interface{}) {
 }
 
 func Log(requestID string, message string, keyvals ...interface{}) {
-	_ = kitlog.With(getLogger(requestID), "msg", message).Log(redactKeyvals(keyvals...)...)
+	_ = kitlog.With(getLogger(requestID), "msg", message).Log(keyvals...)
 }
 
 // Log in situations where we don't have access to the Request ID.
 // Should be used sparingly and with as much context inserted into the message as possible
 func LogNoRequestID(message string, keyvals ...interface{}) {
-	_ = kitlog.With(newLogger(), "msg", message).Log(redactKeyvals(keyvals...)...)
+	_ = kitlog.With(newLogger(), "msg", message).Log(keyvals...)
 }
 
 func LogError(requestID string, message string, err error, keyvals ...interface{}) {

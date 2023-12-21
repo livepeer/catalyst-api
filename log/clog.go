@@ -5,6 +5,8 @@ package log
 
 import (
 	"context"
+
+	kitlog "github.com/go-kit/log"
 )
 
 // unique type to prevent assignment.
@@ -54,6 +56,7 @@ func LogCtx(ctx context.Context, message string, args ...any) {
 	}
 	allArgs := append([]any{}, meta.Flat()...)
 	allArgs = append(allArgs, args...)
+	allArgs = append(allArgs, "caller", kitlog.Caller(2)())
 	if requestID == "" {
 		LogNoRequestID(message, allArgs...)
 	} else {
