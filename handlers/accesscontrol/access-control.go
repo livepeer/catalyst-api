@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/pquerna/cachecontrol/cacheobject"
 )
 
@@ -78,7 +80,21 @@ func (ac *AccessControlHandlersCollection) HandleUserNew(ctx context.Context, pa
 	return false, nil
 }
 
-func (ac *AccessControlHandlersCollection) IsAuthorized(ctx context.Context, playbackID string, payload *misttriggers.UserNewPayload) (bool, error) {
+func (ac *AccessControlHandlersCollection) IsAuthorized(ctx context.Context, playbackID string, payload *misttriggers.UserNewPayload) (allowed bool, err error) {
+	start := time.Now()
+	defer func() {
+		metrics.Metrics.AccessControlRequestDurationSec.
+			WithLabelValues(strconv.FormatBool(allowed), playbackID).
+			Observe(time.Since(start).Seconds())
+		metrics.Metrics.AccessControlRequestCount.
+			WithLabelValues(strconv.FormatBool(allowed), playbackID).
+			Inc()
+	}()
+	allowed, err = ac.isAuthorized(ctx, playbackID, payload)
+	return
+}
+
+func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, playbackID string, payload *misttriggers.UserNewPayload) (bool, error) {
 	acReq := PlaybackAccessControlRequest{Stream: playbackID, Type: "accessKey"}
 	cacheKey := ""
 	accessKey := payload.URL.Query().Get("accessKey")
