@@ -16,6 +16,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
+	"github.com/livepeer/catalyst-api/log"
 	"github.com/pquerna/cachecontrol/cacheobject"
 )
 
@@ -61,10 +62,11 @@ func NewAccessControlHandlersCollection(cli config.Cli) *AccessControlHandlersCo
 
 func (ac *AccessControlHandlersCollection) HandleUserNew(ctx context.Context, payload *misttriggers.UserNewPayload) (bool, error) {
 	playbackID := payload.StreamName[strings.Index(payload.StreamName, "+")+1:]
+	ctx = log.WithLogValues(ctx, "playback_id", playbackID)
 
-	playbackAccessControlAllowed, err := ac.IsAuthorized(playbackID, payload)
+	playbackAccessControlAllowed, err := ac.IsAuthorized(ctx, playbackID, payload)
 	if err != nil {
-		glog.Errorf("Unable to get playback access control info for playbackId=%v err=%s", playbackID, err.Error())
+		log.LogCtx(ctx, "Unable to get playback access control info", "error", err.Error())
 		return false, err
 	}
 
@@ -72,11 +74,11 @@ func (ac *AccessControlHandlersCollection) HandleUserNew(ctx context.Context, pa
 		return true, nil
 	}
 
-	glog.Infof("Playback access control denied for playbackId=%v", playbackID)
+	log.LogCtx(ctx, "Playback access control denied")
 	return false, nil
 }
 
-func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, payload *misttriggers.UserNewPayload) (bool, error) {
+func (ac *AccessControlHandlersCollection) IsAuthorized(ctx context.Context, playbackID string, payload *misttriggers.UserNewPayload) (bool, error) {
 	acReq := PlaybackAccessControlRequest{Stream: playbackID, Type: "accessKey"}
 	cacheKey := ""
 	accessKey := payload.URL.Query().Get("accessKey")
@@ -97,14 +99,14 @@ func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, paylo
 	} else if jwt != "" {
 		for _, blocked := range ac.blockedJWTs {
 			if jwt == blocked {
-				glog.Errorf("blocking JWT. playbackId=%v jwt=%v", acReq.Stream, jwt)
+				log.LogCtx(ctx, "blocking JWT", "jwt", jwt)
 				return false, nil
 			}
 		}
 
-		pub, err := extractKeyFromJwt(jwt, acReq.Stream)
+		pub, err := extractKeyFromJwt(ctx, jwt, acReq.Stream)
 		if err != nil {
-			glog.Infof("Unable to extract key from jwt for playbackId=%v jwt=%v err=%s", acReq.Stream, jwt, err)
+			log.LogCtx(ctx, "Unable to extract key from jwt", "err", err)
 			return false, nil
 		}
 		acReq.Pub = pub
@@ -118,10 +120,10 @@ func (ac *AccessControlHandlersCollection) IsAuthorized(playbackID string, paylo
 		return false, fmt.Errorf("json marshalling failed: %w", err)
 	}
 
-	return ac.GetPlaybackAccessControlInfo(acReq.Stream, cacheKey, body)
+	return ac.GetPlaybackAccessControlInfo(ctx, acReq.Stream, cacheKey, body)
 }
 
-func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(playbackID, cacheKey string, requestBody []byte) (bool, error) {
+func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(ctx context.Context, playbackID, cacheKey string, requestBody []byte) (bool, error) {
 	ac.mutex.RLock()
 	entry := ac.cache[playbackID][cacheKey]
 	ac.mutex.RUnlock()
@@ -141,7 +143,7 @@ func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(playback
 			if stillStale {
 				err := ac.cachePlaybackAccessControlInfo(playbackID, cacheKey, requestBody)
 				if err != nil {
-					glog.Errorf("Error caching playback access control info: %s", err)
+					log.LogCtx(ctx, "Error caching playback access control info", "err", err)
 				}
 			}
 		}()
@@ -224,8 +226,8 @@ func (c *PlaybackGateClaims) Valid() error {
 	return nil
 }
 
-func extractKeyFromJwt(tokenString, playbackID string) (string, error) {
-	claims, err := decodeJwt(tokenString)
+func extractKeyFromJwt(ctx context.Context, tokenString, playbackID string) (string, error) {
+	claims, err := decodeJwt(ctx, tokenString)
 	if err != nil {
 		return "", fmt.Errorf("unable to decode jwt on incoming playbackId=%v jwt=%v %w", playbackID, tokenString, err)
 	}
@@ -234,10 +236,11 @@ func extractKeyFromJwt(tokenString, playbackID string) (string, error) {
 		return "", fmt.Errorf("playbackId mismatch playbackId=%v != claimed=%v jwt=%s", playbackID, claims.Subject, tokenString)
 	}
 
+	log.LogCtx(ctx, "Access control request", "pub_key", claims.PublicKey)
 	return claims.PublicKey, nil
 }
 
-func decodeJwt(tokenString string) (*PlaybackGateClaims, error) {
+func decodeJwt(ctx context.Context, tokenString string) (*PlaybackGateClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &PlaybackGateClaims{}, func(token *jwt.Token) (interface{}, error) {
 		pub := token.Claims.(*PlaybackGateClaims).PublicKey
 		decodedPubkey, err := base64.StdEncoding.DecodeString(pub)
