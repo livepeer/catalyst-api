@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/log"
@@ -145,13 +144,15 @@ func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(ctx cont
 	ac.mutex.RUnlock()
 
 	if isExpired(entry) {
-		glog.V(7).Infof("Cache expired for playbackId=%v cacheKey=%v", playbackID, cacheKey)
+		log.V(7).LogCtx(ctx, "Cache expired",
+			"cache_key", cacheKey)
 		err := ac.cachePlaybackAccessControlInfo(playbackID, cacheKey, requestBody)
 		if err != nil {
 			return false, err
 		}
 	} else if isStale(entry) {
-		glog.V(7).Infof("Cache stale for playbackId=%v cacheKey=%v\n", playbackID, cacheKey)
+		log.V(7).LogCtx(ctx, "Cache stale",
+			"cache_key", cacheKey)
 		go func() {
 			ac.mutex.RLock()
 			stillStale := isStale(ac.cache[playbackID][cacheKey])

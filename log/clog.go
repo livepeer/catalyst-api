@@ -5,9 +5,13 @@ package log
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"path/filepath"
 	"runtime"
 	"strconv"
+
+	"github.com/golang/glog"
 )
 
 // unique type to prevent assignment.
@@ -16,9 +20,26 @@ type clogContextKeyType struct{}
 // singleton value to identify our logging metadata in context
 var clogContextKey = clogContextKeyType{}
 
+var defaultLogLevel glog.Level = 3
+
 // basic type to represent logging container. logging context is immutable after
 // creation, so we don't have to worry about locking.
 type metadata map[string]any
+
+func init() {
+	// Set default v level to 3; this is overridden in main() but is useful for tests
+	vFlag := flag.Lookup("v")
+	vFlag.Value.Set(fmt.Sprintf("%d", defaultLogLevel))
+}
+
+type VerboseLogger struct {
+	level glog.Level
+}
+
+// implementation of our logger aware of glog -v=[0-9] levels
+func V(level glog.Level) *VerboseLogger {
+	return &VerboseLogger{level: level}
+}
 
 func (m metadata) Flat() []any {
 	out := []any{}
@@ -49,7 +70,11 @@ func WithLogValues(ctx context.Context, args ...string) context.Context {
 	return context.WithValue(ctx, clogContextKey, newMetadata)
 }
 
-func LogCtx(ctx context.Context, message string, args ...any) {
+// Actual log handler; the others have wrappers to properly handle stack depth
+func (v *VerboseLogger) logCtx(ctx context.Context, message string, args ...any) {
+	if !glog.V(v.level) {
+		return
+	}
 	var requestID string
 	meta, _ := ctx.Value(clogContextKey).(metadata)
 	if meta != nil {
@@ -57,7 +82,7 @@ func LogCtx(ctx context.Context, message string, args ...any) {
 	}
 	allArgs := append([]any{}, meta.Flat()...)
 	allArgs = append(allArgs, args...)
-	allArgs = append(allArgs, "caller", caller(2))
+	allArgs = append(allArgs, "caller", caller(3))
 	if requestID == "" {
 		LogNoRequestID(message, allArgs...)
 	} else {
@@ -65,6 +90,16 @@ func LogCtx(ctx context.Context, message string, args ...any) {
 	}
 }
 
+func (v *VerboseLogger) LogCtx(ctx context.Context, message string, args ...any) {
+	v.logCtx(ctx, message, args...)
+}
+
+func LogCtx(ctx context.Context, message string, args ...any) {
+	V(defaultLogLevel).logCtx(ctx, message, args...)
+}
+
+// returns filenames relative to catalyst-api root
+// e.g. handlers/misttriggers/triggers.go:58
 func caller(depth int) string {
 	_, myfile, _, _ := runtime.Caller(0)
 	// This assumes that the root directory of catalyst-api is one level above this folder.
