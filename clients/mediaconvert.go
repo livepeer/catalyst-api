@@ -124,10 +124,14 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 	videoTrack, err := mcArgs.InputFileInfo.GetTrack(video.TrackTypeVideo)
 	hasVideoTrack := err == nil
 
-	if hasVideoTrack && len(mcArgs.Profiles) == 0 {
-		mcArgs.Profiles, err = video.GetDefaultPlaybackProfiles(videoTrack)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get playback profiles: %w", err)
+	if hasVideoTrack {
+		if len(mcArgs.Profiles) == 0 {
+			mcArgs.Profiles, err = video.GetDefaultPlaybackProfiles(videoTrack)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get playback profiles: %w", err)
+			}
+		} else if len(mcArgs.Profiles) == 1 && mcArgs.Profiles[0].Bitrate != 0 && mcArgs.Profiles[0].Height == 0 && mcArgs.Profiles[0].Width == 0 {
+			mcArgs.Profiles[0].Height = videoTrack.Height
 		}
 	}
 
@@ -248,6 +252,7 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 	if args.GenerateMP4 {
 		mp4OutputLocation = toStr(args.MP4OutputLocation)
 	}
+
 	payload := createJobPayload(args.InputFile.String(), toStr(args.HLSOutputLocation), mp4OutputLocation, mc.role, accelerated, args.Profiles, args.SegmentSizeSecs)
 	job, err := mc.client.CreateJob(payload)
 	if err != nil {
