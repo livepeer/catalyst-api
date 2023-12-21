@@ -29,6 +29,7 @@ type metadata map[string]any
 func init() {
 	// Set default v level to 3; this is overridden in main() but is useful for tests
 	vFlag := flag.Lookup("v")
+	// nolint:errcheck
 	vFlag.Value.Set(fmt.Sprintf("%d", defaultLogLevel))
 }
 
