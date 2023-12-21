@@ -52,9 +52,11 @@ func LogCtx(ctx context.Context, message string, args ...any) {
 	if meta == nil {
 		requestID, _ = meta["request_id"].(string)
 	}
+	allArgs := append([]any{}, meta.Flat()...)
+	allArgs = append(allArgs, args...)
 	if requestID == "" {
-		LogNoRequestID(message, meta.Flat()...)
+		LogNoRequestID(message, allArgs...)
 	} else {
-		Log(requestID, message, meta.Flat()...)
+		Log(requestID, message, allArgs...)
 	}
 }
