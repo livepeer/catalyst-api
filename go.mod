@@ -5,7 +5,7 @@ go 1.21
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/DATA-DOG/go-sqlmock v1.5.0
-	github.com/aws/aws-sdk-go v1.44.285
+	github.com/aws/aws-sdk-go v1.49.9
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cucumber/godog v0.13.0
 	github.com/d1str0/pkcs7 v0.0.0-20200424205038-d65c16a5759a
@@ -149,11 +149,11 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
-	golang.org/x/crypto v0.9.0 // indirect
+	golang.org/x/crypto v0.14.0 // indirect
 	golang.org/x/mod v0.8.0 // indirect
-	golang.org/x/net v0.10.0 // indirect
+	golang.org/x/net v0.17.0 // indirect
 	golang.org/x/oauth2 v0.8.0 // indirect
-	golang.org/x/sys v0.8.0 // indirect
+	golang.org/x/sys v0.13.0 // indirect
 	golang.org/x/tools v0.6.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/api v0.125.0 // indirect
@@ -170,7 +170,7 @@ require (
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-kit/log v0.2.1
-	github.com/go-logfmt/logfmt v0.5.1 // indirect
+	github.com/go-logfmt/logfmt v0.5.1
 	github.com/grafov/m3u8 v0.12.0
 	github.com/hashicorp/go-retryablehttp v0.7.4
 	github.com/patrickmn/go-cache v2.1.0+incompatible
