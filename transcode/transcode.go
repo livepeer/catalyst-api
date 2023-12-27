@@ -97,7 +97,11 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("failed to create signed url for last segment %s: %w", lastSegment.URL, err)
 	}
-	p := video.Probe{}
+	// ignore the following probe errors when checking the last segment
+	var ignoreProbeErrs = []string{
+		"non-existing sps 0",
+	}
+	p := video.Probe{IgnoreErrMessages: ignoreProbeErrs}
 	// ProbeFile will return err for various reasons so we use the subsequent GetTrack method to check for video tracks
 	lastSegmentProbe, _ := p.ProbeFile(transcodeRequest.RequestID, lastSegmentURL)
 	// GetTrack will return an err if TrackTypeVideo was not found
