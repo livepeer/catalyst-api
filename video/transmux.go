@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/grafov/m3u8"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +13,10 @@ import (
 	"time"
 
 	ffmpeg "github.com/u2takey/ffmpeg-go"
+)
+
+const (
+	Mp4DurationLimit = 21600 //MP4s will be generated only for first 6 hours
 )
 
 func MuxTStoMP4(tsInputFile, mp4OutputFile string) ([]string, error) {
@@ -97,7 +102,7 @@ func MuxTStoFMP4(fmp4ManifestOutputFile string, inputs ...string) error {
 	return nil
 }
 
-func ConcatTS(tsFileName string, segmentsList *TSegmentList, useStreamBasedConcat bool) (int64, error) {
+func ConcatTS(tsFileName string, segmentsList *TSegmentList, sourceMediaPlaylist m3u8.MediaPlaylist, useStreamBasedConcat bool) (int64, error) {
 	var totalBytes int64
 	if !useStreamBasedConcat {
 		// Create a .ts file for a given rendition
@@ -137,6 +142,7 @@ func ConcatTS(tsFileName string, segmentsList *TSegmentList, useStreamBasedConca
 			}
 		}()
 
+		var totalDuration float64
 		// Add segment filename to the text file
 		for segName := range segmentsList.GetSortedSegments() {
 			// Check each segment that was written to disk in the disk-writing goroutine
@@ -158,6 +164,15 @@ func ConcatTS(tsFileName string, segmentsList *TSegmentList, useStreamBasedConca
 			if err = w.Flush(); err != nil {
 				return totalBytes, fmt.Errorf("error flushing text file %s err: %w", segmentFilename, err)
 			}
+
+			// Check total duration processed so far and stop concatenating if Mp4DurationLimit is reached
+			// i.e. generate MP4s for only up to duration specified by Mp4DurationLimit
+			segDuration := sourceMediaPlaylist.Segments[segName].Duration
+			totalDuration = totalDuration + segDuration
+			if totalDuration > Mp4DurationLimit {
+				break
+			}
+
 		}
 
 		// Use stream-based concatenation by reading segment files in text file

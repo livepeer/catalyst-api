@@ -261,7 +261,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			defer os.Remove(concatTsFileName)
 
 			var totalBytes int64
-			totalBytes, err = video.ConcatTS(concatTsFileName, segments, true)
+			totalBytes, err = video.ConcatTS(concatTsFileName, segments, sourceManifest, true)
 			if err != nil {
 				log.Log(transcodeRequest.RequestID, "error concatenating .ts", "file", concatTsFileName, "err", err)
 				continue
@@ -276,8 +276,16 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				}
 			}
 			if rendBytesWritten != totalBytes {
-				log.Log(transcodeRequest.RequestID, "bytes written does not match", "file", concatTsFileName, "bytes expected", transcodedStats[renditionIndex].Bytes, "bytes written", totalBytes)
-				break
+				if inputInfo.Duration > 0 && inputInfo.Duration > video.Mp4DurationLimit {
+					log.Log(transcodeRequest.RequestID, "input video exceeds limit for MP4 duration", "file", concatTsFileName, "bytes expected", transcodedStats[renditionIndex].Bytes, "bytes written", totalBytes)
+
+				} else if inputInfo.Duration == 0 {
+					log.Log(transcodeRequest.RequestID, "input video duration is unknown - ignoring bytes check", "file", concatTsFileName, "bytes expected", transcodedStats[renditionIndex].Bytes, "bytes written", totalBytes)
+
+				} else {
+					log.Log(transcodeRequest.RequestID, "bytes written does not match", "file", concatTsFileName, "bytes expected", transcodedStats[renditionIndex].Bytes, "bytes written", totalBytes)
+					break
+				}
 			}
 
 			// Mux the .ts file to generate either a regular MP4 (w/ faststart) or fMP4 packaged with HLS/DASH
