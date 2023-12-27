@@ -27,6 +27,7 @@ const PresignDuration = 24 * time.Hour
 var ignoreProbeErrs = []string{
 	"parametric stereo signaled to be not-present but was found in the bitstream",
 	"non-existing pps 0 referenced",
+	"non-existing sps 0",
 }
 
 type InputCopier interface {
