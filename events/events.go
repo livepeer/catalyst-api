@@ -97,7 +97,6 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 	ticker := time.NewTicker(catabalancer.UpdateNodeStatsEvery)
 	go func() {
 		for range ticker.C {
-			log.LogNoRequestID("catabalancer NodeStats update loop - starting")
 			sysusage, err := catabalancer.GetSystemUsage()
 			if err != nil {
 				log.LogNoRequestID("catabalancer failed to get sys usage", "err", err)
@@ -147,7 +146,6 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 				log.LogNoRequestID("catabalancer failed to send node update", "err", err)
 				continue
 			}
-			log.LogNoRequestID("catabalancer NodeUpdate loop - completed")
 		}
 	}()
 }
