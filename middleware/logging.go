@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/golang/glog"
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
@@ -62,14 +63,17 @@ func logRequest(metric *prometheus.SummaryVec) func(httprouter.Handle) httproute
 
 			next(wrapped, r, ps)
 			duration := time.Since(start)
-			log.LogNoRequestID("received HTTP request",
-				"remote", r.RemoteAddr,
-				"proto", r.Proto,
-				"method", r.Method,
-				"uri", r.URL.RequestURI(),
-				"duration", duration,
-				"status", wrapped.status,
-			)
+
+			if glog.V(4) || wrapped.status >= 400 {
+				log.LogNoRequestID("received HTTP request",
+					"remote", r.RemoteAddr,
+					"proto", r.Proto,
+					"method", r.Method,
+					"uri", r.URL.RequestURI(),
+					"duration", duration,
+					"status", wrapped.status,
+				)
+			}
 
 			if metric != nil {
 				success := wrapped.status < 400
