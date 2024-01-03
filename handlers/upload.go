@@ -215,6 +215,9 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		if err != nil {
 			return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 		}
+		if clipTargetURL == nil {
+			return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("clip output location not specified"))
+		}
 		uploadVODRequest.ClipStrategy.Enabled = true
 	}
 
