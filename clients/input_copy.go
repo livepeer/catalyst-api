@@ -228,12 +228,6 @@ func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, dec
 	return nil
 }
 
-func isDirectUpload(inputFile *url.URL) bool {
-	return strings.HasSuffix(inputFile.Host, "storage.googleapis.com") &&
-		strings.HasPrefix(inputFile.Path, "/directUpload") &&
-		(inputFile.Scheme == "https" || inputFile.Scheme == "http")
-}
-
 func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string, decryptor *crypto.DecryptionKeys) (writtenBytes int64, err error) {
 	dStorage := NewDStorageDownload()
 	err = backoff.Retry(func() error {
