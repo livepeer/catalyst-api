@@ -31,7 +31,7 @@ require (
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xeipuuv/gojsonschema v1.2.0
 	go.opencensus.io v0.24.0
-	golang.org/x/sync v0.4.0
+	golang.org/x/sync v0.6.0
 	golang.org/x/text v0.13.0
 	gopkg.in/vansante/go-ffprobe.v2 v2.1.2-0.20230412093356-81f7fcbea828
 	sigs.k8s.io/yaml v1.4.0
