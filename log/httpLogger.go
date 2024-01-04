@@ -5,8 +5,6 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 )
 
-var _ retryablehttp.LeveledLogger = retryableHTTPLogger{}
-
 type retryableHTTPLogger struct {
 }
 
