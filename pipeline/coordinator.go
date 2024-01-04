@@ -289,15 +289,15 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		// Update osTransferURL if needed
 		if clients.IsHLSInput(sourceURL) {
 			// Currently we only clip an HLS source (e.g recordings or transcoded asset)
-			var err error
 			if p.ClipStrategy.Enabled {
 				err := backoff.Retry(func() error {
 					log.Log(p.RequestID, "clippity clipping the input", "Playback-ID", p.ClipStrategy.PlaybackID)
 					// Use new clipped manifest as the source URL
-					sourceURL, err = clients.ClipInputManifest(p.RequestID, sourceURL.String(), p.ClipTargetURL.String(), p.ClipStrategy.StartTime, p.ClipStrategy.EndTime)
+					clipSourceURL, err := clients.ClipInputManifest(p.RequestID, sourceURL.String(), p.ClipTargetURL.String(), p.ClipStrategy.StartTime, p.ClipStrategy.EndTime)
 					if err != nil {
 						return fmt.Errorf("clipping failed: %s %w", sourceURL, err)
 					}
+					sourceURL = clipSourceURL
 					return nil
 				}, ClippingRetryBackoff())
 				if err != nil {
