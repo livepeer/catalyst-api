@@ -293,6 +293,7 @@ func newRetryableHttpClient() *http.Client {
 		// or something else has gone wrong and the request is hanging
 		Timeout: MaxCopyFileDuration,
 	}
+	client.Logger = log.NewRetryableHTTPLogger()
 
 	return client.StandardClient()
 }

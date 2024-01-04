@@ -12,6 +12,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/livepeer/catalyst-api/errors"
+	"github.com/livepeer/catalyst-api/log"
 )
 
 var hookClient *http.Client
@@ -24,6 +25,7 @@ func init() {
 	client.HTTPClient = &http.Client{
 		Timeout: 5 * time.Second, // Give up on requests that take more than this long
 	}
+	client.Logger = log.NewRetryableHTTPLogger()
 
 	hookClient = client.StandardClient()
 }

@@ -182,6 +182,7 @@ func newRetryableClient(httpClient *http.Client) *http.Client {
 	if httpClient != nil {
 		client.HTTPClient = httpClient
 	}
+	client.Logger = log.NewRetryableHTTPLogger()
 
 	return client.StandardClient()
 }
