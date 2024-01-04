@@ -44,6 +44,7 @@ func NewPeriodicCallbackClient(callbackInterval time.Duration, headers map[strin
 	client.HTTPClient = &http.Client{
 		Timeout: 5 * time.Second, // Give up on requests that take more than this long
 	}
+	client.Logger = log.NewRetryableHTTPLogger()
 
 	return &PeriodicCallbackClient{
 		httpClient:               client.StandardClient(),
