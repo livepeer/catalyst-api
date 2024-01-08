@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"path"
 	"regexp"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/grafov/m3u8"
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/clients"
@@ -73,7 +75,13 @@ func (h *HandlersCollection) NewFile() httprouter.Handle {
 		// and pass the one ffmpeg gives us to UploadToOSURL instead
 		targetURLBase := reg.ReplaceAllString(job.SegmentingTargetURL, "")
 
-		if err := clients.UploadToOSURL(targetURLBase, filename, body, config.SEGMENT_WRITE_TIMEOUT); err != nil {
+		if err := backoff.Retry(func() error {
+			err := clients.UploadToOSURL(targetURLBase, filename, body, config.SEGMENT_WRITE_TIMEOUT)
+			if err != nil {
+				log.Log(job.RequestID, "Copy segment attempt failed", "dest", path.Join(targetURLBase, filename), "err", err)
+			}
+			return err
+		}, clients.UploadRetryBackoff()); err != nil {
 			errors.WriteHTTPInternalServerError(w, "Error uploading segment", err)
 			return
 		}
