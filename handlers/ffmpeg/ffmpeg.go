@@ -38,7 +38,10 @@ func (h *HandlersCollection) NewFile() httprouter.Handle {
 			return
 		}
 
-		var body io.Reader = req.Body
+		var (
+			content []byte
+			err     error
+		)
 		reg := regexp.MustCompile(`[^/]+.m3u8$`)
 		if reg.MatchString(filename) {
 			// ensure that playlist type in the manifest is set to vod
@@ -52,7 +55,7 @@ func (h *HandlersCollection) NewFile() httprouter.Handle {
 			playlist, playlistType, err := m3u8.Decode(buf, true)
 			if err != nil {
 				log.LogError(job.RequestID, "failed to parse segmented manifest", err)
-				body = &buf
+				content = buf.Bytes()
 			} else if playlistType == m3u8.MEDIA {
 				mediaPl := playlist.(*m3u8.MediaPlaylist)
 				if !mediaPl.Closed {
@@ -62,11 +65,17 @@ func (h *HandlersCollection) NewFile() httprouter.Handle {
 				}
 
 				mediaPl.MediaType = m3u8.VOD
-				body = mediaPl.Encode()
+				content = mediaPl.Encode().Bytes()
 			} else {
 				// should never happen but useful to at least see a log line if it ever did
 				log.Log(job.RequestID, "media playlist not found")
-				body = playlist.Encode()
+				content = playlist.Encode().Bytes()
+			}
+		} else {
+			content, err = io.ReadAll(req.Body)
+			if err != nil {
+				errors.WriteHTTPInternalServerError(w, "Error reading body", err)
+				return
 			}
 		}
 		// job.SegmentingTargetURL comes in the format the Mist wants, looking like:
@@ -76,7 +85,7 @@ func (h *HandlersCollection) NewFile() httprouter.Handle {
 		targetURLBase := reg.ReplaceAllString(job.SegmentingTargetURL, "")
 
 		if err := backoff.Retry(func() error {
-			err := clients.UploadToOSURL(targetURLBase, filename, body, config.SEGMENT_WRITE_TIMEOUT)
+			err := clients.UploadToOSURL(targetURLBase, filename, bytes.NewReader(content), config.SEGMENT_WRITE_TIMEOUT)
 			if err != nil {
 				log.Log(job.RequestID, "Copy segment attempt failed", "dest", path.Join(targetURLBase, filename), "err", err)
 			}
