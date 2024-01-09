@@ -1,8 +1,10 @@
 package ffmpeg
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,6 +39,49 @@ func TestItReturnsAnErrorWhenJobDoesntExist(t *testing.T) {
 		},
 	)
 	require.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestUploadRetries(t *testing.T) {
+	testBody := "this is the upload"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bs, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.Equal(t, testBody, string(bs))
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	h := HandlersCollection{
+		VODEngine: pipeline.NewStubCoordinator(),
+	}
+
+	mockServerURL, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	mockServerURL.Scheme = "s3+http"
+	mockServerURL.User = url.UserPassword("a", "b")
+
+	h.VODEngine.Jobs.Store("exampleStreamName", &pipeline.JobInfo{
+		StreamName:          "exampleStreamName",
+		SegmentingTargetURL: mockServerURL.JoinPath("/bucket/file").String(),
+	})
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/api/ffmpeg/exampleStreamName/index.m3u8", strings.NewReader(testBody))
+
+	h.NewFile()(
+		w,
+		r,
+		[]httprouter.Param{
+			{
+				Key:   "id",
+				Value: "exampleStreamName",
+			},
+			{
+				Key:   "filename",
+				Value: "foo",
+			},
+		},
+	)
 }
 
 func TestItWritesAReceivedFileToStorage(t *testing.T) {
