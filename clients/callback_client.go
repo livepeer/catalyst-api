@@ -124,7 +124,6 @@ func (pcc *PeriodicCallbackClient) SendCallbacks() {
 	pcc.mapLock.Lock()
 	defer pcc.mapLock.Unlock()
 
-	log.LogNoRequestID(fmt.Sprintf("Sending %d callbacks", len(pcc.requestIDToLatestMessage)))
 	for _, tsm := range pcc.requestIDToLatestMessage {
 		// Check timestamp and give up on the job if we haven't received an update for a long time
 		cutoff := int64(config.Clock.GetTimestampUTC() - MAX_TIME_WITHOUT_UPDATE.Milliseconds())
