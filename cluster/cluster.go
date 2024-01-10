@@ -112,6 +112,7 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	memberlistConfig.EnableCompression = true
 	memberlistConfig.SecretKey = encryptBytes
 	memberlistConfig.RetransmitMult = 1
+	memberlistConfig.LogOutput = serfLogger{}
 	serfConfig := serf.DefaultConfig()
 	serfConfig.UserEventSizeLimit = 1024
 	serfConfig.MemberlistConfig = memberlistConfig
