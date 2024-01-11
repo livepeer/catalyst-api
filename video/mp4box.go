@@ -8,8 +8,10 @@ import (
 	"os/exec"
 )
 
-func fixFps(mp4File string, fps int64) error {
-	fixedMp4File := fmt.Sprintf("%s-fixed", mp4File)
+// fixFps fixes the output mp4 FPS which is needed because of a bug in ffmpeg: https://trac.ffmpeg.org/ticket/7939
+// If this fix is not applied then, the output video has sync issues between audio and video tracks
+func fixFps(ctx context.Context, mp4File string, fps int64) error {
+	fixedMp4File := fmt.Sprintf("%s-fixedfps", mp4File)
 
 	args := []string{
 		"-add",
@@ -17,7 +19,7 @@ func fixFps(mp4File string, fps int64) error {
 		fixedMp4File,
 	}
 
-	_, err := runCmd(exec.CommandContext(context.TODO(), "mp4box", args...))
+	_, err := runCmd(exec.CommandContext(ctx, "mp4box", args...))
 	if err == nil {
 		return os.Rename(fixedMp4File, mp4File)
 	}
@@ -29,17 +31,9 @@ func runCmd(cmd *exec.Cmd) (string, error) {
 	var stdErr bytes.Buffer
 	cmd.Stdout = &stdOut
 	cmd.Stderr = &stdErr
-	err := cmd.Run()
 
-	// TODO
-	// Fix not returning errors for all stdErr
-	return stdOut.String(), nil
-
-	fmt.Printf("stdOut: %s", stdOut.String())
-	fmt.Printf("stdErr: %s", stdErr.String())
-	if len(stdErr.Bytes()) > 0 {
-		return "", fmt.Errorf("failed creating C2PA Manifest: %s", stdErr.String())
+	if err := cmd.Run(); err != nil {
+		return stdOut.String(), fmt.Errorf("failed fix mp4 FPS: %s", stdErr.String())
 	}
-
-	return stdOut.String(), err
+	return stdOut.String(), nil
 }

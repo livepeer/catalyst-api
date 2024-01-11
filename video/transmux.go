@@ -16,7 +16,8 @@ import (
 )
 
 const (
-	Mp4DurationLimit = 21600 //MP4s will be generated only for first 6 hours
+	Mp4DurationLimit     = 21600 //MP4s will be generated only for first 6 hours
+	Mp4GenerationTimeout = 10 * time.Minute
 )
 
 func MuxTStoMP4(tsInputFile, mp4OutputFile string, fps int64) ([]string, error) {
@@ -43,7 +44,9 @@ func MuxTStoMP4(tsInputFile, mp4OutputFile string, fps int64) ([]string, error) 
 
 	// Fix FPS in the output file
 	// Needed because of the following ffmpeg bug: https://trac.ffmpeg.org/ticket/7939
-	return transmuxOutputFiles, fixFps(mp4OutputFile, fps)
+	timeout, cancel := context.WithTimeout(context.Background(), Mp4GenerationTimeout)
+	defer cancel()
+	return transmuxOutputFiles, fixFps(timeout, mp4OutputFile, fps)
 }
 
 func MuxTStoFMP4(fmp4ManifestOutputFile string, inputs ...string) error {
@@ -80,7 +83,7 @@ func MuxTStoFMP4(fmp4ManifestOutputFile string, inputs ...string) error {
 	args = append(args, mapArgs...)
 	args = append(args, fmp4ManifestOutputFile)
 
-	timeout, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	timeout, cancel := context.WithTimeout(context.Background(), Mp4GenerationTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(timeout, "ffmpeg", args...)
 

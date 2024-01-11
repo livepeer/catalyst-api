@@ -1,6 +1,7 @@
 package video
 
 import (
+	"context"
 	"fmt"
 	"testing"
 )
@@ -8,6 +9,6 @@ import (
 // TODO: Update to the real test
 func TestMp4Box(t *testing.T) {
 	fmt.Println("HELLO")
-	err := fixFps("/Users/rafalleszko/Downloads/test2/source.mp4", 24)
+	err := fixFps(context.TODO(), "/Users/rafalleszko/Downloads/test2/source.mp4", 24)
 	fmt.Printf("%s\n", err)
 }
