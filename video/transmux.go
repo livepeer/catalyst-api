@@ -19,7 +19,7 @@ const (
 	Mp4DurationLimit = 21600 //MP4s will be generated only for first 6 hours
 )
 
-func MuxTStoMP4(tsInputFile, mp4OutputFile string) ([]string, error) {
+func MuxTStoMP4(tsInputFile, mp4OutputFile string, fps int64) ([]string, error) {
 	var transmuxOutputFiles []string
 	// transmux the .ts file into a standalone MP4 file
 	err := ffmpeg.Input(tsInputFile).
@@ -37,10 +37,13 @@ func MuxTStoMP4(tsInputFile, mp4OutputFile string) ([]string, error) {
 	_, err = os.Stat(mp4OutputFile)
 	if err != nil {
 		return nil, fmt.Errorf("transmux error: failed to stat MP4 media file: %w", err)
-	} else {
-		transmuxOutputFiles = append(transmuxOutputFiles, mp4OutputFile)
 	}
-	return transmuxOutputFiles, nil
+
+	transmuxOutputFiles = append(transmuxOutputFiles, mp4OutputFile)
+
+	// Fix FPS in the output file
+	// Needed because of the following ffmpeg bug: https://trac.ffmpeg.org/ticket/7939
+	return transmuxOutputFiles, fixFps(mp4OutputFile, fps)
 }
 
 func MuxTStoFMP4(fmp4ManifestOutputFile string, inputs ...string) error {

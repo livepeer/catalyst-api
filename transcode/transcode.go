@@ -147,6 +147,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				renditionList.AddRenditionSegment(profile.Name,
 					&video.TSegmentList{
 						SegmentDataTable: make(map[int][]byte),
+						Profile:          &profile,
 					})
 			}
 		}
@@ -293,10 +294,12 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				// Transmux the single .ts file into an mp4 file
 				mp4OutputFileName := concatTsFileName[:len(concatTsFileName)-len(filepath.Ext(concatTsFileName))] + ".mp4"
 				defer os.Remove(mp4OutputFileName)
-				standardMp4OutputFiles, err := video.MuxTStoMP4(concatTsFileName, mp4OutputFileName)
+				standardMp4OutputFiles, err := video.MuxTStoMP4(concatTsFileName, mp4OutputFileName, segments.Profile.FPS)
 				if err != nil {
 					log.Log(transcodeRequest.RequestID, "error transmuxing to regular mp4", "file", mp4OutputFileName, "err", err)
-					continue
+					if standardMp4OutputFiles == nil {
+						continue
+					}
 				}
 
 				// Add C2PA Signature
