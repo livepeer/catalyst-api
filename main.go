@@ -366,7 +366,7 @@ func processClusterEvent(mapic mistapiconnector.IMac, bal balancer.Balancer, use
 	go func() {
 		e, err := events.Unmarshal(userEvent.Payload)
 		if err != nil {
-			glog.Errorf("cannot unmarshal received serf event: %v", userEvent)
+			glog.Errorf("cannot unmarshal received serf event %v: %s", userEvent, err)
 			return
 		}
 		switch event := e.(type) {
