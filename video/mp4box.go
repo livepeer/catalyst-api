@@ -3,6 +3,7 @@ package video
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,12 +11,15 @@ import (
 
 // fixFps fixes the output mp4 FPS which is needed because of a bug in ffmpeg: https://trac.ffmpeg.org/ticket/7939
 // If this fix is not applied then, the output video has sync issues between audio and video tracks
-func fixFps(ctx context.Context, mp4File string, fps int64) error {
+func fixFps(ctx context.Context, mp4File string, fps float64) error {
+	if fps == 0 {
+		return errors.New("failed to fix FPS, invalid FPS: 0")
+	}
 	fixedMp4File := fmt.Sprintf("%s-fixedfps", mp4File)
 
 	args := []string{
 		"-add",
-		fmt.Sprintf("%s:fps=%d", mp4File, fps),
+		fmt.Sprintf("%s:fps=%f", mp4File, fps),
 		fixedMp4File,
 	}
 

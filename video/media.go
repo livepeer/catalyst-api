@@ -34,7 +34,6 @@ import (
 
 type TSegmentList struct {
 	mu               sync.Mutex
-	Profile          *EncodedProfile
 	SegmentDataTable map[int][]byte
 }
 

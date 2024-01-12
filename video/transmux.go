@@ -20,7 +20,7 @@ const (
 	Mp4GenerationTimeout = 10 * time.Minute
 )
 
-func MuxTStoMP4(tsInputFile, mp4OutputFile string, fps int64) ([]string, error) {
+func MuxTStoMP4(tsInputFile, mp4OutputFile string, fps float64) ([]string, error) {
 	var transmuxOutputFiles []string
 	// transmux the .ts file into a standalone MP4 file
 	err := ffmpeg.Input(tsInputFile).
