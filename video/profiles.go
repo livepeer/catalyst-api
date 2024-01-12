@@ -106,7 +106,6 @@ var DefaultProfile720p = EncodedProfile{
 var DefaultTranscodeProfiles = []EncodedProfile{DefaultProfile360p, DefaultProfile720p}
 
 func SetTranscodeProfiles(inputVideoStats InputVideo, reqTranscodeProfiles []EncodedProfile) ([]EncodedProfile, error) {
-
 	var transcodeProfiles []EncodedProfile
 	videoTrack, err := inputVideoStats.GetTrack(TrackTypeVideo)
 	if err != nil {

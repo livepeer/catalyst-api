@@ -285,6 +285,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		}
 
 		osTransferURL := c.SourceOutputURL.JoinPath(p.RequestID, "transfer", path.Base(sourceURL.Path))
+		originalSource := sourceURL
 
 		// Update osTransferURL if needed
 		if clients.IsHLSInput(sourceURL) {
@@ -316,6 +317,8 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 			return nil, fmt.Errorf("error copying input to storage: %w", err)
 		}
 
+		checkClipResolution(p, &inputVideoProbe, originalSource)
+
 		if p.C2PA {
 			si.C2PA = c.C2PA
 		}
@@ -335,6 +338,42 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		c.startUploadJob(si)
 		return nil, nil
 	})
+}
+
+func checkClipResolution(p UploadJobPayload, inputVideoProbe *video.InputVideo, originalSource *url.URL) {
+	// HACK: sometimes probing the clip manifest results in zero height and width, probe the original manifest instead to get this info
+	if !p.ClipStrategy.Enabled {
+		return
+	}
+	if inputVideoProbe == nil {
+		log.Log(p.RequestID, "checkClipResolution inputVideoProbe was nil")
+		return
+	}
+	videoTrack, err := inputVideoProbe.GetTrack(video.TrackTypeVideo)
+	if err != nil {
+		log.LogError(p.RequestID, "checkClipResolution error getting video track", err)
+		return
+	}
+	if videoTrack.Height > 0 && videoTrack.Width > 0 {
+		return
+	}
+
+	iv, err := video.Probe{IgnoreErrMessages: clients.IgnoreProbeErrs}.ProbeFile(p.RequestID, originalSource.String())
+	if err != nil {
+		log.LogError(p.RequestID, "checkClipResolution probe error", err)
+		return
+	}
+	newTrack, err := iv.GetTrack(video.TrackTypeVideo)
+	if err != nil {
+		log.LogError(p.RequestID, "checkClipResolution error getting video track", err)
+		return
+	}
+	videoTrack.VideoTrack = newTrack.VideoTrack
+	err = inputVideoProbe.SetTrack(video.TrackTypeVideo, videoTrack)
+	if err != nil {
+		log.LogError(p.RequestID, "checkClipResolution error setting video track", err)
+		return
+	}
 }
 
 func ShouldGenerateMP4(sourceURL, mp4TargetUrl *url.URL, fragMp4TargetUrl *url.URL, mp4OnlyShort bool, durationSecs float64) bool {

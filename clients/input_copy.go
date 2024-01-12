@@ -24,7 +24,7 @@ const MaxCopyFileDuration = 2 * time.Hour
 const PresignDuration = 24 * time.Hour
 
 // These probe errors were found in the past on mist recordings but still process fine so we are ignoring them
-var ignoreProbeErrs = []string{
+var IgnoreProbeErrs = []string{
 	"parametric stereo signaled to be not-present but was found in the bitstream",
 	"non-existing pps 0 referenced",
 	"non-existing sps 0",
@@ -41,7 +41,7 @@ type InputCopy struct {
 
 func NewInputCopy() *InputCopy {
 	return &InputCopy{
-		Probe: video.Probe{IgnoreErrMessages: ignoreProbeErrs},
+		Probe: video.Probe{IgnoreErrMessages: IgnoreProbeErrs},
 	}
 }
 
@@ -89,6 +89,7 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 			}
 		}
 	}
+
 	if hasVideoTrack {
 		log.Log(requestID, "probed video track:", "container", inputFileProbe.Format, "codec", videoTrack.Codec, "bitrate", videoTrack.Bitrate, "duration", videoTrack.DurationSec, "w", videoTrack.Width, "h", videoTrack.Height, "pix-format", videoTrack.PixelFormat, "FPS", videoTrack.FPS)
 	}
