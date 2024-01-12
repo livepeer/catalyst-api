@@ -46,7 +46,7 @@ func MuxTStoMP4(tsInputFile, mp4OutputFile string, fps float64) ([]string, error
 	// Needed because of the following ffmpeg bug: https://trac.ffmpeg.org/ticket/7939
 	timeout, cancel := context.WithTimeout(context.Background(), Mp4GenerationTimeout)
 	defer cancel()
-	return transmuxOutputFiles, fixFps(timeout, mp4OutputFile, fps)
+	return transmuxOutputFiles, fixFPS(timeout, mp4OutputFile, fps)
 }
 
 func MuxTStoFMP4(fmp4ManifestOutputFile string, inputs ...string) error {

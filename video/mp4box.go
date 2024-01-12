@@ -9,9 +9,9 @@ import (
 	"os/exec"
 )
 
-// fixFps fixes the output mp4 FPS which is needed because of a bug in ffmpeg: https://trac.ffmpeg.org/ticket/7939
+// fixFPS fixes the output mp4 FPS which is needed because of a bug in ffmpeg: https://trac.ffmpeg.org/ticket/7939
 // If this fix is not applied then, the output video has sync issues between audio and video tracks
-func fixFps(ctx context.Context, mp4File string, fps float64) error {
+func fixFPS(ctx context.Context, mp4File string, fps float64) error {
 	if fps == 0 {
 		return errors.New("failed to fix FPS, invalid FPS: 0")
 	}
