@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
@@ -310,13 +311,18 @@ func (f *ffmpeg) probeSourceSegment(requestID string, seg *m3u8.MediaSegment, so
 	if err != nil {
 		return fmt.Errorf("failed to create signed url for %s: %w", u, err)
 	}
-	_, err = f.probe.ProbeFile(requestID, probeURL)
-	if err != nil {
-		if strings.Contains(err.Error(), "non-existing SPS") {
-			log.LogError(requestID, "probeSourceSegment warning", err)
-		} else {
-			return fmt.Errorf("probe failed for segment %s: %w", u, err)
+	if err := backoff.Retry(func() error {
+		_, err = f.probe.ProbeFile(requestID, probeURL)
+		if err != nil {
+			if strings.Contains(err.Error(), "non-existing SPS") {
+				log.LogError(requestID, "probeSourceSegment warning", err)
+			} else {
+				return fmt.Errorf("probe failed for segment %s: %w", u, err)
+			}
 		}
+		return nil
+	}, retries(2)); err != nil {
+		return err
 	}
 
 	// check for audio issues https://linear.app/livepeer/issue/VID-287/audio-missing-after-segmenting
@@ -337,11 +343,16 @@ func copyFileToLocalTmpAndSegment(job *JobInfo) (string, error) {
 
 	// Copy the file locally because of issues with ffmpeg segmenting and remote files
 	// We can be aggressive with the timeout because we're copying from cloud storage
-	timeout, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	defer cancel()
-	_, err = clients.CopyFile(timeout, job.SignedSourceURL, localSourceFile.Name(), "", job.RequestID)
-	if err != nil {
-		return "", fmt.Errorf("failed to copy file (%s) locally for segmenting: %s", job.SignedSourceURL, err)
+	if err := backoff.Retry(func() error {
+		timeout, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+		_, err = clients.CopyFile(timeout, job.SignedSourceURL, localSourceFile.Name(), "", job.RequestID)
+		if err != nil {
+			return fmt.Errorf("failed to copy file (%s) locally for segmenting: %s", job.SignedSourceURL, err)
+		}
+		return nil
+	}, retries(2)); err != nil {
+		return "", err
 	}
 
 	// Begin Segmenting
@@ -387,4 +398,12 @@ func toStr(URL *url.URL) string {
 		return URL.String()
 	}
 	return ""
+}
+
+func retries(retries uint64) backoff.BackOff {
+	backOff := backoff.NewExponentialBackOff()
+	backOff.InitialInterval = 200 * time.Millisecond
+	backOff.MaxInterval = 5 * time.Second
+	backOff.MaxElapsedTime = 0 // don't impose a timeout as part of the retries
+	return backoff.WithMaxRetries(backOff, retries)
 }
