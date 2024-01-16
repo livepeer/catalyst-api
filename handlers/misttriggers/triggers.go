@@ -55,12 +55,6 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 			"request_id", requestID,
 			"trigger_name", triggerName,
 		)
-		log.LogCtx(
-			ctx,
-			"Received Mist Trigger",
-			"mist_version", mistVersion,
-			"payload", log.RedactLogs(string(payload), "\n"),
-		)
 
 		body := MistTriggerBody(payload)
 
