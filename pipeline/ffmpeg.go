@@ -321,7 +321,7 @@ func (f *ffmpeg) probeSourceSegment(requestID string, seg *m3u8.MediaSegment, so
 			}
 		}
 		return nil
-	}, retries(2)); err != nil {
+	}, retries(6)); err != nil {
 		return err
 	}
 
@@ -351,7 +351,7 @@ func copyFileToLocalTmpAndSegment(job *JobInfo) (string, error) {
 			return fmt.Errorf("failed to copy file (%s) locally for segmenting: %s", job.SignedSourceURL, err)
 		}
 		return nil
-	}, retries(2)); err != nil {
+	}, retries(6)); err != nil {
 		return "", err
 	}
 
@@ -402,8 +402,8 @@ func toStr(URL *url.URL) string {
 
 func retries(retries uint64) backoff.BackOff {
 	backOff := backoff.NewExponentialBackOff()
-	backOff.InitialInterval = 200 * time.Millisecond
-	backOff.MaxInterval = 5 * time.Second
+	backOff.InitialInterval = 1 * time.Second
+	backOff.MaxInterval = 30 * time.Second
 	backOff.MaxElapsedTime = 0 // don't impose a timeout as part of the retries
 	return backoff.WithMaxRetries(backOff, retries)
 }
