@@ -85,6 +85,7 @@ var triggers = map[string]bool{
 	TRIGGER_USER_NEW:        true,
 	TRIGGER_USER_END:        false,
 	TRIGGER_STREAM_SOURCE:   true,
+	TRIGGER_PLAYBACK_LOG:    false,
 }
 
 func (b *triggerBroker) SetupMistTriggers(mist clients.MistAPIClient) error {

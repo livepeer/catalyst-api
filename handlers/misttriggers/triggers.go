@@ -18,6 +18,7 @@ const (
 	TRIGGER_PUSH_OUT_START  = "PUSH_OUT_START"
 	TRIGGER_PUSH_REWRITE    = "PUSH_REWRITE"
 	TRIGGER_STREAM_BUFFER   = "STREAM_BUFFER"
+	TRIGGER_PLAYBACK_LOG    = "PLAYBACK_LOG"
 	TRIGGER_LIVE_TRACK_LIST = "LIVE_TRACK_LIST"
 	TRIGGER_USER_NEW        = "USER_NEW"
 	TRIGGER_USER_END        = "USER_END"
@@ -66,6 +67,8 @@ func (d *MistCallbackHandlersCollection) Trigger() httprouter.Handle {
 			d.TriggerPushEnd(ctx, w, req, body)
 		case TRIGGER_STREAM_BUFFER:
 			d.TriggerStreamBuffer(ctx, w, req, body)
+		case TRIGGER_PLAYBACK_LOG:
+			d.TriggerPlaybackLog(ctx, w, req, body)
 		case TRIGGER_PUSH_REWRITE:
 			d.TriggerPushRewrite(ctx, w, req, body)
 		case TRIGGER_LIVE_TRACK_LIST:
