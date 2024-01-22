@@ -36,11 +36,10 @@ func GetOSURL(osURL, byteRange string) (*drivers.FileInfoReader, error) {
 
 	sess := storageDriver.NewSession("")
 	info := sess.GetInfo()
-	var url string
-	if info == nil {
-		url = ""
-	} else {
-		url = info.S3Info.Host
+	var host, bucket string
+	if info != nil && info.S3Info != nil {
+		host = info.S3Info.Host
+		bucket = info.S3Info.Bucket
 	}
 	var fileInfoReader *drivers.FileInfoReader
 	if byteRange == "" {
@@ -50,13 +49,13 @@ func GetOSURL(osURL, byteRange string) (*drivers.FileInfoReader, error) {
 	}
 
 	if err != nil {
-		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(url, "read").Inc()
+		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(host, "read", bucket).Inc()
 		return nil, fmt.Errorf("failed to read from OS URL %q: %w", log.RedactURL(osURL), err)
 	}
 
 	duration := time.Since(start)
 
-	metrics.Metrics.ObjectStoreClient.RequestDuration.WithLabelValues(url, "read").Observe(duration.Seconds())
+	metrics.Metrics.ObjectStoreClient.RequestDuration.WithLabelValues(host, "read", bucket).Observe(duration.Seconds())
 
 	return fileInfoReader, nil
 }
@@ -72,25 +71,24 @@ func UploadToOSURLFields(osURL, filename string, data io.Reader, timeout time.Du
 	}
 	start := time.Now()
 
-	var url string
+	var host, bucket string
 	sess := storageDriver.NewSession("")
 	info := sess.GetInfo()
-	if info == nil {
-		url = ""
-	} else {
-		url = info.S3Info.Host
+	if info != nil && info.S3Info != nil {
+		host = info.S3Info.Host
+		bucket = info.S3Info.Bucket
 	}
 
 	_, err = sess.SaveData(context.Background(), filename, data, fields, timeout)
 
 	if err != nil {
-		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(url, "write").Inc()
+		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(host, "write", bucket).Inc()
 		return fmt.Errorf("failed to write to OS URL %q: %s", log.RedactURL(filepath.Join(osURL, filename)), err)
 	}
 
 	duration := time.Since(start)
 
-	metrics.Metrics.ObjectStoreClient.RequestDuration.WithLabelValues(url, "write").Observe(duration.Seconds())
+	metrics.Metrics.ObjectStoreClient.RequestDuration.WithLabelValues(host, "write", bucket).Observe(duration.Seconds())
 
 	return nil
 }

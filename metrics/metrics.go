@@ -166,16 +166,16 @@ func NewMetrics() *CatalystAPIMetrics {
 			RetryCount: promauto.NewGaugeVec(prometheus.GaugeOpts{
 				Name: "object_store_retry_count",
 				Help: "The number of retries of a successful request to Studio",
-			}, []string{"host", "operation"}),
+			}, []string{"host", "operation", "bucket"}),
 			FailureCount: promauto.NewCounterVec(prometheus.CounterOpts{
 				Name: "object_store_failure_count",
 				Help: "The total number of failed transcoding status updates",
-			}, []string{"host", "operation"}),
+			}, []string{"host", "operation", "bucket"}),
 			RequestDuration: promauto.NewHistogramVec(prometheus.HistogramOpts{
 				Name:    "object_store_request_duration",
 				Help:    "Time taken to send transcoding status updates",
 				Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
-			}, []string{"host", "operation"}),
+			}, []string{"host", "operation", "bucket"}),
 		},
 
 		VODPipelineMetrics: VODPipelineMetrics{
