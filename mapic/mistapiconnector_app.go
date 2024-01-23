@@ -186,7 +186,15 @@ func (mc *mac) NukeStream(playbackID string) {
 }
 
 func (mc *mac) handleStreamBuffer(ctx context.Context, payload *misttriggers.StreamBufferPayload) error {
-	isActive := !payload.IsEmpty()
+	var isActive bool
+	if payload.IsEmpty() {
+		isActive = false
+	} else if payload.IsFull() {
+		isActive = true
+	} else {
+		// Ignore all other STREAM_BUFFER states for setting stream /setactive
+		return nil
+	}
 	playbackID := payload.StreamName
 	if mc.baseStreamName != "" && strings.Contains(playbackID, "+") {
 		playbackID = strings.Split(playbackID, "+")[1]
