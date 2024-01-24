@@ -203,8 +203,22 @@ func parsePlaybackIDWebRTC(path string) (string, string, string, string) {
 	return "webrtc", prefix, playbackID, "/webrtc/%s"
 }
 
+var regexpFLVPath = regexp.MustCompile(`^/flv/([\w+-]+)$`)
+
+func parsePlaybackIDFLV(path string) (string, string, string, string) {
+	m := regexpFLVPath.FindStringSubmatch(path)
+	if len(m) < 2 {
+		return "", "", "", ""
+	}
+	prefix, playbackID := parsePlus(m[1])
+	if playbackID == "" {
+		return "", "", "", ""
+	}
+	return "flv", prefix, playbackID, "/flv/%s"
+}
+
 func parsePlaybackID(path string) (string, string, string, string) {
-	parsers := []func(string) (string, string, string, string){parsePlaybackIDHLS, parsePlaybackIDJS, parsePlaybackIDWebRTC}
+	parsers := []func(string) (string, string, string, string){parsePlaybackIDHLS, parsePlaybackIDJS, parsePlaybackIDWebRTC, parsePlaybackIDFLV}
 	for _, parser := range parsers {
 		pathType, prefix, playbackID, suffix := parser(path)
 		if pathType != "" {
