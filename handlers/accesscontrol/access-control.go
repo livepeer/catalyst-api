@@ -123,6 +123,7 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 
 	if _, ok := hitRecordCache.data[playbackID]; ok {
 		hitRecordCache.mux.Lock()
+		defer hitRecordCache.mux.Unlock()
 
 		if len(hitRecordCache.data[playbackID].hits) >= hitRecordCache.data[playbackID].rateLimit {
 			return false, nil
