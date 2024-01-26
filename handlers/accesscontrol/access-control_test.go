@@ -30,20 +30,20 @@ var expiration = time.Now().Add(time.Duration(1 * time.Hour))
 
 type stubGateClient struct{}
 
-func (g *stubGateClient) QueryGate(body []byte) (bool, int32, int32, error) {
+func (g *stubGateClient) QueryGate(body []byte) (bool, int32, int32, int32, error) {
 	return queryGate(body)
 }
 
-var queryGate = func(body []byte) (bool, int32, int32, error) {
-	return false, 0, 0, errors.New("not implemented")
+var queryGate = func(body []byte) (bool, int32, int32, int32, error) {
+	return false, 0, 0, 0, errors.New("not implemented")
 }
 
-var allowAccess = func(body []byte) (bool, int32, int32, error) {
-	return true, 120, 300, nil
+var allowAccess = func(body []byte) (bool, int32, int32, int32, error) {
+	return true, 0, 120, 300, nil
 }
 
-var denyAccess = func(body []byte) (bool, int32, int32, error) {
-	return false, 120, 300, nil
+var denyAccess = func(body []byte) (bool, int32, int32, int32, error) {
+	return false, 0, 120, 300, nil
 }
 
 func testTriggerHandler() func(context.Context, *misttriggers.UserNewPayload) (bool, error) {
@@ -123,9 +123,9 @@ func TestCacheHit(t *testing.T) {
 	handler := testTriggerHandler()
 
 	var callCount = 0
-	var countableAllowAccess = func(body []byte) (bool, int32, int32, error) {
+	var countableAllowAccess = func(body []byte) (bool, int32, int32, int32, error) {
 		callCount++
-		return true, 10, 20, nil
+		return true, 0, 10, 20, nil
 	}
 
 	executeFlow(payload, handler, countableAllowAccess)
@@ -141,9 +141,9 @@ func TestStaleCache(t *testing.T) {
 	handler := testTriggerHandler()
 
 	var callCount = 0
-	var countableAllowAccess = func(body []byte) (bool, int32, int32, error) {
+	var countableAllowAccess = func(body []byte) (bool, int32, int32, int32, error) {
 		callCount++
-		return true, -10, 20, nil
+		return true, 0, -10, 20, nil
 	}
 
 	// Assign testable function ourselves so executeFlow() can't restore original
@@ -174,9 +174,9 @@ func TestInvalidCache(t *testing.T) {
 	handler := testTriggerHandler()
 
 	var callCount = 0
-	var countableAllowAccess = func(body []byte) (bool, int32, int32, error) {
+	var countableAllowAccess = func(body []byte) (bool, int32, int32, int32, error) {
 		callCount++
-		return true, -10, -20, nil
+		return true, 0, -10, -20, nil
 	}
 
 	executeFlow(payload, handler, countableAllowAccess)
@@ -185,7 +185,7 @@ func TestInvalidCache(t *testing.T) {
 	require.Equal(t, 2, callCount)
 }
 
-func executeFlow(body []byte, handler func(context.Context, *misttriggers.UserNewPayload) (bool, error), request func(body []byte) (bool, int32, int32, error)) string {
+func executeFlow(body []byte, handler func(context.Context, *misttriggers.UserNewPayload) (bool, error), request func(body []byte) (bool, int32, int32, int32, error)) string {
 	original := queryGate
 	queryGate = request
 	defer func() { queryGate = original }()
