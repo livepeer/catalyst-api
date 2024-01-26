@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/log"
@@ -27,7 +26,6 @@ type AccessControlHandlersCollection struct {
 	mutex       sync.RWMutex
 	gateClient  GateAPICaller
 	blockedJWTs []string
-	cacheHits   map[string]*HitRecord
 }
 
 type PlaybackAccessControlEntry struct {
@@ -124,11 +122,9 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 	}
 
 	if _, ok := hitRecordCache.data[playbackID]; ok {
-
 		hitRecordCache.mux.Lock()
 
 		if len(hitRecordCache.data[playbackID].hits) >= hitRecordCache.data[playbackID].rateLimit {
-			glog.Infof("rate limit exeeded for playbackId=%v cacheKey=%v rateLimit=%v", playbackID, cacheKey, hitRecordCache.data[playbackID].rateLimit)
 			return false, nil
 		}
 
