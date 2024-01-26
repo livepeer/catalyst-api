@@ -271,18 +271,20 @@ func (g *GateClient) QueryGate(body []byte) (bool, int32, int32, int32, error) {
 
 	var rateLimit int32 = 0
 
-	var result map[string]interface{}
-	err = json.NewDecoder(res.Body).Decode(&result)
-	if err != nil {
-		return false, 0, 0, 0, err
-	}
-
-	if rl, ok := result["rateLimit"]; ok {
-		rateLimitFloat64, ok := rl.(float64)
-		if !ok {
-			return false, 0, 0, 0, fmt.Errorf("rateLimit is not a number")
+	if res.ContentLength != 0 {
+		var result map[string]interface{}
+		err = json.NewDecoder(res.Body).Decode(&result)
+		if err != nil {
+			return false, 0, 0, 0, err
 		}
-		rateLimit = int32(rateLimitFloat64)
+
+		if rl, ok := result["rateLimit"]; ok {
+			rateLimitFloat64, ok := rl.(float64)
+			if !ok {
+				return false, 0, 0, 0, fmt.Errorf("rateLimit is not a number")
+			}
+			rateLimit = int32(rateLimitFloat64)
+		}
 	}
 
 	return res.StatusCode/100 == 2, rateLimit, int32(cc.MaxAge), int32(cc.StaleWhileRevalidate), nil
