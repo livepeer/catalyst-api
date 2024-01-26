@@ -116,6 +116,17 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 
 // respond to a STREAM_SOURCE request from Mist
 func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, payload *misttriggers.StreamSourcePayload) (string, error) {
+	/**
+	if lb responds if dtsc://, stream is live somewhere, return that
+	if lb responds with push://, stream is not live
+	search for a pull stream on Studio API
+	if pull stream, return source url
+	if not, return push://
+	*/
+
+	//return "http://127.0.0.1:8000/hlstest/out.m3u8", nil
+	// return "https://getsamplefiles.com/download/mkv/sample-2.mkv", nil
+
 	lat := c.Config.NodeLatitude
 	lon := c.Config.NodeLongitude
 	// if VOD source is detected, return empty response to use input URL as configured
@@ -128,6 +139,12 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 	dtscURL, err := c.Balancer.MistUtilLoadSource(context.Background(), payload.StreamName, latStr, lonStr)
 	if err != nil {
 		glog.Errorf("error querying mist for STREAM_SOURCE: %s", err)
+
+		if payload.StreamName == "video+e022lxp1xcmpp0il" || payload.StreamName == "video+44a8uxl7ijsy24ro" {
+			glog.Info("using a stream pull")
+			return "https://vod-cdn.lp-playback.monster/raw/jw55734peq3f3qdqxkd5ggi66l3a/catalyst-vod-monster/hls/d86dboclzo0muydt/index.m3u8", nil
+		}
+
 		return "push://", nil
 	}
 	outURL, err := c.Cluster.ResolveNodeURL(dtscURL)
@@ -135,7 +152,7 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 		glog.Errorf("error finding STREAM_SOURCE: %s", err)
 		return "push://", nil
 	}
-	glog.V(7).Infof("replying to Mist STREAM_SOURCE request=%s response=%s", payload.StreamName, outURL)
+	glog.Infof("replying to Mist STREAM_SOURCE request=%s response=%s", payload.StreamName, outURL)
 	return outURL, nil
 }
 
