@@ -215,9 +215,7 @@ func concatStreams(segmentList, outputTsFileName string) error {
 		"f":    "concat", // Use stream based concatenation (instead of file based concatenation)
 		"safe": "0"}).    // Must be 0 since relative paths to segments are used in segmentListTxtFileName
 		Output(outputTsFileName, ffmpeg.KwArgs{
-			"c:v": "copy",                // Don't accidentally transcode video
-			"c:a": "aac",                 // Re-encode audio to avoid audio/video sync issues
-			"af":  "aresample=async=100", // Re-sample audio with 0.1s buffer
+			"c": "copy", // Don't accidentally transcode
 		}).
 		OverWriteOutput().ErrorToStdOut().Run()
 	if err != nil {
