@@ -261,7 +261,12 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			defer os.Remove(concatTsFileName)
 
 			var totalBytes int64
-			totalBytes, err = video.ConcatTS(concatTsFileName, segments, sourceManifest, true)
+
+			if transcodeRequest.IsClip {
+				totalBytes, err = video.ConcatTS(concatTsFileName, segments, sourceManifest, true)
+			} else {
+				totalBytes, err = video.ConcatTS(concatTsFileName, segments, sourceManifest, false)
+			}
 			if err != nil {
 				log.Log(transcodeRequest.RequestID, "error concatenating .ts", "file", concatTsFileName, "err", err)
 				continue
