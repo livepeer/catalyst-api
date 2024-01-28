@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	ffmpeg "github.com/u2takey/ffmpeg-go"
@@ -103,27 +104,53 @@ func MuxTStoFMP4(fmp4ManifestOutputFile string, inputs ...string) error {
 }
 
 func ConcatTS(tsFileName string, segmentsList *TSegmentList, sourceMediaPlaylist m3u8.MediaPlaylist, useStreamBasedConcat bool) (int64, error) {
+	// Used to track total bytes concatenated will match total bytes transcoded
 	var totalBytes int64
-	if !useStreamBasedConcat {
-		// Create a .ts file for a given rendition
-		tsFile, err := os.Create(tsFileName)
-		if err != nil {
-			return totalBytes, fmt.Errorf("error creating file (%s) err: %w", tsFileName, err)
+	// Used to ensure total duration of segments processed does not exceed Mp4DurationLimit
+	var totalDuration float64
+	// Strip the '.ts' from filename
+	fileBaseWithoutExt := tsFileName[:len(tsFileName)-len(".ts")]
+	// Save a list of segment filenames so that we can delete them once done
+	segmentFilenames := []string{}
+	defer func() {
+		for _, f := range segmentFilenames {
+			os.Remove(f)
 		}
-		defer tsFile.Close()
-		// For a given rendition, write all segment indices in ascending order to the single .ts file
-		for _, k := range segmentsList.GetSortedSegments() {
-			segBytes, err := tsFile.Write(segmentsList.SegmentDataTable[k])
-			if err != nil {
-				return totalBytes, fmt.Errorf("error writing segment %d err: %w", k, err)
-			}
-			totalBytes = totalBytes + int64(segBytes)
-		}
-		return totalBytes, nil
-	} else {
-		// Strip the '.ts' from filename
-		fileBaseWithoutExt := tsFileName[:len(tsFileName)-len(".ts")]
+	}()
 
+	if !useStreamBasedConcat {
+		// Add segment filename to the text file
+		for segName := range segmentsList.GetSortedSegments() {
+			// Check each segment that was written to disk in the disk-writing goroutine
+			segmentFilename := fileBaseWithoutExt + "_" + strconv.Itoa(segName) + ".ts"
+			fileInfo, err := os.Stat(segmentFilename)
+			if err != nil {
+				return totalBytes, fmt.Errorf("error stat segment %s  err: %w", segmentFilename, err)
+			}
+			segBytes := fileInfo.Size()
+
+			segmentFilenames = append(segmentFilenames, segmentFilename)
+			totalBytes = totalBytes + int64(segBytes)
+
+			// Check total duration processed so far and stop concatenating if Mp4DurationLimit is reached
+			// i.e. generate MP4s for only up to duration specified by Mp4DurationLimit
+			segDuration := sourceMediaPlaylist.Segments[segName].Duration
+			totalDuration = totalDuration + segDuration
+			if totalDuration > Mp4DurationLimit {
+				break
+			}
+		}
+		concatArg := "concat:" + strings.Join(segmentFilenames, "|")
+
+		// Use file-based concatenation by reading segment files in text file
+		err := concatFiles(concatArg, tsFileName)
+		if err != nil {
+			return totalBytes, fmt.Errorf("failed to file-concat into a ts file: %w", err)
+		}
+
+		return totalBytes, nil
+
+	} else {
 		// Create a text file containing filenames of the segments
 		segmentListTxtFileName := fileBaseWithoutExt + ".txt"
 		segmentListTxtFile, err := os.Create(segmentListTxtFileName)
@@ -134,15 +161,6 @@ func ConcatTS(tsFileName string, segmentsList *TSegmentList, sourceMediaPlaylist
 		defer os.Remove(segmentListTxtFileName)
 		w := bufio.NewWriter(segmentListTxtFile)
 
-		// Save a list of segment filenames so that we can delete them once done
-		segmentFilenames := []string{}
-		defer func() {
-			for _, f := range segmentFilenames {
-				os.Remove(f)
-			}
-		}()
-
-		var totalDuration float64
 		// Add segment filename to the text file
 		for segName := range segmentsList.GetSortedSegments() {
 			// Check each segment that was written to disk in the disk-writing goroutine
@@ -200,6 +218,30 @@ func concatStreams(segmentList, outputTsFileName string) error {
 			"c:v": "copy",                // Don't accidentally transcode video
 			"c:a": "aac",                 // Re-encode audio to avoid audio/video sync issues
 			"af":  "aresample=async=100", // Re-sample audio with 0.1s buffer
+		}).
+		OverWriteOutput().ErrorToStdOut().Run()
+	if err != nil {
+		return fmt.Errorf("failed to transmux multiple ts files from %s into a ts file: %w", segmentList, err)
+	}
+	// Verify the ts output file was created
+	_, err = os.Stat(outputTsFileName)
+	if err != nil {
+		return fmt.Errorf("transmux error: failed to stat .ts media file: %w", err)
+	}
+	return nil
+}
+
+func concatFiles(segmentList, outputTsFileName string) error {
+	// Create a .ts file for a given rendition
+	tsFile, err := os.Create(outputTsFileName)
+	if err != nil {
+		return fmt.Errorf("error creating file (%s) err: %w", outputTsFileName, err)
+	}
+	defer tsFile.Close()
+	// Transmux the individual .ts files into a combined single ts file using file based concatenation
+	err = ffmpeg.Input(segmentList).
+		Output(outputTsFileName, ffmpeg.KwArgs{
+			"c": "copy", // Don't accidentally transcode
 		}).
 		OverWriteOutput().ErrorToStdOut().Run()
 	if err != nil {
