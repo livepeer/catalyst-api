@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -100,6 +101,7 @@ type (
 		mist                      clients.MistAPIClient
 		streamUpdated             chan struct{}
 		metricsCollector          *metricsCollector
+		streamMetricsRe           *regexp.Regexp
 	}
 )
 
