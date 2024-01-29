@@ -142,7 +142,7 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 
 		if payload.StreamName == "video+e022lxp1xcmpp0il" || payload.StreamName == "video+44a8uxl7ijsy24ro" {
 			glog.Info("using a stream pull")
-			return "https://vod-cdn.lp-playback.monster/raw/jw55734peq3f3qdqxkd5ggi66l3a/catalyst-vod-monster/hls/d86dboclzo0muydt/index.m3u8", nil
+			return "https://fra-staging-staging-catalyst-0.livepeer.monster/video+7fbbbzlcnnqhswee.flv", nil
 		}
 
 		return "push://", nil
