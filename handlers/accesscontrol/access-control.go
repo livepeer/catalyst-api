@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/log"
@@ -43,7 +42,7 @@ type PlaybackAccessControlRequest struct {
 }
 
 type GateAPICaller interface {
-	QueryGate(body []byte) (bool, int32, int32, int32, error)
+	QueryGate(body []byte) (bool, int32, int32, error)
 }
 
 type GateClient struct {
@@ -51,37 +50,7 @@ type GateClient struct {
 	gateURL string
 }
 
-type HitRecord struct {
-	hits      []time.Time
-	rateLimit int
-}
-
-type HitRecords struct {
-	data map[string]*HitRecord
-	mux  sync.Mutex
-}
-
-var hitRecordCache = HitRecords{
-	data: make(map[string]*HitRecord),
-}
-
-func periodicCleanUpHitRecordCache() {
-	go func() {
-		for {
-			time.Sleep(time.Duration(30) * time.Second)
-			hitRecordCache.mux.Lock()
-			hitRecordCache = HitRecords{
-				data: make(map[string]*HitRecord),
-			}
-			hitRecordCache.mux.Unlock()
-		}
-	}()
-}
-
 func NewAccessControlHandlersCollection(cli config.Cli) *AccessControlHandlersCollection {
-
-	periodicCleanUpHitRecordCache()
-
 	return &AccessControlHandlersCollection{
 		cache: make(map[string]map[string]*PlaybackAccessControlEntry),
 		gateClient: &GateClient{
@@ -136,18 +105,6 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 
 	if jwt == "" {
 		jwt = payload.JWT
-	}
-
-	if _, ok := hitRecordCache.data[playbackID]; ok {
-		hitRecordCache.mux.Lock()
-		defer hitRecordCache.mux.Unlock()
-
-		if len(hitRecordCache.data[playbackID].hits) >= hitRecordCache.data[playbackID].rateLimit {
-			glog.Infof("Rate limit reached for playbackID %v", playbackID)
-			return false, nil
-		}
-
-		hitRecordCache.data[playbackID].hits = append(hitRecordCache.data[playbackID].hits, time.Now())
 	}
 
 	if accessKey != "" {
@@ -225,15 +182,9 @@ func isStale(entry *PlaybackAccessControlEntry) bool {
 }
 
 func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playbackID, cacheKey string, requestBody []byte) error {
-	allow, rateLimit, maxAge, stale, err := ac.gateClient.QueryGate(requestBody)
+	allow, maxAge, stale, err := ac.gateClient.QueryGate(requestBody)
 	if err != nil {
 		return err
-	}
-
-	if rateLimit > 0 {
-		if _, ok := hitRecordCache.data[playbackID]; !ok {
-			hitRecordCache.data[playbackID] = &HitRecord{hits: make([]time.Time, 0), rateLimit: int(rateLimit)}
-		}
 	}
 
 	var maxAgeTime = time.Now().Add(time.Duration(maxAge) * time.Second)
@@ -247,50 +198,26 @@ func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playba
 	return nil
 }
 
-// Returns:
-// - bool: whether the request was successful
-// - int32: the rate limit for the request
-// - int32: the max age for the request
-// - int32: the stale while revalidate for the request
-// - error: if any
-func (g *GateClient) QueryGate(body []byte) (bool, int32, int32, int32, error) {
+func (g *GateClient) QueryGate(body []byte) (bool, int32, int32, error) {
 	req, err := http.NewRequest("POST", g.gateURL, bytes.NewReader(body))
 	if err != nil {
-		return false, 0, 0, 0, err
+		return false, 0, 0, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
 	res, err := g.Client.Do(req)
 	if err != nil {
-		return false, 0, 0, 0, err
+		return false, 0, 0, err
 	}
 
 	defer res.Body.Close()
 	cc, err := cacheobject.ParseResponseCacheControl(res.Header.Get("Cache-Control"))
 	if err != nil {
-		return false, 0, 0, 0, err
+		return false, 0, 0, err
 	}
 
-	var rateLimit int32 = 0
-
-	if res.ContentLength != 0 {
-		var result map[string]interface{}
-		err = json.NewDecoder(res.Body).Decode(&result)
-		if err != nil {
-			return false, 0, 0, 0, err
-		}
-
-		if rl, ok := result["rateLimit"]; ok {
-			rateLimitFloat64, ok := rl.(float64)
-			if !ok {
-				return false, 0, 0, 0, fmt.Errorf("rateLimit is not a number")
-			}
-			rateLimit = int32(rateLimitFloat64)
-		}
-	}
-
-	return res.StatusCode/100 == 2, rateLimit, int32(cc.MaxAge), int32(cc.StaleWhileRevalidate), nil
+	return res.StatusCode/100 == 2, int32(cc.MaxAge), int32(cc.StaleWhileRevalidate), nil
 }
 
 type PlaybackGateClaims struct {
