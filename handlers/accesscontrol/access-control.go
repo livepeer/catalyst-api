@@ -251,6 +251,12 @@ func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playba
 	return nil
 }
 
+// Returns:
+// - bool: whether the request was successful
+// - int32: the rate limit for the request
+// - int32: the max age for the request
+// - int32: the stale while revalidate for the request
+// - error: if any
 func (g *GateClient) QueryGate(body []byte) (bool, int32, int32, int32, error) {
 	req, err := http.NewRequest("POST", g.gateURL, bytes.NewReader(body))
 	if err != nil {
