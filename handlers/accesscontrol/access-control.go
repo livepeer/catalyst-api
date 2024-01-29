@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/log"
@@ -64,7 +65,23 @@ var hitRecordCache = HitRecords{
 	data: make(map[string]*HitRecord),
 }
 
+func periodicCleanUpHitRecordCache() {
+	go func() {
+		for {
+			time.Sleep(time.Duration(30) * time.Second)
+			hitRecordCache.mux.Lock()
+			hitRecordCache = HitRecords{
+				data: make(map[string]*HitRecord),
+			}
+			hitRecordCache.mux.Unlock()
+		}
+	}()
+}
+
 func NewAccessControlHandlersCollection(cli config.Cli) *AccessControlHandlersCollection {
+
+	periodicCleanUpHitRecordCache()
+
 	return &AccessControlHandlersCollection{
 		cache: make(map[string]map[string]*PlaybackAccessControlEntry),
 		gateClient: &GateClient{
@@ -126,12 +143,11 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 		defer hitRecordCache.mux.Unlock()
 
 		if len(hitRecordCache.data[playbackID].hits) >= hitRecordCache.data[playbackID].rateLimit {
+			glog.Infof("Rate limit reached for playbackID %v", playbackID)
 			return false, nil
 		}
 
 		hitRecordCache.data[playbackID].hits = append(hitRecordCache.data[playbackID].hits, time.Now())
-		hitRecordCache.mux.Unlock()
-		hitRecordCache.cleanUpCache()
 	}
 
 	if accessKey != "" {
@@ -206,26 +222,6 @@ func isExpired(entry *PlaybackAccessControlEntry) bool {
 
 func isStale(entry *PlaybackAccessControlEntry) bool {
 	return entry != nil && time.Now().After(entry.MaxAge) && !isExpired(entry)
-}
-
-func (c *HitRecords) cleanUpCache() {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-
-	for key, value := range c.data {
-		var validHits []time.Time
-		for _, hit := range value.hits {
-			if time.Since(hit) < time.Duration(30)*time.Second {
-				validHits = append(validHits, hit)
-			}
-		}
-
-		if len(validHits) == 0 {
-			delete(c.data, key)
-		} else {
-			c.data[key].hits = validHits
-		}
-	}
 }
 
 func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playbackID, cacheKey string, requestBody []byte) error {
