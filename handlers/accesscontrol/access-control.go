@@ -70,8 +70,9 @@ func periodicCleanUpHitRecordCache() {
 		for {
 			time.Sleep(time.Duration(30) * time.Second)
 			hitRecordCache.mux.Lock()
-			hitRecordCache = HitRecords{
-				data: make(map[string]*HitRecord),
+			// Clear the map
+			for key := range hitRecordCache.data {
+				delete(hitRecordCache.data, key)
 			}
 			hitRecordCache.mux.Unlock()
 		}
