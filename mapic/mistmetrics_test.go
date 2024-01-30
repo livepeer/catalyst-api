@@ -42,10 +42,10 @@ func TestEnrichMistMetrics(t *testing.T) {
 
 	expLines := []string{
 		`version{app="MistServer",version="729ddd4b42980d0124c72a46f13d8e0697293e94",release="Generic_x86_64"} 1`,
-		`mist_sessions{stream="video+077bh6xx5bx5tdua",userId="abcdefgh-123456789",sessType="viewers"}1`,
-		`mist_latency{stream="video+077bh6xx5bx5tdua",userId="abcdefgh-123456789",source="sin-prod-catalyst-3.lp-playback.studio"}1795`,
-		`mist_sessions{stream="video+51b13mqy7sgw520w",userId="hgfedcba-987654321",sessType="viewers"}5`,
-		`mist_latency{stream="video+51b13mqy7sgw520w",userId="hgfedcba-987654321",source="prg-prod-catalyst-0.lp-playback.studio"}1156`,
+		`mist_sessions{stream="video+077bh6xx5bx5tdua",user_id="abcdefgh-123456789",sessType="viewers"}1`,
+		`mist_latency{stream="video+077bh6xx5bx5tdua",user_id="abcdefgh-123456789",source="sin-prod-catalyst-3.lp-playback.studio"}1795`,
+		`mist_sessions{stream="video+51b13mqy7sgw520w",user_id="hgfedcba-987654321",sessType="viewers"}5`,
+		`mist_latency{stream="video+51b13mqy7sgw520w",user_id="hgfedcba-987654321",source="prg-prod-catalyst-0.lp-playback.studio"}1156`,
 	}
 	for _, exp := range expLines {
 		require.Contains(t, resLines, exp)

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
@@ -40,6 +41,7 @@ type (
 	IMac interface {
 		Start(ctx context.Context) error
 		MetricsHandler() http.Handler
+		MistMetricsHandler() httprouter.Handle
 		RefreshStreamIfNeeded(playbackID string)
 		NukeStream(playbackID string)
 	}

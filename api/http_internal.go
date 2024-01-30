@@ -89,6 +89,10 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	} else {
 		router.Handler("GET", "/metrics", promhttp.Handler())
 	}
+	if cli.MistPrometheus != "" {
+		// Enable Mist metrics enrichment
+		router.GET("/mistmetrics", mapic.MistMetricsHandler())
+	}
 
 	// Public Catalyst API
 	router.POST("/api/vod",
