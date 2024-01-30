@@ -16,12 +16,14 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/metrics"
+	"github.com/livepeer/go-api-client"
 )
 
 type GeolocationHandlersCollection struct {
 	Balancer balancer.Balancer
 	Cluster  cluster.Cluster
 	Config   config.Cli
+	Lapi     *api.Client
 }
 
 // this package handles geolocation for playback and origin discovery for node replication
@@ -140,9 +142,13 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 	if err != nil {
 		glog.Errorf("error querying mist for STREAM_SOURCE: %s", err)
 
-		if payload.StreamName == "video+e022lxp1xcmpp0il" || payload.StreamName == "video+44a8uxl7ijsy24ro" {
-			glog.Info("using a stream pull")
-			return "https://fra-staging-staging-catalyst-0.livepeer.monster/video+7fbbbzlcnnqhswee.flv", nil
+		url, err := c.getStreamPull(strings.TrimPrefix(payload.StreamName, "video+"))
+		if err != nil {
+			return "", err
+		}
+		if url != "" {
+			glog.Infof("stream pull %s %s", payload.StreamName, url)
+			return url, nil
 		}
 
 		return "push://", nil
@@ -154,6 +160,23 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 	}
 	glog.Infof("replying to Mist STREAM_SOURCE request=%s response=%s", payload.StreamName, outURL)
 	return outURL, nil
+}
+
+func (c *GeolocationHandlersCollection) getStreamPull(playbackID string) (string, error) {
+	if c.Lapi == nil {
+		return "", nil
+	}
+
+	stream, err := c.Lapi.GetStreamByPlaybackID(playbackID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get stream to check stream pull: %w", err)
+	}
+
+	if stream.Pull == nil {
+		return "", nil
+	}
+
+	return stream.Pull.Source, nil
 }
 
 func parsePlus(plusString string) (string, string) {
@@ -231,7 +254,7 @@ func parsePlaybackIDFLV(path string) (string, string, string, string) {
 	if playbackID == "" {
 		return "", "", "", ""
 	}
-	return "flv", prefix, playbackID, "/flv/%s"
+	return "flv", prefix, playbackID, "/%s.flv"
 }
 
 func parsePlaybackID(path string) (string, string, string, string) {

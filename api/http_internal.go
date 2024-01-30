@@ -25,6 +25,7 @@ import (
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/catalyst-api/pipeline"
+	"github.com/livepeer/go-api-client"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -63,10 +64,15 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	capacityMiddleware := middleware.CapacityMiddleware{}
 	withCapacityChecking := capacityMiddleware.HasCapacity
 
+	lapi, _ := api.NewAPIClientGeolocated(api.ClientOptions{
+		Server:      cli.APIServer,
+		AccessToken: cli.APIToken,
+	})
 	geoHandlers := &geolocation.GeolocationHandlersCollection{
 		Config:   cli,
 		Balancer: bal,
 		Cluster:  c,
+		Lapi:     lapi,
 	}
 
 	spkiPublicKey, _ := crypto.ConvertToSpki(cli.VodDecryptPublicKey)
