@@ -3,27 +3,27 @@ package mistapiconnector
 import (
 	"fmt"
 	"github.com/golang/glog"
-	"github.com/julienschmidt/httprouter"
 	"io"
 	"net/http"
 	"strings"
 )
 
-func (mc *mac) MistMetricsHandler() httprouter.Handle {
-	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-		mistMetrics, err := mc.queryMistMetrics()
-		if err != nil {
-			http.Error(w, fmt.Sprintf("error fetching Mist prometheus metrics: %s", err), http.StatusInternalServerError)
-			return
-		}
+func (mc *mac) MistMetricsHandler() http.Handler {
+	return http.HandlerFunc(
+		func(w http.ResponseWriter, req *http.Request) {
+			mistMetrics, err := mc.queryMistMetrics()
+			if err != nil {
+				http.Error(w, fmt.Sprintf("error fetching Mist prometheus metrics: %s", err), http.StatusInternalServerError)
+				return
+			}
 
-		enrichedMistMetrics := mc.enrichMistMetrics(mistMetrics)
-		_, err = w.Write([]byte(enrichedMistMetrics))
-		if err != nil {
-			http.Error(w, fmt.Sprintf("error writing enriched metrics: %s", err), http.StatusInternalServerError)
-			return
-		}
-	}
+			enrichedMistMetrics := mc.enrichMistMetrics(mistMetrics)
+			_, err = w.Write([]byte(enrichedMistMetrics))
+			if err != nil {
+				http.Error(w, fmt.Sprintf("error writing enriched metrics: %s", err), http.StatusInternalServerError)
+				return
+			}
+		})
 }
 
 func (mc *mac) queryMistMetrics() (string, error) {
