@@ -41,7 +41,7 @@ func (mc *mac) queryMistMetrics() (string, error) {
 	return string(body), nil
 }
 
-// enrichMistMetrics adds additional labels to Mist streams
+// enrichMistMetrics adds additional labels to Mist metrics
 func (mc *mac) enrichMistMetrics(metrics string) string {
 	res := strings.Builder{}
 	lines := strings.Split(metrics, "\n")
