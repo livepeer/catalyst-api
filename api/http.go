@@ -15,6 +15,7 @@ import (
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/catalyst-api/pipeline"
+	"github.com/livepeer/go-api-client"
 )
 
 func ListenAndServe(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster) error {
@@ -50,11 +51,16 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 	withCORS := middleware.AllowCORS()
 	withGatingCheck := middleware.NewGatingHandler(cli).GatingCheck
 
+	lapi, _ := api.NewAPIClientGeolocated(api.ClientOptions{
+		Server:      cli.APIServer,
+		AccessToken: cli.APIToken,
+	})
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
 	geoHandlers := &geolocation.GeolocationHandlersCollection{
 		Balancer: bal,
 		Cluster:  c,
 		Config:   cli,
+		Lapi:     lapi,
 	}
 
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
