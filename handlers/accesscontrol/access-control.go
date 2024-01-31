@@ -143,6 +143,7 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 		hitRecordCache.mux.Lock()
 		if len(hitRecordCache.data[playbackID].hits) >= hitRecordCache.data[playbackID].rateLimit {
 			glog.Infof("Rate limit reached for playbackID %v", playbackID)
+			hitRecordCache.mux.Unlock()
 			return false, nil
 		}
 		hitRecordCache.data[playbackID].hits = append(hitRecordCache.data[playbackID].hits, time.Now())
