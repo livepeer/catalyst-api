@@ -138,6 +138,9 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 // Hack to combine main metrics and mapic metrics. To be refactored away with mapic.
 func concatHandlers(handlers ...http.Handler) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		// Response concat is string-based, so we don't accept any encoding
+		r.Header.Del("Accept-Encoding")
+
 		var outbuf bytes.Buffer
 		writer := bufio.NewWriter(&outbuf)
 		for _, handler := range handlers {
