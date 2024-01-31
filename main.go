@@ -87,6 +87,7 @@ func main() {
 	fs.StringVar(&cli.MistHost, "mist-host", "127.0.0.1", "Hostname of the Mist server")
 	fs.StringVar(&cli.MistUser, "mist-user", "", "username of MistServer")
 	fs.StringVar(&cli.MistPassword, "mist-password", "", "password of MistServer")
+	fs.StringVar(&cli.MistPrometheus, "mist-prometheus", "", "Mist path for the prometheus metrics endpoint")
 	fs.DurationVar(&cli.MistConnectTimeout, "mist-connect-timeout", 5*time.Minute, "Max time to wait attempting to connect to Mist server")
 	fs.StringVar(&cli.MistStreamSource, "mist-stream-source", "push://", "Stream source we should use for created Mist stream")
 	fs.StringVar(&cli.MistHardcodedBroadcasters, "mist-hardcoded-broadcasters", "", "Hardcoded broadcasters for use by MistProcLivepeer")

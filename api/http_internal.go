@@ -83,12 +83,17 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	// Simple endpoint for healthchecks
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 
+	var metricsHandlers []http.Handler
 	if cli.ShouldMapic() {
-		// Hacky combined metrics handler. To be refactored away with mapic.
-		router.GET("/metrics", concatHandlers(promhttp.Handler(), mapic.MetricsHandler()))
-	} else {
-		router.Handler("GET", "/metrics", promhttp.Handler())
+		metricsHandlers = append(metricsHandlers, mapic.MetricsHandler())
 	}
+	if cli.MistPrometheus != "" {
+		// Enable Mist metrics enrichment
+		metricsHandlers = append(metricsHandlers, mapic.MistMetricsHandler())
+	}
+	metricsHandlers = append(metricsHandlers, promhttp.Handler())
+	// Hacky combined metrics handler. To be refactored away with mapic.
+	router.GET("/metrics", concatHandlers(metricsHandlers...))
 
 	// Public Catalyst API
 	router.POST("/api/vod",
@@ -133,6 +138,9 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 // Hack to combine main metrics and mapic metrics. To be refactored away with mapic.
 func concatHandlers(handlers ...http.Handler) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		// Response concat is string-based, so we don't accept any encoding
+		r.Header.Del("Accept-Encoding")
+
 		var outbuf bytes.Buffer
 		writer := bufio.NewWriter(&outbuf)
 		for _, handler := range handlers {

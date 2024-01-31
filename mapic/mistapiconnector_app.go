@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +40,7 @@ type (
 	IMac interface {
 		Start(ctx context.Context) error
 		MetricsHandler() http.Handler
+		MistMetricsHandler() http.Handler
 		RefreshStreamIfNeeded(playbackID string)
 		NukeStream(playbackID string)
 	}
@@ -100,6 +102,7 @@ type (
 		mist                      clients.MistAPIClient
 		streamUpdated             chan struct{}
 		metricsCollector          *metricsCollector
+		streamMetricsRe           *regexp.Regexp
 	}
 )
 
