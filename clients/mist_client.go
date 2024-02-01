@@ -23,6 +23,7 @@ type MistAPIClient interface {
 	PushAutoAdd(streamName, targetURL string) error
 	PushAutoRemove(streamParams []interface{}) error
 	PushStop(id int64) error
+	InvalidateSessions(streamName string) error
 	DeleteStream(streamName string) error
 	NukeStream(streamName string) error
 	AddTrigger(streamName []string, triggerName string, sync bool) error
@@ -247,6 +248,11 @@ func (mc *MistClient) PushStop(id int64) error {
 	return nil
 }
 
+func (mc *MistClient) InvalidateSessions(streamName string) error {
+	c := commandInvalidateSessions(streamName)
+	return wrapErr(validateInvalidateSessions(mc.sendCommand(c)), streamName)
+}
+
 func (mc *MistClient) DeleteStream(streamName string) error {
 	// Need to send both 'deletestream' and 'nuke_stream' in order to remove stream with all configuration and processes
 	deleteErr := wrapErr(validateDeleteStream(mc.sendCommand(commandDeleteStream(streamName))), streamName)
@@ -433,6 +439,16 @@ func commandAddStream(name, url string) interface{} {
 	}
 }
 
+type invalidateSessionsCommand struct {
+	InvalidateSessions string `json:"invalidate_sessions"`
+}
+
+func commandInvalidateSessions(name string) interface{} {
+	return invalidateSessionsCommand{
+		InvalidateSessions: name,
+	}
+}
+
 type deleteStreamCommand struct {
 	Deletestream map[string]interface{} `json:"deletestream"`
 }
@@ -588,6 +604,11 @@ func validateAddStream(resp string, err error) error {
 		return errors.New("adding stream failed")
 	}
 	return nil
+}
+
+func validateInvalidateSessions(resp string, err error) error {
+	// nothing other than auth to validate, Mist always returns the same response
+	return validateAuth(resp, err)
 }
 
 func validatePushAutoAdd(resp string, err error) error {

@@ -18,6 +18,7 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/log"
+	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/pquerna/cachecontrol/cacheobject"
 )
@@ -70,6 +71,15 @@ type HitRecords struct {
 	mux  sync.Mutex
 }
 
+type RefreshIntervalRecord struct {
+	RefreshInterval int32
+	LastRefresh     time.Time
+}
+
+type RefreshInterval struct {
+	data map[string]*RefreshIntervalRecord
+}
+
 type GateConfig struct {
 	MaxAge               int32 `json:"max_age"`
 	StaleWhileRevalidate int32 `json:"stale_while_revalidate"`
@@ -81,23 +91,48 @@ var hitRecordCache = HitRecords{
 	data: make(map[string]*HitRecord),
 }
 
-func periodicCleanUpHitRecordCache() {
+var refreshIntervalCache = RefreshInterval{
+	data: make(map[string]*RefreshIntervalRecord),
+}
+
+func periodicCleanUpRecordCache() {
 	go func() {
 		for {
 			time.Sleep(time.Duration(30) * time.Second)
 			hitRecordCache.mux.Lock()
-			// Clear the map
+
 			for key := range hitRecordCache.data {
 				delete(hitRecordCache.data, key)
 			}
 			hitRecordCache.mux.Unlock()
+
+			for key := range refreshIntervalCache.data {
+				if time.Since(refreshIntervalCache.data[key].LastRefresh) > time.Duration(refreshIntervalCache.data[key].RefreshInterval)*time.Second*2 {
+					delete(refreshIntervalCache.data, key)
+				}
+			}
 		}
 	}()
 }
 
-func NewAccessControlHandlersCollection(cli config.Cli) *AccessControlHandlersCollection {
+func periodicRefreshIntervalCache(mapic mistapiconnector.IMac) {
+	go func() {
+		for {
+			time.Sleep(time.Duration(5) * time.Second)
+			for key := range refreshIntervalCache.data {
+				if time.Since(refreshIntervalCache.data[key].LastRefresh) > time.Duration(refreshIntervalCache.data[key].RefreshInterval)*time.Second {
+					refreshIntervalCache.data[key].LastRefresh = time.Now()
+					mapic.InvalidateAllSessions(key)
+				}
+			}
+		}
+	}()
+}
 
-	periodicCleanUpHitRecordCache()
+func NewAccessControlHandlersCollection(cli config.Cli, mapic mistapiconnector.IMac) *AccessControlHandlersCollection {
+
+	periodicCleanUpRecordCache()
+	periodicRefreshIntervalCache(mapic)
 
 	return &AccessControlHandlersCollection{
 		cache: make(map[string]map[string]*PlaybackAccessControlEntry),
@@ -265,6 +300,7 @@ func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playba
 	allow, gateConfig, err := ac.gateClient.QueryGate(requestBody)
 
 	rateLimit := gateConfig.RateLimit
+	refreshInterval := gateConfig.RefreshInterval
 	maxAge := gateConfig.MaxAge
 	stale := gateConfig.StaleWhileRevalidate
 
@@ -275,6 +311,12 @@ func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playba
 	if rateLimit > 0 {
 		if _, ok := hitRecordCache.data[playbackID]; !ok {
 			hitRecordCache.data[playbackID] = &HitRecord{hits: make([]time.Time, 0), rateLimit: int(rateLimit)}
+		}
+	}
+
+	if refreshInterval > 0 {
+		if _, ok := refreshIntervalCache.data[playbackID]; !ok {
+			refreshIntervalCache.data[playbackID] = &RefreshIntervalRecord{RefreshInterval: refreshInterval, LastRefresh: time.Now()}
 		}
 	}
 
@@ -289,12 +331,6 @@ func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playba
 	return nil
 }
 
-// Returns:
-// - bool: whether the request was successful
-// - int32: the rate limit for the request
-// - int32: the max age for the request
-// - int32: the stale while revalidate for the request
-// - error: if any
 func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 
 	gateConfig := GateConfig{

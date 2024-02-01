@@ -43,6 +43,7 @@ type (
 		MistMetricsHandler() http.Handler
 		RefreshStreamIfNeeded(playbackID string)
 		NukeStream(playbackID string)
+		InvalidateAllSessions(playbackID string)
 	}
 
 	pushStatus struct {
@@ -186,6 +187,10 @@ func (mc *mac) RefreshStreamIfNeeded(playbackID string) {
 
 func (mc *mac) NukeStream(playbackID string) {
 	mc.nukeAllStreamNames(playbackID)
+}
+
+func (mc *mac) InvalidateAllSessions(playbackID string) {
+	mc.invalidateAllSessions(playbackID)
 }
 
 func (mc *mac) handleStreamBuffer(ctx context.Context, payload *misttriggers.StreamBufferPayload) error {
@@ -560,6 +565,20 @@ func (mc *mac) nukeAllStreamNames(playbackID string) {
 		err := mc.mist.NukeStream(streamName)
 		if err != nil {
 			glog.Errorf("error nuking stream playbackId=%s streamName=%s err=%q", playbackID, streamName, err)
+		}
+	}
+}
+
+func (mc *mac) invalidateAllSessions(playbackID string) {
+	streamNames := []string{
+		streamPlaybackPrefix + playbackID,                // not recorded
+		streamPlaybackPrefix + playbackID + "_recording", // recorded
+	}
+
+	for _, streamName := range streamNames {
+		err := mc.mist.InvalidateSessions(streamName)
+		if err != nil {
+			glog.Errorf("error invalidating sessions playbackId=%s streamName=%s err=%q", playbackID, streamName, err)
 		}
 	}
 }
