@@ -169,7 +169,17 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string) (string
 		return "", nil
 	}
 
-	return stream.Pull.Source, nil
+	if len(stream.Pull.Headers) == 0 {
+		return stream.Pull.Source, nil
+	}
+
+	var params []string
+	for k, v := range stream.Pull.Headers {
+		param := "addheader=" + url.QueryEscape(k+":"+v)
+		params = append(params, param)
+	}
+	finalPullURL := stream.Pull.Source + "?" + strings.Join(params, "&")
+	return finalPullURL, nil
 }
 
 func parsePlus(plusString string) (string, string) {
