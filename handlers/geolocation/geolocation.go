@@ -138,9 +138,8 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 		}
 		pullURL, err := c.getStreamPull(playbackID)
 		if err != nil {
-			return "", err
-		}
-		if pullURL != "" {
+			glog.Errorf("getStreamPull failed: %s", err)
+		} else if pullURL != "" {
 			glog.V(7).Infof("replying to Mist STREAM_SOURCE request=%s response=%s", payload.StreamName, pullURL)
 			return pullURL, nil
 		}
