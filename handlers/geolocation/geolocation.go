@@ -175,7 +175,7 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string) (string
 
 	var params []string
 	for k, v := range stream.Pull.Headers {
-		param := "addheader=" + url.QueryEscape(k+":"+v)
+		param := "addheader=" + url.QueryEscape(k+" "+v)
 		params = append(params, param)
 	}
 	finalPullURL := stream.Pull.Source + "?" + strings.Join(params, "&")
