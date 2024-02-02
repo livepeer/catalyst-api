@@ -64,7 +64,7 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 	}
 
 	log.Log(requestID, "starting probe", "source", inputFile.String(), "dest", osTransferURL.String())
-	inputFileProbe, err := s.Probe.ProbeFile(requestID, signedURL)
+	inputFileProbe, err := s.Probe.ProbeFile(requestID, signedURL, "-analyzeduration", "15000000")
 	if err != nil {
 		log.Log(requestID, "probe failed", "err", err, "source", inputFile.String(), "dest", osTransferURL.String())
 		return video.InputVideo{}, "", fmt.Errorf("error probing MP4 input file from S3: %w", err)
