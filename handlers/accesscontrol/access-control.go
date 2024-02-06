@@ -105,12 +105,6 @@ func periodicCleanUpRecordCache() {
 				delete(hitRecordCache.data, key)
 			}
 			hitRecordCache.mux.Unlock()
-
-			for key := range refreshIntervalCache.data {
-				if time.Since(refreshIntervalCache.data[key].LastRefresh) > time.Duration(refreshIntervalCache.data[key].RefreshInterval)*time.Second*2 {
-					delete(refreshIntervalCache.data, key)
-				}
-			}
 		}
 	}()
 }

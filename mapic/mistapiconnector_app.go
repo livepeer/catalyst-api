@@ -571,8 +571,7 @@ func (mc *mac) nukeAllStreamNames(playbackID string) {
 
 func (mc *mac) invalidateAllSessions(playbackID string) {
 	streamNames := []string{
-		streamPlaybackPrefix + playbackID,                // not recorded
-		streamPlaybackPrefix + playbackID + "_recording", // recorded
+		"video+" + playbackID,
 	}
 
 	for _, streamName := range streamNames {

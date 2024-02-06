@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/metrics"
 )
 
@@ -249,7 +250,9 @@ func (mc *MistClient) PushStop(id int64) error {
 }
 
 func (mc *MistClient) InvalidateSessions(streamName string) error {
+	glog.Infof("Invalidating sessions for stream %s", streamName)
 	c := commandInvalidateSessions(streamName)
+	glog.Infof("Invalidate sessions command: %s", c)
 	return wrapErr(validateInvalidateSessions(mc.sendCommand(c)), streamName)
 }
 
