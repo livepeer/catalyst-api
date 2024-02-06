@@ -116,6 +116,14 @@ func getWebRTCURLs(proto, host string) []string {
 	return urls
 }
 
+func getFLVURLs(proto, host string) []string {
+	var urls []string
+	for _, prefix := range prefixes {
+		urls = append(urls, fmt.Sprintf("%s://%s/%s+%s.flv", proto, host, prefix, playbackID))
+	}
+	return urls
+}
+
 func getHLSURLsWithSeg(proto, host, seg, query string) []string {
 	var urls []string
 	for _, prefix := range prefixes {
@@ -287,6 +295,23 @@ func TestRedirectHandlerWebRTC_Correct(t *testing.T) {
 		result(n).
 		hasStatus(http.StatusTemporaryRedirect).
 		hasHeader("Location", getWebRTCURLs("https", closestNodeAddr)...)
+}
+
+func TestRedirectHandlerFLV_Correct(t *testing.T) {
+	n := mockHandlers(t)
+
+	path := fmt.Sprintf("/flv/%s", playbackID)
+
+	requireReq(t, path).
+		result(n).
+		hasStatus(http.StatusTemporaryRedirect).
+		hasHeader("Location", getFLVURLs("http", closestNodeAddr)...)
+
+	requireReq(t, path).
+		withHeader("X-Forwarded-Proto", "https").
+		result(n).
+		hasStatus(http.StatusTemporaryRedirect).
+		hasHeader("Location", getFLVURLs("https", closestNodeAddr)...)
 }
 
 func TestNodeHostRedirect(t *testing.T) {
