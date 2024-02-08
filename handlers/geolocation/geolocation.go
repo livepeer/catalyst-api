@@ -165,6 +165,14 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string) (string
 		return "", fmt.Errorf("failed to get stream to check stream pull: %w", err)
 	}
 
+	if stream.Suspended {
+		return "", fmt.Errorf("stream is suspended")
+	}
+
+	if stream.Deleted {
+		return "", fmt.Errorf("stream is deleted")
+	}
+
 	if stream.Pull == nil {
 		return "", nil
 	}
