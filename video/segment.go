@@ -18,7 +18,7 @@ func Segment(sourceFilename string, outputManifestURL string, targetSegmentSize 
 		Output(
 			strings.Replace(outputManifestURL, ".m3u8", "", 1)+"%d.ts",
 			ffmpeg.KwArgs{
-				"c:a":               "copy",
+				"c:a":               "aac",
 				"c:v":               "copy",
 				"f":                 "segment",
 				"segment_list":      outputManifestURL,

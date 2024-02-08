@@ -613,7 +613,7 @@ func Test_checkMistCompatible(t *testing.T) {
 			},
 		},
 	}
-	inCompatibleAudio := video.InputVideo{
+	nonAACAudio := video.InputVideo{
 		Tracks: []video.InputTrack{
 			{
 				Codec: "h264",
@@ -682,13 +682,13 @@ func Test_checkMistCompatible(t *testing.T) {
 			wantSupported: false,
 		},
 		{
-			name: "incompatible with ffmpeg - StrategyFallbackExternal",
+			name: "compatible with ffmpeg (non AAC audio) - StrategyFallbackExternal",
 			args: args{
 				strategy: StrategyFallbackExternal,
-				iv:       inCompatibleAudio,
+				iv:       nonAACAudio,
 			},
-			want:          StrategyExternalDominance,
-			wantSupported: false,
+			want:          StrategyFallbackExternal,
+			wantSupported: true,
 		},
 		{
 			name: "compatible with ffmpeg - StrategyFallbackExternal",
