@@ -800,6 +800,10 @@ func TestIsIngestStream(t *testing.T) {
 			wantIsIngest: true,
 		},
 		{
+			stream:       "video+5678901234",
+			wantIsIngest: true,
+		},
+		{
 			stream:       "video+playback",
 			wantIsIngest: false,
 		},
@@ -813,6 +817,9 @@ func TestIsIngestStream(t *testing.T) {
 		ActiveStreams: map[string]*ActiveStream{
 			"video+123456789": {
 				Source: "push://",
+			},
+			"video+5678901234": {
+				Source: "push://INTERNAL_ONLY:https://test-liveplay-quic.trovo.live/live/abcdef-12345",
 			},
 			"video+playback": {
 				Source: "push://INTERNAL_ONLY:dtsc://mdw-staging-staging-catalyst-0.livepeer.monster:4200",
