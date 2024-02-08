@@ -109,7 +109,7 @@ func periodicCleanUpRecordCache() {
 	}()
 }
 
-func periodicRefreshIntervalCache(mapic mistapiconnector.IMac) {
+func periodicRefreshIntervalCache(mapic mistapiconnector.IMac, accessControlCache map[string]map[string]*PlaybackAccessControlEntry) {
 	go func() {
 		for {
 			time.Sleep(time.Duration(5) * time.Second)
@@ -117,6 +117,10 @@ func periodicRefreshIntervalCache(mapic mistapiconnector.IMac) {
 				if time.Since(refreshIntervalCache.data[key].LastRefresh) > time.Duration(refreshIntervalCache.data[key].RefreshInterval)*time.Second {
 					refreshIntervalCache.data[key].LastRefresh = time.Now()
 					mapic.InvalidateAllSessions(key)
+					playbackIdCache := accessControlCache[key]
+					for cacheKey := range playbackIdCache {
+						delete(playbackIdCache, cacheKey)
+					}
 				}
 			}
 		}
@@ -124,12 +128,12 @@ func periodicRefreshIntervalCache(mapic mistapiconnector.IMac) {
 }
 
 func NewAccessControlHandlersCollection(cli config.Cli, mapic mistapiconnector.IMac) *AccessControlHandlersCollection {
-
+	accessControlCache := make(map[string]map[string]*PlaybackAccessControlEntry)
 	periodicCleanUpRecordCache()
-	periodicRefreshIntervalCache(mapic)
+	periodicRefreshIntervalCache(mapic, accessControlCache)
 
 	return &AccessControlHandlersCollection{
-		cache: make(map[string]map[string]*PlaybackAccessControlEntry),
+		cache: accessControlCache,
 		gateClient: &GateClient{
 			gateURL: cli.GateURL,
 			Client:  &http.Client{},
