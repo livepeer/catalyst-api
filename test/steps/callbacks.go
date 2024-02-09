@@ -24,7 +24,7 @@ type Callback struct {
 			Bitrate   int     `json:"bitrate"`
 			Duration  float64 `json:"duration"`
 			Size      int     `json:"size"`
-			StartTime int     `json:"start_time"`
+			StartTime float64 `json:"start_time"`
 			Width     int     `json:"width,omitempty"`
 			Height    int     `json:"height,omitempty"`
 			Fps       int     `json:"fps,omitempty"`
