@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/grafov/m3u8"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -87,6 +89,16 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, fmt.Errorf("error generating source segment URLs: %s", err)
 	}
 	log.Log(transcodeRequest.RequestID, "Fetched Source Segments URLs", "num_urls", len(sourceSegmentURLs))
+
+	// The first segment in an HLS manifest input may have audio/video tracks where the start times
+	// are significantly offset between the two tracks -- this is common during the start of a
+	// livestream when the first segment's start/end times are affected by the streamer's hardware
+	// and OBS settings. This segment should *not* be submitted to the T as it can cause corrupted
+	// output MP4 files.
+	if inputInfo.Format == "hls" {
+
+		sourceManifest.Segments, sourceSegmentURLs = HandleAVStartTimeOffsets(transcodeRequest.RequestID, inputInfo, sourceManifest.Segments, sourceSegmentURLs)
+	}
 
 	// The last segment in an HLS manifest may contain an audio-only track - this is common
 	// during a livestream recording where the video stream can end sooner with a trailing audio stream
@@ -644,6 +656,33 @@ func statsFromProfiles(profiles []video.EncodedProfile) []*video.RenditionStats 
 		})
 	}
 	return stats
+}
+
+func HandleAVStartTimeOffsets(requestID string, iv video.InputVideo, segments []*m3u8.MediaSegment, segmentURLs []clients.SourceSegment) ([]*m3u8.MediaSegment, []clients.SourceSegment) {
+
+	v, err := iv.GetTrack(video.TrackTypeVideo)
+	if err != nil {
+		return segments, segmentURLs
+	}
+	a, err := iv.GetTrack(video.TrackTypeAudio)
+	if err != nil {
+		return segments, segmentURLs
+	}
+	if v.StartTimeSec < 0 || a.StartTimeSec < 0 {
+		return segments, segmentURLs
+	}
+
+	// calculate delta between start time of audio and video tracks
+	avOffset := math.Abs(v.StartTimeSec - a.StartTimeSec)
+
+	// if a/v tracks are delayed by more than 1s, then remove the first segment
+	// from both the manifest and list of segment URLs
+	if avOffset > 1 && avOffset < iv.Duration {
+		log.Log(requestID, "Dropping first segment due to a/v offset mismatch", "av-offset", avOffset)
+		return segments[1:], segmentURLs[1:]
+	}
+
+	return segments, segmentURLs
 }
 
 func TranscodeRetryBackoff() backoff.BackOff {

@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/video"
@@ -291,5 +292,95 @@ func TestNewParallelTranscoding(t *testing.T) {
 	// Check if there are any remaining segments in the queue (should be closed).
 	if _, more := <-jobs.queue; more {
 		t.Error("Expected the queue to be closed after processing all segments.")
+	}
+}
+
+// TestHandleAVStartTimeOffsets uses table-driven tests to verify the behavior
+func TestHandleAVStartTimeOffsets(t *testing.T) {
+	const manifestA = `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-PLAYLIST-TYPE:VOD
+#EXT-X-TARGETDURATION:5
+#EXT-X-MEDIA-SEQUENCE:0
+#EXTINF:10.4160000000,
+0.ts
+#EXTINF:5.3340000000,
+1.ts
+#EXTINF:5.3340000000,
+2.ts
+#EXT-X-ENDLIST`
+
+	tests := []struct {
+		name               string
+		inputInfo          video.InputVideo
+		expectedFirstURI   string
+		expectedSegmentURL string
+		expectedLength     int
+	}{
+		{
+			name: "FirstSegmentDroppedWithLargeStartTimeOffset",
+			inputInfo: video.InputVideo{
+				Duration:  123.0,
+				Format:    "some-format",
+				SizeBytes: 123,
+				Tracks: []video.InputTrack{
+					{
+						Type:         "video",
+						StartTimeSec: 5.0,
+						VideoTrack:   video.VideoTrack{Width: 2020, Height: 2020},
+					},
+					{
+						Type:         "audio",
+						StartTimeSec: 1.4,
+						AudioTrack:   video.AudioTrack{Channels: 2},
+					},
+				},
+			},
+			expectedFirstURI:   "1.ts",
+			expectedSegmentURL: "1.ts",
+			expectedLength:     2,
+		},
+		{
+			name: "FirstSegmentIsNotDroppedWithSmallStartTimeOffset",
+			inputInfo: video.InputVideo{
+				Duration:  123.0,
+				Format:    "some-format",
+				SizeBytes: 123,
+				Tracks: []video.InputTrack{
+					{
+						Type:         "video",
+						StartTimeSec: 1.0,
+						VideoTrack:   video.VideoTrack{Width: 2020, Height: 2020},
+					},
+					{
+						Type:         "audio",
+						StartTimeSec: 1.4,
+						AudioTrack:   video.AudioTrack{Channels: 2},
+					},
+				},
+			},
+			expectedFirstURI:   "0.ts",
+			expectedSegmentURL: "0.ts",
+			expectedLength:     3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			playlistA, _, err := m3u8.DecodeFrom(strings.NewReader(manifestA), true)
+			require.NoError(t, err)
+			sourceManifest := playlistA.(*m3u8.MediaPlaylist)
+
+			sourceSegmentURLs := []clients.SourceSegment{
+				{URL: segmentURL(t, "0.ts"), DurationMillis: 1000},
+				{URL: segmentURL(t, "1.ts"), DurationMillis: 1000},
+				{URL: segmentURL(t, "2.ts"), DurationMillis: 1000},
+			}
+
+			sourceManifest.Segments, sourceSegmentURLs = HandleAVStartTimeOffsets("test", tt.inputInfo, sourceManifest.Segments, sourceSegmentURLs)
+			require.Equal(t, tt.expectedFirstURI, sourceManifest.Segments[0].URI)
+			require.Equal(t, segmentURL(t, tt.expectedSegmentURL), sourceSegmentURLs[0].URL)
+			require.Equal(t, tt.expectedLength, len(sourceSegmentURLs))
+		})
 	}
 }

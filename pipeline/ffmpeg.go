@@ -123,7 +123,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 				Codec:        job.sourceCodecVideo,
 				Bitrate:      job.sourceBitrateVideo,
 				DurationSec:  job.InputFileInfo.Duration,
-				StartTimeSec: 0,
+				StartTimeSec: job.sourceVideoStartTimeSec,
 				VideoTrack: video.VideoTrack{
 					Width:  job.sourceWidth,
 					Height: job.sourceHeight,
@@ -136,7 +136,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 				Codec:        job.sourceCodecAudio,
 				Bitrate:      job.sourceBitrateAudio,
 				DurationSec:  job.InputFileInfo.Duration,
-				StartTimeSec: 0,
+				StartTimeSec: job.sourceAudioStartTimeSec,
 				AudioTrack: video.AudioTrack{
 					Channels:   job.sourceChannels,
 					SampleRate: job.sourceSampleRate,

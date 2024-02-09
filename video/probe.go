@@ -153,15 +153,21 @@ func parseProbeOutput(probeData *ffprobe.ProbeData) (InputVideo, error) {
 		}
 	}
 
+	videoStartTime, err := strconv.ParseFloat(videoStream.StartTime, 64)
+	if err != nil {
+		videoStartTime = -1
+	}
+
 	// format file stats into InputVideo
 	iv := InputVideo{
 		Format: findFormat(probeData.Format.FormatName),
 		Tracks: []InputTrack{
 			{
-				Type:        TrackTypeVideo,
-				Codec:       videoStream.CodecName,
-				Bitrate:     bitrate,
-				DurationSec: parseAssetDuration(videoStream.Duration),
+				Type:         TrackTypeVideo,
+				Codec:        videoStream.CodecName,
+				Bitrate:      bitrate,
+				DurationSec:  parseAssetDuration(videoStream.Duration),
+				StartTimeSec: videoStartTime,
 				VideoTrack: VideoTrack{
 					Width:              int64(videoStream.Width),
 					Height:             int64(videoStream.Height),
@@ -193,17 +199,24 @@ func addAudioTrack(probeData *ffprobe.ProbeData, iv InputVideo) (InputVideo, err
 	if audioTrack.SampleRate != "" && err != nil {
 		return iv, fmt.Errorf("error parsing sample rate from track %d: %w", audioTrack.Index, err)
 	}
+
 	bitDepth, err := strconv.Atoi(audioTrack.BitsPerRawSample)
 	if audioTrack.BitsPerRawSample != "" && err != nil {
 		return iv, fmt.Errorf("error parsing bit depth (bits_per_raw_sample) from track %d: %w", audioTrack.Index, err)
 	}
 
+	audioStartTime, err := strconv.ParseFloat(audioTrack.StartTime, 64)
+	if err != nil {
+		audioStartTime = -1
+	}
+
 	bitrate, _ := strconv.ParseInt(audioTrack.BitRate, 10, 64)
 	iv.Tracks = append(iv.Tracks, InputTrack{
-		Type:        TrackTypeAudio,
-		Codec:       audioTrack.CodecName,
-		Bitrate:     bitrate,
-		DurationSec: parseAssetDuration(audioTrack.Duration),
+		Type:         TrackTypeAudio,
+		Codec:        audioTrack.CodecName,
+		Bitrate:      bitrate,
+		DurationSec:  parseAssetDuration(audioTrack.Duration),
+		StartTimeSec: audioStartTime,
 		AudioTrack: AudioTrack{
 			Channels:   audioTrack.Channels,
 			SampleBits: audioTrack.BitsPerSample,
