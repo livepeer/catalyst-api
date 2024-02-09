@@ -109,19 +109,21 @@ type JobInfo struct {
 	SegmentingDone     time.Time
 	TranscodingDone    time.Time
 
-	sourceBytes        int64
-	sourceSegments     int
-	sourceDurationMs   int64
-	sourceCodecVideo   string
-	sourceCodecAudio   string
-	sourceWidth        int64
-	sourceHeight       int64
-	sourceFPS          float64
-	sourceBitrateVideo int64
-	sourceBitrateAudio int64
-	sourceChannels     int
-	sourceSampleRate   int
-	sourceSampleBits   int
+	sourceBytes             int64
+	sourceSegments          int
+	sourceDurationMs        int64
+	sourceCodecVideo        string
+	sourceCodecAudio        string
+	sourceWidth             int64
+	sourceHeight            int64
+	sourceFPS               float64
+	sourceBitrateVideo      int64
+	sourceBitrateAudio      int64
+	sourceChannels          int
+	sourceSampleRate        int
+	sourceSampleBits        int
+	sourceVideoStartTimeSec float64
+	sourceAudioStartTimeSec float64
 
 	targetSegmentSizeSecs int64
 	catalystRegion        string
@@ -509,18 +511,24 @@ func (c *Coordinator) startOneUploadJob(si *JobInfo, handler Handler, hasFallbac
 	}
 
 	// Codecs are parsed here primarily to write codec stats for each job
+	// Start Time of a/v track is parsed here to detect out-of-sync segments for recordings
 	var videoCodec, audioCodec string
+	var videoStartTimeSec, audioStartTimeSec float64
 	videoTrack, err := si.InputFileInfo.GetTrack(video.TrackTypeVideo)
 	if err != nil {
 		videoCodec = "n/a"
+		videoStartTimeSec = -1
 	} else {
 		videoCodec = videoTrack.Codec
+		videoStartTimeSec = videoTrack.StartTimeSec
 	}
 	audioTrack, err := si.InputFileInfo.GetTrack(video.TrackTypeAudio)
 	if err != nil {
 		audioCodec = "n/a"
+		audioStartTimeSec = -1
 	} else {
 		audioCodec = audioTrack.Codec
+		audioStartTimeSec = audioTrack.StartTimeSec
 	}
 
 	si.PipelineInfo = PipelineInfo{
@@ -546,6 +554,8 @@ func (c *Coordinator) startOneUploadJob(si *JobInfo, handler Handler, hasFallbac
 	si.sourceChannels = audioTrack.Channels
 	si.sourceSampleRate = audioTrack.SampleRate
 	si.sourceSampleBits = audioTrack.SampleBits
+	si.sourceVideoStartTimeSec = videoStartTimeSec
+	si.sourceAudioStartTimeSec = audioStartTimeSec
 
 	si.ReportProgress(clients.TranscodeStatusPreparing, 0)
 	c.Jobs.Store(si.StreamName, si)
