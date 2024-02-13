@@ -11,15 +11,19 @@ import (
 )
 
 type UserNewPayload struct {
-	StreamName   string
-	Hostname     string
-	ConnectionID string
-	Protocol     string
-	URL          *url.URL
-	FullURL      string
-	SessionID    string
-	AccessKey    string
-	JWT          string
+	StreamName     string
+	Hostname       string
+	ConnectionID   string
+	Protocol       string
+	URL            *url.URL
+	FullURL        string
+	SessionID      string
+	AccessKey      string
+	JWT            string
+	OriginIP       string
+	Referrer       string
+	UserAgent      string
+	ForwardedProto string
 }
 
 func ParseUserNewPayload(payload MistTriggerBody) (UserNewPayload, error) {

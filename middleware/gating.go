@@ -40,10 +40,19 @@ func (h *GatingHandler) GatingCheck(next httprouter.Handle) httprouter.Handle {
 			jwt = req.Header.Get("Livepeer-Jwt")
 		}
 
+		originIP := req.Header.Get("X-Forwarded-For")
+		refrerer := req.Header.Get("Referer")
+		userAgent := req.Header.Get("User-Agent")
+		forwardedProto := req.Header.Get("X-Forwarded-Proto")
+
 		payload := misttriggers.UserNewPayload{
-			URL:       req.URL,
-			AccessKey: accessKey,
-			JWT:       jwt,
+			URL:            req.URL,
+			AccessKey:      accessKey,
+			JWT:            jwt,
+			OriginIP:       originIP,
+			Referrer:       refrerer,
+			UserAgent:      userAgent,
+			ForwardedProto: forwardedProto,
 		}
 
 		playbackAccessControlAllowed, err := h.AccessControl.IsAuthorized(req.Context(), playbackID, &payload)
