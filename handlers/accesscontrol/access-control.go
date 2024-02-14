@@ -142,6 +142,8 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 	webhookHeaders["X-Forwarded-Proto"] = payload.ForwardedProto
 	webhookHeaders["X-Tlive-Spanid"] = payload.SessionID
 	webhookHeaders["Tx-Stream-Id"] = playbackID
+	webhookHeaders["Host"] = payload.Host
+	webhookHeaders["Origin"] = payload.Origin
 
 	acReq := PlaybackAccessControlRequest{
 		Stream: playbackID,
