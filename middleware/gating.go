@@ -44,6 +44,8 @@ func (h *GatingHandler) GatingCheck(next httprouter.Handle) httprouter.Handle {
 		refrerer := req.Header.Get("Referer")
 		userAgent := req.Header.Get("User-Agent")
 		forwardedProto := req.Header.Get("X-Forwarded-Proto")
+		host := req.Header.Get("Host")
+		origin := req.Header.Get("Origin")
 
 		payload := misttriggers.UserNewPayload{
 			URL:            req.URL,
@@ -53,6 +55,8 @@ func (h *GatingHandler) GatingCheck(next httprouter.Handle) httprouter.Handle {
 			Referrer:       refrerer,
 			UserAgent:      userAgent,
 			ForwardedProto: forwardedProto,
+			Host:           host,
+			Origin:         origin,
 		}
 
 		playbackAccessControlAllowed, err := h.AccessControl.IsAuthorized(req.Context(), playbackID, &payload)
