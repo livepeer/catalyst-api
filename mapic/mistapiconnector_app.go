@@ -274,6 +274,10 @@ func (mc *mac) handlePushRewrite(ctx context.Context, payload *misttriggers.Push
 	} else {
 		glog.Errorf("Shouldn't happen streamID=%s", stream.ID)
 	}
+	if stream.Deleted || stream.Suspended {
+		// Do not allow to start deleted or suspended streams
+		return "", nil
+	}
 	glog.Infof("Responded with '%s'", responseName)
 	return responseName, nil
 }
