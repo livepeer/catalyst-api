@@ -11,15 +11,21 @@ import (
 )
 
 type UserNewPayload struct {
-	StreamName   string
-	Hostname     string
-	ConnectionID string
-	Protocol     string
-	URL          *url.URL
-	FullURL      string
-	SessionID    string
-	AccessKey    string
-	JWT          string
+	StreamName     string
+	Hostname       string
+	ConnectionID   string
+	Protocol       string
+	URL            *url.URL
+	FullURL        string
+	SessionID      string
+	AccessKey      string
+	JWT            string
+	OriginIP       string
+	Referrer       string
+	UserAgent      string
+	ForwardedProto string
+	Host           string
+	Origin         string
 }
 
 func ParseUserNewPayload(payload MistTriggerBody) (UserNewPayload, error) {
@@ -55,6 +61,18 @@ func (d *MistCallbackHandlersCollection) TriggerUserNew(ctx context.Context, w h
 			accessKey = cookie.Value
 		case "Livepeer-Jwt":
 			jwt = cookie.Value
+		case "X-Fowarded-For":
+			payload.OriginIP = cookie.Value
+		case "Referer":
+			payload.Referrer = cookie.Value
+		case "User-Agent":
+			payload.UserAgent = cookie.Value
+		case "X-Forwarded-Proto":
+			payload.ForwardedProto = cookie.Value
+		case "Host":
+			payload.Host = cookie.Value
+		case "Origin":
+			payload.Origin = cookie.Value
 		}
 	}
 

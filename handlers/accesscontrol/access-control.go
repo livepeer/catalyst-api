@@ -36,10 +36,19 @@ type PlaybackAccessControlEntry struct {
 }
 
 type PlaybackAccessControlRequest struct {
-	Type      string `json:"type"`
-	Pub       string `json:"pub"`
-	AccessKey string `json:"accessKey"`
-	Stream    string `json:"stream"`
+	Type           string                      `json:"type"`
+	Pub            string                      `json:"pub"`
+	AccessKey      string                      `json:"accessKey"`
+	Stream         string                      `json:"stream"`
+	WebhookPayload AccessControlWebhookPayload `json:"webhookPayload"`
+	WebhookHeaders map[string]string           `json:"webhookHeaders"`
+}
+
+type AccessControlWebhookPayload struct {
+	UserIP     string            `json:"userIP"`
+	PlayDomain string            `json:"playDomain"`
+	PlayURL    string            `json:"playURL"`
+	Headers    map[string]string `json:"headers"`
 }
 
 type GateAPICaller interface {
@@ -126,7 +135,28 @@ func (ac *AccessControlHandlersCollection) IsAuthorized(ctx context.Context, pla
 }
 
 func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, playbackID string, payload *misttriggers.UserNewPayload) (bool, error) {
-	acReq := PlaybackAccessControlRequest{Stream: playbackID, Type: "accessKey"}
+	webhookHeaders := make(map[string]string)
+
+	webhookHeaders["User-Agent"] = payload.UserAgent
+	webhookHeaders["Referer"] = payload.Referrer
+	webhookHeaders["X-Forwarded-Proto"] = payload.ForwardedProto
+	webhookHeaders["X-Tlive-Spanid"] = payload.SessionID
+	webhookHeaders["Tx-Stream-Id"] = playbackID
+	webhookHeaders["Host"] = payload.Host
+	webhookHeaders["Origin"] = payload.Origin
+
+	acReq := PlaybackAccessControlRequest{
+		Stream: playbackID,
+		Type:   "accessKey",
+		WebhookPayload: AccessControlWebhookPayload{
+			UserIP:     payload.OriginIP,
+			PlayDomain: payload.URL.Host,
+			Headers:    webhookHeaders,
+			PlayURL:    payload.URL.String(),
+		},
+		WebhookHeaders: webhookHeaders,
+	}
+
 	cacheKey := ""
 	accessKey := payload.URL.Query().Get("accessKey")
 	jwt := payload.URL.Query().Get("jwt")
