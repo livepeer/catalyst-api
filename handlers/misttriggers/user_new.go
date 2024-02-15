@@ -72,7 +72,7 @@ func (d *MistCallbackHandlersCollection) TriggerUserNew(ctx context.Context, w h
 		case "Host":
 			payload.Host = cookie.Value
 		case "Origin":
-			payload.Host = cookie.Value
+			payload.Origin = cookie.Value
 		}
 	}
 
