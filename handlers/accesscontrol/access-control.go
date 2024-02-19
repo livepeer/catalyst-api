@@ -104,11 +104,11 @@ func (ac *AccessControlHandlersCollection) periodicCleanUpRecordCache() {
 	go func() {
 		for {
 			time.Sleep(time.Duration(30) * time.Second)
-			ac.mutex.Lock()
+			hitRecordCache.mux.Lock()
 			for key := range ac.cache {
-				delete(ac.cache, key)
+				delete(hitRecordCache.data, key)
 			}
-			ac.mutex.Unlock()
+			hitRecordCache.mux.Unlock()
 		}
 	}()
 }
