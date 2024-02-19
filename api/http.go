@@ -63,8 +63,12 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 		Config:   cli,
 		Lapi:     lapi,
 	}
+	analyticsApiHandlers := &handlers.AnalyticsHandlersCollection{}
 
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
+	if cli.EnableAnalytics {
+		router.POST("/analytics/log", analyticsApiHandlers.Log())
+	}
 
 	// Playback endpoint
 	playback := middleware.LogAndMetrics(metrics.Metrics.PlaybackRequestDurationSec)(
