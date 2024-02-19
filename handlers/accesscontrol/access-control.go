@@ -76,10 +76,6 @@ type RefreshIntervalRecord struct {
 	LastRefresh     time.Time
 }
 
-type RefreshInterval struct {
-	data map[string]*RefreshIntervalRecord
-}
-
 type GateConfig struct {
 	MaxAge               int32 `json:"max_age"`
 	StaleWhileRevalidate int32 `json:"stale_while_revalidate"`
@@ -378,7 +374,7 @@ func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 			return false, gateConfig, err
 		}
 
-		if rl, ok := result["rate_limit"]; ok {
+		if rl, ok := result["rateLimit"]; ok {
 			rateLimitFloat64, ok := rl.(float64)
 			if !ok {
 				return false, gateConfig, fmt.Errorf("rate_limit is not a number")
