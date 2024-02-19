@@ -95,7 +95,7 @@ func (d *MistCallbackHandlersCollection) TriggerUserNew(ctx context.Context, w h
 				"err", err,
 				"originalURL", payload.FullURL)
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("false"))
+			w.Write([]byte("false")) // nolint:errcheck
 			return
 		}
 		accessKey = originalURL.Query().Get("accessKey")
