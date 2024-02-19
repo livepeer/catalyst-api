@@ -91,48 +91,58 @@ var hitRecordCache = HitRecords{
 	data: make(map[string]*HitRecord),
 }
 
-var refreshIntervalCache = RefreshInterval{
+type RefreshIntervalCache struct {
+	data map[string]*RefreshIntervalRecord
+	mux  sync.Mutex
+}
+
+var refreshIntervalCache = RefreshIntervalCache{
 	data: make(map[string]*RefreshIntervalRecord),
 }
 
-func periodicCleanUpRecordCache() {
+func (ac *AccessControlHandlersCollection) periodicCleanUpRecordCache() {
 	go func() {
 		for {
 			time.Sleep(time.Duration(30) * time.Second)
-			hitRecordCache.mux.Lock()
-
-			for key := range hitRecordCache.data {
-				delete(hitRecordCache.data, key)
+			ac.mutex.Lock()
+			for key := range ac.cache {
+				delete(ac.cache, key)
 			}
-			hitRecordCache.mux.Unlock()
+			ac.mutex.Unlock()
 		}
 	}()
 }
 
-func periodicRefreshIntervalCache(mapic mistapiconnector.IMac, accessControlCache map[string]map[string]*PlaybackAccessControlEntry) {
+func (ac *AccessControlHandlersCollection) periodicRefreshIntervalCache(mapic mistapiconnector.IMac) {
 	go func() {
 		for {
-			time.Sleep(time.Duration(5) * time.Second)
+			time.Sleep(5 * time.Second)
+			ac.mutex.RLock()
+			glog.Infof("Checking for refresh interval")
+			refreshIntervalCache.mux.Lock()
 			for key := range refreshIntervalCache.data {
 				if time.Since(refreshIntervalCache.data[key].LastRefresh) > time.Duration(refreshIntervalCache.data[key].RefreshInterval)*time.Second {
 					refreshIntervalCache.data[key].LastRefresh = time.Now()
+
 					mapic.InvalidateAllSessions(key)
-					playbackIdCache := accessControlCache[key]
-					for cacheKey := range playbackIdCache {
-						delete(playbackIdCache, cacheKey)
+					glog.Infof("Invalidating all mist sessions for playbackID %v", key)
+					glog.Infof("Size of cache before invalidation: %v", len(ac.cache))
+					for cachedAccessKey := range ac.cache[key] {
+						glog.Infof("Invalidating session cache for playbackID %v", key)
+						delete(ac.cache[key], cachedAccessKey)
 					}
+					break
 				}
 			}
+			ac.mutex.RUnlock()
+			refreshIntervalCache.mux.Unlock()
 		}
 	}()
 }
 
 func NewAccessControlHandlersCollection(cli config.Cli, mapic mistapiconnector.IMac) *AccessControlHandlersCollection {
 	accessControlCache := make(map[string]map[string]*PlaybackAccessControlEntry)
-	periodicCleanUpRecordCache()
-	periodicRefreshIntervalCache(mapic, accessControlCache)
-
-	return &AccessControlHandlersCollection{
+	ac := &AccessControlHandlersCollection{
 		cache: accessControlCache,
 		gateClient: &GateClient{
 			gateURL: cli.GateURL,
@@ -140,6 +150,9 @@ func NewAccessControlHandlersCollection(cli config.Cli, mapic mistapiconnector.I
 		},
 		blockedJWTs: cli.BlockedJWTs,
 	}
+	ac.periodicCleanUpRecordCache()
+	ac.periodicRefreshIntervalCache(mapic)
+	return ac
 }
 
 func (ac *AccessControlHandlersCollection) HandleUserNew(ctx context.Context, payload *misttriggers.UserNewPayload) (bool, error) {
@@ -323,9 +336,11 @@ func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playba
 	ac.mutex.Lock()
 	defer ac.mutex.Unlock()
 	if ac.cache[playbackID] == nil {
+		glog.Infof("Creating new cache for playbackID %v", playbackID)
 		ac.cache[playbackID] = make(map[string]*PlaybackAccessControlEntry)
 	}
 	ac.cache[playbackID][cacheKey] = &PlaybackAccessControlEntry{staleTime, maxAgeTime, allow}
+	glog.Infof("Caching playback access control info for playbackID %v with cachekey %v", playbackID, cacheKey)
 	return nil
 }
 
