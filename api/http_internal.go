@@ -80,7 +80,7 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
 	eventsHandler := &handlers.EventsHandlersCollection{Cluster: c}
 	ffmpegSegmentingHandlers := &ffmpeg.HandlersCollection{VODEngine: vodEngine}
-	accessControlHandlers := accesscontrol.NewAccessControlHandlersCollection(cli)
+	accessControlHandlers := accesscontrol.NewAccessControlHandlersCollection(cli, mapic)
 	analyticsHandlers := analytics.NewAnalyticsHandler(metricsDB)
 	encryptionHandlers := accesscontrol.NewEncryptionHandlersCollection(cli, spkiPublicKey)
 	adminHandlers := &admin.AdminHandlersCollection{Cluster: c}

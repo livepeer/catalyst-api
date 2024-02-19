@@ -18,6 +18,7 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/log"
+	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/pquerna/cachecontrol/cacheobject"
 )
@@ -52,7 +53,7 @@ type AccessControlWebhookPayload struct {
 }
 
 type GateAPICaller interface {
-	QueryGate(body []byte) (bool, int32, int32, int32, error)
+	QueryGate(body []byte) (bool, GateConfig, error)
 }
 
 type GateClient struct {
@@ -70,17 +71,37 @@ type HitRecords struct {
 	mux  sync.Mutex
 }
 
+type RefreshIntervalRecord struct {
+	RefreshInterval int32
+	LastRefresh     time.Time
+}
+
+type GateConfig struct {
+	MaxAge               int32 `json:"max_age"`
+	StaleWhileRevalidate int32 `json:"stale_while_revalidate"`
+	RateLimit            int32 `json:"rate_limit"`
+	RefreshInterval      int32 `json:"refresh_interval"`
+}
+
 var hitRecordCache = HitRecords{
 	data: make(map[string]*HitRecord),
 }
 
-func periodicCleanUpHitRecordCache() {
+type RefreshIntervalCache struct {
+	data map[string]*RefreshIntervalRecord
+	mux  sync.Mutex
+}
+
+var refreshIntervalCache = RefreshIntervalCache{
+	data: make(map[string]*RefreshIntervalRecord),
+}
+
+func (ac *AccessControlHandlersCollection) periodicCleanUpRecordCache() {
 	go func() {
 		for {
 			time.Sleep(time.Duration(30) * time.Second)
 			hitRecordCache.mux.Lock()
-			// Clear the map
-			for key := range hitRecordCache.data {
+			for key := range ac.cache {
 				delete(hitRecordCache.data, key)
 			}
 			hitRecordCache.mux.Unlock()
@@ -88,18 +109,41 @@ func periodicCleanUpHitRecordCache() {
 	}()
 }
 
-func NewAccessControlHandlersCollection(cli config.Cli) *AccessControlHandlersCollection {
+func (ac *AccessControlHandlersCollection) periodicRefreshIntervalCache(mapic mistapiconnector.IMac) {
+	go func() {
+		for {
+			time.Sleep(5 * time.Second)
+			ac.mutex.RLock()
+			refreshIntervalCache.mux.Lock()
+			for key := range refreshIntervalCache.data {
+				if time.Since(refreshIntervalCache.data[key].LastRefresh) > time.Duration(refreshIntervalCache.data[key].RefreshInterval)*time.Second {
+					refreshIntervalCache.data[key].LastRefresh = time.Now()
+					mapic.InvalidateAllSessions(key)
+					for cachedAccessKey := range ac.cache[key] {
+						delete(ac.cache[key], cachedAccessKey)
+					}
+					break
+				}
+			}
+			ac.mutex.RUnlock()
+			refreshIntervalCache.mux.Unlock()
+		}
+	}()
+}
 
-	periodicCleanUpHitRecordCache()
-
-	return &AccessControlHandlersCollection{
-		cache: make(map[string]map[string]*PlaybackAccessControlEntry),
+func NewAccessControlHandlersCollection(cli config.Cli, mapic mistapiconnector.IMac) *AccessControlHandlersCollection {
+	accessControlCache := make(map[string]map[string]*PlaybackAccessControlEntry)
+	ac := &AccessControlHandlersCollection{
+		cache: accessControlCache,
 		gateClient: &GateClient{
 			gateURL: cli.GateURL,
 			Client:  &http.Client{},
 		},
 		blockedJWTs: cli.BlockedJWTs,
 	}
+	ac.periodicCleanUpRecordCache()
+	ac.periodicRefreshIntervalCache(mapic)
+	return ac
 }
 
 func (ac *AccessControlHandlersCollection) HandleUserNew(ctx context.Context, payload *misttriggers.UserNewPayload) (bool, error) {
@@ -255,7 +299,13 @@ func isStale(entry *PlaybackAccessControlEntry) bool {
 }
 
 func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playbackID, cacheKey string, requestBody []byte) error {
-	allow, rateLimit, maxAge, stale, err := ac.gateClient.QueryGate(requestBody)
+	allow, gateConfig, err := ac.gateClient.QueryGate(requestBody)
+
+	rateLimit := gateConfig.RateLimit
+	refreshInterval := gateConfig.RefreshInterval
+	maxAge := gateConfig.MaxAge
+	stale := gateConfig.StaleWhileRevalidate
+
 	if err != nil {
 		return err
 	}
@@ -265,6 +315,16 @@ func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playba
 			hitRecordCache.data[playbackID] = &HitRecord{hits: make([]time.Time, 0), rateLimit: int(rateLimit)}
 		}
 	}
+
+	refreshIntervalCache.mux.Lock()
+	if refreshInterval > 0 {
+		if _, ok := refreshIntervalCache.data[playbackID]; !ok {
+			if refreshIntervalCache.data[playbackID] == nil {
+				refreshIntervalCache.data[playbackID] = &RefreshIntervalRecord{RefreshInterval: refreshInterval, LastRefresh: time.Now()}
+			}
+		}
+	}
+	refreshIntervalCache.mux.Unlock()
 
 	var maxAgeTime = time.Now().Add(time.Duration(maxAge) * time.Second)
 	var staleTime = time.Now().Add(time.Duration(stale) * time.Second)
@@ -277,50 +337,66 @@ func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playba
 	return nil
 }
 
-// Returns:
-// - bool: whether the request was successful
-// - int32: the rate limit for the request
-// - int32: the max age for the request
-// - int32: the stale while revalidate for the request
-// - error: if any
-func (g *GateClient) QueryGate(body []byte) (bool, int32, int32, int32, error) {
+func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
+
+	gateConfig := GateConfig{
+		MaxAge:               0,
+		StaleWhileRevalidate: 0,
+		RateLimit:            0,
+		RefreshInterval:      0,
+	}
+
 	req, err := http.NewRequest("POST", g.gateURL, bytes.NewReader(body))
 	if err != nil {
-		return false, 0, 0, 0, err
+		return false, gateConfig, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
 	res, err := g.Client.Do(req)
 	if err != nil {
-		return false, 0, 0, 0, err
+		return false, gateConfig, err
 	}
 
 	defer res.Body.Close()
 	cc, err := cacheobject.ParseResponseCacheControl(res.Header.Get("Cache-Control"))
 	if err != nil {
-		return false, 0, 0, 0, err
+		return false, gateConfig, err
 	}
 
 	var rateLimit int32 = 0
+	var refreshInterval int32 = 0
 
 	if res.ContentLength != 0 {
 		var result map[string]interface{}
 		err = json.NewDecoder(res.Body).Decode(&result)
 		if err != nil {
-			return false, 0, 0, 0, err
+			return false, gateConfig, err
 		}
 
 		if rl, ok := result["rateLimit"]; ok {
 			rateLimitFloat64, ok := rl.(float64)
 			if !ok {
-				return false, 0, 0, 0, fmt.Errorf("rateLimit is not a number")
+				return false, gateConfig, fmt.Errorf("rate_limit is not a number")
 			}
 			rateLimit = int32(rateLimitFloat64)
 		}
+
+		if ri, ok := result["refresh_interval"]; ok {
+			refreshIntervalFloat64, ok := ri.(float64)
+			if !ok {
+				return false, gateConfig, fmt.Errorf("refresh_interval is not a number")
+			}
+			refreshInterval = int32(refreshIntervalFloat64)
+		}
 	}
 
-	return res.StatusCode/100 == 2, rateLimit, int32(cc.MaxAge), int32(cc.StaleWhileRevalidate), nil
+	gateConfig.MaxAge = int32(cc.MaxAge)
+	gateConfig.StaleWhileRevalidate = int32(cc.StaleWhileRevalidate)
+	gateConfig.RateLimit = rateLimit
+	gateConfig.RefreshInterval = refreshInterval
+
+	return res.StatusCode/100 == 2, gateConfig, nil
 }
 
 type PlaybackGateClaims struct {

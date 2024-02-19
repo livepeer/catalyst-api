@@ -10,6 +10,7 @@ import (
 	"github.com/livepeer/catalyst-api/handlers/accesscontrol"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/log"
+	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/playback"
 	"github.com/livepeer/catalyst-api/requests"
 )
@@ -18,9 +19,9 @@ type GatingHandler struct {
 	AccessControl *accesscontrol.AccessControlHandlersCollection
 }
 
-func NewGatingHandler(cli config.Cli) *GatingHandler {
+func NewGatingHandler(cli config.Cli, mapic mistapiconnector.IMac) *GatingHandler {
 	return &GatingHandler{
-		AccessControl: accesscontrol.NewAccessControlHandlersCollection(cli),
+		AccessControl: accesscontrol.NewAccessControlHandlersCollection(cli, mapic),
 	}
 }
 

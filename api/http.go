@@ -12,14 +12,15 @@ import (
 	"github.com/livepeer/catalyst-api/handlers"
 	"github.com/livepeer/catalyst-api/handlers/geolocation"
 	"github.com/livepeer/catalyst-api/log"
+	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/catalyst-api/pipeline"
 	"github.com/livepeer/go-api-client"
 )
 
-func ListenAndServe(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster) error {
-	router := NewCatalystAPIRouter(cli, vodEngine, bal, c)
+func ListenAndServe(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster, mapic mistapiconnector.IMac) error {
+	router := NewCatalystAPIRouter(cli, vodEngine, bal, c, mapic)
 	server := http.Server{Addr: cli.HTTPAddress, Handler: router}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -45,11 +46,11 @@ func ListenAndServe(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coo
 	return server.Shutdown(ctx)
 }
 
-func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster) *httprouter.Router {
+func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal balancer.Balancer, c cluster.Cluster, mapic mistapiconnector.IMac) *httprouter.Router {
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
 	withCORS := middleware.AllowCORS()
-	withGatingCheck := middleware.NewGatingHandler(cli).GatingCheck
+	withGatingCheck := middleware.NewGatingHandler(cli, mapic).GatingCheck
 
 	lapi, _ := api.NewAPIClientGeolocated(api.ClientOptions{
 		Server:      cli.APIServer,
