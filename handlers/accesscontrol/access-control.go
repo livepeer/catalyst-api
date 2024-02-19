@@ -118,17 +118,12 @@ func (ac *AccessControlHandlersCollection) periodicRefreshIntervalCache(mapic mi
 		for {
 			time.Sleep(5 * time.Second)
 			ac.mutex.RLock()
-			glog.Infof("Checking for refresh interval")
 			refreshIntervalCache.mux.Lock()
 			for key := range refreshIntervalCache.data {
 				if time.Since(refreshIntervalCache.data[key].LastRefresh) > time.Duration(refreshIntervalCache.data[key].RefreshInterval)*time.Second {
 					refreshIntervalCache.data[key].LastRefresh = time.Now()
-
 					mapic.InvalidateAllSessions(key)
-					glog.Infof("Invalidating all mist sessions for playbackID %v", key)
-					glog.Infof("Size of cache before invalidation: %v", len(ac.cache))
 					for cachedAccessKey := range ac.cache[key] {
-						glog.Infof("Invalidating session cache for playbackID %v", key)
 						delete(ac.cache[key], cachedAccessKey)
 					}
 					break
@@ -340,11 +335,9 @@ func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playba
 	ac.mutex.Lock()
 	defer ac.mutex.Unlock()
 	if ac.cache[playbackID] == nil {
-		glog.Infof("Creating new cache for playbackID %v", playbackID)
 		ac.cache[playbackID] = make(map[string]*PlaybackAccessControlEntry)
 	}
 	ac.cache[playbackID][cacheKey] = &PlaybackAccessControlEntry{staleTime, maxAgeTime, allow}
-	glog.Infof("Caching playback access control info for playbackID %v with cachekey %v", playbackID, cacheKey)
 	return nil
 }
 

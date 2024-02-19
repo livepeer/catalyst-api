@@ -42,13 +42,10 @@ func ParseUserNewPayload(payload MistTriggerBody) (UserNewPayload, error) {
 
 	var originalURL string
 
-	glog.Infof("Got USER_NEW payload streamName=%s hostname=%s connectionID=%s protocol=%s url=%s fullURL=%s sessionID=%s", lines[0], lines[1], lines[2], lines[3], u, lines[4], lines[5])
-
 	if len(lines) == 6 {
 		originalURL = ""
 	} else {
 		originalURL = lines[6]
-		glog.Infof("Got USER_NEW payload originalURL=%s", originalURL)
 	}
 
 	return UserNewPayload{
@@ -87,6 +84,22 @@ func (d *MistCallbackHandlersCollection) TriggerUserNew(ctx context.Context, w h
 		case "Origin":
 			payload.Origin = cookie.Value
 		}
+	}
+
+	if payload.OriginalURL != "" {
+		// Parse query parameter accessKey and jwt from the old URL
+		// If they don't exist, use the ones from the cookies
+		originalURL, err := url.Parse(payload.FullURL)
+		if err != nil {
+			log.LogCtx(ctx, "Error parsing original URL",
+				"err", err,
+				"originalURL", payload.FullURL)
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("false"))
+			return
+		}
+		accessKey = originalURL.Query().Get("accessKey")
+		jwt = originalURL.Query().Get("jwt")
 	}
 
 	payload.AccessKey = accessKey
