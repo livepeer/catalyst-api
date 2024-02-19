@@ -21,6 +21,7 @@ type UserNewPayload struct {
 	AccessKey      string
 	JWT            string
 	OriginIP       string
+	OriginalURL    string
 	Referrer       string
 	UserAgent      string
 	ForwardedProto string
@@ -30,13 +31,24 @@ type UserNewPayload struct {
 
 func ParseUserNewPayload(payload MistTriggerBody) (UserNewPayload, error) {
 	lines := payload.Lines()
-	if len(lines) != 6 {
-		return UserNewPayload{}, fmt.Errorf("expected 6 lines in USER_NEW payload but got lines=%d payload=%s", len(lines), payload)
+	if len(lines) < 6 || len(lines) > 7 {
+		return UserNewPayload{}, fmt.Errorf("expected 6 or 7 lines in USER_NEW payload but got lines=%d payload=%s", len(lines), payload)
 	}
 
 	u, err := url.Parse(lines[4])
 	if err != nil {
 		return UserNewPayload{}, fmt.Errorf("unparsable URL in USER_NEW payload err=%s payload=%s", err, payload)
+	}
+
+	var originalURL string
+
+	glog.Infof("Got USER_NEW payload streamName=%s hostname=%s connectionID=%s protocol=%s url=%s fullURL=%s sessionID=%s", lines[0], lines[1], lines[2], lines[3], u, lines[4], lines[5])
+
+	if len(lines) == 6 {
+		originalURL = ""
+	} else {
+		originalURL = lines[6]
+		glog.Infof("Got USER_NEW payload originalURL=%s", originalURL)
 	}
 
 	return UserNewPayload{
@@ -47,6 +59,7 @@ func ParseUserNewPayload(payload MistTriggerBody) (UserNewPayload, error) {
 		URL:          u,
 		FullURL:      lines[4],
 		SessionID:    lines[5],
+		OriginalURL:  originalURL,
 	}, nil
 }
 

@@ -325,11 +325,15 @@ func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playba
 		}
 	}
 
+	refreshIntervalCache.mux.Lock()
 	if refreshInterval > 0 {
 		if _, ok := refreshIntervalCache.data[playbackID]; !ok {
-			refreshIntervalCache.data[playbackID] = &RefreshIntervalRecord{RefreshInterval: refreshInterval, LastRefresh: time.Now()}
+			if refreshIntervalCache.data[playbackID] == nil {
+				refreshIntervalCache.data[playbackID] = &RefreshIntervalRecord{RefreshInterval: refreshInterval, LastRefresh: time.Now()}
+			}
 		}
 	}
+	refreshIntervalCache.mux.Unlock()
 
 	var maxAgeTime = time.Now().Add(time.Duration(maxAge) * time.Second)
 	var staleTime = time.Now().Add(time.Duration(stale) * time.Second)
