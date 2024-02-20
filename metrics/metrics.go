@@ -34,7 +34,9 @@ type CatalystAPIMetrics struct {
 	SerfEventBufferSize             prometheus.Gauge
 	AccessControlRequestCount       *prometheus.CounterVec
 	AccessControlRequestDurationSec *prometheus.SummaryVec
-	ImageRequestDurationSec         *prometheus.SummaryVec // TODO
+	ImageAPIDurationSec             *prometheus.SummaryVec
+	ImageAPIDownloadDurationSec     *prometheus.SummaryVec
+	ImageAPIExtractDurationSec      *prometheus.SummaryVec
 
 	JobsInFlight         prometheus.Gauge
 	HTTPRequestsInFlight prometheus.Gauge
@@ -113,6 +115,9 @@ func NewMetrics() *CatalystAPIMetrics {
 			Name: "access_control_request_duration_seconds",
 			Help: "The latency of the access control requests",
 		}, []string{"allowed", "playbackID"}),
+		ImageAPIDurationSec:         durationSummary("image_api_response_duration", "Total time taken to process Image API request", "success", "status_code", "version"),
+		ImageAPIDownloadDurationSec: durationSummary("image_api_download_duration", "Time taken to download media from storage while generating an image"),
+		ImageAPIExtractDurationSec:  durationSummary("image_api_extract_duration", "Time taken to generate image"),
 
 		// Clients metrics
 		TranscodingStatusUpdate: ClientMetrics{
@@ -211,6 +216,14 @@ func NewMetrics() *CatalystAPIMetrics {
 	m.Version.WithLabelValues("catalyst-api", config.Version).Inc()
 
 	return m
+}
+
+func durationSummary(name, help string, labelNames ...string) *prometheus.SummaryVec {
+	return promauto.NewSummaryVec(prometheus.SummaryOpts{
+		Name:       name,
+		Help:       help,
+		Objectives: map[float64]float64{0.5: 0.05, 0.8: 0.01, 0.95: 0.01},
+	}, labelNames)
 }
 
 var Metrics = NewMetrics()

@@ -11,11 +11,13 @@ import (
 	"path"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/grafov/m3u8"
 	"github.com/julienschmidt/httprouter"
 	caterrs "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/playback"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
@@ -77,11 +79,12 @@ func parseResolution(req *http.Request, key string, defaultVal int64) (int64, er
 	return strconv.ParseInt(val, 10, 32)
 }
 
-func (p *ImageHandler) handle(w http.ResponseWriter, playbackID string, time float64, width int64, height int64) error {
+func (p *ImageHandler) handle(w http.ResponseWriter, playbackID string, t float64, width int64, height int64) error {
 	var (
 		err         error
 		segmentFile string
 		dir         = playbackID
+		start       = time.Now()
 	)
 
 	// download master playlist
@@ -123,9 +126,9 @@ func (p *ImageHandler) handle(w http.ResponseWriter, playbackID string, time flo
 	extractTime := 0.0
 	for _, segment := range mediaPlaylist.GetAllSegments() {
 		currentTime += segment.Duration
-		if currentTime > time {
+		if currentTime > t {
 			segmentFile = segment.URI
-			extractTime = time - currentTime + segment.Duration
+			extractTime = t - currentTime + segment.Duration
 			break
 		}
 	}
@@ -155,7 +158,12 @@ func (p *ImageHandler) handle(w http.ResponseWriter, playbackID string, time flo
 	}
 	outputFile := path.Join(tmpDir, "out.jpg")
 
+	metrics.Metrics.ImageAPIDownloadDurationSec.WithLabelValues().Observe(time.Since(start).Seconds())
+
 	// extract image
+	extractStart := time.Now()
+	defer metrics.Metrics.ImageAPIExtractDurationSec.WithLabelValues().Observe(time.Since(extractStart).Seconds())
+
 	var ffmpegErr bytes.Buffer
 	err = ffmpeg.
 		Input(inputFile).
