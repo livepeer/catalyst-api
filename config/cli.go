@@ -64,6 +64,7 @@ type Cli struct {
 	DefaultQuality            int
 	MaxBitrateFactor          float64
 	BlockedJWTs               []string
+	EnableAnalytics           string
 
 	// mapping playbackId to value between 0.0 to 100.0
 	CdnRedirectPlaybackPct             map[string]float64
