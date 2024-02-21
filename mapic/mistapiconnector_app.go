@@ -44,6 +44,7 @@ type (
 		RefreshStreamIfNeeded(playbackID string)
 		NukeStream(playbackID string)
 		InvalidateAllSessions(playbackID string)
+		GetCachedStream(playbackID string) *api.Stream
 	}
 
 	pushStatus struct {
@@ -808,6 +809,18 @@ func (mc *mac) refreshStreamInfo(playbackID string) (*streamInfo, error) {
 	glog.Infof("Refreshed stream info for playbackID=%s id=%s numPushes=%d", playbackID, stream.ID, len(info.pushStatus))
 
 	return info, nil
+}
+
+func (mc *mac) GetCachedStream(playbackID string) *api.Stream {
+	mc.mu.RLock()
+	defer mc.mu.Unlock()
+
+	if si, ok := mc.streamInfo[playbackID]; ok {
+		si.mu.Lock()
+		defer si.mu.Unlock()
+		return si.stream
+	}
+	return nil
 }
 
 func mistStreamName2playbackID(msn string) string {

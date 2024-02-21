@@ -2,15 +2,19 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/golang/glog"
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/errors"
+	cerrors "github.com/livepeer/catalyst-api/errors"
+	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
+	"github.com/livepeer/go-api-client"
 	"github.com/mmcloughlin/geohash"
 	"github.com/xeipuuv/gojsonschema"
 	"io"
 	"net/http"
 	"strconv"
+	"sync"
 )
 
 const GEO_HASH_PRECISION = 3
@@ -50,25 +54,42 @@ type AnalyticsGeo struct {
 	Timezone    string
 }
 
-type AnalyticsHandlersCollection struct {
+type AnalyticsExternalData struct {
+	UserID string
 }
 
-func (d *AnalyticsHandlersCollection) Log() httprouter.Handle {
+type AnalyticsHandlersCollection struct {
+	mapic mistapiconnector.IMac
+	lapi  *api.Client
+
+	cache map[string]*AnalyticsExternalData
+	mu    sync.RWMutex
+}
+
+func NewAnalyticsHandlersCollection(mapic mistapiconnector.IMac, lapi *api.Client) AnalyticsHandlersCollection {
+	return AnalyticsHandlersCollection{mapic: mapic, lapi: lapi}
+}
+
+func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 	schema := inputSchemasCompiled["AnalyticsLog"]
 
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		log, err := parseAnalyticsLog(r, schema)
 		if log == nil {
-			errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+			cerrors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 			return
 		}
 		geo, err := parseAnalyticsGeo(r)
 		if err != nil {
 			glog.Warning("error parsing geo info from analytics log request header, err=%v", err)
 		}
+		extData, err := c.enrichExtData(log.PlaybackID)
+		if err != nil {
+			glog.Warning("error enriching analytics log with external data, err=%v", err)
+		}
 
 		// TODO: ENG-1650, Process analytics data and remove logging
-		glog.Info("Processing analytics log: log=%v, geo=%v", log, geo)
+		glog.Info("Processing analytics log: log=%v, geo=%v, extData=%v", log, geo, extData)
 	}
 }
 
@@ -127,4 +148,65 @@ func parseAnalyticsLog(r *http.Request, schema *gojsonschema.Schema) (*Analytics
 	}
 
 	return &log, nil
+}
+
+func (c *AnalyticsHandlersCollection) enrichExtData(playbackID string) (*AnalyticsExternalData, error) {
+	// Try using internal cache
+	c.mu.RLock()
+	cached, ok := c.cache[playbackID]
+	c.mu.RUnlock()
+	if ok {
+		// Empty struct means that the playbackID does not exist
+		if *cached == (AnalyticsExternalData{}) {
+			return nil, fmt.Errorf("playbackID does not exists, playbackID=%v", playbackID)
+		}
+		return cached, nil
+	}
+
+	// PlaybackID is not in internal cache, try using the stream cache from mapic
+	stream := c.mapic.GetCachedStream(playbackID)
+	if stream != nil {
+		return c.extDataFromStream(playbackID, stream)
+	}
+
+	// Not found in any cache, try querying Studio API to get Asset
+	asset, assetErr := c.lapi.GetAssetByPlaybackID(playbackID, true)
+	if assetErr == nil {
+		return c.extDataFromAsset(playbackID, asset)
+	}
+
+	// Not found in any cache, try querying Studio API to get Stream
+	stream, streamErr := c.lapi.GetStreamByPlaybackID(playbackID)
+	if streamErr == nil {
+		return c.extDataFromStream(playbackID, stream)
+	}
+
+	// If not found in both asset and streams, then the playbackID is invalid
+	// Mark it in the internal cache to not repeat querying Studio API again for the same playbackID
+	if errors.Is(assetErr, api.ErrNotExists) && errors.Is(streamErr, api.ErrNotExists) {
+		c.cacheExtData(playbackID, &AnalyticsExternalData{})
+	}
+
+	return nil, fmt.Errorf("unable to fetch playbackID, playbackID=%v, assetErr=%v, streamErr=%v", playbackID, assetErr, streamErr)
+}
+
+func (c *AnalyticsHandlersCollection) extDataFromStream(playbackID string, stream *api.Stream) (*AnalyticsExternalData, error) {
+	return c.cacheExtData(playbackID,
+		&AnalyticsExternalData{
+			UserID: stream.UserID,
+		})
+}
+
+func (c *AnalyticsHandlersCollection) extDataFromAsset(playbackID string, asset *api.Asset) (*AnalyticsExternalData, error) {
+	return c.cacheExtData(playbackID,
+		&AnalyticsExternalData{
+			UserID: asset.UserID,
+		})
+}
+
+func (c *AnalyticsHandlersCollection) cacheExtData(playbackID string, extData *AnalyticsExternalData) (*AnalyticsExternalData, error) {
+	c.mu.Lock()
+	c.cache[playbackID] = extData
+	c.mu.Unlock()
+	return extData, nil
 }
