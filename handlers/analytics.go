@@ -65,12 +65,32 @@ func (d *AnalyticsHandlersCollection) Log() httprouter.Handle {
 		}
 		geo, err := parseAnalyticsGeo(r)
 		if err != nil {
-			glog.Warning("error parsing geo info from analytics log request header, err=%v", err)
+			glog.Warning("error parsing geo info from analytics log request header, err=%w", err)
 		}
 
 		// TODO: ENG-1650, Process analytics data and remove logging
 		glog.Info("Processing analytics log: log=%v, geo=%v", log, geo)
 	}
+}
+
+func parseAnalyticsLog(r *http.Request, schema *gojsonschema.Schema) (*AnalyticsLog, error) {
+	payload, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+	result, err := schema.Validate(gojsonschema.NewBytesLoader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed validating the schema, err=%w", err)
+	}
+	if !result.Valid() {
+		return nil, fmt.Errorf("payload is invalid with schema")
+	}
+	var log AnalyticsLog
+	if err := json.Unmarshal(payload, &log); err != nil {
+		return nil, fmt.Errorf("failed unmarshalling payload into analytics log, err=%w", err)
+	}
+
+	return &log, nil
 }
 
 func parseAnalyticsGeo(r *http.Request) (AnalyticsGeo, error) {
@@ -87,11 +107,11 @@ func parseAnalyticsGeo(r *http.Request) (AnalyticsGeo, error) {
 	if lat != "" && lon != "" {
 		latF, err := strconv.ParseFloat(lat, 64)
 		if err != nil {
-			return res, fmt.Errorf("error parsing header X-Latitude, err=%v", err)
+			return res, fmt.Errorf("error parsing header X-Latitude, err=%w", err)
 		}
 		lonF, err := strconv.ParseFloat(lon, 64)
 		if err != nil {
-			return res, fmt.Errorf("error parsing header X-Longitude, err=%v", err)
+			return res, fmt.Errorf("error parsing header X-Longitude, err=%w", err)
 		}
 		res.GeoHash = geohash.EncodeWithPrecision(latF, lonF, GEO_HASH_PRECISION)
 	}
@@ -108,24 +128,4 @@ func getOrAddMissing(key string, headers http.Header, missingHeaders []string) (
 	}
 	missingHeaders = append(missingHeaders, key)
 	return "", missingHeaders
-}
-
-func parseAnalyticsLog(r *http.Request, schema *gojsonschema.Schema) (*AnalyticsLog, error) {
-	payload, err := io.ReadAll(r.Body)
-	if err != nil {
-		return nil, err
-	}
-	result, err := schema.Validate(gojsonschema.NewBytesLoader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed validating the schema, err=%v", err)
-	}
-	if !result.Valid() {
-		return nil, fmt.Errorf("payload is invalid with schema")
-	}
-	var log AnalyticsLog
-	if err := json.Unmarshal(payload, &log); err != nil {
-		return nil, fmt.Errorf("failed unmarshalling payload into analytics log, err=%v", err)
-	}
-
-	return &log, nil
 }
