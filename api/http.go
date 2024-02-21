@@ -63,10 +63,10 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 		Config:   cli,
 		Lapi:     lapi,
 	}
-	analyticsApiHandlers := &handlers.AnalyticsHandlersCollection{}
 
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 	if cli.EnableAnalytics == "true" || cli.EnableAnalytics == "enabled" {
+		analyticsApiHandlers := handlers.NewAnalyticsHandlersCollection()
 		router.POST("/analytics/log", analyticsApiHandlers.Log())
 	}
 
