@@ -162,7 +162,9 @@ func (p *ImageHandler) handle(w http.ResponseWriter, playbackID string, t float6
 
 	// extract image
 	extractStart := time.Now()
-	defer metrics.Metrics.ImageAPIExtractDurationSec.WithLabelValues().Observe(time.Since(extractStart).Seconds())
+	defer func() {
+		metrics.Metrics.ImageAPIExtractDurationSec.WithLabelValues().Observe(time.Since(extractStart).Seconds())
+	}()
 
 	var ffmpegErr bytes.Buffer
 	err = ffmpeg.

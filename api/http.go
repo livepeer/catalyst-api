@@ -79,12 +79,6 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 	for _, path := range [...]string{"/asset/hls/:playbackID/*file", "/webrtc/:playbackID"} {
 		router.OPTIONS(path, playback)
 	}
-	image := middleware.LogAndMetrics(metrics.Metrics.ImageAPIDurationSec)(
-		withCORS(
-			handlers.NewImageHandler(cli.PublicBucketURLs).Handle,
-		),
-	)
-	router.GET("/asset/image/:playbackID/thumbnail.jpg", image)
 
 	// Handling incoming playback redirection requests
 	redirectHandler := withLogging(withCORS(geoHandlers.RedirectHandler()))
