@@ -23,6 +23,7 @@ import (
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	"github.com/livepeer/catalyst-api/log"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
+	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/catalyst-api/pipeline"
 	"github.com/livepeer/go-api-client"
@@ -110,6 +111,14 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 					vodEngine,
 					catalystApiHandlers.UploadVOD(),
 				),
+			),
+		),
+	)
+	router.GET("/api/image/:playbackID/thumbnail.jpg",
+		middleware.LogAndMetrics(metrics.Metrics.ImageAPIDurationSec)(
+			withAuth(
+				cli.APIToken,
+				handlers.NewImageHandler(cli.PrivateBucketURLs).Handle,
 			),
 		),
 	)

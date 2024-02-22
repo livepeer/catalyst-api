@@ -41,6 +41,7 @@ type Cli struct {
 	APIServer                 string
 	SourceOutput              string
 	PrivateBucketURLs         []*url.URL
+	PublicBucketURLs          []*url.URL
 	ExternalTranscoder        string
 	VodPipelineStrategy       string
 	MetricsDBConnectionString string

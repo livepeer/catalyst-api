@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"path/filepath"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -103,6 +104,10 @@ func appendAccessKey(uri, gatingParam, gatingParamName string) (string, error) {
 }
 
 func osFetch(buckets []*url.URL, playbackID, file, byteRange string) (*drivers.FileInfoReader, error) {
+	return OsFetch(buckets, filepath.Join("hls", playbackID), file, byteRange)
+}
+
+func OsFetch(buckets []*url.URL, playbackID, file, byteRange string) (*drivers.FileInfoReader, error) {
 	if len(buckets) < 1 {
 		return nil, errors.New("playback failed, no private buckets configured")
 	}
@@ -113,7 +118,7 @@ func osFetch(buckets []*url.URL, playbackID, file, byteRange string) (*drivers.F
 	)
 	// try all private buckets until object is found or return error
 	for _, bucket := range buckets {
-		osURL := bucket.JoinPath("hls").JoinPath(playbackID).JoinPath(file)
+		osURL := bucket.JoinPath(playbackID).JoinPath(file)
 		f, err = clients.GetOSURL(osURL.String(), byteRange)
 		if err == nil {
 			// object found successfully so return early
