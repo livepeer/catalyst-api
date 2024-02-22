@@ -36,8 +36,13 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 		host := r.Host
 		pathType, prefix, playbackID, pathTmpl := parsePlaybackID(r.URL.Path)
 		redirectPrefixes := c.Config.RedirectPrefixes
-		lat := r.Header.Get("X-Latitude")
-		lon := r.Header.Get("X-Longitude")
+
+		query := r.URL.Query()
+		lat, lon := query.Get("lat"), query.Get("lon")
+		if lat == "" || lon == "" {
+			lat = r.Header.Get("X-Latitude")
+			lon = r.Header.Get("X-Longitude")
+		}
 
 		if c.Config.CdnRedirectPrefix != nil && (pathType == "hls" || pathType == "webrtc") {
 			cdnPercentage, toBeRedirected := c.Config.CdnRedirectPlaybackPct[playbackID]
