@@ -44,6 +44,10 @@ type (
 		RefreshStreamIfNeeded(playbackID string)
 		NukeStream(playbackID string)
 		InvalidateAllSessions(playbackID string)
+		IStreamCache
+	}
+
+	IStreamCache interface {
 		GetCachedStream(playbackID string) *api.Stream
 	}
 

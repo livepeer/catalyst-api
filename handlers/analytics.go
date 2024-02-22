@@ -59,15 +59,19 @@ type AnalyticsExternalData struct {
 }
 
 type AnalyticsHandlersCollection struct {
-	mapic mistapiconnector.IMac
-	lapi  *api.Client
+	streamCache mistapiconnector.IStreamCache
+	lapi        *api.Client
 
-	cache map[string]*AnalyticsExternalData
+	cache map[string]AnalyticsExternalData
 	mu    sync.RWMutex
 }
 
-func NewAnalyticsHandlersCollection(mapic mistapiconnector.IMac, lapi *api.Client) AnalyticsHandlersCollection {
-	return AnalyticsHandlersCollection{mapic: mapic, lapi: lapi}
+func NewAnalyticsHandlersCollection(streamCache mistapiconnector.IStreamCache, lapi *api.Client) AnalyticsHandlersCollection {
+	return AnalyticsHandlersCollection{
+		streamCache: streamCache,
+		lapi:        lapi,
+		cache:       make(map[string]AnalyticsExternalData),
+	}
 }
 
 func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
@@ -150,21 +154,21 @@ func parseAnalyticsLog(r *http.Request, schema *gojsonschema.Schema) (*Analytics
 	return &log, nil
 }
 
-func (c *AnalyticsHandlersCollection) enrichExtData(playbackID string) (*AnalyticsExternalData, error) {
+func (c *AnalyticsHandlersCollection) enrichExtData(playbackID string) (AnalyticsExternalData, error) {
 	// Try using internal cache
 	c.mu.RLock()
 	cached, ok := c.cache[playbackID]
 	c.mu.RUnlock()
 	if ok {
 		// Empty struct means that the playbackID does not exist
-		if *cached == (AnalyticsExternalData{}) {
-			return nil, fmt.Errorf("playbackID does not exists, playbackID=%v", playbackID)
+		if cached == (AnalyticsExternalData{}) {
+			return cached, fmt.Errorf("playbackID does not exists, playbackID=%v", playbackID)
 		}
 		return cached, nil
 	}
 
 	// PlaybackID is not in internal cache, try using the stream cache from mapic
-	stream := c.mapic.GetCachedStream(playbackID)
+	stream := c.streamCache.GetCachedStream(playbackID)
 	if stream != nil {
 		return c.extDataFromStream(playbackID, stream)
 	}
@@ -184,27 +188,27 @@ func (c *AnalyticsHandlersCollection) enrichExtData(playbackID string) (*Analyti
 	// If not found in both asset and streams, then the playbackID is invalid
 	// Mark it in the internal cache to not repeat querying Studio API again for the same playbackID
 	if errors.Is(assetErr, api.ErrNotExists) && errors.Is(streamErr, api.ErrNotExists) {
-		c.cacheExtData(playbackID, &AnalyticsExternalData{})
+		c.cacheExtData(playbackID, AnalyticsExternalData{})
 	}
 
-	return nil, fmt.Errorf("unable to fetch playbackID, playbackID=%v, assetErr=%v, streamErr=%v", playbackID, assetErr, streamErr)
+	return AnalyticsExternalData{}, fmt.Errorf("unable to fetch playbackID, playbackID=%v, assetErr=%v, streamErr=%v", playbackID, assetErr, streamErr)
 }
 
-func (c *AnalyticsHandlersCollection) extDataFromStream(playbackID string, stream *api.Stream) (*AnalyticsExternalData, error) {
+func (c *AnalyticsHandlersCollection) extDataFromStream(playbackID string, stream *api.Stream) (AnalyticsExternalData, error) {
 	return c.cacheExtData(playbackID,
-		&AnalyticsExternalData{
+		AnalyticsExternalData{
 			UserID: stream.UserID,
 		})
 }
 
-func (c *AnalyticsHandlersCollection) extDataFromAsset(playbackID string, asset *api.Asset) (*AnalyticsExternalData, error) {
+func (c *AnalyticsHandlersCollection) extDataFromAsset(playbackID string, asset *api.Asset) (AnalyticsExternalData, error) {
 	return c.cacheExtData(playbackID,
-		&AnalyticsExternalData{
+		AnalyticsExternalData{
 			UserID: asset.UserID,
 		})
 }
 
-func (c *AnalyticsHandlersCollection) cacheExtData(playbackID string, extData *AnalyticsExternalData) (*AnalyticsExternalData, error) {
+func (c *AnalyticsHandlersCollection) cacheExtData(playbackID string, extData AnalyticsExternalData) (AnalyticsExternalData, error) {
 	c.mu.Lock()
 	c.cache[playbackID] = extData
 	c.mu.Unlock()

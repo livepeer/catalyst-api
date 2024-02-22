@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/go-api-client"
 	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
@@ -197,4 +198,39 @@ func TestParseAnalyticsGeo(t *testing.T) {
 			require.Equal(tt.exp.Timezone, res.Timezone)
 		})
 	}
+}
+
+type MockMapicCache struct {
+	streams   map[string]*api.Stream
+	callCount int
+}
+
+func (c *MockMapicCache) GetCachedStream(playbackID string) *api.Stream {
+	c.callCount = c.callCount + 1
+	return c.streams[playbackID]
+}
+
+func TestEnrichExtData(t *testing.T) {
+	require := require.New(t)
+
+	playbackID := "playback-id-1"
+	userID := "user-id-1"
+
+	mockMapicCache := &MockMapicCache{streams: map[string]*api.Stream{
+		playbackID: {UserID: userID},
+	}}
+
+	c := NewAnalyticsHandlersCollection(mockMapicCache, nil)
+
+	// First call
+	res, err := c.enrichExtData(playbackID)
+	require.NoError(err)
+	require.Equal(userID, res.UserID)
+	require.Equal(1, mockMapicCache.callCount)
+
+	// Second call, use cache
+	res, err = c.enrichExtData(playbackID)
+	require.NoError(err)
+	require.Equal(userID, res.UserID)
+	require.Equal(1, mockMapicCache.callCount)
 }
