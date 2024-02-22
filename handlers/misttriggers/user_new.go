@@ -71,7 +71,7 @@ func (d *MistCallbackHandlersCollection) TriggerUserNew(ctx context.Context, w h
 			accessKey = cookie.Value
 		case "Livepeer-Jwt":
 			jwt = cookie.Value
-		case "X-Fowarded-For":
+		case "X-Forwarded-For":
 			payload.OriginIP = cookie.Value
 		case "Referer":
 			payload.Referrer = cookie.Value
