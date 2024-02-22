@@ -90,6 +90,7 @@ func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 		extData, err := c.enrichExtData(log.PlaybackID)
 		if err != nil {
 			glog.Warning("error enriching analytics log with external data, err=%v", err)
+			cerrors.WriteHTTPBadRequest(w, "Invalid playback_id", nil)
 		}
 
 		// TODO: ENG-1650, Process analytics data and remove logging
