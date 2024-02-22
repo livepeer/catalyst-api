@@ -817,7 +817,7 @@ func (mc *mac) refreshStreamInfo(playbackID string) (*streamInfo, error) {
 
 func (mc *mac) GetCachedStream(playbackID string) *api.Stream {
 	mc.mu.RLock()
-	defer mc.mu.Unlock()
+	defer mc.mu.RUnlock()
 
 	if si, ok := mc.streamInfo[playbackID]; ok {
 		si.mu.Lock()
