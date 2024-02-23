@@ -247,6 +247,29 @@ func TestRedirectHandler_IncompleteLatLonQuery(t *testing.T) {
 		hasHeader("Location", getHLSURLs("http", closestNodeAddr, query)...)
 }
 
+func TestRedirectHandler_InvalidLatLonValues(t *testing.T) {
+	n := mockHandlers(t)
+
+	// coordinates should fallback to empty strings if invalid. so just rely on
+	// the default `EXPECT`s from `mockHandlers`.
+
+	pathHLS := fmt.Sprintf("/hls/%s/index.m3u8", playbackID)
+	requireReq(t, pathHLS).
+		withHeader("X-Latitude", "-123").
+		withHeader("X-Longitude", "420").
+		result(n).
+		hasStatus(http.StatusTemporaryRedirect).
+		hasHeader("Location", getHLSURLs("http", closestNodeAddr, "")...)
+
+	query := "?lat=-112&lon=NaN"
+	pathHLS = fmt.Sprintf("/hls/%s/index.m3u8%s", playbackID, query)
+
+	requireReq(t, pathHLS).
+		result(n).
+		hasStatus(http.StatusTemporaryRedirect).
+		hasHeader("Location", getHLSURLs("http", closestNodeAddr, query)...)
+}
+
 func TestRedirectHandlerHLS_Correct(t *testing.T) {
 	n := mockHandlers(t)
 
