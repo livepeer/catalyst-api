@@ -113,7 +113,7 @@ func (ac *AccessControlHandlersCollection) periodicRefreshIntervalCache(mapic mi
 	go func() {
 		for {
 			time.Sleep(5 * time.Second)
-			ac.mutex.RLock()
+			ac.mutex.Lock()
 			refreshIntervalCache.mux.Lock()
 			for key := range refreshIntervalCache.data {
 				if time.Since(refreshIntervalCache.data[key].LastRefresh) > time.Duration(refreshIntervalCache.data[key].RefreshInterval)*time.Second {
@@ -125,7 +125,7 @@ func (ac *AccessControlHandlersCollection) periodicRefreshIntervalCache(mapic mi
 					break
 				}
 			}
-			ac.mutex.RUnlock()
+			ac.mutex.Unlock()
 			refreshIntervalCache.mux.Unlock()
 		}
 	}()
