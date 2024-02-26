@@ -374,7 +374,7 @@ func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 			return false, gateConfig, err
 		}
 
-		if rl, ok := result["rateLimit"]; ok {
+		if rl, ok := result["rate_limit"]; ok {
 			rateLimitFloat64, ok := rl.(float64)
 			if !ok {
 				return false, gateConfig, fmt.Errorf("rate_limit is not a number")
