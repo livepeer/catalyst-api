@@ -570,6 +570,7 @@ func (mc *mac) nukeAllStreamNames(playbackID string) {
 }
 
 func (mc *mac) invalidateAllSessions(playbackID string) {
+	glog.V(8).Infof("invalidating mist sessions for: %s", playbackID)
 	streamNames := []string{
 		"video+" + playbackID,
 	}

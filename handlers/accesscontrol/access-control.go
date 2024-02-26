@@ -25,7 +25,7 @@ import (
 
 type AccessControlHandlersCollection struct {
 	cache       map[string]map[string]*PlaybackAccessControlEntry
-	mutex       sync.RWMutex
+	mutex       *sync.Mutex
 	gateClient  GateAPICaller
 	blockedJWTs []string
 }
@@ -119,9 +119,12 @@ func (ac *AccessControlHandlersCollection) periodicRefreshIntervalCache(mapic mi
 				if time.Since(refreshIntervalCache.data[key].LastRefresh) > time.Duration(refreshIntervalCache.data[key].RefreshInterval)*time.Second {
 					refreshIntervalCache.data[key].LastRefresh = time.Now()
 					mapic.InvalidateAllSessions(key)
+					//log.LogNoRequestID("after invalidate", "cache", fmt.Sprintf("%+v", ac.cache), "key", key)
 					for cachedAccessKey := range ac.cache[key] {
-						delete(ac.cache[key], cachedAccessKey)
+						//delete(ac.cache[key], cachedAccessKey)
+						ac.cache[key][cachedAccessKey] = &PlaybackAccessControlEntry{}
 					}
+					//log.LogNoRequestID("after delete", "cache", fmt.Sprintf("%+v", ac.cache), "key", key)
 					break
 				}
 			}
@@ -140,6 +143,7 @@ func NewAccessControlHandlersCollection(cli config.Cli, mapic mistapiconnector.I
 			Client:  &http.Client{},
 		},
 		blockedJWTs: cli.BlockedJWTs,
+		mutex:       &sync.Mutex{},
 	}
 	ac.periodicCleanUpRecordCache()
 	ac.periodicRefreshIntervalCache(mapic)
@@ -149,6 +153,7 @@ func NewAccessControlHandlersCollection(cli config.Cli, mapic mistapiconnector.I
 func (ac *AccessControlHandlersCollection) HandleUserNew(ctx context.Context, payload *misttriggers.UserNewPayload) (bool, error) {
 	playbackID := payload.StreamName[strings.Index(payload.StreamName, "+")+1:]
 	ctx = log.WithLogValues(ctx, "playback_id", playbackID)
+	log.V(7).LogCtx(ctx, "access control handling USER_NEW trigger")
 
 	playbackAccessControlAllowed, err := ac.IsAuthorized(ctx, playbackID, payload)
 	if err != nil {
@@ -256,9 +261,9 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 }
 
 func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(ctx context.Context, playbackID, cacheKey string, requestBody []byte) (bool, error) {
-	ac.mutex.RLock()
+	ac.mutex.Lock()
 	entry := ac.cache[playbackID][cacheKey]
-	ac.mutex.RUnlock()
+	ac.mutex.Unlock()
 
 	if isExpired(entry) {
 		log.V(7).LogCtx(ctx, "Cache expired",
@@ -271,9 +276,9 @@ func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(ctx cont
 		log.V(7).LogCtx(ctx, "Cache stale",
 			"cache_key", cacheKey)
 		go func() {
-			ac.mutex.RLock()
+			ac.mutex.Lock()
 			stillStale := isStale(ac.cache[playbackID][cacheKey])
-			ac.mutex.RUnlock()
+			ac.mutex.Unlock()
 			if stillStale {
 				err := ac.cachePlaybackAccessControlInfo(playbackID, cacheKey, requestBody)
 				if err != nil {
@@ -281,11 +286,13 @@ func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(ctx cont
 				}
 			}
 		}()
+	} else {
+		log.V(7).LogCtx(ctx, "Cache entry valid", "allow", entry.Allow, "maxage", entry.MaxAge, "stale", entry.Stale)
 	}
 
-	ac.mutex.RLock()
+	ac.mutex.Lock()
 	entry = ac.cache[playbackID][cacheKey]
-	ac.mutex.RUnlock()
+	ac.mutex.Unlock()
 
 	return entry.Allow, nil
 }
