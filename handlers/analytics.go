@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,15 +10,23 @@ import (
 	cerrors "github.com/livepeer/catalyst-api/errors"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/go-api-client"
+	"github.com/mileusna/useragent"
 	"github.com/mmcloughlin/geohash"
 	"github.com/xeipuuv/gojsonschema"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
+	"time"
 )
 
-const GEO_HASH_PRECISION = 3
+const (
+	GeoHashPrecision        = 3
+	MaxConcurrentProcessing = 5000
+	SendMetricsInterval     = 10 * time.Second
+	SendMetricsTimeout      = 60 * time.Second
+)
 
 type AnalyticsHandler struct {
 }
@@ -58,7 +67,18 @@ type AnalyticsExternalData struct {
 	UserID string
 }
 
+type AnalyticsData struct {
+	sessionID  string
+	playbackID string
+	browser    string
+	deviceType string
+	country    string
+	userID     string
+}
+
 type AnalyticsHandlersCollection struct {
+	schema *gojsonschema.Schema
+
 	streamCache mistapiconnector.IStreamCache
 	lapi        *api.Client
 
@@ -68,6 +88,7 @@ type AnalyticsHandlersCollection struct {
 
 func NewAnalyticsHandlersCollection(streamCache mistapiconnector.IStreamCache, lapi *api.Client) AnalyticsHandlersCollection {
 	return AnalyticsHandlersCollection{
+		schema:      inputSchemasCompiled["AnalyticsLog"],
 		streamCache: streamCache,
 		lapi:        lapi,
 		cache:       make(map[string]AnalyticsExternalData),
@@ -75,10 +96,11 @@ func NewAnalyticsHandlersCollection(streamCache mistapiconnector.IStreamCache, l
 }
 
 func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
-	schema := inputSchemasCompiled["AnalyticsLog"]
+	dataCh := make(chan AnalyticsData, MaxConcurrentProcessing)
+	startLogProcessor(dataCh)
 
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		log, err := parseAnalyticsLog(r, schema)
+		log, err := parseAnalyticsLog(r, c.schema)
 		if log == nil {
 			cerrors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 			return
@@ -93,8 +115,12 @@ func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 			cerrors.WriteHTTPBadRequest(w, "Invalid playback_id", nil)
 		}
 
-		// TODO: ENG-1650, Process analytics data and remove logging
-		glog.Info("Processing analytics log: log=%v, geo=%v, extData=%v", log, geo, extData)
+		select {
+		case dataCh <- toAnalyticsData(log, geo, extData):
+			// process data async
+		default:
+			cerrors.WriteHTTPInternalServerError(w, "error processing analytics log, too many requests", nil)
+		}
 	}
 }
 
@@ -118,7 +144,7 @@ func parseAnalyticsGeo(r *http.Request) (*AnalyticsGeo, error) {
 		if err != nil {
 			return &res, fmt.Errorf("error parsing header X-Longitude, err=%v", err)
 		}
-		res.GeoHash = geohash.EncodeWithPrecision(latF, lonF, GEO_HASH_PRECISION)
+		res.GeoHash = geohash.EncodeWithPrecision(latF, lonF, GeoHashPrecision)
 	}
 	if len(missingHeader) > 0 {
 		return &res, fmt.Errorf("missing geo headers: %v", missingHeader)
@@ -214,4 +240,135 @@ func (c *AnalyticsHandlersCollection) cacheExtData(playbackID string, extData An
 	c.cache[playbackID] = extData
 	c.mu.Unlock()
 	return extData, nil
+}
+
+func toAnalyticsData(log *AnalyticsLog, geo *AnalyticsGeo, extData AnalyticsExternalData) AnalyticsData {
+	ua := useragent.Parse(log.UserAgent)
+	return AnalyticsData{
+		sessionID:  log.SessionID,
+		playbackID: log.PlaybackID,
+		browser:    ua.Name,
+		deviceType: deviceTypeOf(ua),
+		country:    geo.Country,
+		userID:     extData.UserID,
+	}
+}
+
+func deviceTypeOf(ua useragent.UserAgent) string {
+	if ua.Mobile {
+		return "mobile"
+	} else if ua.Tablet {
+		return "tablet"
+	} else if ua.Desktop {
+		return "desktop"
+	}
+	return ""
+}
+
+type LogProcessor struct {
+	logs    map[labelsKey]map[string]metricValue
+	promURL string
+}
+
+type metricValue struct {
+}
+
+type labelsKey struct {
+	playbackID string
+	browser    string
+	deviceType string
+	country    string
+	userID     string
+}
+
+func NewLogProcessor(promURL string) LogProcessor {
+	return LogProcessor{
+		logs:    make(map[labelsKey]map[string]metricValue),
+		promURL: promURL,
+	}
+}
+
+func startLogProcessor(ch chan AnalyticsData) {
+	t := time.NewTicker(SendMetricsInterval)
+	lp := NewLogProcessor("TODO")
+
+	go func() {
+		for {
+			select {
+			case d := <-ch:
+				lp.processLog(d)
+			case <-t.C:
+				lp.sendMetrics()
+			}
+		}
+	}()
+}
+
+func (p *LogProcessor) processLog(d AnalyticsData) {
+	var k = labelsKey{
+		playbackID: d.playbackID,
+		browser:    d.browser,
+		deviceType: d.deviceType,
+		country:    d.country,
+		userID:     d.userID,
+	}
+
+	bySessionID, ok := p.logs[k]
+	if !ok {
+		p.logs[k] = make(map[string]metricValue)
+		bySessionID = p.logs[k]
+	}
+	bySessionID[d.sessionID] = metricValue{}
+}
+
+func (p *LogProcessor) sendMetrics() {
+	glog.Info("sending analytics logs")
+
+	// convert values in the Prometheus format
+	var metrics strings.Builder
+	now := time.Now().UnixMilli()
+	for k, v := range p.logs {
+		metrics.WriteString(toMetric(k, v, now))
+	}
+
+	// send data
+	err := p.sendMetricsString(metrics.String())
+	if err != nil {
+		glog.Error("failed to send analytics logs, err=%w", err)
+	}
+
+	// clear map
+	p.logs = make(map[labelsKey]map[string]metricValue)
+}
+
+func toMetric(k labelsKey, v map[string]metricValue, nowMs int64) string {
+	return fmt.Sprintln(fmt.Sprintf(`viewcount{user_id="%s",playback_id="%s",device_type="%s",browser="%s",country="%s"} %d %d`,
+		k.userID,
+		k.playbackID,
+		k.deviceType,
+		k.browser,
+		k.country,
+		len(v),
+		nowMs,
+	))
+}
+
+func (p *LogProcessor) sendMetricsString(metrics string) error {
+	client := &http.Client{Timeout: SendMetricsTimeout}
+	req, err := http.NewRequest("POST", p.promURL, bytes.NewBuffer([]byte(metrics)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "text/plain")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("non-OK status code: %d", resp.StatusCode)
+	}
+	return nil
 }
