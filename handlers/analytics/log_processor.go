@@ -15,7 +15,7 @@ const (
 )
 
 type ILogProcessor interface {
-	Start(ch chan AnalyticsData)
+	Start(ch chan LogData)
 }
 
 type LogProcessor struct {
@@ -35,7 +35,7 @@ type labelsKey struct {
 	userID     string
 }
 
-type AnalyticsData struct {
+type LogData struct {
 	SessionID  string
 	PlaybackID string
 	Browser    string
@@ -44,15 +44,15 @@ type AnalyticsData struct {
 	UserID     string
 }
 
-func NewLogProcessor(promURL string, host string) LogProcessor {
-	return LogProcessor{
+func NewLogProcessor(promURL string, host string) *LogProcessor {
+	return &LogProcessor{
 		logs:    make(map[labelsKey]map[string]metricValue),
 		promURL: promURL,
 		host:    host,
 	}
 }
 
-func (lp *LogProcessor) Start(ch chan AnalyticsData) {
+func (lp *LogProcessor) Start(ch chan LogData) {
 	t := time.NewTicker(SendMetricsInterval)
 
 	go func() {
@@ -67,7 +67,7 @@ func (lp *LogProcessor) Start(ch chan AnalyticsData) {
 	}()
 }
 
-func (p *LogProcessor) processLog(d AnalyticsData) {
+func (p *LogProcessor) processLog(d LogData) {
 	var k = labelsKey{
 		playbackID: d.PlaybackID,
 		browser:    d.Browser,

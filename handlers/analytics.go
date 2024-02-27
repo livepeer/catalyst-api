@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/golang/glog"
 	"github.com/julienschmidt/httprouter"
@@ -16,7 +15,6 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"sync"
 )
 
 const (
@@ -53,43 +51,28 @@ type AnalyticsLogEvent struct {
 
 type AnalyticsGeo struct {
 	GeoHash     string
-	Continent   string
 	Country     string
 	Subdivision string
 	Timezone    string
 }
 
-type AnalyticsExternalData struct {
-	UserID string
-}
-
 type AnalyticsHandlersCollection struct {
-	streamCache mistapiconnector.IStreamCache
-	lapi        *api.Client
-
-	cache map[string]AnalyticsExternalData
-	mu    sync.RWMutex
-
-	metricsURL string
-	host       string
+	extFetcher   analytics.IExternalDataFetcher
+	logProcessor analytics.ILogProcessor
 }
 
 func NewAnalyticsHandlersCollection(streamCache mistapiconnector.IStreamCache, lapi *api.Client, metricsURL string, host string) AnalyticsHandlersCollection {
 	return AnalyticsHandlersCollection{
-		streamCache: streamCache,
-		lapi:        lapi,
-		cache:       make(map[string]AnalyticsExternalData),
-		metricsURL:  metricsURL,
-		host:        host,
+		extFetcher:   analytics.NewExternalDataFetcher(streamCache, lapi),
+		logProcessor: analytics.NewLogProcessor(metricsURL, host),
 	}
 }
 
 func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 	schema := inputSchemasCompiled["AnalyticsLog"]
 
-	dataCh := make(chan analytics.AnalyticsData, MaxConcurrentProcessing)
-	lp := analytics.NewLogProcessor(c.metricsURL, c.host)
-	lp.Start(dataCh)
+	dataCh := make(chan analytics.LogData, MaxConcurrentProcessing)
+	c.logProcessor.Start(dataCh)
 
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		log, err := parseAnalyticsLog(r, schema)
@@ -101,7 +84,7 @@ func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 		if err != nil {
 			glog.Warning("error parsing geo info from analytics log request header, err=%v", err)
 		}
-		extData, err := c.enrichExtData(log.PlaybackID)
+		extData, err := c.extFetcher.Fetch(log.PlaybackID)
 		if err != nil {
 			glog.Warning("error enriching analytics log with external data, err=%v", err)
 			cerrors.WriteHTTPBadRequest(w, "Invalid playback_id", nil)
@@ -120,7 +103,6 @@ func parseAnalyticsGeo(r *http.Request) (*AnalyticsGeo, error) {
 	res := AnalyticsGeo{}
 	var missingHeader []string
 
-	res.Continent, missingHeader = getOrAddMissing("X-Continent-Name", r.Header, missingHeader)
 	res.Country, missingHeader = getOrAddMissing("X-City-Country-Name", r.Header, missingHeader)
 	res.Subdivision, missingHeader = getOrAddMissing("X-Subregion-Name", r.Header, missingHeader)
 	res.Timezone, missingHeader = getOrAddMissing("X-Time-Zone", r.Header, missingHeader)
@@ -173,70 +155,9 @@ func parseAnalyticsLog(r *http.Request, schema *gojsonschema.Schema) (*Analytics
 	return &log, nil
 }
 
-func (c *AnalyticsHandlersCollection) enrichExtData(playbackID string) (AnalyticsExternalData, error) {
-	// Try using internal cache
-	c.mu.RLock()
-	cached, ok := c.cache[playbackID]
-	c.mu.RUnlock()
-	if ok {
-		// Empty struct means that the playbackID does not exist
-		if cached == (AnalyticsExternalData{}) {
-			return cached, fmt.Errorf("playbackID does not exists, playbackID=%v", playbackID)
-		}
-		return cached, nil
-	}
-
-	// PlaybackID is not in internal cache, try using the stream cache from mapic
-	stream := c.streamCache.GetCachedStream(playbackID)
-	if stream != nil {
-		return c.extDataFromStream(playbackID, stream)
-	}
-
-	// Not found in any cache, try querying Studio API to get Asset
-	asset, assetErr := c.lapi.GetAssetByPlaybackID(playbackID, true)
-	if assetErr == nil {
-		return c.extDataFromAsset(playbackID, asset)
-	}
-
-	// Not found in any cache, try querying Studio API to get Stream
-	stream, streamErr := c.lapi.GetStreamByPlaybackID(playbackID)
-	if streamErr == nil {
-		return c.extDataFromStream(playbackID, stream)
-	}
-
-	// If not found in both asset and streams, then the playbackID is invalid
-	// Mark it in the internal cache to not repeat querying Studio API again for the same playbackID
-	if errors.Is(assetErr, api.ErrNotExists) && errors.Is(streamErr, api.ErrNotExists) {
-		c.cacheExtData(playbackID, AnalyticsExternalData{})
-	}
-
-	return AnalyticsExternalData{}, fmt.Errorf("unable to fetch playbackID, playbackID=%v, assetErr=%v, streamErr=%v", playbackID, assetErr, streamErr)
-}
-
-func (c *AnalyticsHandlersCollection) extDataFromStream(playbackID string, stream *api.Stream) (AnalyticsExternalData, error) {
-	return c.cacheExtData(playbackID,
-		AnalyticsExternalData{
-			UserID: stream.UserID,
-		})
-}
-
-func (c *AnalyticsHandlersCollection) extDataFromAsset(playbackID string, asset *api.Asset) (AnalyticsExternalData, error) {
-	return c.cacheExtData(playbackID,
-		AnalyticsExternalData{
-			UserID: asset.UserID,
-		})
-}
-
-func (c *AnalyticsHandlersCollection) cacheExtData(playbackID string, extData AnalyticsExternalData) (AnalyticsExternalData, error) {
-	c.mu.Lock()
-	c.cache[playbackID] = extData
-	c.mu.Unlock()
-	return extData, nil
-}
-
-func toAnalyticsData(log *AnalyticsLog, geo *AnalyticsGeo, extData AnalyticsExternalData) analytics.AnalyticsData {
+func toAnalyticsData(log *AnalyticsLog, geo *AnalyticsGeo, extData analytics.ExternalData) analytics.LogData {
 	ua := useragent.Parse(log.UserAgent)
-	return analytics.AnalyticsData{
+	return analytics.LogData{
 		SessionID:  log.SessionID,
 		PlaybackID: log.PlaybackID,
 		Browser:    ua.Name,

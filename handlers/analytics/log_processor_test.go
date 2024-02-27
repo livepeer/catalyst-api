@@ -14,12 +14,12 @@ func TestLogProcessor(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		data     []AnalyticsData
+		data     []LogData
 		expected []string
 	}{
 		{
 			name: "Multiple same logs results in 1 metric",
-			data: []AnalyticsData{
+			data: []LogData{
 				{
 					SessionID:  "session-1",
 					PlaybackID: "playback-1",
@@ -43,7 +43,7 @@ func TestLogProcessor(t *testing.T) {
 		},
 		{
 			name: "Multiple same logs with different session IDs results in 1 metric",
-			data: []AnalyticsData{
+			data: []LogData{
 				{
 					SessionID:  "session-1",
 					PlaybackID: "playback-1",
@@ -67,7 +67,7 @@ func TestLogProcessor(t *testing.T) {
 		},
 		{
 			name: "Different logs result in separate metrics",
-			data: []AnalyticsData{
+			data: []LogData{
 				{
 					SessionID:  "session-1",
 					PlaybackID: "playback-1",
