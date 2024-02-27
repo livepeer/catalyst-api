@@ -221,7 +221,7 @@ func TestEnrichExtData(t *testing.T) {
 		playbackID: {UserID: userID},
 	}}
 
-	c := NewAnalyticsHandlersCollection(mockMapicCache, nil, "")
+	c := NewAnalyticsHandlersCollection(mockMapicCache, nil, "", "")
 
 	// First call
 	res, err := c.enrichExtData(playbackID)

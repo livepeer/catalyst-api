@@ -86,15 +86,17 @@ type AnalyticsHandlersCollection struct {
 	mu    sync.RWMutex
 
 	metricsURL string
+	host       string
 }
 
-func NewAnalyticsHandlersCollection(streamCache mistapiconnector.IStreamCache, lapi *api.Client, metricsURL string) AnalyticsHandlersCollection {
+func NewAnalyticsHandlersCollection(streamCache mistapiconnector.IStreamCache, lapi *api.Client, metricsURL string, host string) AnalyticsHandlersCollection {
 	return AnalyticsHandlersCollection{
 		schema:      inputSchemasCompiled["AnalyticsLog"],
 		streamCache: streamCache,
 		lapi:        lapi,
 		cache:       make(map[string]AnalyticsExternalData),
 		metricsURL:  metricsURL,
+		host:        host,
 	}
 }
 
@@ -271,6 +273,7 @@ func deviceTypeOf(ua useragent.UserAgent) string {
 type LogProcessor struct {
 	logs    map[labelsKey]map[string]metricValue
 	promURL string
+	host    string
 }
 
 type metricValue struct {
@@ -284,16 +287,17 @@ type labelsKey struct {
 	userID     string
 }
 
-func NewLogProcessor(promURL string) LogProcessor {
+func NewLogProcessor(promURL string, host string) LogProcessor {
 	return LogProcessor{
 		logs:    make(map[labelsKey]map[string]metricValue),
 		promURL: promURL,
+		host:    host,
 	}
 }
 
 func (c *AnalyticsHandlersCollection) startLogProcessor(ch chan AnalyticsData) {
 	t := time.NewTicker(SendMetricsInterval)
-	lp := NewLogProcessor(c.metricsURL)
+	lp := NewLogProcessor(c.metricsURL, c.host)
 
 	go func() {
 		for {
@@ -336,7 +340,7 @@ func (p *LogProcessor) sendMetrics() {
 	var metrics strings.Builder
 	now := time.Now().UnixMilli()
 	for k, v := range p.logs {
-		metrics.WriteString(toMetric(k, v, now))
+		metrics.WriteString(p.toMetric(k, v, now))
 	}
 
 	// send data
@@ -349,8 +353,9 @@ func (p *LogProcessor) sendMetrics() {
 	p.logs = make(map[labelsKey]map[string]metricValue)
 }
 
-func toMetric(k labelsKey, v map[string]metricValue, nowMs int64) string {
-	return fmt.Sprintln(fmt.Sprintf(`viewcount{user_id="%s",playback_id="%s",device_type="%s",browser="%s",country="%s"} %d %d`,
+func (p *LogProcessor) toMetric(k labelsKey, v map[string]metricValue, nowMs int64) string {
+	return fmt.Sprintln(fmt.Sprintf(`viewcount{host="%s",user_id="%s",playback_id="%s",device_type="%s",browser="%s",country="%s"} %d %d`,
+		p.host,
 		k.userID,
 		k.playbackID,
 		k.deviceType,
