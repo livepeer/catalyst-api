@@ -325,7 +325,12 @@ func (p *LogProcessor) processLog(d AnalyticsData) {
 }
 
 func (p *LogProcessor) sendMetrics() {
-	glog.Info("sending analytics logs")
+	if len(p.logs) > 0 {
+		glog.Info("sending analytics logs")
+	} else {
+		glog.V(6).Info("no analytics logs, skip sending")
+		return
+	}
 
 	// convert values in the Prometheus format
 	var metrics strings.Builder
@@ -370,7 +375,7 @@ func (p *LogProcessor) sendMetricsString(metrics string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("non-OK status code: %d", resp.StatusCode)
 	}
 	return nil
