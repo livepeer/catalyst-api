@@ -84,20 +84,23 @@ type AnalyticsHandlersCollection struct {
 
 	cache map[string]AnalyticsExternalData
 	mu    sync.RWMutex
+
+	metricsURL string
 }
 
-func NewAnalyticsHandlersCollection(streamCache mistapiconnector.IStreamCache, lapi *api.Client) AnalyticsHandlersCollection {
+func NewAnalyticsHandlersCollection(streamCache mistapiconnector.IStreamCache, lapi *api.Client, metricsURL string) AnalyticsHandlersCollection {
 	return AnalyticsHandlersCollection{
 		schema:      inputSchemasCompiled["AnalyticsLog"],
 		streamCache: streamCache,
 		lapi:        lapi,
 		cache:       make(map[string]AnalyticsExternalData),
+		metricsURL:  metricsURL,
 	}
 }
 
 func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 	dataCh := make(chan AnalyticsData, MaxConcurrentProcessing)
-	startLogProcessor(dataCh)
+	c.startLogProcessor(dataCh)
 
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		log, err := parseAnalyticsLog(r, c.schema)
@@ -288,9 +291,9 @@ func NewLogProcessor(promURL string) LogProcessor {
 	}
 }
 
-func startLogProcessor(ch chan AnalyticsData) {
+func (c *AnalyticsHandlersCollection) startLogProcessor(ch chan AnalyticsData) {
 	t := time.NewTicker(SendMetricsInterval)
-	lp := NewLogProcessor("TODO")
+	lp := NewLogProcessor(c.metricsURL)
 
 	go func() {
 		for {
@@ -334,7 +337,7 @@ func (p *LogProcessor) sendMetrics() {
 	// send data
 	err := p.sendMetricsString(metrics.String())
 	if err != nil {
-		glog.Error("failed to send analytics logs, err=%w", err)
+		glog.Errorf("failed to send analytics logs, err=%w", err)
 	}
 
 	// clear map

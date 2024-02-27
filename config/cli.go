@@ -65,6 +65,7 @@ type Cli struct {
 	MaxBitrateFactor          float64
 	BlockedJWTs               []string
 	EnableAnalytics           string
+	AnalyticsMetricsURL       string
 
 	// mapping playbackId to value between 0.0 to 100.0
 	CdnRedirectPlaybackPct             map[string]float64
