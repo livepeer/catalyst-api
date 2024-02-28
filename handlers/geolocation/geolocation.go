@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/golang/glog"
@@ -36,8 +37,19 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 		host := r.Host
 		pathType, prefix, playbackID, pathTmpl := parsePlaybackID(r.URL.Path)
 		redirectPrefixes := c.Config.RedirectPrefixes
-		lat := r.Header.Get("X-Latitude")
-		lon := r.Header.Get("X-Longitude")
+
+		// `X-Latitude` and `X-Longitude` headers are populated by nginx/geoip when requests come from viewers. The `lat`
+		// and `lon` queries can override these and are used by the `studio API` to trigger stream pulls from a desired loc.
+		query := r.URL.Query()
+		lat, lon := query.Get("lat"), query.Get("lon")
+		if !isValidGPSCoord(lat, lon) {
+			lat = r.Header.Get("X-Latitude")
+			lon = r.Header.Get("X-Longitude")
+
+			if !isValidGPSCoord(lat, lon) {
+				lat, lon = "", ""
+			}
+		}
 
 		if c.Config.CdnRedirectPrefix != nil && (pathType == "hls" || pathType == "webrtc") {
 			cdnPercentage, toBeRedirected := c.Config.CdnRedirectPlaybackPct[playbackID]
@@ -284,4 +296,17 @@ func protocol(r *http.Request) string {
 		return "https"
 	}
 	return "http"
+}
+
+func isValidGPSCoord(lat, lon string) bool {
+	if lat == "" || lon == "" {
+		return false
+	}
+
+	latF, errLat := strconv.ParseFloat(lat, 64)
+	lonF, errLon := strconv.ParseFloat(lon, 64)
+	if errLat != nil || errLon != nil {
+		return false
+	}
+	return latF >= -90 && latF <= 90 && lonF >= -180 && lonF <= 180
 }

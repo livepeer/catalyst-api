@@ -39,6 +39,11 @@ var fakeSerfMember = cluster.Member{
 
 var prefixes = [...]string{"video", "videorec", "stream", "playback", "vod"}
 
+var coordinates = []struct{ lat, lon string }{
+	{"-22.952595041532618", "-43.194387810060256"},
+	{"41.37409383123628", "2.161971651333584"},
+}
+
 func randomPrefix() string {
 	return prefixes[rand.Intn(len(prefixes))]
 }
@@ -92,10 +97,10 @@ func TestPlaybackIDParserWithoutPrefix(t *testing.T) {
 	}
 }
 
-func getHLSURLs(proto, host string) []string {
+func getHLSURLs(proto, host, query string) []string {
 	var urls []string
 	for _, prefix := range prefixes {
-		urls = append(urls, fmt.Sprintf("%s://%s/hls/%s+%s/index.m3u8", proto, host, prefix, playbackID))
+		urls = append(urls, fmt.Sprintf("%s://%s/hls/%s+%s/index.m3u8%s", proto, host, prefix, playbackID, query))
 	}
 	return urls
 }
@@ -179,13 +184,90 @@ func TestRedirectHandler404(t *testing.T) {
 	requireReq(t, path).
 		result(n).
 		hasStatus(http.StatusTemporaryRedirect).
-		hasHeader("Location", getHLSURLs("http", closestNodeAddr)...)
+		hasHeader("Location", getHLSURLs("http", closestNodeAddr, "")...)
 
 	requireReq(t, path).
 		withHeader("X-Forwarded-Proto", "https").
 		result(n).
 		hasStatus(http.StatusTemporaryRedirect).
-		hasHeader("Location", getHLSURLs("https", closestNodeAddr)...)
+		hasHeader("Location", getHLSURLs("https", closestNodeAddr, "")...)
+}
+
+func TestRedirectHandler_LatLonHeaders(t *testing.T) {
+	n := mockHandlers(t)
+
+	n.Balancer.(*mockbalancer.MockBalancer).EXPECT().
+		GetBestNode(context.Background(), prefixes[:], playbackID, coordinates[0].lat, coordinates[0].lon, "").
+		Return(closestNodeAddr, fmt.Sprintf("%s+%s", prefixes[0], playbackID), nil)
+
+	pathHLS := fmt.Sprintf("/hls/%s/index.m3u8", playbackID)
+
+	requireReq(t, pathHLS).
+		withHeader("X-Latitude", coordinates[0].lat).
+		withHeader("X-Longitude", coordinates[0].lon).
+		result(n).
+		hasStatus(http.StatusTemporaryRedirect).
+		hasHeader("Location", getHLSURLs("http", closestNodeAddr, "")...)
+}
+
+func TestRedirectHandler_LatLonQueryOverride(t *testing.T) {
+	n := mockHandlers(t)
+
+	n.Balancer.(*mockbalancer.MockBalancer).EXPECT().
+		GetBestNode(context.Background(), prefixes[:], playbackID, coordinates[1].lat, coordinates[1].lon, "").
+		Return(closestNodeAddr, fmt.Sprintf("%s+%s", prefixes[0], playbackID), nil)
+
+	query := fmt.Sprintf("?lat=%s&lon=%s", coordinates[1].lat, coordinates[1].lon)
+	pathHLS := fmt.Sprintf("/hls/%s/index.m3u8%s", playbackID, query)
+
+	requireReq(t, pathHLS).
+		withHeader("X-Latitude", coordinates[0].lat).
+		withHeader("X-Longitude", coordinates[0].lon).
+		result(n).
+		hasStatus(http.StatusTemporaryRedirect).
+		hasHeader("Location", getHLSURLs("http", closestNodeAddr, query)...)
+}
+
+func TestRedirectHandler_IncompleteLatLonQuery(t *testing.T) {
+	n := mockHandlers(t)
+
+	// Make sure values are not overridden if either lat or lon are missing
+	n.Balancer.(*mockbalancer.MockBalancer).EXPECT().
+		GetBestNode(context.Background(), prefixes[:], playbackID, coordinates[0].lat, coordinates[0].lon, "").
+		Return(closestNodeAddr, fmt.Sprintf("%s+%s", prefixes[0], playbackID), nil)
+
+	query := fmt.Sprintf("?lat=&lon=%s", coordinates[1].lon)
+	pathHLS := fmt.Sprintf("/hls/%s/index.m3u8%s", playbackID, query)
+
+	requireReq(t, pathHLS).
+		withHeader("X-Latitude", coordinates[0].lat).
+		withHeader("X-Longitude", coordinates[0].lon).
+		result(n).
+		hasStatus(http.StatusTemporaryRedirect).
+		hasHeader("Location", getHLSURLs("http", closestNodeAddr, query)...)
+}
+
+func TestRedirectHandler_InvalidLatLonValues(t *testing.T) {
+	n := mockHandlers(t)
+
+	// coordinates should fallback to empty strings if invalid. so just rely on
+	// the default `EXPECT`s from `mockHandlers`.
+
+	pathHLS := fmt.Sprintf("/hls/%s/index.m3u8", playbackID)
+	requireReq(t, pathHLS).
+		withHeader("X-Latitude", "-123").
+		withHeader("X-Longitude", "420").
+		result(n).
+		hasStatus(http.StatusTemporaryRedirect).
+		hasHeader("Location", getHLSURLs("http", closestNodeAddr, "")...)
+
+	query := "?lat=-112&lon=NaN"
+	pathHLS = fmt.Sprintf("/hls/%s/index.m3u8%s", playbackID, query)
+
+	requireReq(t, pathHLS).
+		result(n).
+		hasStatus(http.StatusTemporaryRedirect).
+		hasHeader("Location", getHLSURLs("http", closestNodeAddr, query)...)
 }
 
 func TestRedirectHandlerHLS_Correct(t *testing.T) {
@@ -196,13 +278,13 @@ func TestRedirectHandlerHLS_Correct(t *testing.T) {
 	requireReq(t, path).
 		result(n).
 		hasStatus(http.StatusTemporaryRedirect).
-		hasHeader("Location", getHLSURLs("http", closestNodeAddr)...)
+		hasHeader("Location", getHLSURLs("http", closestNodeAddr, "")...)
 
 	requireReq(t, path).
 		withHeader("X-Forwarded-Proto", "https").
 		result(n).
 		hasStatus(http.StatusTemporaryRedirect).
-		hasHeader("Location", getHLSURLs("https", closestNodeAddr)...)
+		hasHeader("Location", getHLSURLs("https", closestNodeAddr, "")...)
 }
 
 func TestRedirectHandlerHLSVOD_Correct(t *testing.T) {

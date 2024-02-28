@@ -113,7 +113,7 @@ func (ac *AccessControlHandlersCollection) periodicRefreshIntervalCache(mapic mi
 	go func() {
 		for {
 			time.Sleep(5 * time.Second)
-			ac.mutex.RLock()
+			ac.mutex.Lock()
 			refreshIntervalCache.mux.Lock()
 			for key := range refreshIntervalCache.data {
 				if time.Since(refreshIntervalCache.data[key].LastRefresh) > time.Duration(refreshIntervalCache.data[key].RefreshInterval)*time.Second {
@@ -125,25 +125,36 @@ func (ac *AccessControlHandlersCollection) periodicRefreshIntervalCache(mapic mi
 					break
 				}
 			}
-			ac.mutex.RUnlock()
+			ac.mutex.Unlock()
 			refreshIntervalCache.mux.Unlock()
 		}
 	}()
 }
 
+// This is a singleton to avoid instantiating multiple handlers and having auth state
+// split across them
+var accessControlHandlersCollection *AccessControlHandlersCollection
+var accessControlHandlersCollectionMutex sync.Mutex
+
 func NewAccessControlHandlersCollection(cli config.Cli, mapic mistapiconnector.IMac) *AccessControlHandlersCollection {
-	accessControlCache := make(map[string]map[string]*PlaybackAccessControlEntry)
-	ac := &AccessControlHandlersCollection{
-		cache: accessControlCache,
-		gateClient: &GateClient{
-			gateURL: cli.GateURL,
-			Client:  &http.Client{},
-		},
-		blockedJWTs: cli.BlockedJWTs,
+	accessControlHandlersCollectionMutex.Lock()
+	defer accessControlHandlersCollectionMutex.Unlock()
+
+	if accessControlHandlersCollection == nil {
+		accessControlCache := make(map[string]map[string]*PlaybackAccessControlEntry)
+		accessControlHandlersCollection = &AccessControlHandlersCollection{
+			cache: accessControlCache,
+			gateClient: &GateClient{
+				gateURL: cli.GateURL,
+				Client:  &http.Client{},
+			},
+			blockedJWTs: cli.BlockedJWTs,
+		}
+		accessControlHandlersCollection.periodicCleanUpRecordCache()
+		accessControlHandlersCollection.periodicRefreshIntervalCache(mapic)
 	}
-	ac.periodicCleanUpRecordCache()
-	ac.periodicRefreshIntervalCache(mapic)
-	return ac
+
+	return accessControlHandlersCollection
 }
 
 func (ac *AccessControlHandlersCollection) HandleUserNew(ctx context.Context, payload *misttriggers.UserNewPayload) (bool, error) {
@@ -374,7 +385,7 @@ func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 			return false, gateConfig, err
 		}
 
-		if rl, ok := result["rateLimit"]; ok {
+		if rl, ok := result["rate_limit"]; ok {
 			rateLimitFloat64, ok := rl.(float64)
 			if !ok {
 				return false, gateConfig, fmt.Errorf("rate_limit is not a number")
