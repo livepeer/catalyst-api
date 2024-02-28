@@ -59,6 +59,11 @@ func NewLogProcessor(promURL string, host string) *LogProcessor {
 	}
 }
 
+// Start starts LogProcessor which does the following:
+// - on every analytics heartbeat event, process log which means updating the internal structure with the log data
+// - every SendMetricsInterval, send metrics to the Prometheus (Victoria Metrics) DB
+// Note that it sends the metrics in the plaintext format, this could be changed to sending data in the binary format,
+// but plaintext seems to be efficient enough.
 func (lp *LogProcessor) Start(ch chan LogData) {
 	t := time.NewTicker(SendMetricsInterval)
 
