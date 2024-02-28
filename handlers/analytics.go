@@ -87,11 +87,13 @@ func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 			cerrors.WriteHTTPBadRequest(w, "Invalid playback_id", nil)
 		}
 
-		select {
-		case dataCh <- toAnalyticsData(log, geo, extData):
-			// process data async
-		default:
-			cerrors.WriteHTTPInternalServerError(w, "error processing analytics log, too many requests", nil)
+		for _, ad := range toAnalyticsData(log, geo, extData) {
+			select {
+			case dataCh <- ad:
+				// process data async
+			default:
+				cerrors.WriteHTTPInternalServerError(w, "error processing analytics log, too many requests", nil)
+			}
 		}
 	}
 }
@@ -152,16 +154,25 @@ func getOrAddMissing(key string, headers http.Header, missingHeaders []string) (
 	return "", missingHeaders
 }
 
-func toAnalyticsData(log *AnalyticsLog, geo AnalyticsGeo, extData analytics.ExternalData) analytics.LogData {
+func toAnalyticsData(log *AnalyticsLog, geo AnalyticsGeo, extData analytics.ExternalData) []analytics.LogData {
 	ua := useragent.Parse(log.UserAgent)
-	return analytics.LogData{
-		SessionID:  log.SessionID,
-		PlaybackID: log.PlaybackID,
-		Browser:    ua.Name,
-		DeviceType: deviceTypeOf(ua),
-		Country:    geo.Country,
-		UserID:     extData.UserID,
+	var res []analytics.LogData
+	for _, e := range log.Events {
+		if e.Type == "heartbeat" {
+			res = append(res, analytics.LogData{
+				SessionID:  log.SessionID,
+				PlaybackID: log.PlaybackID,
+				Browser:    ua.Name,
+				DeviceType: deviceTypeOf(ua),
+				Country:    geo.Country,
+				UserID:     extData.UserID,
+				PlaytimeMs: e.PlaytimeMS,
+				BufferMs:   e.BufferMS,
+				Errors:     e.Errors,
+			})
+		}
 	}
+	return res
 }
 
 func deviceTypeOf(ua useragent.UserAgent) string {

@@ -25,6 +25,9 @@ type LogProcessor struct {
 }
 
 type metricValue struct {
+	count           int
+	sumRebufferRate float64
+	sumErrorRatio   float64
 }
 
 type labelsKey struct {
@@ -42,6 +45,10 @@ type LogData struct {
 	DeviceType string
 	Country    string
 	UserID     string
+
+	PlaytimeMs int
+	BufferMs   int
+	Errors     int
 }
 
 func NewLogProcessor(promURL string, host string) *LogProcessor {
@@ -81,7 +88,18 @@ func (p *LogProcessor) processLog(d LogData) {
 		p.logs[k] = make(map[string]metricValue)
 		bySessionID = p.logs[k]
 	}
-	bySessionID[d.SessionID] = metricValue{}
+
+	rebufferRate := float64(d.BufferMs) / float64(d.PlaytimeMs+d.BufferMs)
+	var errorRatio float64
+	if d.Errors > 0 {
+		errorRatio = 1
+	}
+	mv := bySessionID[d.SessionID]
+	bySessionID[d.SessionID] = metricValue{
+		count:           mv.count + 1,
+		sumRebufferRate: mv.sumRebufferRate + rebufferRate,
+		sumErrorRatio:   mv.sumErrorRatio + errorRatio,
+	}
 }
 
 func (p *LogProcessor) sendMetrics() {
@@ -96,7 +114,9 @@ func (p *LogProcessor) sendMetrics() {
 	var metrics strings.Builder
 	now := time.Now().UnixMilli()
 	for k, v := range p.logs {
-		metrics.WriteString(p.toMetric(k, v, now))
+		metrics.WriteString(p.toViewCountMetric(k, v, now))
+		metrics.WriteString(p.toRebufferRatioMetric(k, v, now))
+		metrics.WriteString(p.toErrorRateMetric(k, v, now))
 	}
 
 	// send data
@@ -109,15 +129,45 @@ func (p *LogProcessor) sendMetrics() {
 	p.logs = make(map[labelsKey]map[string]metricValue)
 }
 
-func (p *LogProcessor) toMetric(k labelsKey, v map[string]metricValue, nowMs int64) string {
-	return fmt.Sprintln(fmt.Sprintf(`viewcount{host="%s",user_id="%s",playback_id="%s",device_type="%s",browser="%s",country="%s"} %d %d`,
+func (p *LogProcessor) toViewCountMetric(k labelsKey, v map[string]metricValue, nowMs int64) string {
+	value := fmt.Sprintf("%d", len(v))
+	return p.toMetric(k, "view_count", value, nowMs)
+}
+
+func (p *LogProcessor) toRebufferRatioMetric(k labelsKey, v map[string]metricValue, nowMs int64) string {
+	var count int
+	var sumRebufferRate float64
+	for _, mv := range v {
+		count += 1
+		sumRebufferRate += mv.sumRebufferRate / float64(mv.count)
+	}
+
+	value := fmt.Sprintf("%f", sumRebufferRate/float64(count))
+	return p.toMetric(k, "rebuffer_ratio", value, nowMs)
+}
+
+func (p *LogProcessor) toErrorRateMetric(k labelsKey, v map[string]metricValue, nowMs int64) string {
+	var count int
+	var sumErrorRatio float64
+	for _, mv := range v {
+		count += 1
+		sumErrorRatio += mv.sumErrorRatio / float64(mv.count)
+	}
+
+	value := fmt.Sprintf("%f", sumErrorRatio/float64(count))
+	return p.toMetric(k, "error_rate", value, nowMs)
+}
+
+func (p *LogProcessor) toMetric(k labelsKey, name string, value string, nowMs int64) string {
+	return fmt.Sprintln(fmt.Sprintf(`%s{host="%s",user_id="%s",playback_id="%s",device_type="%s",browser="%s",country="%s"} %s %d`,
+		name,
 		p.host,
 		k.userID,
 		k.playbackID,
 		k.deviceType,
 		k.browser,
 		k.country,
-		len(v),
+		value,
 		nowMs,
 	))
 }

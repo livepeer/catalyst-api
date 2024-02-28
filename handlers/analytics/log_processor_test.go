@@ -18,7 +18,7 @@ func TestLogProcessor(t *testing.T) {
 		expected []string
 	}{
 		{
-			name: "Multiple same logs results in 1 metric",
+			name: "Multiple logs from the same viewer",
 			data: []LogData{
 				{
 					SessionID:  "session-1",
@@ -27,6 +27,9 @@ func TestLogProcessor(t *testing.T) {
 					DeviceType: "mobile",
 					Country:    "Poland",
 					UserID:     "user-1",
+					PlaytimeMs: 4500,
+					BufferMs:   500,
+					Errors:     0,
 				},
 				{
 					SessionID:  "session-1",
@@ -35,14 +38,19 @@ func TestLogProcessor(t *testing.T) {
 					DeviceType: "mobile",
 					Country:    "Poland",
 					UserID:     "user-1",
+					PlaytimeMs: 5000,
+					BufferMs:   0,
+					Errors:     5,
 				},
 			},
 			expected: []string{
-				`viewcount{host="hostname",user_id="user-1",playback_id="playback-1",device_type="mobile",browser="chrome",country="Poland"} 1`,
+				`view_count{host="hostname",user_id="user-1",playback_id="playback-1",device_type="mobile",browser="chrome",country="Poland"} 1`,
+				`rebuffer_ratio{host="hostname",user_id="user-1",playback_id="playback-1",device_type="mobile",browser="chrome",country="Poland"} 0.05`,
+				`error_rate{host="hostname",user_id="user-1",playback_id="playback-1",device_type="mobile",browser="chrome",country="Poland"} 0.5`,
 			},
 		},
 		{
-			name: "Multiple same logs with different session IDs results in 1 metric",
+			name: "Multiple same logs from different viewers with the same labels",
 			data: []LogData{
 				{
 					SessionID:  "session-1",
@@ -51,6 +59,9 @@ func TestLogProcessor(t *testing.T) {
 					DeviceType: "mobile",
 					Country:    "Poland",
 					UserID:     "user-1",
+					PlaytimeMs: 4500,
+					BufferMs:   500,
+					Errors:     0,
 				},
 				{
 					SessionID:  "session-2",
@@ -59,14 +70,19 @@ func TestLogProcessor(t *testing.T) {
 					DeviceType: "mobile",
 					Country:    "Poland",
 					UserID:     "user-1",
+					PlaytimeMs: 5000,
+					BufferMs:   0,
+					Errors:     5,
 				},
 			},
 			expected: []string{
-				`viewcount{host="hostname",user_id="user-1",playback_id="playback-1",device_type="mobile",browser="chrome",country="Poland"} 2`,
+				`view_count{host="hostname",user_id="user-1",playback_id="playback-1",device_type="mobile",browser="chrome",country="Poland"} 2`,
+				`rebuffer_ratio{host="hostname",user_id="user-1",playback_id="playback-1",device_type="mobile",browser="chrome",country="Poland"} 0.05`,
+				`error_rate{host="hostname",user_id="user-1",playback_id="playback-1",device_type="mobile",browser="chrome",country="Poland"} 0.5`,
 			},
 		},
 		{
-			name: "Different logs result in separate metrics",
+			name: "Multiple logs from different viewers with different logs",
 			data: []LogData{
 				{
 					SessionID:  "session-1",
@@ -75,6 +91,9 @@ func TestLogProcessor(t *testing.T) {
 					DeviceType: "mobile",
 					Country:    "Poland",
 					UserID:     "user-1",
+					PlaytimeMs: 4500,
+					BufferMs:   500,
+					Errors:     0,
 				},
 				{
 					SessionID:  "session-2",
@@ -83,11 +102,18 @@ func TestLogProcessor(t *testing.T) {
 					DeviceType: "mobile",
 					Country:    "Poland",
 					UserID:     "user-1",
+					PlaytimeMs: 5000,
+					BufferMs:   0,
+					Errors:     5,
 				},
 			},
 			expected: []string{
-				`viewcount{host="hostname",user_id="user-1",playback_id="playback-1",device_type="mobile",browser="chrome",country="Poland"} 1`,
-				`viewcount{host="hostname",user_id="user-1",playback_id="playback-1",device_type="mobile",browser="firefox",country="Poland"} 1`,
+				`view_count{host="hostname",user_id="user-1",playback_id="playback-1",device_type="mobile",browser="chrome",country="Poland"} 1`,
+				`view_count{host="hostname",user_id="user-1",playback_id="playback-1",device_type="mobile",browser="firefox",country="Poland"} 1`,
+				`rebuffer_ratio{host="hostname",user_id="user-1",playback_id="playback-1",device_type="mobile",browser="chrome",country="Poland"} 0.1`,
+				`rebuffer_ratio{host="hostname",user_id="user-1",playback_id="playback-1",device_type="mobile",browser="firefox",country="Poland"} 0`,
+				`error_rate{host="hostname",user_id="user-1",playback_id="playback-1",device_type="mobile",browser="chrome",country="Poland"} 0`,
+				`error_rate{host="hostname",user_id="user-1",playback_id="playback-1",device_type="mobile",browser="firefox",country="Poland"} 1`,
 			},
 		},
 	}

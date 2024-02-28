@@ -54,11 +54,15 @@ func TestHandleLog(t *testing.T) {
 					{
 						"type": "heartbeat",
 						"timestamp": 1234567895,
-						"errors": 0,
+						"errors": 2,
 						"playtime_ms": 4500,
 						"ttff_ms": 300,
 						"preload_time_ms": 1000,
 						"buffer_ms": 50
+					},
+					{
+						"type": "error",
+						"timestamp": 1234567895
 					}
 				]
 			}`,
@@ -70,6 +74,9 @@ func TestHandleLog(t *testing.T) {
 				Browser:    "Chrome",
 				DeviceType: "desktop",
 				UserID:     userID,
+				PlaytimeMs: 4500,
+				BufferMs:   50,
+				Errors:     2,
 			},
 		},
 		{
@@ -143,7 +150,7 @@ func TestHandleLog(t *testing.T) {
 			router.ServeHTTP(rr, req)
 
 			// then
-			require.Equal(rr.Result().StatusCode, tt.wantHttpCode)
+			require.Equal(tt.wantHttpCode, rr.Result().StatusCode)
 			if tt.wantHttpCode == http.StatusOK {
 				require.Equal(1, len(mockFetcher.calledPlaybackIDs))
 				require.True(mockFetcher.calledPlaybackIDs[tt.wantExtFetchedPlaybackID])
