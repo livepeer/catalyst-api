@@ -159,7 +159,7 @@ func (p *LogProcessor) toErrorRateMetric(k labelsKey, v map[string]metricValue, 
 }
 
 func (p *LogProcessor) toMetric(k labelsKey, name string, value string, nowMs int64) string {
-	return fmt.Sprintln(fmt.Sprintf(`%s{host="%s",user_id="%s",playback_id="%s",device_type="%s",browser="%s",country="%s"} %s %d`,
+	return fmt.Sprintf(`%s{host="%s",user_id="%s",playback_id="%s",device_type="%s",browser="%s",country="%s"} %s %d`+"\n",
 		name,
 		p.host,
 		k.userID,
@@ -169,7 +169,7 @@ func (p *LogProcessor) toMetric(k labelsKey, name string, value string, nowMs in
 		k.country,
 		value,
 		nowMs,
-	))
+	)
 }
 
 func (p *LogProcessor) sendMetricsString(metrics string) error {

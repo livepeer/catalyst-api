@@ -66,7 +66,7 @@ func (e *ExternalDataFetcher) Fetch(playbackID string) (ExternalData, error) {
 	// If not found in both asset and streams, then the playbackID is invalid
 	// Mark it in the internal cache to not repeat querying Studio API again for the same playbackID
 	if errors.Is(assetErr, api.ErrNotExists) && errors.Is(streamErr, api.ErrNotExists) {
-		e.cacheExtData(playbackID, ExternalData{})
+		_, _ = e.cacheExtData(playbackID, ExternalData{})
 	}
 
 	return ExternalData{}, fmt.Errorf("unable to fetch playbackID, playbackID=%v, assetErr=%v, streamErr=%v", playbackID, assetErr, streamErr)
