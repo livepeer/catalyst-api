@@ -5,7 +5,11 @@ import (
 	"fmt"
 	"github.com/golang/glog"
 	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/errors"
+	cerrors "github.com/livepeer/catalyst-api/errors"
+	"github.com/livepeer/catalyst-api/handlers/analytics"
+	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
+	"github.com/livepeer/go-api-client"
+	"github.com/mileusna/useragent"
 	"github.com/mmcloughlin/geohash"
 	"github.com/xeipuuv/gojsonschema"
 	"io"
@@ -13,7 +17,10 @@ import (
 	"strconv"
 )
 
-const GEO_HASH_PRECISION = 3
+const (
+	GeoHashPrecision     = 3
+	LogChannelBufferSize = 5000
+)
 
 type AnalyticsLog struct {
 	SessionID  string              `json:"session_id"`
@@ -41,35 +48,53 @@ type AnalyticsLogEvent struct {
 
 type AnalyticsGeo struct {
 	GeoHash     string
-	Continent   string
 	Country     string
 	Subdivision string
 	Timezone    string
 }
 
 type AnalyticsHandlersCollection struct {
+	extFetcher   analytics.IExternalDataFetcher
+	logProcessor analytics.ILogProcessor
 }
 
-func NewAnalyticsHandlersCollection() *AnalyticsHandlersCollection {
-	return &AnalyticsHandlersCollection{}
+func NewAnalyticsHandlersCollection(streamCache mistapiconnector.IStreamCache, lapi *api.Client, metricsURL string, host string) AnalyticsHandlersCollection {
+	return AnalyticsHandlersCollection{
+		extFetcher:   analytics.NewExternalDataFetcher(streamCache, lapi),
+		logProcessor: analytics.NewLogProcessor(metricsURL, host),
+	}
 }
 
-func (d *AnalyticsHandlersCollection) Log() httprouter.Handle {
+func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 	schema := inputSchemasCompiled["AnalyticsLog"]
+
+	dataCh := make(chan analytics.LogData, LogChannelBufferSize)
+	c.logProcessor.Start(dataCh)
 
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		log, err := parseAnalyticsLog(r, schema)
 		if log == nil {
-			errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+			cerrors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 			return
 		}
 		geo, err := parseAnalyticsGeo(r)
 		if err != nil {
-			glog.Warning("error parsing geo info from analytics log request header, err=%w", err)
+			glog.Warning("error parsing geo info from analytics log request header, err=%v", err)
+		}
+		extData, err := c.extFetcher.Fetch(log.PlaybackID)
+		if err != nil {
+			glog.Warning("error enriching analytics log with external data, err=%v", err)
+			cerrors.WriteHTTPBadRequest(w, "Invalid playback_id", nil)
 		}
 
-		// TODO: ENG-1650, Process analytics data and remove logging
-		glog.Info("Processing analytics log: log=%v, geo=%v", log, geo)
+		for _, ad := range toAnalyticsData(log, geo, extData) {
+			select {
+			case dataCh <- ad:
+				// process data async
+			default:
+				cerrors.WriteHTTPInternalServerError(w, "error processing analytics log, too many requests", nil)
+			}
+		}
 	}
 }
 
@@ -80,14 +105,14 @@ func parseAnalyticsLog(r *http.Request, schema *gojsonschema.Schema) (*Analytics
 	}
 	result, err := schema.Validate(gojsonschema.NewBytesLoader(payload))
 	if err != nil {
-		return nil, fmt.Errorf("failed validating the schema, err=%w", err)
+		return nil, fmt.Errorf("failed validating the schema, err=%v", err)
 	}
 	if !result.Valid() {
 		return nil, fmt.Errorf("payload is invalid with schema")
 	}
 	var log AnalyticsLog
 	if err := json.Unmarshal(payload, &log); err != nil {
-		return nil, fmt.Errorf("failed unmarshalling payload into analytics log, err=%w", err)
+		return nil, fmt.Errorf("failed unmarshalling payload into analytics log, err=%v", err)
 	}
 
 	return &log, nil
@@ -97,9 +122,8 @@ func parseAnalyticsGeo(r *http.Request) (AnalyticsGeo, error) {
 	res := AnalyticsGeo{}
 	var missingHeader []string
 
-	res.Continent, missingHeader = getOrAddMissing("X-Continent-Name", r.Header, missingHeader)
 	res.Country, missingHeader = getOrAddMissing("X-City-Country-Name", r.Header, missingHeader)
-	res.Subdivision, missingHeader = getOrAddMissing("X-Subregion-Name", r.Header, missingHeader)
+	res.Subdivision, missingHeader = getOrAddMissing("X-Region-Name", r.Header, missingHeader)
 	res.Timezone, missingHeader = getOrAddMissing("X-Time-Zone", r.Header, missingHeader)
 
 	lat, missingHeader := getOrAddMissing("X-Latitude", r.Header, missingHeader)
@@ -107,13 +131,13 @@ func parseAnalyticsGeo(r *http.Request) (AnalyticsGeo, error) {
 	if lat != "" && lon != "" {
 		latF, err := strconv.ParseFloat(lat, 64)
 		if err != nil {
-			return res, fmt.Errorf("error parsing header X-Latitude, err=%w", err)
+			return res, fmt.Errorf("error parsing header X-Latitude, err=%v", err)
 		}
 		lonF, err := strconv.ParseFloat(lon, 64)
 		if err != nil {
-			return res, fmt.Errorf("error parsing header X-Longitude, err=%w", err)
+			return res, fmt.Errorf("error parsing header X-Longitude, err=%v", err)
 		}
-		res.GeoHash = geohash.EncodeWithPrecision(latF, lonF, GEO_HASH_PRECISION)
+		res.GeoHash = geohash.EncodeWithPrecision(latF, lonF, GeoHashPrecision)
 	}
 	if len(missingHeader) > 0 {
 		return res, fmt.Errorf("missing geo headers: %v", missingHeader)
@@ -128,4 +152,36 @@ func getOrAddMissing(key string, headers http.Header, missingHeaders []string) (
 	}
 	missingHeaders = append(missingHeaders, key)
 	return "", missingHeaders
+}
+
+func toAnalyticsData(log *AnalyticsLog, geo AnalyticsGeo, extData analytics.ExternalData) []analytics.LogData {
+	ua := useragent.Parse(log.UserAgent)
+	var res []analytics.LogData
+	for _, e := range log.Events {
+		if e.Type == "heartbeat" {
+			res = append(res, analytics.LogData{
+				SessionID:  log.SessionID,
+				PlaybackID: log.PlaybackID,
+				Browser:    ua.Name,
+				DeviceType: deviceTypeOf(ua),
+				Country:    geo.Country,
+				UserID:     extData.UserID,
+				PlaytimeMs: e.PlaytimeMS,
+				BufferMs:   e.BufferMS,
+				Errors:     e.Errors,
+			})
+		}
+	}
+	return res
+}
+
+func deviceTypeOf(ua useragent.UserAgent) string {
+	if ua.Mobile {
+		return "mobile"
+	} else if ua.Tablet {
+		return "tablet"
+	} else if ua.Desktop {
+		return "desktop"
+	}
+	return "unknown"
 }

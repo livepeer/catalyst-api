@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/handlers/analytics"
 	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
@@ -9,13 +10,34 @@ import (
 	"testing"
 )
 
+const userID = "user-id"
+
+type MockExternalDataFetcher struct {
+	calledPlaybackIDs map[string]bool
+}
+
+func (f *MockExternalDataFetcher) Fetch(playbackID string) (analytics.ExternalData, error) {
+	f.calledPlaybackIDs[playbackID] = true
+	return analytics.ExternalData{UserID: userID}, nil
+}
+
+type MockLogProcessor struct {
+	processed chan analytics.LogData
+}
+
+func (p *MockLogProcessor) Start(ch chan analytics.LogData) {
+	p.processed = ch
+}
+
 func TestHandleLog(t *testing.T) {
 	require := require.New(t)
 
 	tests := []struct {
-		name         string
-		requestBody  string
-		wantHttpCode int
+		name                     string
+		requestBody              string
+		wantHttpCode             int
+		wantExtFetchedPlaybackID string
+		wantProcessedLog         analytics.LogData
 	}{
 		{
 			name: "valid payload",
@@ -32,15 +54,30 @@ func TestHandleLog(t *testing.T) {
 					{
 						"type": "heartbeat",
 						"timestamp": 1234567895,
-						"errors": 0,
+						"errors": 2,
 						"playtime_ms": 4500,
 						"ttff_ms": 300,
 						"preload_time_ms": 1000,
 						"buffer_ms": 50
+					},
+					{
+						"type": "error",
+						"timestamp": 1234567895
 					}
 				]
 			}`,
-			wantHttpCode: 200,
+			wantHttpCode:             200,
+			wantExtFetchedPlaybackID: "123456",
+			wantProcessedLog: analytics.LogData{
+				SessionID:  "abcdef",
+				PlaybackID: "123456",
+				Browser:    "Chrome",
+				DeviceType: "desktop",
+				UserID:     userID,
+				PlaytimeMs: 4500,
+				BufferMs:   50,
+				Errors:     2,
+			},
 		},
 		{
 			name: "additional field",
@@ -94,17 +131,33 @@ func TestHandleLog(t *testing.T) {
 		},
 	}
 
-	analyticsApiHandlers := AnalyticsHandlersCollection{}
-	router := httprouter.New()
-	router.POST("/analytics/log", analyticsApiHandlers.Log())
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// given
+			mockFetcher := MockExternalDataFetcher{calledPlaybackIDs: make(map[string]bool)}
+			mockProcessor := MockLogProcessor{}
+
+			analyticsApiHandlers := AnalyticsHandlersCollection{
+				extFetcher:   &mockFetcher,
+				logProcessor: &mockProcessor,
+			}
+			router := httprouter.New()
+			router.POST("/analytics/log", analyticsApiHandlers.Log())
+
+			// when
 			req, _ := http.NewRequest("POST", "/analytics/log", strings.NewReader(tt.requestBody))
 			rr := httptest.NewRecorder()
 			router.ServeHTTP(rr, req)
 
-			require.Equal(rr.Result().StatusCode, tt.wantHttpCode)
+			// then
+			require.Equal(tt.wantHttpCode, rr.Result().StatusCode)
+			if tt.wantHttpCode == http.StatusOK {
+				require.Equal(1, len(mockFetcher.calledPlaybackIDs))
+				require.True(mockFetcher.calledPlaybackIDs[tt.wantExtFetchedPlaybackID])
+				require.Equal(tt.wantProcessedLog, <-mockProcessor.processed)
+			} else {
+				require.Equal(0, len(mockFetcher.calledPlaybackIDs))
+			}
 		})
 	}
 }
@@ -123,14 +176,12 @@ func TestParseAnalyticsGeo(t *testing.T) {
 			header: map[string][]string{
 				"X-Latitude":          {"50.06580"},
 				"X-Longitude":         {"19.94010"},
-				"X-Continent-Name":    {"Europe"},
 				"X-City-Country-Name": {"Poland"},
-				"X-Subregion-Name":    {"Lesser Poland"},
+				"X-Region-Name":       {"Lesser Poland"},
 				"X-Time-Zone":         {"Europe/Warsaw"},
 			},
 			exp: AnalyticsGeo{
 				GeoHash:     "u2yhvdpyqj",
-				Continent:   "Europe",
 				Country:     "Poland",
 				Subdivision: "Lesser Poland",
 				Timezone:    "Europe/Warsaw",
@@ -150,8 +201,7 @@ func TestParseAnalyticsGeo(t *testing.T) {
 			},
 			wantErrorContains: []string{
 				"missing geo headers",
-				"X-Continent-Name",
-				"X-Subregion-Name",
+				"X-Region-Name",
 				"X-Time-Zone",
 			},
 		},
@@ -189,9 +239,8 @@ func TestParseAnalyticsGeo(t *testing.T) {
 			}
 			require.NotNil(res)
 			if res.GeoHash != "" || tt.exp.GeoHash != "" {
-				require.Equal(tt.exp.GeoHash[:GEO_HASH_PRECISION], res.GeoHash)
+				require.Equal(tt.exp.GeoHash[:GeoHashPrecision], res.GeoHash)
 			}
-			require.Equal(tt.exp.Continent, res.Continent)
 			require.Equal(tt.exp.Country, res.Country)
 			require.Equal(tt.exp.Subdivision, res.Subdivision)
 			require.Equal(tt.exp.Timezone, res.Timezone)
