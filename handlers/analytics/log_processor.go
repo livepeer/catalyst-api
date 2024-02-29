@@ -127,7 +127,7 @@ func (p *LogProcessor) sendMetrics() {
 	// send data
 	err := p.sendMetricsString(metrics.String())
 	if err != nil {
-		glog.Errorf("failed to send analytics logs, err=%w", err)
+		glog.Errorf("failed to send analytics logs, err=%v", err)
 	}
 
 	// clear map

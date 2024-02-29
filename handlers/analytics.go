@@ -79,11 +79,11 @@ func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 		}
 		geo, err := parseAnalyticsGeo(r)
 		if err != nil {
-			glog.Warning("error parsing geo info from analytics log request header, err=%w", err)
+			glog.Warning("error parsing geo info from analytics log request header, err=%v", err)
 		}
 		extData, err := c.extFetcher.Fetch(log.PlaybackID)
 		if err != nil {
-			glog.Warning("error enriching analytics log with external data, err=%w", err)
+			glog.Warning("error enriching analytics log with external data, err=%v", err)
 			cerrors.WriteHTTPBadRequest(w, "Invalid playback_id", nil)
 		}
 
@@ -105,14 +105,14 @@ func parseAnalyticsLog(r *http.Request, schema *gojsonschema.Schema) (*Analytics
 	}
 	result, err := schema.Validate(gojsonschema.NewBytesLoader(payload))
 	if err != nil {
-		return nil, fmt.Errorf("failed validating the schema, err=%w", err)
+		return nil, fmt.Errorf("failed validating the schema, err=%v", err)
 	}
 	if !result.Valid() {
 		return nil, fmt.Errorf("payload is invalid with schema")
 	}
 	var log AnalyticsLog
 	if err := json.Unmarshal(payload, &log); err != nil {
-		return nil, fmt.Errorf("failed unmarshalling payload into analytics log, err=%w", err)
+		return nil, fmt.Errorf("failed unmarshalling payload into analytics log, err=%v", err)
 	}
 
 	return &log, nil
@@ -131,11 +131,11 @@ func parseAnalyticsGeo(r *http.Request) (AnalyticsGeo, error) {
 	if lat != "" && lon != "" {
 		latF, err := strconv.ParseFloat(lat, 64)
 		if err != nil {
-			return res, fmt.Errorf("error parsing header X-Latitude, err=%w", err)
+			return res, fmt.Errorf("error parsing header X-Latitude, err=%v", err)
 		}
 		lonF, err := strconv.ParseFloat(lon, 64)
 		if err != nil {
-			return res, fmt.Errorf("error parsing header X-Longitude, err=%w", err)
+			return res, fmt.Errorf("error parsing header X-Longitude, err=%v", err)
 		}
 		res.GeoHash = geohash.EncodeWithPrecision(latF, lonF, GeoHashPrecision)
 	}
