@@ -177,7 +177,7 @@ func TestParseAnalyticsGeo(t *testing.T) {
 				"X-Latitude":          {"50.06580"},
 				"X-Longitude":         {"19.94010"},
 				"X-City-Country-Name": {"Poland"},
-				"X-Subregion-Name":    {"Lesser Poland"},
+				"X-Region-Name":       {"Lesser Poland"},
 				"X-Time-Zone":         {"Europe/Warsaw"},
 			},
 			exp: AnalyticsGeo{
@@ -201,7 +201,7 @@ func TestParseAnalyticsGeo(t *testing.T) {
 			},
 			wantErrorContains: []string{
 				"missing geo headers",
-				"X-Subregion-Name",
+				"X-Region-Name",
 				"X-Time-Zone",
 			},
 		},

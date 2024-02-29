@@ -123,7 +123,7 @@ func parseAnalyticsGeo(r *http.Request) (AnalyticsGeo, error) {
 	var missingHeader []string
 
 	res.Country, missingHeader = getOrAddMissing("X-City-Country-Name", r.Header, missingHeader)
-	res.Subdivision, missingHeader = getOrAddMissing("X-Subregion-Name", r.Header, missingHeader)
+	res.Subdivision, missingHeader = getOrAddMissing("X-Region-Name", r.Header, missingHeader)
 	res.Timezone, missingHeader = getOrAddMissing("X-Time-Zone", r.Header, missingHeader)
 
 	lat, missingHeader := getOrAddMissing("X-Latitude", r.Header, missingHeader)
