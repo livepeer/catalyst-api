@@ -94,7 +94,11 @@ func (p *LogProcessor) processLog(d LogData) {
 		bySessionID = p.logs[k]
 	}
 
-	rebufferRate := float64(d.BufferMs) / float64(d.PlaytimeMs+d.BufferMs)
+	totalMs := d.PlaytimeMs + d.BufferMs
+	var rebufferRate float64
+	if totalMs > 0 {
+		rebufferRate = float64(d.BufferMs) / float64(totalMs)
+	}
 	var errorRatio float64
 	if d.Errors > 0 {
 		errorRatio = 1
@@ -143,11 +147,16 @@ func (p *LogProcessor) toRebufferRatioMetric(k labelsKey, v map[string]metricVal
 	var count int
 	var sumRebufferRate float64
 	for _, mv := range v {
-		count += 1
-		sumRebufferRate += mv.sumRebufferRate / float64(mv.count)
+		if mv.count > 0 {
+			count += 1
+			sumRebufferRate += mv.sumRebufferRate / float64(mv.count)
+		}
 	}
-
-	value := fmt.Sprintf("%f", sumRebufferRate/float64(count))
+	var rebufferRate float64
+	if count > 0 {
+		rebufferRate = sumRebufferRate / float64(count)
+	}
+	value := fmt.Sprintf("%f", rebufferRate)
 	return p.toMetric(k, "rebuffer_ratio", value, nowMs)
 }
 
@@ -155,11 +164,16 @@ func (p *LogProcessor) toErrorRateMetric(k labelsKey, v map[string]metricValue, 
 	var count int
 	var sumErrorRatio float64
 	for _, mv := range v {
-		count += 1
-		sumErrorRatio += mv.sumErrorRatio / float64(mv.count)
+		if mv.count > 0 {
+			count += 1
+			sumErrorRatio += mv.sumErrorRatio / float64(mv.count)
+		}
 	}
-
-	value := fmt.Sprintf("%f", sumErrorRatio/float64(count))
+	var errorRatio float64
+	if count > 0 {
+		errorRatio = sumErrorRatio / float64(count)
+	}
+	value := fmt.Sprintf("%f", errorRatio)
 	return p.toMetric(k, "error_rate", value, nowMs)
 }
 
