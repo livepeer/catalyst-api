@@ -111,8 +111,9 @@ func (ac *AccessControlHandlersCollection) periodicCleanUpRecordCache() {
 
 func (ac *AccessControlHandlersCollection) periodicRefreshIntervalCache(mapic mistapiconnector.IMac) {
 	go func() {
-		for {
-			time.Sleep(5 * time.Second)
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
 			ac.mutex.Lock()
 			refreshIntervalCache.mux.Lock()
 			for key := range refreshIntervalCache.data {
