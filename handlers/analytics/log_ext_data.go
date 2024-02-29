@@ -66,29 +66,26 @@ func (e *ExternalDataFetcher) Fetch(playbackID string) (ExternalData, error) {
 	// If not found in both asset and streams, then the playbackID is invalid
 	// Mark it in the internal cache to not repeat querying Studio API again for the same playbackID
 	if errors.Is(assetErr, api.ErrNotExists) && errors.Is(streamErr, api.ErrNotExists) {
-		_, _ = e.cacheExtData(playbackID, ExternalData{})
+		e.cacheExtData(playbackID, ExternalData{})
 	}
 
 	return ExternalData{}, fmt.Errorf("unable to fetch playbackID, playbackID=%v, assetErr=%v, streamErr=%v", playbackID, assetErr, streamErr)
 }
 
 func (e *ExternalDataFetcher) extDataFromStream(playbackID string, stream *api.Stream) (ExternalData, error) {
-	return e.cacheExtData(playbackID,
-		ExternalData{
-			UserID: stream.UserID,
-		})
+	extData := ExternalData{UserID: stream.UserID}
+	e.cacheExtData(playbackID, extData)
+	return extData, nil
 }
 
 func (e *ExternalDataFetcher) extDataFromAsset(playbackID string, asset *api.Asset) (ExternalData, error) {
-	return e.cacheExtData(playbackID,
-		ExternalData{
-			UserID: asset.UserID,
-		})
+	extData := ExternalData{UserID: asset.UserID}
+	e.cacheExtData(playbackID, extData)
+	return extData, nil
 }
 
-func (e *ExternalDataFetcher) cacheExtData(playbackID string, extData ExternalData) (ExternalData, error) {
+func (e *ExternalDataFetcher) cacheExtData(playbackID string, extData ExternalData) {
 	e.mu.Lock()
 	e.cache[playbackID] = extData
 	e.mu.Unlock()
-	return extData, nil
 }

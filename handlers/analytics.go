@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	GeoHashPrecision        = 3
-	MaxConcurrentProcessing = 5000
+	GeoHashPrecision     = 3
+	LogChannelBufferSize = 5000
 )
 
 type AnalyticsLog struct {
@@ -68,7 +68,7 @@ func NewAnalyticsHandlersCollection(streamCache mistapiconnector.IStreamCache, l
 func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 	schema := inputSchemasCompiled["AnalyticsLog"]
 
-	dataCh := make(chan analytics.LogData, MaxConcurrentProcessing)
+	dataCh := make(chan analytics.LogData, LogChannelBufferSize)
 	c.logProcessor.Start(dataCh)
 
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -183,5 +183,5 @@ func deviceTypeOf(ua useragent.UserAgent) string {
 	} else if ua.Desktop {
 		return "desktop"
 	}
-	return ""
+	return "unknown"
 }
