@@ -7,6 +7,7 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/aws/aws-sdk-go v1.50.18
 	github.com/cenkalti/backoff/v4 v4.2.1
+	github.com/confluentinc/confluent-kafka-go/v2 v2.3.0
 	github.com/cucumber/godog v0.13.0
 	github.com/d1str0/pkcs7 v0.0.0-20200424205038-d65c16a5759a
 	github.com/fergusstrange/embedded-postgres v1.25.0
@@ -22,6 +23,7 @@ require (
 	github.com/livepeer/joy4 v0.1.1
 	github.com/livepeer/livepeer-data v0.8.1
 	github.com/livepeer/m3u8 v0.11.1
+	github.com/mileusna/useragent v1.3.4
 	github.com/minio/madmin-go v1.7.5
 	github.com/mmcloughlin/geohash v0.10.0
 	github.com/peterbourgon/ff/v3 v3.4.0
@@ -108,7 +110,6 @@ require (
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
 	github.com/miekg/dns v1.1.50 // indirect
-	github.com/mileusna/useragent v1.3.4 // indirect
 	github.com/minio/minio-go/v7 v7.0.45 // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect

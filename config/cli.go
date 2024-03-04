@@ -65,7 +65,10 @@ type Cli struct {
 	MaxBitrateFactor          float64
 	BlockedJWTs               []string
 	EnableAnalytics           string
-	AnalyticsMetricsURL       string
+	KafkaBootstrapServers     string
+	KafkaUser                 string
+	KafkaPassword             string
+	KafkaTopic                string
 
 	// mapping playbackId to value between 0.0 to 100.0
 	CdnRedirectPlaybackPct             map[string]float64

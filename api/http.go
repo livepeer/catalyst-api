@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"github.com/golang/glog"
 	"net/http"
 	"time"
 
@@ -66,8 +67,12 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 	if cli.EnableAnalytics == "true" || cli.EnableAnalytics == "enabled" {
-		analyticsApiHandlers := handlers.NewAnalyticsHandlersCollection(mapic, lapi, cli.AnalyticsMetricsURL, cli.NodeName)
-		router.POST("/analytics/log", withCORS(analyticsApiHandlers.Log()))
+		analyticsApiHandlers, err := handlers.NewAnalyticsHandlersCollection(mapic, lapi, cli.KafkaBootstrapServers, cli.KafkaUser, cli.KafkaPassword, cli.KafkaTopic)
+		if err != nil {
+			glog.Errorf("failed to configure analytics handlers, analytics endpoint won't be enabled, err=%v", err)
+		} else {
+			router.POST("/analytics/log", withCORS(analyticsApiHandlers.Log()))
+		}
 	}
 
 	// Playback endpoint

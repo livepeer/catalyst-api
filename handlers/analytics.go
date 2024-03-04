@@ -58,11 +58,15 @@ type AnalyticsHandlersCollection struct {
 	logProcessor analytics.ILogProcessor
 }
 
-func NewAnalyticsHandlersCollection(streamCache mistapiconnector.IStreamCache, lapi *api.Client, metricsURL string, host string) AnalyticsHandlersCollection {
+func NewAnalyticsHandlersCollection(streamCache mistapiconnector.IStreamCache, lapi *api.Client, kafkaBootstrapServers, kafkaUser, kafkaPassword, kafkaTopic string) (AnalyticsHandlersCollection, error) {
+	lp, err := analytics.NewLogProcessor(kafkaBootstrapServers, kafkaUser, kafkaPassword, kafkaTopic)
+	if err != nil {
+		return AnalyticsHandlersCollection{}, err
+	}
 	return AnalyticsHandlersCollection{
 		extFetcher:   analytics.NewExternalDataFetcher(streamCache, lapi),
-		logProcessor: analytics.NewLogProcessor(metricsURL, host),
-	}
+		logProcessor: lp,
+	}, nil
 }
 
 func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
@@ -160,15 +164,17 @@ func toAnalyticsData(log *AnalyticsLog, geo AnalyticsGeo, extData analytics.Exte
 	for _, e := range log.Events {
 		if e.Type == "heartbeat" {
 			res = append(res, analytics.LogData{
-				SessionID:  log.SessionID,
-				PlaybackID: log.PlaybackID,
-				Browser:    ua.Name,
-				DeviceType: deviceTypeOf(ua),
-				Country:    geo.Country,
-				UserID:     extData.UserID,
-				PlaytimeMs: e.PlaytimeMS,
-				BufferMs:   e.BufferMS,
-				Errors:     e.Errors,
+				SessionID:           log.SessionID,
+				PlaybackID:          log.PlaybackID,
+				Browser:             ua.Name,
+				DeviceType:          deviceTypeOf(ua),
+				PlaybackCountryName: geo.Country,
+				UserID:              extData.UserID,
+				Data: analytics.LogDataEvent{
+					PlaytimeMS: e.PlaytimeMS,
+					BufferMS:   e.BufferMS,
+					Errors:     e.Errors,
+				},
 			})
 		}
 	}
