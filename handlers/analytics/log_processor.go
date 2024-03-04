@@ -1,9 +1,13 @@
 package analytics
 
 import (
+	"context"
+	"crypto/tls"
 	"encoding/json"
-	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/golang/glog"
+	"github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/sasl/plain"
+	"time"
 )
 
 type ILogProcessor interface {
@@ -11,8 +15,8 @@ type ILogProcessor interface {
 }
 
 type LogProcessor struct {
-	kafkaProducer *kafka.Producer
-	topic         string
+	writer *kafka.Writer
+	topic  string
 }
 
 type LogDataEvent struct {
@@ -60,33 +64,29 @@ type LogData struct {
 }
 
 func NewLogProcessor(bootstrapServers, user, password, topic string) (*LogProcessor, error) {
-	cfg := &kafka.ConfigMap{
-		"security.protocol": "SASL_SSL",
-		"sasl.mechanisms":   "PLAIN",
-		"bootstrap.servers": bootstrapServers,
-		"sasl.username":     user,
-		"sasl.password":     password,
-	}
-	producer, err := kafka.NewProducer(cfg)
-	if err != nil {
-		return nil, err
+	dialer := &kafka.Dialer{
+		Timeout: 10 * time.Second,
+		SASLMechanism: plain.Mechanism{
+			Username: user,
+			Password: password,
+		},
+		DualStack: true,
+		TLS: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
 	}
 
-	// Log errors in delivery to Kafka
-	go func() {
-		for e := range producer.Events() {
-			switch ev := e.(type) {
-			case *kafka.Message:
-				if ev.TopicPartition.Error != nil {
-					glog.Errorf("Error in sending analytics logs to Kafka: %v", ev.TopicPartition.Error)
-				}
-			}
-		}
-	}()
+	// Create a new Kafka writer
+	writer := kafka.NewWriter(kafka.WriterConfig{
+		Brokers:  []string{bootstrapServers},
+		Topic:    topic,
+		Balancer: kafka.CRC32Balancer{},
+		Dialer:   dialer,
+	})
 
 	return &LogProcessor{
-		kafkaProducer: producer,
-		topic:         topic,
+		writer: writer,
+		topic:  topic,
 	}, nil
 }
 
@@ -110,11 +110,10 @@ func (p *LogProcessor) processLog(d LogData) {
 		return
 	}
 
-	err = p.kafkaProducer.Produce(&kafka.Message{
-		TopicPartition: kafka.TopicPartition{Topic: &p.topic, Partition: kafka.PartitionAny},
-		Key:            key,
-		Value:          value,
-	}, nil)
+	err = p.writer.WriteMessages(context.Background(), kafka.Message{
+		Key:   key,
+		Value: value,
+	})
 
 	if err != nil {
 		glog.Errorf("error while sending analytics log to Kafka, err=%v", err)
