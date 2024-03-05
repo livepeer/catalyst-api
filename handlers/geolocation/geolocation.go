@@ -193,7 +193,7 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string) (string
 		return stream.Pull.Source, nil
 	}
 
-	var params []string
+	params := []string{"readtimeout=180"}
 	for k, v := range stream.Pull.Headers {
 		param := "addheader=" + url.QueryEscape(k+" "+v)
 		params = append(params, param)
