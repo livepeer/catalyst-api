@@ -120,7 +120,6 @@ func (lp *LogProcessor) Start(ch chan LogData) {
 			select {
 			case d := <-ch:
 				lp.processLog(d)
-
 			case <-t.C:
 				lp.sendEvents()
 			}
