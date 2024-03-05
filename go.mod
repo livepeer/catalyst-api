@@ -17,7 +17,7 @@ require (
 	github.com/hashicorp/serf v0.10.1
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/lib/pq v1.10.9
-	github.com/livepeer/go-api-client v0.4.15
+	github.com/livepeer/go-api-client v0.4.18-0.20240305122931-8f6d8c6543ad
 	github.com/livepeer/go-tools v0.3.5
 	github.com/livepeer/joy4 v0.1.1
 	github.com/livepeer/livepeer-data v0.8.1
@@ -28,6 +28,7 @@ require (
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/pquerna/cachecontrol v0.2.0
 	github.com/prometheus/client_golang v1.18.0
+	github.com/segmentio/kafka-go v0.4.47
 	github.com/shirou/gopsutil/v3 v3.22.9
 	github.com/stretchr/testify v1.8.4
 	github.com/u2takey/ffmpeg-go v0.5.0
@@ -135,7 +136,6 @@ require (
 	github.com/rs/xid v1.4.0 // indirect
 	github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529 // indirect
 	github.com/secure-io/sio-go v0.3.1 // indirect
-	github.com/segmentio/kafka-go v0.4.47 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/objx v0.5.0 // indirect

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"github.com/golang/glog"
@@ -15,6 +16,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 const (
@@ -35,22 +37,44 @@ type AnalyticsLog struct {
 }
 
 type AnalyticsLogEvent struct {
-	Type           string `json:"type"`
-	Timestamp      int64  `json:"timestamp"`
-	Errors         int    `json:"errors,omitempty"`
-	PlaytimeMS     int    `json:"playtime_ms,omitempty"`
-	TTFFMS         int    `json:"ttff_ms,omitempty"`
-	PreloadTimeMS  int    `json:"preload_time_ms,omitempty"`
-	AutoplayStatus string `json:"autoplay_status,omitempty"`
-	BufferMS       int    `json:"buffer_ms,omitempty"`
-	ErrorMessage   string `json:"error_message,omitempty"`
+	// Shared fields by all events
+	Type      string `json:"type"`
+	Timestamp int64  `json:"timestamp"`
+
+	// Heartbeat event
+	Errors              int    `json:"errors"`
+	AutoplayStatus      string `json:"autoplay_status"`
+	StalledCount        int    `json:"stalled_count"`
+	WaitingCount        int    `json:"waiting_count"`
+	TimeErroredMS       int    `json:"time_errored_ms"`
+	TimeStalledMS       int    `json:"time_stalled_ms"`
+	TimePlayingMS       int    `json:"time_playing_ms"`
+	TimeWaitingMS       int    `json:"time_waiting_ms"`
+	MountToPlayMS       int    `json:"mount_to_play_ms"`
+	MountToFirstFrameMS int    `json:"mount_to_first_frame_ms"`
+	PlayToFirstFrameMS  int    `json:"play_to_first_frame_ms"`
+	DurationMS          int    `json:"duration_ms"`
+	OffsetMS            int    `json:"offset_ms"`
+	PlayerHeightPX      int    `json:"player_height_px"`
+	PlayerWidthPX       int    `json:"player_width_px"`
+	VideoHeightPX       int    `json:"video_height_px"`
+	VideoWidthPX        int    `json:"video_width_px"`
+	WindowHeightPX      int    `json:"window_height_px"`
+	WindowWidthPX       int    `json:"window_width_px"`
+
+	// Error event
+	ErrorMessage string `json:"error_message"`
+	Category     string `json:"category"`
 }
 
 type AnalyticsGeo struct {
 	GeoHash     string
+	Continent   string
 	Country     string
+	CountryCode string
 	Subdivision string
 	Timezone    string
+	IP          string
 }
 
 type AnalyticsHandlersCollection struct {
@@ -123,10 +147,11 @@ func parseAnalyticsLog(r *http.Request, schema *gojsonschema.Schema) (*Analytics
 }
 
 func parseAnalyticsGeo(r *http.Request) (AnalyticsGeo, error) {
-	res := AnalyticsGeo{}
+	res := AnalyticsGeo{IP: r.RemoteAddr}
 	var missingHeader []string
 
 	res.Country, missingHeader = getOrAddMissing("X-City-Country-Name", r.Header, missingHeader)
+	res.CountryCode, missingHeader = getOrAddMissing("X-City-Country-Code", r.Header, missingHeader)
 	res.Subdivision, missingHeader = getOrAddMissing("X-Region-Name", r.Header, missingHeader)
 	res.Timezone, missingHeader = getOrAddMissing("X-Time-Zone", r.Header, missingHeader)
 
@@ -162,21 +187,57 @@ func toAnalyticsData(log *AnalyticsLog, geo AnalyticsGeo, extData analytics.Exte
 	ua := useragent.Parse(log.UserAgent)
 	var res []analytics.LogData
 	for _, e := range log.Events {
-		if e.Type == "heartbeat" {
-			res = append(res, analytics.LogData{
-				SessionID:           log.SessionID,
-				PlaybackID:          log.PlaybackID,
-				Browser:             ua.Name,
-				DeviceType:          deviceTypeOf(ua),
-				PlaybackCountryName: geo.Country,
-				UserID:              extData.UserID,
-				Data: analytics.LogDataEvent{
-					PlaytimeMS: e.PlaytimeMS,
-					BufferMS:   e.BufferMS,
-					Errors:     e.Errors,
-				},
-			})
-		}
+		res = append(res, analytics.LogData{
+			SessionID:             log.SessionID,
+			ServerTimestamp:       time.Now().UnixMilli(),
+			PlaybackID:            log.PlaybackID,
+			ViewerHash:            hashViewer(log, geo),
+			Protocol:              log.Protocol,
+			PageURL:               log.PageURL,
+			SourceURL:             log.SourceURL,
+			Player:                log.Player,
+			UID:                   log.UID,
+			UserID:                extData.UserID,
+			DStorageURL:           extData.DStorageURL,
+			Source:                extData.SourceType,
+			CreatorID:             extData.CreatorID,
+			DeviceType:            deviceTypeOf(ua),
+			DeviceModel:           ua.Device,
+			Browser:               ua.Name,
+			OS:                    ua.OS,
+			PlaybackGeoHash:       geo.GeoHash,
+			PlaybackContinentName: geo.Continent,
+			PlaybackCountryCode:   geo.CountryCode,
+			PlaybackCountryName:   geo.Country,
+			PlaybackSubdivision:   geo.Subdivision,
+			Data: analytics.LogDataEvent{
+				EventType:      e.Type,
+				EventTimestamp: e.Timestamp,
+
+				Errors:              e.Errors,
+				AutoplayStatus:      e.AutoplayStatus,
+				StalledCount:        e.StalledCount,
+				WaitingCount:        e.WaitingCount,
+				TimeErroredMS:       e.TimeErroredMS,
+				TimeStalledMS:       e.TimeStalledMS,
+				TimePlayingMS:       e.TimePlayingMS,
+				TimeWaitingMS:       e.TimeWaitingMS,
+				MountToPlayMS:       e.MountToPlayMS,
+				MountToFirstFrameMS: e.MountToFirstFrameMS,
+				PlayToFirstFrameMS:  e.PlayToFirstFrameMS,
+				DurationMS:          e.DurationMS,
+				OffsetMS:            e.OffsetMS,
+				PlayerHeightPX:      e.PlayerHeightPX,
+				PlayerWidthPX:       e.PlayerWidthPX,
+				VideoHeightPX:       e.VideoHeightPX,
+				VideoWidthPX:        e.VideoWidthPX,
+				WindowHeightPX:      e.WindowHeightPX,
+				WindowWidthPX:       e.WindowWidthPX,
+
+				ErrorMessage: e.ErrorMessage,
+				Category:     e.Category,
+			},
+		})
 	}
 	return res
 }
@@ -190,4 +251,8 @@ func deviceTypeOf(ua useragent.UserAgent) string {
 		return "desktop"
 	}
 	return "unknown"
+}
+
+func hashViewer(log *AnalyticsLog, geo AnalyticsGeo) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(log.UserAgent+geo.IP)))
 }
