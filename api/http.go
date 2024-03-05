@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-
 	"net/http"
 	"time"
 
@@ -73,6 +72,7 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 			glog.Errorf("failed to configure analytics handlers, analytics endpoint won't be enabled, err=%v", err)
 		} else {
 			router.POST("/analytics/log", withCORS(analyticsApiHandlers.Log()))
+			router.GET("/analytics/log", withLogging(withCORS(geoHandlers.RedirectHandler())))
 		}
 	}
 

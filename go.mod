@@ -11,14 +11,14 @@ require (
 	github.com/d1str0/pkcs7 v0.0.0-20200424205038-d65c16a5759a
 	github.com/fergusstrange/embedded-postgres v1.25.0
 	github.com/golang-jwt/jwt/v4 v4.5.0
-	github.com/golang/glog v1.1.2
+	github.com/golang/glog v1.2.0
 	github.com/golang/mock v1.6.0
 	github.com/hashicorp/memberlist v0.5.0
 	github.com/hashicorp/serf v0.10.1
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/lib/pq v1.10.9
 	github.com/livepeer/go-api-client v0.4.18-0.20240305122931-8f6d8c6543ad
-	github.com/livepeer/go-tools v0.3.5
+	github.com/livepeer/go-tools v0.3.6
 	github.com/livepeer/joy4 v0.1.1
 	github.com/livepeer/livepeer-data v0.8.1
 	github.com/livepeer/m3u8 v0.11.1
@@ -30,6 +30,7 @@ require (
 	github.com/prometheus/client_golang v1.18.0
 	github.com/segmentio/kafka-go v0.4.47
 	github.com/shirou/gopsutil/v3 v3.22.9
+	github.com/shirou/gopsutil/v3 v3.24.2
 	github.com/stretchr/testify v1.8.4
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/xeipuuv/gojsonschema v1.2.0
@@ -110,6 +111,7 @@ require (
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
 	github.com/miekg/dns v1.1.50 // indirect
+	github.com/mileusna/useragent v1.3.4 // indirect
 	github.com/minio/minio-go/v7 v7.0.45 // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -174,7 +176,7 @@ require (
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-kit/log v0.2.1
-	github.com/go-logfmt/logfmt v0.5.1
+	github.com/go-logfmt/logfmt v0.6.0
 	github.com/grafov/m3u8 v0.12.0
 	github.com/hashicorp/go-retryablehttp v0.7.5
 	github.com/patrickmn/go-cache v2.1.0+incompatible
