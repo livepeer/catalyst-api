@@ -2,10 +2,11 @@ package api
 
 import (
 	"context"
-	"github.com/golang/glog"
+
 	"net/http"
 	"time"
 
+	"github.com/golang/glog"
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/balancer"
 	"github.com/livepeer/catalyst-api/cluster"
