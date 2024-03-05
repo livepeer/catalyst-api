@@ -10,11 +10,17 @@ import (
 	"time"
 )
 
+const (
+	KafkaBatchInterval  = 1 * time.Second
+	KafkaRequestTimeout = 60 * time.Second
+)
+
 type ILogProcessor interface {
 	Start(ch chan LogData)
 }
 
 type LogProcessor struct {
+	logs   []LogData
 	writer *kafka.Writer
 	topic  string
 }
@@ -65,7 +71,7 @@ type LogData struct {
 
 func NewLogProcessor(bootstrapServers, user, password, topic string) (*LogProcessor, error) {
 	dialer := &kafka.Dialer{
-		Timeout: 10 * time.Second,
+		Timeout: KafkaRequestTimeout,
 		SASLMechanism: plain.Mechanism{
 			Username: user,
 			Password: password,
@@ -85,36 +91,56 @@ func NewLogProcessor(bootstrapServers, user, password, topic string) (*LogProces
 	})
 
 	return &LogProcessor{
+		logs:   []LogData{},
 		writer: writer,
 		topic:  topic,
 	}, nil
 }
 
-// Start starts LogProcessor which sends events to Kafka.
+// Start starts LogProcessor which sends events to Kafka in batches.
 func (lp *LogProcessor) Start(ch chan LogData) {
+	t := time.NewTicker(KafkaBatchInterval)
 	go func() {
 		for {
 			select {
 			case d := <-ch:
 				lp.processLog(d)
+
+			case <-t.C:
+				lp.sendEvents()
 			}
 		}
 	}()
 }
 
 func (p *LogProcessor) processLog(d LogData) {
-	key := []byte(d.SessionID)
-	value, err := json.Marshal(d)
-	if err != nil {
-		glog.Errorf("invalid analytics log event, cannot sent to Kafka, err=%v", err)
+	p.logs = append(p.logs, d)
+}
+
+func (p *LogProcessor) sendEvents() {
+	if len(p.logs) > 0 {
+		glog.Info("sending analytics logs")
+	} else {
+		glog.V(6).Info("no analytics logs, skip sending")
 		return
 	}
 
-	err = p.writer.WriteMessages(context.Background(), kafka.Message{
-		Key:   key,
-		Value: value,
-	})
+	var msgs []kafka.Message
+	for _, d := range p.logs {
+		key := []byte(d.SessionID)
+		value, err := json.Marshal(d)
+		if err != nil {
+			glog.Errorf("invalid analytics log event, cannot sent to Kafka, err=%v", err)
+			continue
+		}
+		msgs = append(msgs, kafka.Message{
+			Key:   key,
+			Value: value,
+		})
+	}
+	p.logs = []LogData{}
 
+	err := p.writer.WriteMessages(context.Background(), msgs...)
 	if err != nil {
 		glog.Errorf("error while sending analytics log to Kafka, err=%v", err)
 	}
