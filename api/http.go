@@ -69,7 +69,7 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 	if cli.EnableAnalytics == "true" || cli.EnableAnalytics == "enabled" {
 		analyticsApiHandlers, err := handlers.NewAnalyticsHandlersCollection(mapic, lapi, cli.KafkaBootstrapServers, cli.KafkaUser, cli.KafkaPassword, cli.AnalyticsKafkaTopic)
 		if err != nil {
-			glog.Errorf("failed to configure analytics handlers, analytics endpoint won't be enabled, err=%v", err)
+			glog.Fatalf("failed to configure analytics handlers, analytics endpoint won't be enabled, err=%v", err)
 		} else {
 			router.POST("/analytics/log", withCORS(analyticsApiHandlers.Log()))
 			router.GET("/analytics/log", withLogging(withCORS(geoHandlers.RedirectHandler())))
