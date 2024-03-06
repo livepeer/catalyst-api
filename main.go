@@ -125,7 +125,7 @@ func main() {
 	fs.StringVar(&cli.KafkaBootstrapServers, "kafka-bootstrap-servers", "", "URL of Kafka Bootstrap Servers")
 	fs.StringVar(&cli.KafkaUser, "kafka-user", "", "Kafka Username")
 	fs.StringVar(&cli.KafkaPassword, "kafka-password", "", "Kafka Password")
-	fs.StringVar(&cli.KafkaTopic, "kafka-topic", "", "Kafka Topic used to send analytics logs")
+	fs.StringVar(&cli.AnalyticsKafkaTopic, "analytics-kafka-topic", "", "Kafka Topic used to send analytics logs")
 	pprofPort := fs.Int("pprof-port", 6061, "Pprof listen port")
 
 	fs.String("send-audio", "", "[DEPRECATED] ignored, will be removed")
