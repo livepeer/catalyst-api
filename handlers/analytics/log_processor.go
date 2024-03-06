@@ -134,7 +134,7 @@ func (p *LogProcessor) processLog(d LogData) {
 
 func (p *LogProcessor) sendEvents() {
 	if len(p.logs) > 0 {
-		glog.Info("sending analytics logs")
+		glog.Infof("sending analytics logs, count=%d", len(p.logs))
 	} else {
 		glog.V(6).Info("no analytics logs, skip sending")
 		return
