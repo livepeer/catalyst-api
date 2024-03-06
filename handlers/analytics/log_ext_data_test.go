@@ -26,7 +26,7 @@ func TestFetch(t *testing.T) {
 	mockMapicCache := &MockMapicCache{streams: map[string]*api.Stream{
 		playbackID: {
 			UserID:    userID,
-			CreatorID: api.CreatorID{Value: creatorID},
+			CreatorID: &api.CreatorID{Value: creatorID},
 		},
 	}}
 
