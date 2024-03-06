@@ -82,15 +82,11 @@ type AnalyticsHandlersCollection struct {
 	logProcessor analytics.ILogProcessor
 }
 
-func NewAnalyticsHandlersCollection(streamCache mistapiconnector.IStreamCache, lapi *api.Client, kafkaBootstrapServers, kafkaUser, kafkaPassword, kafkaTopic string) (AnalyticsHandlersCollection, error) {
-	lp, err := analytics.NewLogProcessor(kafkaBootstrapServers, kafkaUser, kafkaPassword, kafkaTopic)
-	if err != nil {
-		return AnalyticsHandlersCollection{}, err
-	}
+func NewAnalyticsHandlersCollection(streamCache mistapiconnector.IStreamCache, lapi *api.Client, lp analytics.ILogProcessor) AnalyticsHandlersCollection {
 	return AnalyticsHandlersCollection{
 		extFetcher:   analytics.NewExternalDataFetcher(streamCache, lapi),
 		logProcessor: lp,
-	}, nil
+	}
 }
 
 func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"github.com/livepeer/catalyst-api/handlers/analytics"
 	"net/http"
 	"time"
 
@@ -67,10 +68,11 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 	if cli.EnableAnalytics == "true" || cli.EnableAnalytics == "enabled" {
-		analyticsApiHandlers, err := handlers.NewAnalyticsHandlersCollection(mapic, lapi, cli.KafkaBootstrapServers, cli.KafkaUser, cli.KafkaPassword, cli.AnalyticsKafkaTopic)
+		logProcessor, err := analytics.NewLogProcessor(cli.KafkaBootstrapServers, cli.KafkaUser, cli.KafkaPassword, cli.AnalyticsKafkaTopic)
 		if err != nil {
-			glog.Fatalf("failed to configure analytics handlers, analytics endpoint won't be enabled, err=%v", err)
+			glog.Fatalf("failed to configure analytics log processor, err=%v", err)
 		} else {
+			analyticsApiHandlers := handlers.NewAnalyticsHandlersCollection(mapic, lapi, logProcessor)
 			router.POST("/analytics/log", withCORS(analyticsApiHandlers.Log()))
 			router.GET("/analytics/log", withLogging(withCORS(geoHandlers.RedirectHandler())))
 		}
