@@ -145,7 +145,7 @@ func (p *LogProcessor) sendEvents() {
 		key := []byte(d.SessionID)
 		value, err := json.Marshal(d)
 		if err != nil {
-			glog.Errorf("invalid analytics log event, cannot sent to Kafka, err=%v", err)
+			glog.Errorf("invalid analytics log event, cannot sent to Kafka, sessionID=%s, err=%v", d.SessionID, err)
 			continue
 		}
 		msgs = append(msgs, kafka.Message{
