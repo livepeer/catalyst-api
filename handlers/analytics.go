@@ -14,6 +14,7 @@ import (
 	"github.com/mmcloughlin/geohash"
 	"github.com/xeipuuv/gojsonschema"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -144,7 +145,7 @@ func parseAnalyticsLog(r *http.Request, schema *gojsonschema.Schema) (*Analytics
 }
 
 func parseAnalyticsGeo(r *http.Request) (AnalyticsGeo, error) {
-	res := AnalyticsGeo{IP: r.RemoteAddr}
+	res := AnalyticsGeo{IP: getIP(r)}
 	var missingHeader []string
 
 	res.Country, missingHeader = getOrAddMissing("X-City-Country-Name", r.Header, missingHeader)
@@ -170,6 +171,16 @@ func parseAnalyticsGeo(r *http.Request) (AnalyticsGeo, error) {
 	}
 
 	return res, nil
+}
+
+func getIP(r *http.Request) string {
+	ip := r.RemoteAddr
+	host, _, err := net.SplitHostPort(ip)
+	if err != nil {
+		// If not possible to split, then just use RemoteAddr
+		return ip
+	}
+	return host
 }
 
 func getOrAddMissing(key string, headers http.Header, missingHeaders []string) (string, []string) {
