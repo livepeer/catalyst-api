@@ -47,7 +47,8 @@ func TestHandleLog(t *testing.T) {
 				"protocol": "video/mp4",
 				"page_url": "https://www.fishtank.live/",
 				"source_url": "https://vod-cdn.lp-playback.studio/raw/jxf4iblf6wlsyor6526t4tcmtmqa/catalyst-vod-com/hls/362f9l7ekeoze518/1080p0.mp4?tkn=8b140ec6b404a",
-				"player": "video-@livepeer/react@3.1.9",
+				"player": "video",
+				"version": "3.1.9",
 				"user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36",
 				"uid": "abcdef",
 				"events": [
@@ -74,6 +75,11 @@ func TestHandleLog(t *testing.T) {
 						"window_height_px": 532,
 						"window_width_px": 234
 					},
+			   		{
+						"type": "ignored",
+						"timestamp": 1234567895,
+						"some_field": "some value"
+					},
 					{
 						"type": "error",
 						"timestamp": 1234567895,
@@ -92,7 +98,8 @@ func TestHandleLog(t *testing.T) {
 					Protocol:   "video/mp4",
 					PageURL:    "https://www.fishtank.live/",
 					SourceURL:  "https://vod-cdn.lp-playback.studio/raw/jxf4iblf6wlsyor6526t4tcmtmqa/catalyst-vod-com/hls/362f9l7ekeoze518/1080p0.mp4?tkn=8b140ec6b404a",
-					Player:     "video-@livepeer/react@3.1.9",
+					Player:     "video",
+					Version:    "3.1.9",
 					UID:        "abcdef",
 					UserID:     userID,
 					Source:     "stream",
@@ -130,7 +137,8 @@ func TestHandleLog(t *testing.T) {
 					Protocol:   "video/mp4",
 					PageURL:    "https://www.fishtank.live/",
 					SourceURL:  "https://vod-cdn.lp-playback.studio/raw/jxf4iblf6wlsyor6526t4tcmtmqa/catalyst-vod-com/hls/362f9l7ekeoze518/1080p0.mp4?tkn=8b140ec6b404a",
-					Player:     "video-@livepeer/react@3.1.9",
+					Player:     "video",
+					Version:    "3.1.9",
 					UID:        "abcdef",
 					UserID:     userID,
 					Source:     "stream",

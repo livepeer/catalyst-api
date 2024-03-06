@@ -31,6 +31,7 @@ type AnalyticsLog struct {
 	PageURL    string              `json:"page_url"`
 	SourceURL  string              `json:"source_url"`
 	Player     string              `json:"player"`
+	Version    string              `json:"version"`
 	UserAgent  string              `json:"user_agent"`
 	UID        string              `json:"uid"`
 	Events     []AnalyticsLogEvent `json:"events"`
@@ -183,6 +184,9 @@ func toAnalyticsData(log *AnalyticsLog, geo AnalyticsGeo, extData analytics.Exte
 	ua := useragent.Parse(log.UserAgent)
 	var res []analytics.LogData
 	for _, e := range log.Events {
+		if !isSupportedEvent(e.Type) {
+			continue
+		}
 		res = append(res, analytics.LogData{
 			SessionID:             log.SessionID,
 			ServerTimestamp:       time.Now().UnixMilli(),
@@ -192,6 +196,7 @@ func toAnalyticsData(log *AnalyticsLog, geo AnalyticsGeo, extData analytics.Exte
 			PageURL:               log.PageURL,
 			SourceURL:             log.SourceURL,
 			Player:                log.Player,
+			Version:               log.Version,
 			UID:                   log.UID,
 			UserID:                extData.UserID,
 			DStorageURL:           extData.DStorageURL,
@@ -236,6 +241,13 @@ func toAnalyticsData(log *AnalyticsLog, geo AnalyticsGeo, extData analytics.Exte
 		})
 	}
 	return res
+}
+
+func isSupportedEvent(eventType string) bool {
+	if eventType == "heartbeat" || eventType == "error" {
+		return true
+	}
+	return false
 }
 
 func deviceTypeOf(ua useragent.UserAgent) string {
