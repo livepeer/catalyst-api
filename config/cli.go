@@ -68,7 +68,7 @@ type Cli struct {
 	KafkaBootstrapServers     string
 	KafkaUser                 string
 	KafkaPassword             string
-	KafkaTopic                string
+	AnalyticsKafkaTopic       string
 
 	// mapping playbackId to value between 0.0 to 100.0
 	CdnRedirectPlaybackPct             map[string]float64
