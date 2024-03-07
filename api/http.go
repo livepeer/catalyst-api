@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"github.com/livepeer/catalyst-api/handlers/analytics"
 	"net/http"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers"
+	"github.com/livepeer/catalyst-api/handlers/analytics"
 	"github.com/livepeer/catalyst-api/handlers/geolocation"
 	"github.com/livepeer/catalyst-api/log"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
