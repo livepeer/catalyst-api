@@ -79,7 +79,7 @@ func (e *ExternalDataFetcher) extDataFromStream(playbackID string, stream *api.S
 	extData := ExternalData{
 		SourceType: "stream",
 		UserID:     stream.UserID,
-		CreatorID:  stream.CreatorID.Value,
+		CreatorID:  toCreatorID(stream.CreatorID),
 	}
 	e.cacheExtData(playbackID, extData)
 	return extData, nil
@@ -90,10 +90,17 @@ func (e *ExternalDataFetcher) extDataFromAsset(playbackID string, asset *api.Ass
 		SourceType:  "asset",
 		UserID:      asset.UserID,
 		DStorageURL: toDStorageURL(asset.Storage.IPFS),
-		CreatorID:   asset.CreatorID.Value,
+		CreatorID:   toCreatorID(asset.CreatorID),
 	}
 	e.cacheExtData(playbackID, extData)
 	return extData, nil
+}
+
+func toCreatorID(c *api.CreatorID) string {
+	if c != nil {
+		return c.Value
+	}
+	return ""
 }
 
 func toDStorageURL(ipfs *api.AssetIPFS) string {
