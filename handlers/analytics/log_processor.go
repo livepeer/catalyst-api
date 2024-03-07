@@ -27,29 +27,29 @@ type LogProcessor struct {
 
 type LogDataEvent struct {
 	// Heartbeat event
-	Errors              int    `json:"errors,omitempty"`
-	AutoplayStatus      string `json:"autoplay_status,omitempty"`
-	StalledCount        int    `json:"stalled_count,omitempty"`
-	WaitingCount        int    `json:"waiting_count,omitempty"`
-	TimeErroredMS       int    `json:"time_errored_ms,omitempty"`
-	TimeStalledMS       int    `json:"time_stalled_ms,omitempty"`
-	TimePlayingMS       int    `json:"time_playing_ms,omitempty"`
-	TimeWaitingMS       int    `json:"time_waiting_ms,omitempty"`
-	MountToPlayMS       int    `json:"mount_to_play_ms,omitempty"`
-	MountToFirstFrameMS int    `json:"mount_to_first_frame_ms,omitempty"`
-	PlayToFirstFrameMS  int    `json:"play_to_first_frame_ms,omitempty"`
-	DurationMS          int    `json:"duration_ms,omitempty"`
-	OffsetMS            int    `json:"offset_ms,omitempty"`
-	PlayerHeightPX      int    `json:"player_height_px,omitempty"`
-	PlayerWidthPX       int    `json:"player_width_px,omitempty"`
-	VideoHeightPX       int    `json:"video_height_px,omitempty"`
-	VideoWidthPX        int    `json:"video_width_px,omitempty"`
-	WindowHeightPX      int    `json:"window_height_px,omitempty"`
-	WindowWidthPX       int    `json:"window_width_px,omitempty"`
+	Errors              *int    `json:"errors,omitempty"`
+	AutoplayStatus      *string `json:"autoplay_status,omitempty"`
+	StalledCount        *int    `json:"stalled_count,omitempty"`
+	WaitingCount        *int    `json:"waiting_count,omitempty"`
+	TimeErroredMS       *int    `json:"time_errored_ms,omitempty"`
+	TimeStalledMS       *int    `json:"time_stalled_ms,omitempty"`
+	TimePlayingMS       *int    `json:"time_playing_ms,omitempty"`
+	TimeWaitingMS       *int    `json:"time_waiting_ms,omitempty"`
+	MountToPlayMS       *int    `json:"mount_to_play_ms,omitempty"`
+	MountToFirstFrameMS *int    `json:"mount_to_first_frame_ms,omitempty"`
+	PlayToFirstFrameMS  *int    `json:"play_to_first_frame_ms,omitempty"`
+	DurationMS          *int    `json:"duration_ms,omitempty"`
+	OffsetMS            *int    `json:"offset_ms,omitempty"`
+	PlayerHeightPX      *int    `json:"player_height_px,omitempty"`
+	PlayerWidthPX       *int    `json:"player_width_px,omitempty"`
+	VideoHeightPX       *int    `json:"video_height_px,omitempty"`
+	VideoWidthPX        *int    `json:"video_width_px,omitempty"`
+	WindowHeightPX      *int    `json:"window_height_px,omitempty"`
+	WindowWidthPX       *int    `json:"window_width_px,omitempty"`
 
 	// Error event
-	ErrorMessage string `json:"error_message,omitempty"`
-	Category     string `json:"category,omitempty"`
+	ErrorMessage *string `json:"error_message,omitempty"`
+	Category     *string `json:"category,omitempty"`
 }
 
 type LogData struct {

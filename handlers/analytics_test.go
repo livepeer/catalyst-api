@@ -108,25 +108,25 @@ func TestHandleLog(t *testing.T) {
 					EventType:      "heartbeat",
 					EventTimestamp: 1234567895,
 					EventData: analytics.LogDataEvent{
-						Errors:              0,
-						AutoplayStatus:      "autoplay",
-						StalledCount:        5,
-						WaitingCount:        7,
-						TimeErroredMS:       18,
-						TimeStalledMS:       20,
-						TimePlayingMS:       40,
-						TimeWaitingMS:       60,
-						MountToPlayMS:       80,
-						MountToFirstFrameMS: 100,
-						PlayToFirstFrameMS:  30,
-						DurationMS:          40,
-						OffsetMS:            400,
-						PlayerHeightPX:      123,
-						PlayerWidthPX:       124,
-						VideoHeightPX:       12345,
-						VideoWidthPX:        124,
-						WindowHeightPX:      532,
-						WindowWidthPX:       234,
+						Errors:              intPtr(0),
+						AutoplayStatus:      strPtr("autoplay"),
+						StalledCount:        intPtr(5),
+						WaitingCount:        intPtr(7),
+						TimeErroredMS:       intPtr(18),
+						TimeStalledMS:       intPtr(20),
+						TimePlayingMS:       intPtr(40),
+						TimeWaitingMS:       intPtr(60),
+						MountToPlayMS:       intPtr(80),
+						MountToFirstFrameMS: intPtr(100),
+						PlayToFirstFrameMS:  intPtr(30),
+						DurationMS:          intPtr(40),
+						OffsetMS:            intPtr(400),
+						PlayerHeightPX:      intPtr(123),
+						PlayerWidthPX:       intPtr(124),
+						VideoHeightPX:       intPtr(12345),
+						VideoWidthPX:        intPtr(124),
+						WindowHeightPX:      intPtr(532),
+						WindowWidthPX:       intPtr(234),
 					},
 				},
 				{
@@ -146,8 +146,8 @@ func TestHandleLog(t *testing.T) {
 					EventType:      "error",
 					EventTimestamp: 1234567895,
 					EventData: analytics.LogDataEvent{
-						ErrorMessage: "error message",
-						Category:     "offline",
+						ErrorMessage: strPtr("error message"),
+						Category:     strPtr("offline"),
 					},
 				},
 			},
@@ -327,4 +327,12 @@ func TestParseAnalyticsGeo(t *testing.T) {
 			require.Equal(tt.exp.Timezone, res.Timezone)
 		})
 	}
+}
+
+func intPtr(i int) *int {
+	return &i
+}
+
+func strPtr(s string) *string {
+	return &s
 }

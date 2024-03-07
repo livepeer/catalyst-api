@@ -44,29 +44,29 @@ type AnalyticsLogEvent struct {
 	Timestamp int64  `json:"timestamp"`
 
 	// Heartbeat event
-	Errors              int    `json:"errors"`
-	AutoplayStatus      string `json:"autoplay_status"`
-	StalledCount        int    `json:"stalled_count"`
-	WaitingCount        int    `json:"waiting_count"`
-	TimeErroredMS       int    `json:"time_errored_ms"`
-	TimeStalledMS       int    `json:"time_stalled_ms"`
-	TimePlayingMS       int    `json:"time_playing_ms"`
-	TimeWaitingMS       int    `json:"time_waiting_ms"`
-	MountToPlayMS       int    `json:"mount_to_play_ms"`
-	MountToFirstFrameMS int    `json:"mount_to_first_frame_ms"`
-	PlayToFirstFrameMS  int    `json:"play_to_first_frame_ms"`
-	DurationMS          int    `json:"duration_ms"`
-	OffsetMS            int    `json:"offset_ms"`
-	PlayerHeightPX      int    `json:"player_height_px"`
-	PlayerWidthPX       int    `json:"player_width_px"`
-	VideoHeightPX       int    `json:"video_height_px"`
-	VideoWidthPX        int    `json:"video_width_px"`
-	WindowHeightPX      int    `json:"window_height_px"`
-	WindowWidthPX       int    `json:"window_width_px"`
+	Errors              *int    `json:"errors"`
+	AutoplayStatus      *string `json:"autoplay_status"`
+	StalledCount        *int    `json:"stalled_count"`
+	WaitingCount        *int    `json:"waiting_count"`
+	TimeErroredMS       *int    `json:"time_errored_ms"`
+	TimeStalledMS       *int    `json:"time_stalled_ms"`
+	TimePlayingMS       *int    `json:"time_playing_ms"`
+	TimeWaitingMS       *int    `json:"time_waiting_ms"`
+	MountToPlayMS       *int    `json:"mount_to_play_ms"`
+	MountToFirstFrameMS *int    `json:"mount_to_first_frame_ms"`
+	PlayToFirstFrameMS  *int    `json:"play_to_first_frame_ms"`
+	DurationMS          *int    `json:"duration_ms"`
+	OffsetMS            *int    `json:"offset_ms"`
+	PlayerHeightPX      *int    `json:"player_height_px"`
+	PlayerWidthPX       *int    `json:"player_width_px"`
+	VideoHeightPX       *int    `json:"video_height_px"`
+	VideoWidthPX        *int    `json:"video_width_px"`
+	WindowHeightPX      *int    `json:"window_height_px"`
+	WindowWidthPX       *int    `json:"window_width_px"`
 
 	// Error event
-	ErrorMessage string `json:"error_message"`
-	Category     string `json:"category"`
+	ErrorMessage *string `json:"error_message"`
+	Category     *string `json:"category"`
 }
 
 type AnalyticsGeo struct {
