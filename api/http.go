@@ -5,11 +5,13 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/golang/glog"
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/balancer"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers"
+	"github.com/livepeer/catalyst-api/handlers/analytics"
 	"github.com/livepeer/catalyst-api/handlers/geolocation"
 	"github.com/livepeer/catalyst-api/log"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
@@ -66,9 +68,14 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 	if cli.EnableAnalytics == "true" || cli.EnableAnalytics == "enabled" {
-		analyticsApiHandlers := handlers.NewAnalyticsHandlersCollection(mapic, lapi, cli.AnalyticsMetricsURL, cli.NodeName)
-		router.POST("/analytics/log", withLogging(withCORS(analyticsApiHandlers.Log())))
-		router.GET("/analytics/log", withLogging(withCORS(geoHandlers.RedirectHandler())))
+		logProcessor, err := analytics.NewLogProcessor(cli.KafkaBootstrapServers, cli.KafkaUser, cli.KafkaPassword, cli.AnalyticsKafkaTopic)
+		if err != nil {
+			glog.Fatalf("failed to configure analytics log processor, err=%v", err)
+		} else {
+			analyticsApiHandlers := handlers.NewAnalyticsHandlersCollection(mapic, lapi, logProcessor)
+			router.POST("/analytics/log", withCORS(analyticsApiHandlers.Log()))
+			router.GET("/analytics/log", withLogging(withCORS(geoHandlers.RedirectHandler())))
+		}
 	}
 
 	// Playback endpoint

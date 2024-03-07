@@ -21,9 +21,13 @@ func TestFetch(t *testing.T) {
 
 	playbackID := "playback-id-1"
 	userID := "user-id-1"
+	creatorID := "creator-id-1"
 
 	mockMapicCache := &MockMapicCache{streams: map[string]*api.Stream{
-		playbackID: {UserID: userID},
+		playbackID: {
+			UserID:    userID,
+			CreatorID: &api.CreatorID{Value: creatorID},
+		},
 	}}
 
 	e := NewExternalDataFetcher(mockMapicCache, nil)
@@ -38,5 +42,7 @@ func TestFetch(t *testing.T) {
 	res, err = e.Fetch(playbackID)
 	require.NoError(err)
 	require.Equal(userID, res.UserID)
+	require.Equal(creatorID, res.CreatorID)
+	require.Equal("stream", res.SourceType)
 	require.Equal(1, mockMapicCache.callCount)
 }

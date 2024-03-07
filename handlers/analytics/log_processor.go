@@ -1,17 +1,18 @@
 package analytics
 
 import (
-	"bytes"
-	"fmt"
+	"context"
+	"crypto/tls"
+	"encoding/json"
 	"github.com/golang/glog"
-	"net/http"
-	"strings"
+	"github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/sasl/plain"
 	"time"
 )
 
 const (
-	SendMetricsInterval = 10 * time.Second
-	SendMetricsTimeout  = 60 * time.Second
+	KafkaBatchInterval  = 1 * time.Second
+	KafkaRequestTimeout = 60 * time.Second
 )
 
 type ILogProcessor interface {
@@ -19,194 +20,150 @@ type ILogProcessor interface {
 }
 
 type LogProcessor struct {
-	logs    map[labelsKey]map[string]metricValue
-	promURL string
-	host    string
+	logs   []LogData
+	writer *kafka.Writer
+	topic  string
 }
 
-type metricValue struct {
-	count           int
-	sumRebufferRate float64
-	sumErrorRatio   float64
-}
+type LogDataEvent struct {
+	// Heartbeat event
+	Errors              *int    `json:"errors,omitempty"`
+	AutoplayStatus      *string `json:"autoplay_status,omitempty"`
+	StalledCount        *int    `json:"stalled_count,omitempty"`
+	WaitingCount        *int    `json:"waiting_count,omitempty"`
+	TimeErroredMS       *int    `json:"time_errored_ms,omitempty"`
+	TimeStalledMS       *int    `json:"time_stalled_ms,omitempty"`
+	TimePlayingMS       *int    `json:"time_playing_ms,omitempty"`
+	TimeWaitingMS       *int    `json:"time_waiting_ms,omitempty"`
+	MountToPlayMS       *int    `json:"mount_to_play_ms,omitempty"`
+	MountToFirstFrameMS *int    `json:"mount_to_first_frame_ms,omitempty"`
+	PlayToFirstFrameMS  *int    `json:"play_to_first_frame_ms,omitempty"`
+	DurationMS          *int    `json:"duration_ms,omitempty"`
+	OffsetMS            *int    `json:"offset_ms,omitempty"`
+	PlayerHeightPX      *int    `json:"player_height_px,omitempty"`
+	PlayerWidthPX       *int    `json:"player_width_px,omitempty"`
+	VideoHeightPX       *int    `json:"video_height_px,omitempty"`
+	VideoWidthPX        *int    `json:"video_width_px,omitempty"`
+	WindowHeightPX      *int    `json:"window_height_px,omitempty"`
+	WindowWidthPX       *int    `json:"window_width_px,omitempty"`
 
-type labelsKey struct {
-	playbackID string
-	browser    string
-	deviceType string
-	country    string
-	userID     string
+	// Error event
+	ErrorMessage *string `json:"error_message,omitempty"`
+	Category     *string `json:"category,omitempty"`
 }
 
 type LogData struct {
-	SessionID  string
-	PlaybackID string
-	Browser    string
-	DeviceType string
-	Country    string
-	UserID     string
-
-	PlaytimeMs int
-	BufferMs   int
-	Errors     int
+	SessionID             string       `json:"session_id"`
+	ServerTimestamp       int64        `json:"server_timestamp"`
+	PlaybackID            string       `json:"playback_id"`
+	ViewerHash            string       `json:"viewer_hash"`
+	Protocol              string       `json:"protocol"`
+	PageURL               string       `json:"page_url"`
+	SourceURL             string       `json:"source_url"`
+	Player                string       `json:"player"`
+	Version               string       `json:"version"`
+	UserID                string       `json:"user_id"`
+	DStorageURL           string       `json:"d_storage_url"`
+	Source                string       `json:"source"`
+	CreatorID             string       `json:"creator_id"`
+	DeviceType            string       `json:"device_type"`
+	DeviceModel           string       `json:"device_model"`
+	DeviceBrand           string       `json:"device_brand"`
+	Browser               string       `json:"browser"`
+	OS                    string       `json:"os"`
+	CPU                   string       `json:"cpu"`
+	PlaybackGeoHash       string       `json:"playback_geo_hash"`
+	PlaybackContinentName string       `json:"playback_continent_name"`
+	PlaybackCountryCode   string       `json:"playback_country_code"`
+	PlaybackCountryName   string       `json:"playback_country_name"`
+	PlaybackSubdivision   string       `json:"playback_subdivision_name"`
+	PlaybackTimezone      string       `json:"playback_timezone"`
+	EventType             string       `json:"event_type"`
+	EventTimestamp        int64        `json:"event_timestamp"`
+	EventData             LogDataEvent `json:"event_data"`
 }
 
-func NewLogProcessor(promURL string, host string) *LogProcessor {
-	return &LogProcessor{
-		logs:    make(map[labelsKey]map[string]metricValue),
-		promURL: promURL,
-		host:    host,
+type KafkaKey struct {
+	SessionID string `json:"session_id"`
+	EventType string `json:"event_type"`
+}
+
+func NewLogProcessor(bootstrapServers, user, password, topic string) (*LogProcessor, error) {
+	dialer := &kafka.Dialer{
+		Timeout: KafkaRequestTimeout,
+		SASLMechanism: plain.Mechanism{
+			Username: user,
+			Password: password,
+		},
+		DualStack: true,
+		TLS: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
 	}
+
+	// Create a new Kafka writer
+	writer := kafka.NewWriter(kafka.WriterConfig{
+		Brokers:  []string{bootstrapServers},
+		Topic:    topic,
+		Balancer: kafka.CRC32Balancer{},
+		Dialer:   dialer,
+	})
+
+	return &LogProcessor{
+		logs:   []LogData{},
+		writer: writer,
+		topic:  topic,
+	}, nil
 }
 
-// Start starts LogProcessor which does the following:
-// - on every analytics heartbeat event, process log which means updating the internal structure with the log data
-// - every SendMetricsInterval, send metrics to the Prometheus (Victoria Metrics) DB
-// Note that it sends the metrics in the plaintext format, this could be changed to sending data in the binary format,
-// but plaintext seems to be efficient enough.
+// Start starts LogProcessor which sends events to Kafka in batches.
 func (lp *LogProcessor) Start(ch chan LogData) {
-	t := time.NewTicker(SendMetricsInterval)
-
+	t := time.NewTicker(KafkaBatchInterval)
 	go func() {
 		for {
 			select {
 			case d := <-ch:
 				lp.processLog(d)
 			case <-t.C:
-				lp.sendMetrics()
+				lp.sendEvents()
 			}
 		}
 	}()
 }
 
 func (p *LogProcessor) processLog(d LogData) {
-	var k = labelsKey{
-		playbackID: d.PlaybackID,
-		browser:    d.Browser,
-		deviceType: d.DeviceType,
-		country:    d.Country,
-		userID:     d.UserID,
-	}
-
-	bySessionID, ok := p.logs[k]
-	if !ok {
-		p.logs[k] = make(map[string]metricValue)
-		bySessionID = p.logs[k]
-	}
-
-	totalMs := d.PlaytimeMs + d.BufferMs
-	var rebufferRate float64
-	if totalMs > 0 {
-		rebufferRate = float64(d.BufferMs) / float64(totalMs)
-	}
-	var errorRatio float64
-	if d.Errors > 0 {
-		errorRatio = 1
-	}
-	mv := bySessionID[d.SessionID]
-	bySessionID[d.SessionID] = metricValue{
-		count:           mv.count + 1,
-		sumRebufferRate: mv.sumRebufferRate + rebufferRate,
-		sumErrorRatio:   mv.sumErrorRatio + errorRatio,
-	}
+	p.logs = append(p.logs, d)
 }
 
-func (p *LogProcessor) sendMetrics() {
+func (p *LogProcessor) sendEvents() {
 	if len(p.logs) > 0 {
-		glog.Info("sending analytics logs")
+		glog.Infof("sending analytics logs, count=%d", len(p.logs))
 	} else {
 		glog.V(6).Info("no analytics logs, skip sending")
 		return
 	}
 
-	// convert values in the Prometheus format
-	var metrics strings.Builder
-	now := time.Now().UnixMilli()
-	for k, v := range p.logs {
-		metrics.WriteString(p.toViewCountMetric(k, v, now))
-		metrics.WriteString(p.toRebufferRatioMetric(k, v, now))
-		metrics.WriteString(p.toErrorRateMetric(k, v, now))
-	}
-
-	// send data
-	err := p.sendMetricsString(metrics.String())
-	if err != nil {
-		glog.Errorf("failed to send analytics logs, err=%v", err)
-	}
-
-	// clear map
-	p.logs = make(map[labelsKey]map[string]metricValue)
-}
-
-func (p *LogProcessor) toViewCountMetric(k labelsKey, v map[string]metricValue, nowMs int64) string {
-	value := fmt.Sprintf("%d", len(v))
-	return p.toMetric(k, "view_count", value, nowMs)
-}
-
-func (p *LogProcessor) toRebufferRatioMetric(k labelsKey, v map[string]metricValue, nowMs int64) string {
-	var count int
-	var sumRebufferRate float64
-	for _, mv := range v {
-		if mv.count > 0 {
-			count += 1
-			sumRebufferRate += mv.sumRebufferRate / float64(mv.count)
+	var msgs []kafka.Message
+	for _, d := range p.logs {
+		key, err := json.Marshal(KafkaKey{SessionID: d.SessionID, EventType: d.EventType})
+		if err != nil {
+			glog.Errorf("invalid analytics log event, cannot create Kafka key, sessionID=%s, err=%v", d.SessionID, err)
+			continue
 		}
-	}
-	var rebufferRate float64
-	if count > 0 {
-		rebufferRate = sumRebufferRate / float64(count)
-	}
-	value := fmt.Sprintf("%f", rebufferRate)
-	return p.toMetric(k, "rebuffer_ratio", value, nowMs)
-}
-
-func (p *LogProcessor) toErrorRateMetric(k labelsKey, v map[string]metricValue, nowMs int64) string {
-	var count int
-	var sumErrorRatio float64
-	for _, mv := range v {
-		if mv.count > 0 {
-			count += 1
-			sumErrorRatio += mv.sumErrorRatio / float64(mv.count)
+		value, err := json.Marshal(d)
+		if err != nil {
+			glog.Errorf("invalid analytics log event, cannot sent to Kafka, sessionID=%s, err=%v", d.SessionID, err)
+			continue
 		}
+		msgs = append(msgs, kafka.Message{
+			Key:   key,
+			Value: value,
+		})
 	}
-	var errorRatio float64
-	if count > 0 {
-		errorRatio = sumErrorRatio / float64(count)
-	}
-	value := fmt.Sprintf("%f", errorRatio)
-	return p.toMetric(k, "error_rate", value, nowMs)
-}
+	p.logs = []LogData{}
 
-func (p *LogProcessor) toMetric(k labelsKey, name string, value string, nowMs int64) string {
-	return fmt.Sprintf(`%s{host="%s",user_id="%s",playback_id="%s",device_type="%s",browser="%s",country="%s"} %s %d`+"\n",
-		name,
-		p.host,
-		k.userID,
-		k.playbackID,
-		k.deviceType,
-		k.browser,
-		k.country,
-		value,
-		nowMs,
-	)
-}
-
-func (p *LogProcessor) sendMetricsString(metrics string) error {
-	client := &http.Client{Timeout: SendMetricsTimeout}
-	req, err := http.NewRequest("POST", p.promURL, bytes.NewBuffer([]byte(metrics)))
+	err := p.writer.WriteMessages(context.Background(), msgs...)
 	if err != nil {
-		return err
+		glog.Errorf("error while sending analytics log to Kafka, err=%v", err)
 	}
-	req.Header.Set("Content-Type", "text/plain")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("non-OK status code: %d", resp.StatusCode)
-	}
-	return nil
 }

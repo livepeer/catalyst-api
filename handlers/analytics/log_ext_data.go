@@ -13,7 +13,10 @@ type IExternalDataFetcher interface {
 }
 
 type ExternalData struct {
-	UserID string
+	UserID      string
+	DStorageURL string
+	SourceType  string
+	CreatorID   string
 }
 
 type ExternalDataFetcher struct {
@@ -73,15 +76,31 @@ func (e *ExternalDataFetcher) Fetch(playbackID string) (ExternalData, error) {
 }
 
 func (e *ExternalDataFetcher) extDataFromStream(playbackID string, stream *api.Stream) (ExternalData, error) {
-	extData := ExternalData{UserID: stream.UserID}
+	extData := ExternalData{
+		SourceType: "stream",
+		UserID:     stream.UserID,
+		CreatorID:  stream.CreatorID.Value,
+	}
 	e.cacheExtData(playbackID, extData)
 	return extData, nil
 }
 
 func (e *ExternalDataFetcher) extDataFromAsset(playbackID string, asset *api.Asset) (ExternalData, error) {
-	extData := ExternalData{UserID: asset.UserID}
+	extData := ExternalData{
+		SourceType:  "asset",
+		UserID:      asset.UserID,
+		DStorageURL: toDStorageURL(asset.Storage.IPFS),
+		CreatorID:   asset.CreatorID.Value,
+	}
 	e.cacheExtData(playbackID, extData)
 	return extData, nil
+}
+
+func toDStorageURL(ipfs *api.AssetIPFS) string {
+	if ipfs.CID != "" {
+		return fmt.Sprintf("ipfs://%s", ipfs.CID)
+	}
+	return ipfs.Url
 }
 
 func (e *ExternalDataFetcher) cacheExtData(playbackID string, extData ExternalData) {
