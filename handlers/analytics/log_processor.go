@@ -83,6 +83,11 @@ type LogData struct {
 	EventData             LogDataEvent `json:"event_data"`
 }
 
+type KafkaKey struct {
+	SessionID string `json:"session_id"`
+	EventType string `json:"event_type"`
+}
+
 func NewLogProcessor(bootstrapServers, user, password, topic string) (*LogProcessor, error) {
 	dialer := &kafka.Dialer{
 		Timeout: KafkaRequestTimeout,
@@ -140,7 +145,11 @@ func (p *LogProcessor) sendEvents() {
 
 	var msgs []kafka.Message
 	for _, d := range p.logs {
-		key := []byte(d.SessionID)
+		key, err := json.Marshal(KafkaKey{SessionID: d.SessionID, EventType: d.EventType})
+		if err != nil {
+			glog.Errorf("invalid analytics log event, cannot create Kafka key, sessionID=%s, err=%v", d.SessionID, err)
+			continue
+		}
 		value, err := json.Marshal(d)
 		if err != nil {
 			glog.Errorf("invalid analytics log event, cannot sent to Kafka, sessionID=%s, err=%v", d.SessionID, err)
