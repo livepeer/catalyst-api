@@ -26,9 +26,6 @@ type LogProcessor struct {
 }
 
 type LogDataEvent struct {
-	EventType      string `json:"event_type"`
-	EventTimestamp int64  `json:"event_timestamp"`
-
 	// Heartbeat event
 	Errors              int    `json:"errors,omitempty"`
 	AutoplayStatus      string `json:"autoplay_status,omitempty"`
@@ -81,7 +78,9 @@ type LogData struct {
 	PlaybackCountryName   string       `json:"playback_country_name"`
 	PlaybackSubdivision   string       `json:"playback_subdivision_name"`
 	PlaybackTimezone      string       `json:"playback_timezone"`
-	Data                  LogDataEvent `json:"data"`
+	EventType             string       `json:"event_type"`
+	EventTimestamp        int64        `json:"event_timestamp"`
+	EventData             LogDataEvent `json:"event_data"`
 }
 
 func NewLogProcessor(bootstrapServers, user, password, topic string) (*LogProcessor, error) {
