@@ -208,7 +208,6 @@ func toAnalyticsData(log *AnalyticsLog, geo AnalyticsGeo, extData analytics.Exte
 			SourceURL:             log.SourceURL,
 			Player:                log.Player,
 			Version:               log.Version,
-			UID:                   log.UID,
 			UserID:                extData.UserID,
 			DStorageURL:           extData.DStorageURL,
 			Source:                extData.SourceType,
@@ -273,5 +272,10 @@ func deviceTypeOf(ua useragent.UserAgent) string {
 }
 
 func hashViewer(log *AnalyticsLog, geo AnalyticsGeo) string {
+	if log.UID != "" {
+		// If user defined the unique viewer ID, then we just use it
+		return log.UID
+	}
+	// If user didn't define the unique viewer ID, then we hash IP and user agent data
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(log.UserAgent+geo.IP)))
 }
