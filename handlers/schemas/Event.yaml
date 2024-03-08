@@ -5,6 +5,7 @@ properties:
     enum:
       - stream
       - nuke
+      - stopSessions
   playback_id:
     type: "string"
 required:

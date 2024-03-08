@@ -44,6 +44,7 @@ type (
 		RefreshStreamIfNeeded(playbackID string)
 		NukeStream(playbackID string)
 		InvalidateAllSessions(playbackID string)
+		StopSessions(playbackID string)
 		IStreamCache
 	}
 
@@ -192,6 +193,19 @@ func (mc *mac) RefreshStreamIfNeeded(playbackID string) {
 
 func (mc *mac) NukeStream(playbackID string) {
 	mc.nukeAllStreamNames(playbackID)
+}
+
+func (mc *mac) StopSessions(playbackID string) {
+	streamNames := []string{
+		"video+" + playbackID,
+	}
+
+	for _, streamName := range streamNames {
+		err := mc.mist.StopSessions(streamName)
+		if err != nil {
+			glog.Errorf("error stopping sessions playbackId=%s streamName=%s err=%q", playbackID, streamName, err)
+		}
+	}
 }
 
 func (mc *mac) InvalidateAllSessions(playbackID string) {
