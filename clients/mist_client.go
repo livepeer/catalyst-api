@@ -26,6 +26,7 @@ type MistAPIClient interface {
 	InvalidateSessions(streamName string) error
 	DeleteStream(streamName string) error
 	NukeStream(streamName string) error
+	StopSessions(streamName string) error
 	AddTrigger(streamName []string, triggerName string, sync bool) error
 	DeleteTrigger(streamName []string, triggerName string) error
 	GetStreamInfo(streamName string) (MistStreamInfo, error)
@@ -271,6 +272,14 @@ func (mc *MistClient) NukeStream(streamName string) error {
 	return nil
 }
 
+func (mc *MistClient) StopSessions(streamName string) error {
+	c := commandStopSessions(streamName)
+	if err := validateAuth(mc.sendCommand(c)); err != nil {
+		return err
+	}
+	return nil
+}
+
 // AddTrigger adds a trigger `triggerName` for the stream `streamName`.
 // Note that Mist API supports only overriding the whole trigger configuration, therefore this function needs to:
 // 1. Acquire a lock
@@ -466,6 +475,16 @@ type nukeStreamCommand struct {
 func commandNukeStream(name string) nukeStreamCommand {
 	return nukeStreamCommand{
 		Nukestream: name,
+	}
+}
+
+type stopSessionsCommand struct {
+	StopSessions string `json:"stop_sessions"`
+}
+
+func commandStopSessions(name string) stopSessionsCommand {
+	return stopSessionsCommand{
+		StopSessions: name,
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 
 const streamEventResource = "stream"
 const nukeEventResource = "nuke"
+const stopSessionsEventResource = "stopSessions"
 const nodeUpdateEventResource = "nodeUpdate"
 
 type Event interface{}
@@ -29,6 +30,11 @@ type StreamEvent struct {
 }
 
 type NukeEvent struct {
+	Resource   string `json:"resource"`
+	PlaybackID string `json:"playback_id"`
+}
+
+type StopSessionsEvent struct {
 	Resource   string `json:"resource"`
 	PlaybackID string `json:"playback_id"`
 }
@@ -77,6 +83,13 @@ func Unmarshal(payload []byte) (Event, error) {
 		return event, nil
 	case nukeEventResource:
 		event := &NukeEvent{}
+		err := json.Unmarshal(payload, event)
+		if err != nil {
+			return nil, err
+		}
+		return event, nil
+	case stopSessionsEventResource:
+		event := &StopSessionsEvent{}
 		err := json.Unmarshal(payload, event)
 		if err != nil {
 			return nil, err

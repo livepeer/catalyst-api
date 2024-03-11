@@ -382,6 +382,10 @@ func processClusterEvent(mapic mistapiconnector.IMac, bal balancer.Balancer, use
 		case *events.NukeEvent:
 			mapic.NukeStream(event.PlaybackID)
 			return
+		case *events.StopSessionsEvent:
+			glog.V(5).Infof("received serf StopSessionsEvent: %v", event.PlaybackID)
+			mapic.StopSessions(event.PlaybackID)
+			return
 		case *events.NodeUpdateEvent:
 			if glog.V(5) {
 				glog.Infof("received serf NodeUpdateEvent. Node: %s. Length: %d bytes. Ingest Streams: %v. Non-Ingest Streams: %v", event.NodeID, len(userEvent.Payload), strings.Join(event.GetIngestStreams(), ","), strings.Join(event.GetStreams(), ","))

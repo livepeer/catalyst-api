@@ -44,6 +44,10 @@ func TestRequestPayload(t *testing.T) {
 			commandNukeStream("somestream"),
 		},
 		{
+			"command=%7B%22stop_sessions%22%3A%22somestream%22%7D",
+			commandStopSessions("somestream"),
+		},
+		{
 			"command=%7B%22config%22%3A%7B%22triggers%22%3A%7B%22PUSH_END%22%3A%5B%7B%22handler%22%3A%22http%3A%2F%2Flocalhost%2Fapi%22%2C%22streams%22%3A%5B%22somestream%22%5D%2C%22sync%22%3Afalse%7D%5D%7D%7D%7D",
 			commandAddTrigger([]string{"somestream"}, "PUSH_END", "http://localhost/api", Triggers{}, false),
 		},
