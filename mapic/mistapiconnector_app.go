@@ -196,11 +196,22 @@ func (mc *mac) NukeStream(playbackID string) {
 }
 
 func (mc *mac) StopSessions(playbackID string) {
+	mistState, err := mc.mist.GetState()
+	if err != nil {
+		glog.Errorf("error stopping sessions, mist GetState failed playbackId=%s err=%q", playbackID, err)
+		return
+	}
+
 	streamNames := []string{
 		"video+" + playbackID,
 	}
 
 	for _, streamName := range streamNames {
+		if !mistState.IsIngestStream(streamName) {
+			// only call stop sessions if we are the ingest node for this stream
+			continue
+		}
+		glog.V(7).Infof("calling mist StopSessions playbackId=%s streamName=%s", playbackID, streamName)
 		err := mc.mist.StopSessions(streamName)
 		if err != nil {
 			glog.Errorf("error stopping sessions playbackId=%s streamName=%s err=%q", playbackID, streamName, err)
