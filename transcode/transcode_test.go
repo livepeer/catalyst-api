@@ -163,10 +163,10 @@ func TestItCanTranscode(t *testing.T) {
 	// Confirm the master manifest was created and that it looks like a manifest
 	var expectedMasterManifest = `#EXTM3U
 #EXT-X-VERSION:3
-#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=3195660,RESOLUTION=2020x2020,NAME="0-2020p0"
-2020p0/index.m3u8
-#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=532610,RESOLUTION=2020x2020,NAME="1-low-bitrate"
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=532610,RESOLUTION=2020x2020,NAME="0-low-bitrate"
 low-bitrate/index.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=3195660,RESOLUTION=2020x2020,NAME="1-2020p0"
+2020p0/index.m3u8
 `
 
 	masterManifestBytes, err := os.ReadFile(filepath.Join(topLevelDir, "index.m3u8"))

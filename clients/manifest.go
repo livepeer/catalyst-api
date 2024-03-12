@@ -104,11 +104,10 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 
 	//sort transcoded Stats and loop in order.
 	SortTranscodedStats(transcodedStats)
-
 	// If the first rendition is greater than 2k resolution, then swap with the second rendition. HLS players
 	// typically load the first rendition in a master playlist and this can result in long downloads (and
 	// hence long TTFF) for high-res video segments.
-	if len(transcodedStats) >= 2 && (transcodedStats[0].Width >= 2160 || transcodedStats[0].Height >= 2160) {
+	if len(transcodedStats) >= 2 && (transcodedStats[0].Width >= 960 || transcodedStats[0].Height >= 960) {
 		transcodedStats[0], transcodedStats[1] = transcodedStats[1], transcodedStats[0]
 	}
 

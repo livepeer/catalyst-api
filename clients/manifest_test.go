@@ -199,6 +199,13 @@ func TestCompliantMasterManifestOrdering(t *testing.T) {
 				BitsPerSecond: 1000000,
 			},
 			{
+				Name:          "medium-high-def",
+				FPS:           60,
+				Width:         1280,
+				Height:        720,
+				BitsPerSecond: 1000000,
+			},
+			{
 				Name:          "super-high-def",
 				FPS:           30,
 				Width:         1080,
@@ -222,11 +229,13 @@ func TestCompliantMasterManifestOrdering(t *testing.T) {
 	require.NoError(t, err)
 	const expectedMasterManifest = `#EXTM3U
 #EXT-X-VERSION:3
-#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=2000000,RESOLUTION=1080x720,NAME="0-super-high-def",FRAME-RATE=30.000
-super-high-def/index.m3u8
-#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=2000000,RESOLUTION=800x600,NAME="1-small-high-def",FRAME-RATE=30.000
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=2000000,RESOLUTION=800x600,NAME="0-small-high-def",FRAME-RATE=30.000
 small-high-def/index.m3u8
-#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1000000,RESOLUTION=800x600,NAME="2-lowlowlow",FRAME-RATE=60.000
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=2000000,RESOLUTION=1080x720,NAME="1-super-high-def",FRAME-RATE=30.000
+super-high-def/index.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1000000,RESOLUTION=1280x720,NAME="2-medium-high-def",FRAME-RATE=60.000
+medium-high-def/index.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=0,BANDWIDTH=1000000,RESOLUTION=800x600,NAME="3-lowlowlow",FRAME-RATE=60.000
 lowlowlow/index.m3u8
 `
 	require.Equal(t, expectedMasterManifest, string(masterManifestContents))
