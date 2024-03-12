@@ -128,6 +128,15 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 	}
 }
 
+// RedirectConstPathHandler redirects const path into the self catalyst node
+func (c *GeolocationHandlersCollection) RedirectConstPathHandler() httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+		rURL := fmt.Sprintf("%s://%s%s", protocol(r), c.Config.NodeName, r.URL.Path)
+		glog.V(6).Infof("generated redirect url=%s", rURL)
+		http.Redirect(w, r, rURL, http.StatusTemporaryRedirect)
+	}
+}
+
 // respond to a STREAM_SOURCE request from Mist
 func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, payload *misttriggers.StreamSourcePayload) (string, error) {
 	lat := c.Config.NodeLatitude

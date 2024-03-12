@@ -74,7 +74,7 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 		} else {
 			analyticsApiHandlers := handlers.NewAnalyticsHandlersCollection(mapic, lapi, logProcessor)
 			router.POST("/analytics/log", withCORS(analyticsApiHandlers.Log()))
-			router.GET("/analytics/log", withLogging(withCORS(geoHandlers.RedirectHandler())))
+			router.GET("/analytics/log", withLogging(withCORS(geoHandlers.RedirectConstPathHandler())))
 		}
 	}
 
