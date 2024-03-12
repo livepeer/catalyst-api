@@ -96,8 +96,10 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// and OBS settings. This segment should *not* be submitted to the T as it can cause corrupted
 	// output MP4 files.
 	if inputInfo.Format == "hls" {
-
 		sourceManifest.Segments, sourceSegmentURLs = HandleAVStartTimeOffsets(transcodeRequest.RequestID, inputInfo, sourceManifest.Segments, sourceSegmentURLs)
+		if len(sourceSegmentURLs) == 0 {
+			return outputs, segmentsCount, fmt.Errorf("no valid segments in stream to transcode")
+		}
 	}
 
 	// The last segment in an HLS manifest may contain an audio-only track - this is common
@@ -675,11 +677,17 @@ func HandleAVStartTimeOffsets(requestID string, iv video.InputVideo, segments []
 	// calculate delta between start time of audio and video tracks
 	avOffset := math.Abs(v.StartTimeSec - a.StartTimeSec)
 
-	// if a/v tracks are delayed by more than 1s, then remove the first segment
-	// from both the manifest and list of segment URLs
+	// If a/v tracks are delayed by more than 1s, then remove the first segment
+	// from both the manifest and list of segment URLs. This is done so that
+	// the resulting playable MP4s can be generated. MP4s of a/v streams cannot
+	// be generated when the offset is too large (e.g. greater than 1s).
 	if avOffset > 1 && avOffset < iv.Duration {
 		log.Log(requestID, "Dropping first segment due to a/v offset mismatch", "av-offset", avOffset)
-		return segments[1:], segmentURLs[1:]
+		if len(segments) > 1 && len(segmentURLs) > 1 {
+			return segments[1:], segmentURLs[1:]
+		} else {
+			return []*m3u8.MediaSegment{}, []clients.SourceSegment{}
+		}
 	}
 
 	return segments, segmentURLs

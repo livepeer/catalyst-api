@@ -295,7 +295,6 @@ func TestNewParallelTranscoding(t *testing.T) {
 	}
 }
 
-// TestHandleAVStartTimeOffsets uses table-driven tests to verify the behavior
 func TestHandleAVStartTimeOffsets(t *testing.T) {
 	const manifestA = `#EXTM3U
 #EXT-X-VERSION:3
@@ -380,6 +379,60 @@ func TestHandleAVStartTimeOffsets(t *testing.T) {
 			sourceManifest.Segments, sourceSegmentURLs = HandleAVStartTimeOffsets("test", tt.inputInfo, sourceManifest.Segments, sourceSegmentURLs)
 			require.Equal(t, tt.expectedFirstURI, sourceManifest.Segments[0].URI)
 			require.Equal(t, segmentURL(t, tt.expectedSegmentURL), sourceSegmentURLs[0].URL)
+			require.Equal(t, tt.expectedLength, len(sourceSegmentURLs))
+		})
+	}
+}
+
+func TestHandleAVStartTimeOffsetsWhenSingleSegment(t *testing.T) {
+	const manifestA = `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-PLAYLIST-TYPE:VOD
+#EXT-X-TARGETDURATION:5
+#EXT-X-MEDIA-SEQUENCE:0
+#EXTINF:10.4160000000,
+0.ts
+#EXT-X-ENDLIST`
+
+	tests := []struct {
+		name           string
+		inputInfo      video.InputVideo
+		expectedLength int
+	}{
+		{
+			name: "FirstSegmentDroppedWithLargeStartTimeOffset",
+			inputInfo: video.InputVideo{
+				Duration:  123.0,
+				Format:    "some-format",
+				SizeBytes: 123,
+				Tracks: []video.InputTrack{
+					{
+						Type:         "video",
+						StartTimeSec: 5.0,
+						VideoTrack:   video.VideoTrack{Width: 2020, Height: 2020},
+					},
+					{
+						Type:         "audio",
+						StartTimeSec: 1.4,
+						AudioTrack:   video.AudioTrack{Channels: 2},
+					},
+				},
+			},
+			expectedLength: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			playlistA, _, err := m3u8.DecodeFrom(strings.NewReader(manifestA), true)
+			require.NoError(t, err)
+			sourceManifest := playlistA.(*m3u8.MediaPlaylist)
+
+			sourceSegmentURLs := []clients.SourceSegment{
+				{URL: segmentURL(t, "0.ts"), DurationMillis: 1000},
+			}
+
+			sourceManifest.Segments, sourceSegmentURLs = HandleAVStartTimeOffsets("test", tt.inputInfo, sourceManifest.Segments, sourceSegmentURLs)
 			require.Equal(t, tt.expectedLength, len(sourceSegmentURLs))
 		})
 	}
