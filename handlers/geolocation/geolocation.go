@@ -128,7 +128,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 	}
 }
 
-// RedirectConstPathHandler redirects const path into the self catalyst node if it was not already redirected.
+// RedirectConstPathHandler redirects const path into the self catalyst node if it was not yet redirected.
 func (c *GeolocationHandlersCollection) RedirectConstPathHandler() httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 		if r.Host != c.Config.NodeName {
