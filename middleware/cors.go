@@ -18,6 +18,7 @@ func AllowCORS() func(httprouter.Handle) httprouter.Handle {
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			// Safari doesn't allow a wildcard for this so we just list them all
 			w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE")
+			w.Header().Set("Access-Control-Expose-Headers", "Location")
 
 			// If this is a preflight request, we don't need to call the next handler
 			if r.Method == "OPTIONS" {
