@@ -132,7 +132,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 func (c *GeolocationHandlersCollection) RedirectConstPathHandler() httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 		if r.Host != c.Config.NodeName {
-			rURL := fmt.Sprintf("%s://%s:8989%s", protocol(r), c.Config.NodeName, r.URL.Path)
+			rURL := fmt.Sprintf("%s://%s%s", protocol(r), c.Config.NodeName, r.URL.Path)
 			glog.V(6).Infof("generated redirect url=%s", rURL)
 			http.Redirect(w, r, rURL, http.StatusTemporaryRedirect)
 		}
