@@ -77,6 +77,7 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 			// Redirect GET /analytics/log to the specific catalyst node, e.g. "mdw-staging-staging-catalyst-0.livepeer.monster"
 			// This is useful for the player, because then it can stick to one node while sending analytics logs
 			router.GET("/analytics/log", withLogging(withCORS(geoHandlers.RedirectConstPathHandler())))
+			router.HEAD("/analytics/log", withLogging(withCORS(geoHandlers.RedirectConstPathHandler())))
 		}
 	}
 
