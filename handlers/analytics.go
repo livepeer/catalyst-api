@@ -29,7 +29,9 @@ type AnalyticsLog struct {
 	SessionID  string              `json:"session_id"`
 	PlaybackID string              `json:"playback_id"`
 	Protocol   string              `json:"protocol"`
-	PageURL    string              `json:"page_url"`
+	Domain     string              `json:"domain"`
+	Path       string              `json:"path"`
+	Params     string              `json:"params"`
 	SourceURL  string              `json:"source_url"`
 	Player     string              `json:"player"`
 	Version    string              `json:"version"`
@@ -204,7 +206,9 @@ func toAnalyticsData(log *AnalyticsLog, geo AnalyticsGeo, extData analytics.Exte
 			PlaybackID:            log.PlaybackID,
 			ViewerHash:            hashViewer(log, geo),
 			Protocol:              log.Protocol,
-			PageURL:               log.PageURL,
+			Domain:                log.Domain,
+			Path:                  log.Path,
+			Params:                log.Params,
 			SourceURL:             log.SourceURL,
 			Player:                log.Player,
 			Version:               log.Version,
@@ -276,5 +280,5 @@ func hashViewer(log *AnalyticsLog, geo AnalyticsGeo) string {
 		return log.UID
 	}
 	// If user didn't define the unique viewer ID, then we hash IP and user agent data
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(log.UserAgent+geo.IP)))
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(log.Domain+log.UserAgent+geo.IP)))
 }

@@ -58,7 +58,9 @@ type LogData struct {
 	PlaybackID            string       `json:"playback_id"`
 	ViewerHash            string       `json:"viewer_hash"`
 	Protocol              string       `json:"protocol"`
-	PageURL               string       `json:"page_url"`
+	Domain                string       `json:"domain"`
+	Path                  string       `json:"path"`
+	Params                string       `json:"params"`
 	SourceURL             string       `json:"source_url"`
 	Player                string       `json:"player"`
 	Version               string       `json:"version"`

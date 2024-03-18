@@ -6,11 +6,17 @@ properties:
     type: "string"
   protocol:
     type: "string"
-  page_url:
-    type: "string"
   source_url:
     type: "string"
   player:
+    type: "string"
+  version:
+    type: "string"
+  domain:
+    type: "string"
+  path:
+    type: "string"
+  params:
     type: "string"
   user_agent:
     type: "string"
@@ -46,8 +52,11 @@ required:
   - session_id
   - playback_id
   - protocol
-  - page_url
+  - domain
+  - path
+  - params
   - source_url
   - player
+  - version
   - user_agent
   - events
