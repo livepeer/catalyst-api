@@ -265,6 +265,7 @@ func TestParseAnalyticsGeo(t *testing.T) {
 				Country:     "Poland",
 				Subdivision: "Lesser Poland",
 				Timezone:    "Europe/Warsaw",
+				Continent:   "Europe",
 			},
 			wantErrorContains: nil,
 		},
@@ -277,8 +278,9 @@ func TestParseAnalyticsGeo(t *testing.T) {
 				"X-City-Country-Name": {"Poland"},
 			},
 			exp: AnalyticsGeo{
-				GeoHash: "u2yhvdpyqj",
-				Country: "Poland",
+				GeoHash:   "u2yhvdpyqj",
+				Country:   "Poland",
+				Continent: "Europe",
 			},
 			wantErrorContains: []string{
 				"missing geo headers",
