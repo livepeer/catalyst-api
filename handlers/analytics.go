@@ -221,6 +221,7 @@ func toAnalyticsData(log *AnalyticsLog, geo AnalyticsGeo, extData analytics.Exte
 			PlaybackCountryCode:   geo.CountryCode,
 			PlaybackCountryName:   geo.Country,
 			PlaybackSubdivision:   geo.Subdivision,
+			PlaybackTimezone:      geo.Timezone,
 			EventType:             e.Type,
 			EventTimestamp:        e.Timestamp,
 			EventData: analytics.LogDataEvent{
