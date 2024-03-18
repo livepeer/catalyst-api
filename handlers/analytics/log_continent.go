@@ -254,6 +254,9 @@ var countryCodeToContinent = map[string]string{
 	"BR": "South America",
 }
 
+// GetContinent resolves the continent name from the country code.
+// We don't have Continent Name in our Geo DB and country codes do not change very often,
+// so mapping it with constant values should be good enough.
 func GetContinent(countryCode string) string {
 	if c, ok := countryCodeToContinent[countryCode]; ok {
 		return c
