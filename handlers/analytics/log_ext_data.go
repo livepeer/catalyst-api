@@ -104,6 +104,9 @@ func toCreatorID(c *api.CreatorID) string {
 }
 
 func toDStorageURL(ipfs *api.AssetIPFS) string {
+	if ipfs == nil {
+		return ""
+	}
 	if ipfs.CID != "" {
 		return fmt.Sprintf("ipfs://%s", ipfs.CID)
 	}
