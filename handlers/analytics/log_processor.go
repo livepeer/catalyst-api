@@ -61,6 +61,7 @@ type LogData struct {
 	Domain                string       `json:"domain"`
 	Path                  string       `json:"path"`
 	Params                string       `json:"params"`
+	Hash                  string       `json:"hash"`
 	SourceURL             string       `json:"source_url"`
 	Player                string       `json:"player"`
 	Version               string       `json:"version"`

@@ -18,6 +18,8 @@ properties:
     type: "string"
   params:
     type: "string"
+  hash:
+    type: "string"
   user_agent:
     type: "string"
   uid:
@@ -52,9 +54,6 @@ required:
   - session_id
   - playback_id
   - protocol
-  - domain
-  - path
-  - params
   - source_url
   - player
   - version
