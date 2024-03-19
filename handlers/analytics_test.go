@@ -4,6 +4,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/handlers/analytics"
 	"github.com/stretchr/testify/require"
+	"github.com/ua-parser/uap-go/uaparser"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -107,6 +108,8 @@ func TestHandleLog(t *testing.T) {
 					UserID:         userID,
 					Source:         "stream",
 					DeviceType:     "desktop",
+					DeviceModel:    "Mac",
+					DeviceBrand:    "Apple",
 					Browser:        "Chrome",
 					OS:             "macOS",
 					EventType:      "heartbeat",
@@ -147,6 +150,8 @@ func TestHandleLog(t *testing.T) {
 					UserID:         userID,
 					Source:         "stream",
 					DeviceType:     "desktop",
+					DeviceModel:    "Mac",
+					DeviceBrand:    "Apple",
 					Browser:        "Chrome",
 					OS:             "macOS",
 					EventType:      "error",
@@ -225,6 +230,7 @@ func TestHandleLog(t *testing.T) {
 			analyticsApiHandlers := AnalyticsHandlersCollection{
 				extFetcher:   &mockFetcher,
 				logProcessor: &mockProcessor,
+				uaParser:     uaparser.NewFromSaved(),
 			}
 			router := httprouter.New()
 			router.POST("/analytics/log", analyticsApiHandlers.Log())
@@ -277,6 +283,7 @@ func TestParseAnalyticsGeo(t *testing.T) {
 				Country:     "Poland",
 				Subdivision: "Lesser Poland",
 				Timezone:    "Europe/Warsaw",
+				Continent:   "Europe",
 			},
 			wantErrorContains: nil,
 		},
@@ -289,8 +296,9 @@ func TestParseAnalyticsGeo(t *testing.T) {
 				"X-City-Country-Name": {"Poland"},
 			},
 			exp: AnalyticsGeo{
-				GeoHash: "u2yhvdpyqj",
-				Country: "Poland",
+				GeoHash:   "u2yhvdpyqj",
+				Country:   "Poland",
+				Continent: "Europe",
 			},
 			wantErrorContains: []string{
 				"missing geo headers",

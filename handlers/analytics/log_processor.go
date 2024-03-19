@@ -74,7 +74,6 @@ type LogData struct {
 	DeviceBrand           string       `json:"device_brand"`
 	Browser               string       `json:"browser"`
 	OS                    string       `json:"os"`
-	CPU                   string       `json:"cpu"`
 	PlaybackGeoHash       string       `json:"playback_geo_hash"`
 	PlaybackContinentName string       `json:"playback_continent_name"`
 	PlaybackCountryCode   string       `json:"playback_country_code"`
