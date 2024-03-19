@@ -41,12 +41,13 @@ func TestHandleLog(t *testing.T) {
 		wantProcessedLogs        []analytics.LogData
 	}{
 		{
-			name: "valid payload",
 			requestBody: `{
 				"session_id": "abcdef",
 				"playback_id": "123456",
 				"protocol": "video/mp4",
-				"page_url": "https://www.fishtank.live/",
+				"domain" :"www.fishtank.live",
+				"path": "/some-path",
+				"params": "a=1",
 				"source_url": "https://vod-cdn.lp-playback.studio/raw/jxf4iblf6wlsyor6526t4tcmtmqa/catalyst-vod-com/hls/362f9l7ekeoze518/1080p0.mp4?tkn=8b140ec6b404a",
 				"player": "video",
 				"version": "3.1.9",
@@ -89,6 +90,7 @@ func TestHandleLog(t *testing.T) {
 					}
 				]
 			}`,
+			name:                     "valid payload",
 			wantHttpCode:             200,
 			wantExtFetchedPlaybackID: "123456",
 			wantProcessedLogs: []analytics.LogData{
@@ -97,7 +99,9 @@ func TestHandleLog(t *testing.T) {
 					PlaybackID:     "123456",
 					ViewerHash:     "abcdef",
 					Protocol:       "video/mp4",
-					PageURL:        "https://www.fishtank.live/",
+					Domain:         "www.fishtank.live",
+					Path:           "/some-path",
+					Params:         "a=1",
 					SourceURL:      "https://vod-cdn.lp-playback.studio/raw/jxf4iblf6wlsyor6526t4tcmtmqa/catalyst-vod-com/hls/362f9l7ekeoze518/1080p0.mp4?tkn=8b140ec6b404a",
 					Player:         "video",
 					Version:        "3.1.9",
@@ -137,7 +141,9 @@ func TestHandleLog(t *testing.T) {
 					PlaybackID:     "123456",
 					ViewerHash:     "abcdef",
 					Protocol:       "video/mp4",
-					PageURL:        "https://www.fishtank.live/",
+					Domain:         "www.fishtank.live",
+					Path:           "/some-path",
+					Params:         "a=1",
 					SourceURL:      "https://vod-cdn.lp-playback.studio/raw/jxf4iblf6wlsyor6526t4tcmtmqa/catalyst-vod-com/hls/362f9l7ekeoze518/1080p0.mp4?tkn=8b140ec6b404a",
 					Player:         "video",
 					Version:        "3.1.9",
@@ -164,9 +170,12 @@ func TestHandleLog(t *testing.T) {
 				"session_id": "abcdef",
 				"playback_id": "123456",
 				"protocol": "video/mp4",
-				"page_url": "https://www.fishtank.live/",
+				"domain" :"www.fishtank.live",
+				"path": "/some-path",
+				"params": "a=1",
 				"source_url": "https://vod-cdn.lp-playback.studio/raw/jxf4iblf6wlsyor6526t4tcmtmqa/catalyst-vod-com/hls/362f9l7ekeoze518/1080p0.mp4?tkn=8b140ec6b404a",
 				"player": "video-@livepeer/react@3.1.9",
+				"version": "3.1.9",
 				"user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36",
 				"uid": "abcdef",
 				"events": [
@@ -188,9 +197,12 @@ func TestHandleLog(t *testing.T) {
 			requestBody: `{
 				"playback_id": "123456",
 				"protocol": "video/mp4",
-				"page_url": "https://www.fishtank.live/",
+				"domain" :"www.fishtank.live",
+				"path": "/some-path",
+				"params: "a=1",
 				"source_url": "https://vod-cdn.lp-playback.studio/raw/jxf4iblf6wlsyor6526t4tcmtmqa/catalyst-vod-com/hls/362f9l7ekeoze518/1080p0.mp4?tkn=8b140ec6b404a",
 				"player": "video-@livepeer/react@3.1.9",
+				"version": "3.1.9",
 				"user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36",
 				"uid": "abcdef",
 				"events": [
