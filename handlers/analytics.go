@@ -279,6 +279,6 @@ func hashViewer(log *AnalyticsLog, geo AnalyticsGeo) string {
 		// If user defined the unique viewer ID, then we just use it
 		return log.UID
 	}
-	// If user didn't define the unique viewer ID, then we hash IP and user agent data
+	// If user didn't define the unique viewer ID, then we hash domain, IP and user agent data
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(log.Domain+log.UserAgent+geo.IP)))
 }
