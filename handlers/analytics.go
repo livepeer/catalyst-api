@@ -4,6 +4,13 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/ua-parser/uap-go/uaparser"
+	"io"
+	"net"
+	"net/http"
+	"strconv"
+	"time"
+
 	"github.com/golang/glog"
 	"github.com/julienschmidt/httprouter"
 	cerrors "github.com/livepeer/catalyst-api/errors"
@@ -13,11 +20,6 @@ import (
 	"github.com/mileusna/useragent"
 	"github.com/mmcloughlin/geohash"
 	"github.com/xeipuuv/gojsonschema"
-	"io"
-	"net"
-	"net/http"
-	"strconv"
-	"time"
 )
 
 const (
@@ -82,12 +84,14 @@ type AnalyticsGeo struct {
 type AnalyticsHandlersCollection struct {
 	extFetcher   analytics.IExternalDataFetcher
 	logProcessor analytics.ILogProcessor
+	uaParser     *uaparser.Parser
 }
 
 func NewAnalyticsHandlersCollection(streamCache mistapiconnector.IStreamCache, lapi *api.Client, lp analytics.ILogProcessor) AnalyticsHandlersCollection {
 	return AnalyticsHandlersCollection{
 		extFetcher:   analytics.NewExternalDataFetcher(streamCache, lapi),
 		logProcessor: lp,
+		uaParser:     uaparser.NewFromSaved(),
 	}
 }
 
@@ -113,7 +117,7 @@ func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 			cerrors.WriteHTTPBadRequest(w, "Invalid playback_id", nil)
 		}
 
-		for _, ad := range toAnalyticsData(log, geo, extData) {
+		for _, ad := range c.toAnalyticsData(log, geo, extData) {
 			select {
 			case dataCh <- ad:
 				// process data async
@@ -192,8 +196,10 @@ func getOrAddMissing(key string, headers http.Header, missingHeaders []string) (
 	return "", missingHeaders
 }
 
-func toAnalyticsData(log *AnalyticsLog, geo AnalyticsGeo, extData analytics.ExternalData) []analytics.LogData {
+func (c *AnalyticsHandlersCollection) toAnalyticsData(log *AnalyticsLog, geo AnalyticsGeo, extData analytics.ExternalData) []analytics.LogData {
 	ua := useragent.Parse(log.UserAgent)
+	ua2 := c.uaParser.Parse(log.UserAgent)
+
 	var res []analytics.LogData
 	for _, e := range log.Events {
 		if !isSupportedEvent(e.Type) {
@@ -214,7 +220,8 @@ func toAnalyticsData(log *AnalyticsLog, geo AnalyticsGeo, extData analytics.Exte
 			Source:                extData.SourceType,
 			CreatorID:             extData.CreatorID,
 			DeviceType:            deviceTypeOf(ua),
-			DeviceModel:           ua.Device,
+			DeviceModel:           ua2.Device.Model,
+			DeviceBrand:           ua2.Device.Brand,
 			Browser:               ua.Name,
 			OS:                    ua.OS,
 			PlaybackGeoHash:       geo.GeoHash,
