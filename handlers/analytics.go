@@ -150,6 +150,7 @@ func parseAnalyticsGeo(r *http.Request) (AnalyticsGeo, error) {
 
 	res.Country, missingHeader = getOrAddMissing("X-City-Country-Name", r.Header, missingHeader)
 	res.CountryCode, missingHeader = getOrAddMissing("X-City-Country-Code", r.Header, missingHeader)
+	res.Continent = analytics.GetContinent(res.CountryCode)
 	res.Subdivision, missingHeader = getOrAddMissing("X-Region-Name", r.Header, missingHeader)
 	res.Timezone, missingHeader = getOrAddMissing("X-Time-Zone", r.Header, missingHeader)
 
@@ -221,6 +222,7 @@ func toAnalyticsData(log *AnalyticsLog, geo AnalyticsGeo, extData analytics.Exte
 			PlaybackCountryCode:   geo.CountryCode,
 			PlaybackCountryName:   geo.Country,
 			PlaybackSubdivision:   geo.Subdivision,
+			PlaybackTimezone:      geo.Timezone,
 			EventType:             e.Type,
 			EventTimestamp:        e.Timestamp,
 			EventData: analytics.LogDataEvent{
