@@ -349,7 +349,6 @@ func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playba
 }
 
 func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
-
 	gateConfig := GateConfig{
 		MaxAge:               0,
 		StaleWhileRevalidate: 0,
@@ -357,7 +356,10 @@ func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 		RefreshInterval:      0,
 	}
 
-	req, err := http.NewRequest("POST", g.gateURL, bytes.NewReader(body))
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", g.gateURL, bytes.NewReader(body))
 	if err != nil {
 		return false, gateConfig, err
 	}
@@ -366,10 +368,18 @@ func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 
 	res, err := g.Client.Do(req)
 	if err != nil {
+		// If the timeout is exceeded, simulate a 2XX status code with 2 minute cache expiration
+		if err == context.DeadlineExceeded {
+			glog.Infof("queryGate timeout exceeded. Setting default cache expiration to 2 minutes.")
+			gateConfig.MaxAge = 120
+			gateConfig.StaleWhileRevalidate = 600
+			gateConfig.RefreshInterval = 60
+			return true, gateConfig, nil
+		}
 		return false, gateConfig, err
 	}
-
 	defer res.Body.Close()
+
 	cc, err := cacheobject.ParseResponseCacheControl(res.Header.Get("Cache-Control"))
 	if err != nil {
 		return false, gateConfig, err
