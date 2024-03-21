@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/julienschmidt/httprouter"
@@ -19,6 +20,8 @@ import (
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/go-api-client"
 )
+
+const lockPullLeaseTimeout = 3 * time.Minute
 
 type GeolocationHandlersCollection struct {
 	Balancer balancer.Balancer
@@ -198,6 +201,10 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string) (string
 
 	if stream.Pull == nil {
 		return "", nil
+	}
+
+	if err := c.Lapi.LockPull(stream.ID, lockPullLeaseTimeout); err != nil {
+		return "", fmt.Errorf("failed to lock pull, err=%v", err)
 	}
 
 	if len(stream.Pull.Headers) == 0 {
