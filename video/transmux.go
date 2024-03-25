@@ -23,6 +23,7 @@ const (
 func MuxTStoMP4(tsInputFile, mp4OutputFile string) ([]string, error) {
 	var transmuxOutputFiles []string
 	// transmux the .ts file into a standalone MP4 file
+	ffmpegErr := bytes.Buffer{}
 	err := ffmpeg.Input(tsInputFile).
 		Output(mp4OutputFile, ffmpeg.KwArgs{
 			"analyzeduration": "15M",           // Analyze up to 15s of video to figure out the format. We saw failures to detect the video codec without this
@@ -30,9 +31,9 @@ func MuxTStoMP4(tsInputFile, mp4OutputFile string) ([]string, error) {
 			"c":               "copy",          // Don't accidentally transcode
 			"bsf:a":           "aac_adtstoasc", // Remove ADTS header (required for ts -> mp4 container conversion)
 		}).
-		OverWriteOutput().ErrorToStdOut().Run()
+		OverWriteOutput().WithErrorOutput(&ffmpegErr).Run()
 	if err != nil {
-		return nil, fmt.Errorf("failed to transmux concatenated mpeg-ts file (%s) into a mp4 file: %w", tsInputFile, err)
+		return nil, fmt.Errorf("failed to transmux concatenated mpeg-ts file (%s) into a mp4 file [%s]: %w", tsInputFile, ffmpegErr.String(), err)
 	}
 	// Verify the mp4 output file was created
 	_, err = os.Stat(mp4OutputFile)
@@ -211,15 +212,16 @@ func concatStreams(segmentList, outputTsFileName string) error {
 	}
 	defer tsFile.Close()
 	// Transmux the individual .ts files into a combined single ts file using stream based concatenation
+	ffmpegErr := bytes.Buffer{}
 	err = ffmpeg.Input(segmentList, ffmpeg.KwArgs{
 		"f":    "concat", // Use stream based concatenation (instead of file based concatenation)
 		"safe": "0"}).    // Must be 0 since relative paths to segments are used in segmentListTxtFileName
 		Output(outputTsFileName, ffmpeg.KwArgs{
 			"c": "copy", // Don't accidentally transcode
 		}).
-		OverWriteOutput().ErrorToStdOut().Run()
+		OverWriteOutput().WithErrorOutput(&ffmpegErr).Run()
 	if err != nil {
-		return fmt.Errorf("failed to transmux multiple ts files from %s into a ts file: %w", segmentList, err)
+		return fmt.Errorf("failed to transmux multiple ts files from %s into a ts file [%s]: %w", segmentList, ffmpegErr.String(), err)
 	}
 	// Verify the ts output file was created
 	_, err = os.Stat(outputTsFileName)
@@ -237,13 +239,14 @@ func concatFiles(segmentList, outputTsFileName string) error {
 	}
 	defer tsFile.Close()
 	// Transmux the individual .ts files into a combined single ts file using file based concatenation
+	ffmpegErr := bytes.Buffer{}
 	err = ffmpeg.Input(segmentList).
 		Output(outputTsFileName, ffmpeg.KwArgs{
 			"c": "copy", // Don't accidentally transcode
 		}).
-		OverWriteOutput().ErrorToStdOut().Run()
+		OverWriteOutput().WithErrorOutput(&ffmpegErr).Run()
 	if err != nil {
-		return fmt.Errorf("failed to transmux multiple ts files from %s into a ts file: %w", segmentList, err)
+		return fmt.Errorf("failed to transmux multiple ts files from %s into a ts file [%s]: %w", segmentList, ffmpegErr.String(), err)
 	}
 	// Verify the ts output file was created
 	_, err = os.Stat(outputTsFileName)
