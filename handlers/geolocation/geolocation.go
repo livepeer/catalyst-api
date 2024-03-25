@@ -167,7 +167,7 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 		}
 
 		glog.Errorf("error querying mist for STREAM_SOURCE: %s", err)
-		pullURL, err := c.getStreamPull(playbackID(payload.StreamName))
+		pullURL, err := c.getStreamPull(playbackIdFor(payload.StreamName))
 		if err != nil && !errors.Is(err, errLockPull) {
 			glog.Errorf("getStreamPull failed for %s: %s", payload.StreamName, err)
 			return "push://", nil
@@ -181,7 +181,7 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 	return "push://", nil
 }
 
-func playbackID(streamName string) string {
+func playbackIdFor(streamName string) string {
 	res := streamName
 	parts := strings.Split(res, "+")
 	if len(parts) == 2 {
