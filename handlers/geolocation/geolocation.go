@@ -2,6 +2,7 @@ package geolocation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -21,7 +22,13 @@ import (
 	"github.com/livepeer/go-api-client"
 )
 
-const lockPullLeaseTimeout = 3 * time.Minute
+const (
+	streamSourceRetries       = 10
+	streamSourceRetryInterval = 15 * time.Second
+	lockPullLeaseTimeout      = 3 * time.Minute
+)
+
+var errLockPull = errors.New("failed to lock pull")
 
 type GeolocationHandlersCollection struct {
 	Balancer balancer.Balancer
@@ -153,31 +160,43 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 
 	latStr := fmt.Sprintf("%f", lat)
 	lonStr := fmt.Sprintf("%f", lon)
-	dtscURL, err := c.Balancer.MistUtilLoadSource(context.Background(), payload.StreamName, latStr, lonStr)
-	if err != nil {
-		glog.Errorf("error querying mist for STREAM_SOURCE: %s", err)
-
-		playbackID := payload.StreamName
-		parts := strings.Split(playbackID, "+")
-		if len(parts) == 2 {
-			playbackID = parts[1] // take the playbackID after the prefix e.g. 'video+'
+	for i := 0; i < streamSourceRetries; i++ {
+		dtscURL, err := c.Balancer.MistUtilLoadSource(context.Background(), payload.StreamName, latStr, lonStr)
+		if err == nil {
+			return c.resolveReplicatedStream(dtscURL, payload.StreamName)
 		}
-		pullURL, err := c.getStreamPull(playbackID)
-		if err != nil {
+
+		glog.Errorf("error querying mist for STREAM_SOURCE: %s", err)
+		pullURL, err := c.getStreamPull(playbackID(payload.StreamName))
+		if err != nil && !errors.Is(err, errLockPull) {
 			glog.Errorf("getStreamPull failed for %s: %s", payload.StreamName, err)
+			return "push://", nil
 		} else if pullURL != "" {
 			glog.Infof("replying to Mist STREAM_SOURCE with stream pull request=%s response=%s", payload.StreamName, pullURL)
 			return pullURL, nil
 		}
-
-		return "push://", nil
+		// another Mist node is currently pulling the stream, sleep and retry
+		time.Sleep(streamSourceRetryInterval)
 	}
+	return "push://", nil
+}
+
+func playbackID(streamName string) string {
+	res := streamName
+	parts := strings.Split(res, "+")
+	if len(parts) == 2 {
+		res = parts[1] // take the playbackID after the prefix e.g. 'video+'
+	}
+	return res
+}
+
+func (c *GeolocationHandlersCollection) resolveReplicatedStream(dtscURL string, streamName string) (string, error) {
 	outURL, err := c.Cluster.ResolveNodeURL(dtscURL)
 	if err != nil {
 		glog.Errorf("error finding STREAM_SOURCE: %s", err)
 		return "push://", nil
 	}
-	glog.V(7).Infof("replying to Mist STREAM_SOURCE request=%s response=%s", payload.StreamName, outURL)
+	glog.V(7).Infof("replying to Mist STREAM_SOURCE request=%s response=%s", streamName, outURL)
 	return outURL, nil
 }
 
@@ -188,7 +207,7 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string) (string
 
 	stream, err := c.Lapi.GetStreamByPlaybackID(playbackID)
 	if err != nil {
-		return "", fmt.Errorf("failed to get stream to check stream pull: %w", err)
+		return "", errLockPull
 	}
 
 	if stream.Suspended {
