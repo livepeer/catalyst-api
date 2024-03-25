@@ -24,7 +24,7 @@ import (
 
 const (
 	streamSourceRetries       = 10
-	streamSourceRetryInterval = 15 * time.Second
+	streamSourceRetryInterval = 3 * time.Second
 	lockPullLeaseTimeout      = 3 * time.Minute
 )
 
