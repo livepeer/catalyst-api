@@ -175,7 +175,7 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 			glog.Infof("replying to Mist STREAM_SOURCE with stream pull request=%s response=%s", payload.StreamName, pullURL)
 			return pullURL, nil
 		}
-		// another Mist node is currently pulling the stream, sleep and retry
+		glog.Warningf("another node is currently pulling the stream, waiting %v and retrying", streamSourceRetryInterval)
 		time.Sleep(streamSourceRetryInterval)
 	}
 	return "push://", nil
