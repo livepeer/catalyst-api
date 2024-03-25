@@ -168,13 +168,22 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 
 		glog.Errorf("error querying mist for STREAM_SOURCE: %s", err)
 		pullURL, err := c.getStreamPull(playbackIdFor(payload.StreamName))
-		if err != nil && !errors.Is(err, errLockPull) {
+		if err == nil {
+			if pullURL == "" {
+				// not a stream pull
+				return "push://", nil
+			} else {
+				// start stream pull
+				glog.Infof("replying to Mist STREAM_SOURCE with stream pull request=%s response=%s", payload.StreamName, pullURL)
+				return pullURL, nil
+			}
+		}
+		if !errors.Is(err, errLockPull) {
+			// stream pull failed for unknown reason
 			glog.Errorf("getStreamPull failed for %s: %s", payload.StreamName, err)
 			return "push://", nil
-		} else if pullURL != "" {
-			glog.Infof("replying to Mist STREAM_SOURCE with stream pull request=%s response=%s", payload.StreamName, pullURL)
-			return pullURL, nil
 		}
+		// stream pull failed, because another node started to pull at the same time
 		glog.Warningf("another node is currently pulling the stream, waiting %v and retrying", streamSourceRetryInterval)
 		time.Sleep(streamSourceRetryInterval)
 	}
@@ -207,7 +216,7 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string) (string
 
 	stream, err := c.Lapi.GetStreamByPlaybackID(playbackID)
 	if err != nil {
-		return "", errLockPull
+		return "", fmt.Errorf("failed to get stream to check stream pull: %w", err)
 	}
 
 	if stream.Suspended {
