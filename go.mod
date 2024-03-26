@@ -17,7 +17,7 @@ require (
 	github.com/hashicorp/serf v0.10.1
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/lib/pq v1.10.9
-	github.com/livepeer/go-api-client v0.4.18
+	github.com/livepeer/go-api-client v0.4.19
 	github.com/livepeer/go-tools v0.3.6
 	github.com/livepeer/joy4 v0.1.1
 	github.com/livepeer/livepeer-data v0.8.1
