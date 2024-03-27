@@ -78,18 +78,6 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	}
 	job.ReportProgress(clients.TranscodeStatusPreparingCompleted, 1)
 
-	if job.ThumbnailsTargetURL != nil {
-		go func() {
-			log.Log(job.RequestID, "generating thumbs VTT")
-			err := thumbnails.GenerateThumbs(job.RequestID, job.SegmentingTargetURL, job.ThumbnailsTargetURL)
-			if err != nil {
-				log.LogError(job.RequestID, "generate thumbs failed", err, "in", job.SegmentingTargetURL, "out", job.ThumbnailsTargetURL)
-			} else {
-				log.Log(job.RequestID, "generate thumbs succeeded", "in", job.SegmentingTargetURL, "out", job.ThumbnailsTargetURL)
-			}
-		}()
-	}
-
 	// Transcode Beginning
 	log.Log(job.RequestID, "Beginning transcoding via FFMPEG/Livepeer pipeline")
 
@@ -168,7 +156,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	// wait for thumbs background process
 	if job.ThumbnailsTargetURL != nil {
-		err := thumbnails.WaitForThumbs(job.RequestID, job.ThumbnailsTargetURL)
+		err := thumbnails.GenerateThumbsVTT(job.RequestID, job.SegmentingTargetURL, job.ThumbnailsTargetURL)
 		if err != nil {
 			log.LogError(job.RequestID, "waiting for thumbs failed", err, "out", job.ThumbnailsTargetURL)
 		} else {

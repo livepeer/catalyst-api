@@ -12,16 +12,29 @@ import (
 	"gopkg.in/vansante/go-ffprobe.v2"
 )
 
+func generateThumb(t *testing.T, filename string, out *url.URL) {
+	bs, err := os.ReadFile(filename)
+	require.NoError(t, err)
+	err = GenerateThumb(path.Base(filename), bs, out)
+	require.NoError(t, err)
+}
+
 func TestGenerateThumbs(t *testing.T) {
 	outDir, err := os.MkdirTemp(os.TempDir(), "thumbs*")
 	require.NoError(t, err)
 	defer os.RemoveAll(outDir)
-
 	out, err := url.Parse(outDir)
 	require.NoError(t, err)
+
 	wd, err := os.Getwd()
 	require.NoError(t, err)
-	err = GenerateThumbs("req ID", path.Join(wd, "..", "test/fixtures/tiny.m3u8"), out)
+
+	segmentPrefix = "seg-"
+	generateThumb(t, path.Join(wd, "..", "test/fixtures/seg-0.ts"), out)
+	generateThumb(t, path.Join(wd, "..", "test/fixtures/seg-1.ts"), out)
+	generateThumb(t, path.Join(wd, "..", "test/fixtures/seg-2.ts"), out)
+
+	err = GenerateThumbsVTT("req ID", path.Join(wd, "..", "test/fixtures/tiny.m3u8"), out)
 	require.NoError(t, err)
 
 	expectedVtt := `WEBVTT
