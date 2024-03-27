@@ -20,19 +20,42 @@ func generateThumb(t *testing.T, filename string, out *url.URL) {
 }
 
 func TestGenerateThumbs(t *testing.T) {
+	segmentPrefix = "seg-"
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+
+	// Test the non-recording flow where GenerateThumb is called by handlers/ffmpeg/ffmpeg.go
 	outDir, err := os.MkdirTemp(os.TempDir(), "thumbs*")
 	require.NoError(t, err)
 	defer os.RemoveAll(outDir)
 	out, err := url.Parse(outDir)
 	require.NoError(t, err)
 
-	wd, err := os.Getwd()
-	require.NoError(t, err)
-
-	segmentPrefix = "seg-"
 	generateThumb(t, path.Join(wd, "..", "test/fixtures/seg-0.ts"), out)
 	generateThumb(t, path.Join(wd, "..", "test/fixtures/seg-1.ts"), out)
 	generateThumb(t, path.Join(wd, "..", "test/fixtures/seg-2.ts"), out)
+
+	testGenerateThumbsRun(t, outDir)
+
+	// Test the recording flow
+	outDir, err = os.MkdirTemp(os.TempDir(), "thumbs*")
+	require.NoError(t, err)
+	defer os.RemoveAll(outDir)
+	out, err = url.Parse(outDir)
+	require.NoError(t, err)
+
+	err = GenerateThumbsFromManifest("req ID", path.Join(wd, "..", "test/fixtures/tiny.m3u8"), out)
+	require.NoError(t, err)
+
+	testGenerateThumbsRun(t, outDir)
+}
+
+func testGenerateThumbsRun(t *testing.T, outDir string) {
+	out, err := url.Parse(outDir)
+	require.NoError(t, err)
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
 
 	err = GenerateThumbsVTT("req ID", path.Join(wd, "..", "test/fixtures/tiny.m3u8"), out)
 	require.NoError(t, err)

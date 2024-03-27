@@ -18,6 +18,7 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/go-tools/drivers"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
+	"golang.org/x/sync/errgroup"
 )
 
 const resolution = "854:480"
@@ -27,8 +28,7 @@ const outputDir = "thumbnails"
 // Wait a maximum of 5 mins for thumbnails to finish
 var thumbWaitBackoff = backoff.WithMaxRetries(backoff.NewConstantBackOff(30*time.Second), 10)
 
-func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
-	// download and parse the manifest
+func getMediaManifest(requestID string, input string) (*m3u8.MediaPlaylist, error) {
 	var (
 		rc  io.ReadCloser
 		err error
@@ -38,19 +38,28 @@ func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
 		return err
 	}, clients.DownloadRetryBackoff())
 	if err != nil {
-		return fmt.Errorf("error downloading manifest: %w", err)
+		return nil, fmt.Errorf("error downloading manifest: %w", err)
 	}
 	manifest, playlistType, err := m3u8.DecodeFrom(rc, true)
 	if err != nil {
-		return fmt.Errorf("failed to decode manifest: %w", err)
+		return nil, fmt.Errorf("failed to decode manifest: %w", err)
 	}
 
 	if playlistType != m3u8.MEDIA {
-		return fmt.Errorf("received non-Media manifest, but currently only Media playlists are supported")
+		return nil, fmt.Errorf("received non-Media manifest, but currently only Media playlists are supported")
 	}
 	mediaPlaylist, ok := manifest.(*m3u8.MediaPlaylist)
 	if !ok || mediaPlaylist == nil {
-		return fmt.Errorf("failed to parse playlist as MediaPlaylist")
+		return nil, fmt.Errorf("failed to parse playlist as MediaPlaylist")
+	}
+	return mediaPlaylist, nil
+}
+
+func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
+	// download and parse the manifest
+	mediaPlaylist, err := getMediaManifest(requestID, input)
+	if err != nil {
+		return err
 	}
 
 	const layout = "15:04:05.000"
@@ -60,12 +69,10 @@ func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
 	if err != nil {
 		return err
 	}
-	var (
-		currentTime time.Time
-		segments    = mediaPlaylist.GetAllSegments()
-	)
+
+	var currentTime time.Time
 	// loop through each segment, generate a vtt entry for it
-	for _, segment := range segments {
+	for _, segment := range mediaPlaylist.GetAllSegments() {
 		filename, err := thumbFilename(segment.URI)
 		if err != nil {
 			return err
@@ -138,6 +145,46 @@ func GenerateThumb(segmentURI string, input []byte, output *url.URL) error {
 	}
 
 	return nil
+}
+
+func GenerateThumbsFromManifest(requestID, input string, output *url.URL) error {
+	// parse manifest and generate one thumbnail per segment
+	mediaPlaylist, err := getMediaManifest(requestID, input)
+	if err != nil {
+		return err
+	}
+	inputURL, err := url.Parse(input)
+	if err != nil {
+		return err
+	}
+
+	// parallelise the thumb uploads
+	uploadGroup, _ := errgroup.WithContext(context.Background())
+	uploadGroup.SetLimit(5)
+	for _, segment := range mediaPlaylist.GetAllSegments() {
+		segment := segment
+		uploadGroup.Go(func() error {
+			segURL := inputURL.JoinPath("..", segment.URI)
+			var (
+				rc  io.ReadCloser
+				err error
+			)
+			err = backoff.Retry(func() error {
+				rc, err = clients.GetFile(context.Background(), requestID, segURL.String(), nil)
+				return err
+			}, clients.DownloadRetryBackoff())
+			if err != nil {
+				return fmt.Errorf("error downloading manifest: %w", err)
+			}
+			bs, err := io.ReadAll(rc)
+			if err != nil {
+				return err
+			}
+
+			return GenerateThumb(segment.URI, bs, output)
+		})
+	}
+	return uploadGroup.Wait()
 }
 
 func processSegment(input string, thumbOut string) error {

@@ -71,6 +71,16 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 		}
 	} else {
 		job.SegmentingTargetURL = job.SourceFile
+
+		go func() {
+			if job.ThumbnailsTargetURL == nil {
+				return
+			}
+			err := thumbnails.GenerateThumbsFromManifest(job.RequestID, job.SegmentingTargetURL, job.ThumbnailsTargetURL)
+			if err != nil {
+				log.LogError(job.RequestID, "generate thumbs failed", err, "in", job.SegmentingTargetURL, "out", job.ThumbnailsTargetURL)
+			}
+		}()
 	}
 	job.SegmentingDone = time.Now()
 	if job.HlsTargetURL != nil {

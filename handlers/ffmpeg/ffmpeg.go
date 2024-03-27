@@ -85,13 +85,14 @@ func (h *HandlersCollection) NewFile() httprouter.Handle {
 				return
 			}
 
-			if job.ThumbnailsTargetURL != nil {
-				go func() {
-					if err := thumbnails.GenerateThumb(filename, content, job.ThumbnailsTargetURL); err != nil {
-						log.LogError(job.RequestID, "generate thumb failed", err, "in", path.Join(targetURLBase, filename), "out", job.ThumbnailsTargetURL)
-					}
-				}()
-			}
+			go func() {
+				if job.ThumbnailsTargetURL == nil {
+					return
+				}
+				if err := thumbnails.GenerateThumb(filename, content, job.ThumbnailsTargetURL); err != nil {
+					log.LogError(job.RequestID, "generate thumb failed", err, "in", path.Join(targetURLBase, filename), "out", job.ThumbnailsTargetURL)
+				}
+			}()
 		}
 
 		if err := backoff.Retry(func() error {
