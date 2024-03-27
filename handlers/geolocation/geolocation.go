@@ -203,8 +203,13 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string) (string
 		return "", nil
 	}
 
-	if err := c.Lapi.LockPull(stream.ID, lockPullLeaseTimeout); err != nil {
-		return "", fmt.Errorf("failed to lock pull, err=%v", err)
+	// Feature flag to check if the duplicate stream fix works
+	// 67281_11889_11889 is the test stream, so we can test it in Trovo Test website
+	if strings.Contains(stream.Pull.Source, "67281_11889_11889") {
+		glog.Infof("LockPull for stream %v", playbackID)
+		if err := c.Lapi.LockPull(stream.ID, lockPullLeaseTimeout); err != nil {
+			return "", fmt.Errorf("failed to lock pull, err=%v", err)
+		}
 	}
 
 	if len(stream.Pull.Headers) == 0 {
