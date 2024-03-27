@@ -77,7 +77,7 @@ func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
 		if err != nil {
 			return err
 		}
-		// check file exists on storage
+		// check thumbnail file exists on storage
 		err = backoff.Retry(func() error {
 			_, err := clients.GetFile(context.Background(), requestID, outputLocation.JoinPath(filename).String(), nil)
 			return err
@@ -94,6 +94,8 @@ func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
 			return err
 		}
 	}
+
+	// upload VTT file
 	vttContent := builder.Bytes()
 	err = backoff.Retry(func() error {
 		return clients.UploadToOSURLFields(outputLocation.String(), vttFilename, bytes.NewReader(vttContent), time.Minute, &drivers.FileProperties{ContentType: "text/vtt"})
@@ -169,6 +171,7 @@ func GenerateThumbsFromManifest(requestID, input string, output *url.URL) error 
 				rc  io.ReadCloser
 				err error
 			)
+			// save the segment to memory
 			err = backoff.Retry(func() error {
 				rc, err = clients.GetFile(context.Background(), requestID, segURL.String(), nil)
 				return err
@@ -181,6 +184,7 @@ func GenerateThumbsFromManifest(requestID, input string, output *url.URL) error 
 				return err
 			}
 
+			// generate thumbnail for the segment
 			return GenerateThumb(path.Base(segment.URI), bs, output)
 		})
 	}
