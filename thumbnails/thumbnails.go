@@ -73,7 +73,7 @@ func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
 	var currentTime time.Time
 	// loop through each segment, generate a vtt entry for it
 	for _, segment := range mediaPlaylist.GetAllSegments() {
-		filename, err := thumbFilename(segment.URI)
+		filename, err := thumbFilename(path.Base(segment.URI))
 		if err != nil {
 			return err
 		}
@@ -181,7 +181,7 @@ func GenerateThumbsFromManifest(requestID, input string, output *url.URL) error 
 				return err
 			}
 
-			return GenerateThumb(segment.URI, bs, output)
+			return GenerateThumb(path.Base(segment.URI), bs, output)
 		})
 	}
 	return uploadGroup.Wait()
