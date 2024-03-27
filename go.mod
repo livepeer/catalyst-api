@@ -32,6 +32,7 @@ require (
 	github.com/shirou/gopsutil/v3 v3.24.2
 	github.com/stretchr/testify v1.8.4
 	github.com/u2takey/ffmpeg-go v0.5.0
+	github.com/ua-parser/uap-go v0.0.0-20240113215029-33f8e6d47f38
 	github.com/xeipuuv/gojsonschema v1.2.0
 	go.opencensus.io v0.24.0
 	golang.org/x/sync v0.6.0
@@ -145,7 +146,6 @@ require (
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/tomnomnom/linkheader v0.0.0-20180905144013-02ca5825eb80 // indirect
 	github.com/u2takey/go-utils v0.3.1 // indirect
-	github.com/ua-parser/uap-go v0.0.0-20240113215029-33f8e6d47f38 // indirect
 	github.com/whyrusleeping/cbor-gen v0.0.0-20230418232409-daab9ece03a0 // indirect
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
@@ -167,7 +167,7 @@ require (
 	google.golang.org/genproto v0.0.0-20230530153820-e85fd2cbaebc // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20230530153820-e85fd2cbaebc // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230530153820-e85fd2cbaebc // indirect
-	google.golang.org/grpc v1.55.0 // indirect
+	google.golang.org/grpc v1.56.3 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	lukechampine.com/blake3 v1.2.1 // indirect
