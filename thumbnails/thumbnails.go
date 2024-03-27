@@ -87,8 +87,10 @@ func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
 			return err
 		}
 	}
-
-	err = clients.UploadToOSURLFields(outputLocation.String(), vttFilename, builder, time.Minute, &drivers.FileProperties{ContentType: "text/vtt"})
+	vttContent := builder.Bytes()
+	err = backoff.Retry(func() error {
+		return clients.UploadToOSURLFields(outputLocation.String(), vttFilename, bytes.NewReader(vttContent), time.Minute, &drivers.FileProperties{ContentType: "text/vtt"})
+	}, clients.UploadRetryBackoff())
 	if err != nil {
 		return fmt.Errorf("failed to upload vtt: %w", err)
 	}
