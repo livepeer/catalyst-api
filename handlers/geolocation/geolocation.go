@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/golang/glog"
 	"github.com/julienschmidt/httprouter"
@@ -20,8 +19,6 @@ import (
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/go-api-client"
 )
-
-const lockPullLeaseTimeout = 3 * time.Minute
 
 type GeolocationHandlersCollection struct {
 	Balancer balancer.Balancer
@@ -201,17 +198,6 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string) (string
 
 	if stream.Pull == nil {
 		return "", nil
-	}
-
-	// Feature flag to check if the duplicate stream fix works
-	// 67281_11889_11889 is the test stream, so we can test it in Trovo Test website
-	if strings.Contains(stream.Pull.Source, "67281_11878_11878") ||
-		strings.Contains(stream.Pull.Source, "67281_11879_11879") ||
-		strings.Contains(stream.Pull.Source, "67281_11889_11889") {
-		glog.Infof("LockPull for stream %v", playbackID)
-		if err := c.Lapi.LockPull(stream.ID, lockPullLeaseTimeout); err != nil {
-			return "", fmt.Errorf("failed to lock pull, err=%v", err)
-		}
 	}
 
 	if len(stream.Pull.Headers) == 0 {
