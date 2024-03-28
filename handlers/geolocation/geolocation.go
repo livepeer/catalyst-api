@@ -2,6 +2,7 @@ package geolocation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -21,7 +22,13 @@ import (
 	"github.com/livepeer/go-api-client"
 )
 
-const lockPullLeaseTimeout = 3 * time.Minute
+const (
+	streamSourceRetries       = 20
+	streamSourceRetryInterval = 3 * time.Second
+	lockPullLeaseTimeout      = 3 * time.Minute
+)
+
+var errLockPull = errors.New("failed to lock pull")
 
 type GeolocationHandlersCollection struct {
 	Balancer balancer.Balancer
@@ -153,31 +160,52 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 
 	latStr := fmt.Sprintf("%f", lat)
 	lonStr := fmt.Sprintf("%f", lon)
-	dtscURL, err := c.Balancer.MistUtilLoadSource(context.Background(), payload.StreamName, latStr, lonStr)
-	if err != nil {
+	for i := 0; i < streamSourceRetries; i++ {
+		dtscURL, err := c.Balancer.MistUtilLoadSource(context.Background(), payload.StreamName, latStr, lonStr)
+		if err == nil {
+			return c.resolveReplicatedStream(dtscURL, payload.StreamName)
+		}
+
 		glog.Errorf("error querying mist for STREAM_SOURCE: %s", err)
-
-		playbackID := payload.StreamName
-		parts := strings.Split(playbackID, "+")
-		if len(parts) == 2 {
-			playbackID = parts[1] // take the playbackID after the prefix e.g. 'video+'
+		pullURL, err := c.getStreamPull(playbackIdFor(payload.StreamName))
+		if err == nil {
+			if pullURL == "" {
+				// not a stream pull
+				return "push://", nil
+			} else {
+				// start stream pull
+				glog.Infof("replying to Mist STREAM_SOURCE with stream pull request=%s response=%s", payload.StreamName, pullURL)
+				return pullURL, nil
+			}
 		}
-		pullURL, err := c.getStreamPull(playbackID)
-		if err != nil {
+		if !errors.Is(err, errLockPull) {
+			// stream pull failed for unknown reason
 			glog.Errorf("getStreamPull failed for %s: %s", payload.StreamName, err)
-		} else if pullURL != "" {
-			glog.Infof("replying to Mist STREAM_SOURCE with stream pull request=%s response=%s", payload.StreamName, pullURL)
-			return pullURL, nil
+			return "push://", nil
 		}
-
-		return "push://", nil
+		// stream pull failed, because another node started to pull at the same time
+		glog.Warningf("another node is currently pulling the stream, waiting %v and retrying", streamSourceRetryInterval)
+		time.Sleep(streamSourceRetryInterval)
 	}
+	return "push://", nil
+}
+
+func playbackIdFor(streamName string) string {
+	res := streamName
+	parts := strings.Split(res, "+")
+	if len(parts) == 2 {
+		res = parts[1] // take the playbackID after the prefix e.g. 'video+'
+	}
+	return res
+}
+
+func (c *GeolocationHandlersCollection) resolveReplicatedStream(dtscURL string, streamName string) (string, error) {
 	outURL, err := c.Cluster.ResolveNodeURL(dtscURL)
 	if err != nil {
 		glog.Errorf("error finding STREAM_SOURCE: %s", err)
 		return "push://", nil
 	}
-	glog.V(7).Infof("replying to Mist STREAM_SOURCE request=%s response=%s", payload.StreamName, outURL)
+	glog.V(7).Infof("replying to Mist STREAM_SOURCE request=%s response=%s", streamName, outURL)
 	return outURL, nil
 }
 
@@ -203,14 +231,11 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string) (string
 		return "", nil
 	}
 
-	// Feature flag to check if the duplicate stream fix works
-	// 67281_11889_11889 is the test stream, so we can test it in Trovo Test website
-	if strings.Contains(stream.Pull.Source, "67281_11878_11878") ||
-		strings.Contains(stream.Pull.Source, "67281_11879_11879") ||
-		strings.Contains(stream.Pull.Source, "67281_11889_11889") {
+	// Feature flag to lock only for test accounts
+	if isTestAccount(stream) {
 		glog.Infof("LockPull for stream %v", playbackID)
-		if err := c.Lapi.LockPull(stream.ID, lockPullLeaseTimeout); err != nil {
-			return "", fmt.Errorf("failed to lock pull, err=%v", err)
+		if err := c.Lapi.LockPull(stream.ID, lockPullLeaseTimeout, c.Config.NodeName); err != nil {
+			return "", errLockPull
 		}
 	}
 
@@ -334,4 +359,12 @@ func isValidGPSCoord(lat, lon string) bool {
 		return false
 	}
 	return latF >= -90 && latF <= 90 && lonF >= -180 && lonF <= 180
+}
+
+// Feature flag to check if the duplicate stream fix works
+// 67281_11889_11889, 67281_11879_11879, 67281_11889_11889 are test streams, so we can test it in Trovo Test website
+func isTestAccount(stream *api.Stream) bool {
+	return strings.Contains(stream.Pull.Source, "67281_11878_11878") ||
+		strings.Contains(stream.Pull.Source, "67281_11879_11879") ||
+		strings.Contains(stream.Pull.Source, "67281_11889_11889")
 }
