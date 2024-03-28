@@ -231,7 +231,7 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string) (string
 		return "", nil
 	}
 
-	if err := c.Lapi.LockPull(stream.ID, lockPullLeaseTimeout); err != nil {
+	if err := c.Lapi.LockPull(stream.ID, lockPullLeaseTimeout, c.Config.NodeName); err != nil {
 		return "", errLockPull
 	}
 
