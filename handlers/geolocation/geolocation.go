@@ -231,12 +231,9 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string) (string
 		return "", nil
 	}
 
-	// Feature flag to lock only for test accounts
-	if isTestAccount(stream) {
-		glog.Infof("LockPull for stream %v", playbackID)
-		if err := c.Lapi.LockPull(stream.ID, lockPullLeaseTimeout, c.Config.NodeName); err != nil {
-			return "", errLockPull
-		}
+	glog.Infof("LockPull for stream %v", playbackID)
+	if err := c.Lapi.LockPull(stream.ID, lockPullLeaseTimeout, c.Config.NodeName); err != nil {
+		return "", errLockPull
 	}
 
 	if len(stream.Pull.Headers) == 0 {
@@ -359,12 +356,4 @@ func isValidGPSCoord(lat, lon string) bool {
 		return false
 	}
 	return latF >= -90 && latF <= 90 && lonF >= -180 && lonF <= 180
-}
-
-// Feature flag to check if the duplicate stream fix works
-// 67281_11889_11889, 67281_11879_11879, 67281_11889_11889 are test streams, so we can test it in Trovo Test website
-func isTestAccount(stream *api.Stream) bool {
-	return strings.Contains(stream.Pull.Source, "67281_11878_11878") ||
-		strings.Contains(stream.Pull.Source, "67281_11879_11879") ||
-		strings.Contains(stream.Pull.Source, "67281_11889_11889")
 }
