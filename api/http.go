@@ -67,6 +67,8 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 	}
 
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
+	router.GET("/healthcheck", withLogging(catalystApiHandlers.Healthcheck()))
+
 	if cli.EnableAnalytics == "true" || cli.EnableAnalytics == "enabled" {
 		logProcessor, err := analytics.NewLogProcessor(cli.KafkaBootstrapServers, cli.KafkaUser, cli.KafkaPassword, cli.AnalyticsKafkaTopic)
 		if err != nil {
