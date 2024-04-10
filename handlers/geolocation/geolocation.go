@@ -29,6 +29,7 @@ const (
 )
 
 var errLockPull = errors.New("failed to lock pull")
+var errNoStreamSourceForActiveStream = errors.New("failed to get stream source for active stream")
 
 type GeolocationHandlersCollection struct {
 	Balancer balancer.Balancer
@@ -160,17 +161,19 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 
 	latStr := fmt.Sprintf("%f", lat)
 	lonStr := fmt.Sprintf("%f", lon)
+	var errMist error
 	for i := 0; i < streamSourceRetries; i++ {
-		dtscURL, err := c.Balancer.MistUtilLoadSource(context.Background(), payload.StreamName, latStr, lonStr)
-		if err == nil {
+		var dtscURL string
+		dtscURL, errMist = c.Balancer.MistUtilLoadSource(context.Background(), payload.StreamName, latStr, lonStr)
+		if errMist == nil {
 			return c.resolveReplicatedStream(dtscURL, payload.StreamName)
 		}
 
-		glog.Errorf("error querying mist for STREAM_SOURCE: %s", err)
 		pullURL, err := c.getStreamPull(playbackIdFor(payload.StreamName))
 		if err == nil {
 			if pullURL == "" {
 				// not a stream pull
+				glog.V(6).Infof("unable to find STREAM_SOURCE: %s", errMist)
 				return "push://", nil
 			} else {
 				// start stream pull
@@ -178,7 +181,11 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 				return pullURL, nil
 			}
 		}
-		if !errors.Is(err, errLockPull) {
+		if errors.Is(err, errNoStreamSourceForActiveStream) {
+			// stream is active, but STREAM_SOURCE cannot be found
+			glog.Errorf("error querying mist for STREAM_SOURCE: %s", errMist)
+			return "push://", nil
+		} else if !errors.Is(err, errLockPull) {
 			// stream pull failed for unknown reason
 			glog.Errorf("getStreamPull failed for %s: %s", payload.StreamName, err)
 			return "push://", nil
@@ -187,6 +194,7 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 		glog.Warningf("another node is currently pulling the stream, waiting %v and retrying", streamSourceRetryInterval)
 		time.Sleep(streamSourceRetryInterval)
 	}
+	glog.Errorf("error querying mist for STREAM_SOURCE for stream pull request: %s", errMist)
 	return "push://", nil
 }
 
@@ -228,6 +236,9 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string) (string
 	}
 
 	if stream.Pull == nil {
+		if stream.IsActive {
+			return "", errNoStreamSourceForActiveStream
+		}
 		return "", nil
 	}
 
