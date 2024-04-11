@@ -170,9 +170,9 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 		}
 
 		pullURL, err := c.getStreamPull(playbackIdFor(payload.StreamName))
-		if err == nil {
+		if err == nil || errors.Is(err, api.ErrNotExists) {
 			if pullURL == "" {
-				// not a stream pull
+				// not a stream pull, stream is not active or does not exist, usual situation when a viewer tries to play inactive stream
 				glog.V(6).Infof("unable to find STREAM_SOURCE: %s", errMist)
 				return "push://", nil
 			} else {
