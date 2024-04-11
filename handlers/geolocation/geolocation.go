@@ -25,7 +25,7 @@ import (
 const (
 	streamSourceRetries               = 20
 	streamSourceRetryInterval         = 3 * time.Second
-	streamSourceMaxWrongRegionRetries = 10
+	streamSourceMaxWrongRegionRetries = 2
 	lockPullLeaseTimeout              = 3 * time.Minute
 )
 
@@ -271,28 +271,19 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string, retryCo
 }
 
 func (c *GeolocationHandlersCollection) sendPlaybackRequestAsync(playbackID string, region string) {
-	members, err := c.Cluster.MembersFiltered(map[string]string{}, "", "")
+	members, err := c.Cluster.MembersFiltered(map[string]string{"region": region}, "", "")
 	if err != nil || len(members) == 0 {
 		glog.Errorf("Error fetching member list: %v", err)
 		return
 	}
+	m := members[rand.Intn(len(members))]
 
-	// Shuffle the member list to always get the random order
-	rand.Shuffle(len(members), func(i, j int) {
-		members[i], members[j] = members[j], members[i]
-	})
-
-	for _, m := range members {
-		if m.Tags["region"] == region {
-			go func() {
-				url := fmt.Sprintf("%s/hls/%s+%s/index.m3u8", m.Tags["https"], c.Config.MistBaseStreamName, playbackID)
-				if _, err := http.Get(url); err != nil {
-					glog.Errorf("Error making a playback request url=%s, err=%v", url, err)
-				}
-			}()
-			return
+	go func() {
+		url := fmt.Sprintf("%s/hls/%s+%s/index.m3u8", m.Tags["https"], c.Config.MistBaseStreamName, playbackID)
+		if _, err := http.Get(url); err != nil {
+			glog.Errorf("Error making a playback request url=%s, err=%v", url, err)
 		}
-	}
+	}()
 }
 
 func parsePlus(plusString string) (string, string) {
