@@ -183,7 +183,7 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 		}
 		if errors.Is(err, errNoStreamSourceForActiveStream) {
 			// stream is active, but STREAM_SOURCE cannot be found
-			glog.Errorf("error querying mist for STREAM_SOURCE: %s", errMist)
+			glog.Errorf("error querying mist for active stream STREAM_SOURCE: %s", errMist)
 			return "push://", nil
 		} else if !errors.Is(err, errLockPull) {
 			// stream pull failed for unknown reason
