@@ -108,7 +108,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			newURL.Scheme = protocol(r)
 			newURL.Host = nodeHost
 			http.Redirect(w, r, newURL.String(), http.StatusTemporaryRedirect)
-			glog.V(6).Infof("NodeHost redirect host=%s nodeHost=%s from=%s to=%s", host, nodeHost, r.URL, newURL)
+			glog.Infof("NodeHost redirect host=%s nodeHost=%s from=%s to=%s, lat=%s, lon=%s", host, nodeHost, r.URL, newURL, lat, lon)
 			return
 		}
 
@@ -133,7 +133,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		glog.V(6).Infof("generated redirect url=%s", rURL)
+		glog.Infof("redirect from=%s to=%s, lat=%s, lon=%s", r.URL, rURL, lat, lon)
 		http.Redirect(w, r, rURL, http.StatusTemporaryRedirect)
 	}
 }
