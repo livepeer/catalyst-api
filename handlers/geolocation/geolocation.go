@@ -24,9 +24,9 @@ import (
 
 const (
 	streamSourceRetries               = 20
-	streamSourceRetryInterval         = 3 * time.Second
-	streamSourceMaxWrongRegionRetries = 2
-	lockPullLeaseTimeout              = 3 * time.Minute
+	streamSourceRetryInterval         = 1 * time.Second
+	streamSourceMaxWrongRegionRetries = 3
+	lockPullLeaseTimeout              = 1 * time.Minute
 )
 
 var errPullWrongRegion = errors.New("failed to pull stream, wrong region")
