@@ -40,10 +40,11 @@ const (
 	// Execute the FFMPEG pipeline first and fallback to the external transcoding
 	// provider on errors.
 	StrategyFallbackExternal Strategy = "fallback_external"
+)
+
+const (
 	// Only mp4s of maxMP4OutDuration will have MP4s generated for each rendition
-	maxMP4OutDuration          = 2 * time.Minute
-	maxRecordingMP4Duration    = 12 * time.Hour
-	maxRecordingThumbsDuration = maxRecordingMP4Duration
+	maxMP4OutDuration = 2 * time.Minute
 )
 
 func (s Strategy) IsValid() bool {
@@ -383,7 +384,8 @@ func ShouldGenerateMP4(sourceURL, mp4TargetUrl *url.URL, fragMp4TargetUrl *url.U
 		return false
 	}
 	// We're currently memory-bound for generating MP4s above a certain file size
-	// This has been hitting us for long recordings, so do a crude "is it longer than 12 hours?" check and skip the MP4 if it is
+	// This has been hitting us for long recordings, so do a crude "is it longer than 3 hours?" check and skip the MP4 if it is
+	const maxRecordingMP4Duration = 12 * time.Hour
 	if clients.IsHLSInput(sourceURL) && durationSecs > maxRecordingMP4Duration.Seconds() {
 		return false
 	}
