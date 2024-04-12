@@ -12,7 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"encoding/json"
 	"github.com/golang/glog"
+
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/balancer"
 	"github.com/livepeer/catalyst-api/cluster"
@@ -59,6 +61,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 
 			if !isValidGPSCoord(lat, lon) {
 				lat, lon = "", ""
+				glog.Warningf("invalid coordinates from=%s lat=%s lon=%s", r.URL.String(), lat, lon)
 			}
 		}
 
@@ -109,7 +112,17 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			newURL.Scheme = protocol(r)
 			newURL.Host = nodeHost
 			http.Redirect(w, r, newURL.String(), http.StatusTemporaryRedirect)
-			glog.Infof("NodeHost redirect host=%s nodeHost=%s from=%s to=%s, lat=%s, lon=%s", host, nodeHost, r.URL, newURL, lat, lon)
+			jsonRedirectInfo, _ := json.Marshal(map[string]interface{}{
+				"redirect-type": "closest-node",
+				"host":          host,
+				"node-host":     nodeHost,
+				"playbackID":    playbackID,
+				"from":          r.URL.String(),
+				"to":            newURL.String(),
+				"lat":           lat,
+				"lon":           lon,
+			})
+			glog.Infof(string(jsonRedirectInfo))
 			return
 		}
 
@@ -134,7 +147,15 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		glog.Infof("redirect from=%s to=%s, lat=%s, lon=%s", r.URL, rURL, lat, lon)
+		jsonRedirectInfo, _ := json.Marshal(map[string]interface{}{
+			"redirect-type": "playback-or-ingest",
+			"playbackID":    playbackID,
+			"from":          r.URL.String(),
+			"to":            bestNode,
+			"lat":           lat,
+			"lon":           lon,
+		})
+		glog.Infof(string(jsonRedirectInfo))
 		http.Redirect(w, r, rURL, http.StatusTemporaryRedirect)
 	}
 }
