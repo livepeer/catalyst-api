@@ -72,10 +72,6 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	} else {
 		job.SegmentingTargetURL = job.SourceFile
 
-		// don't generate thumbs for very long recordings since it involves downloading segments
-		if job.InputFileInfo.Duration <= 0 || job.InputFileInfo.Duration > maxRecordingThumbsDuration.Seconds() {
-			job.ThumbnailsTargetURL = nil
-		}
 		go func() {
 			if job.ThumbnailsTargetURL == nil {
 				return
