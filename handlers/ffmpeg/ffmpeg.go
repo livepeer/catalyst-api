@@ -15,7 +15,6 @@ import (
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/pipeline"
-	"github.com/livepeer/catalyst-api/thumbnails"
 )
 
 type HandlersCollection struct {
@@ -44,12 +43,6 @@ func (h *HandlersCollection) NewFile() httprouter.Handle {
 			err     error
 		)
 		reg := regexp.MustCompile(`[^/]+.m3u8$`)
-		// job.SegmentingTargetURL comes in the format the Mist wants, looking like:
-		//   protocol://abc@123:s3.com/a/b/c/<something>.m3u8
-		// but since this endpoint receives both .ts segments and m3u8 updates, we strip off the filename
-		// and pass the one ffmpeg gives us to UploadToOSURL instead
-		targetURLBase := reg.ReplaceAllString(job.SegmentingTargetURL, "")
-
 		if reg.MatchString(filename) {
 			// ensure that playlist type in the manifest is set to vod
 			buf := bytes.Buffer{}
@@ -84,16 +77,12 @@ func (h *HandlersCollection) NewFile() httprouter.Handle {
 				errors.WriteHTTPInternalServerError(w, "Error reading body", err)
 				return
 			}
-
-			go func() {
-				if job.ThumbnailsTargetURL == nil {
-					return
-				}
-				if err := thumbnails.GenerateThumb(filename, content, job.ThumbnailsTargetURL); err != nil {
-					log.LogError(job.RequestID, "generate thumb failed", err, "in", path.Join(targetURLBase, filename), "out", job.ThumbnailsTargetURL)
-				}
-			}()
 		}
+		// job.SegmentingTargetURL comes in the format the Mist wants, looking like:
+		//   protocol://abc@123:s3.com/a/b/c/<something>.m3u8
+		// but since this endpoint receives both .ts segments and m3u8 updates, we strip off the filename
+		// and pass the one ffmpeg gives us to UploadToOSURL instead
+		targetURLBase := reg.ReplaceAllString(job.SegmentingTargetURL, "")
 
 		if err := backoff.Retry(func() error {
 			err := clients.UploadToOSURL(targetURLBase, filename, bytes.NewReader(content), config.SEGMENT_WRITE_TIMEOUT)
