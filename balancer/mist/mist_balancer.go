@@ -243,7 +243,7 @@ func (b *MistBalancer) formatNodeAddress(server string) string {
 }
 
 func (b *MistBalancer) execBalancer(ctx context.Context, balancerArgs []string) error {
-	args := append(balancerArgs, "-p", fmt.Sprintf("%d", b.config.MistUtilLoadPort))
+	args := append(balancerArgs, "-p", fmt.Sprintf("%d", b.config.MistUtilLoadPort), "-g", "4")
 	glog.Infof("Running MistUtilLoad with %v", args)
 	b.cmd = exec.CommandContext(ctx, "MistUtilLoad", args...)
 
