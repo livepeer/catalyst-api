@@ -113,14 +113,17 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			newURL.Host = nodeHost
 			http.Redirect(w, r, newURL.String(), http.StatusTemporaryRedirect)
 			jsonRedirectInfo, _ := json.Marshal(map[string]interface{}{
-				"redirect-type": "closest-node",
-				"host":          host,
-				"node-host":     nodeHost,
-				"playbackID":    playbackID,
-				"from":          r.URL.String(),
-				"to":            newURL.String(),
-				"lat":           lat,
-				"lon":           lon,
+				"redirect-type":   "closest-node",
+				"host":            host,
+				"node-host":       nodeHost,
+				"playbackID":      playbackID,
+				"from":            r.URL.String(),
+				"to":              newURL.String(),
+				"lat":             lat,
+				"lon":             lon,
+				"x-real-ip":       r.Header.Get("X-Real-Ip"),
+				"x-forwarded-for": r.Header.Get("X-Forwarded-For"),
+				"remote-addr":     r.RemoteAddr,
 			})
 			glog.Infof(string(jsonRedirectInfo))
 			return
@@ -148,12 +151,15 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			return
 		}
 		jsonRedirectInfo, _ := json.Marshal(map[string]interface{}{
-			"redirect-type": "playback-or-ingest",
-			"playbackID":    playbackID,
-			"from":          r.URL.String(),
-			"to":            bestNode,
-			"lat":           lat,
-			"lon":           lon,
+			"redirect-type":   "playback-or-ingest",
+			"playbackID":      playbackID,
+			"from":            r.URL.String(),
+			"to":              bestNode,
+			"lat":             lat,
+			"lon":             lon,
+			"x-real-ip":       r.Header.Get("X-Real-Ip"),
+			"x-forwarded-for": r.Header.Get("X-Forwarded-For"),
+			"remote-addr":     r.RemoteAddr,
 		})
 		glog.Infof(string(jsonRedirectInfo))
 		http.Redirect(w, r, rURL, http.StatusTemporaryRedirect)
