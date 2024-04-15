@@ -25,11 +25,13 @@ import (
 )
 
 const (
-	streamSourceRetries       = 20
-	streamSourceRetryInterval = 3 * time.Second
-	lockPullLeaseTimeout      = 3 * time.Minute
+	streamSourceRetries               = 20
+	streamSourceRetryInterval         = 1 * time.Second
+	streamSourceMaxWrongRegionRetries = 3
+	lockPullLeaseTimeout              = 1 * time.Minute
 )
 
+var errPullWrongRegion = errors.New("failed to pull stream, wrong region")
 var errLockPull = errors.New("failed to lock pull")
 var errNoStreamSourceForActiveStream = errors.New("failed to get stream source for active stream")
 
@@ -190,7 +192,7 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 			return c.resolveReplicatedStream(dtscURL, payload.StreamName)
 		}
 
-		pullURL, err := c.getStreamPull(playbackIdFor(payload.StreamName))
+		pullURL, err := c.getStreamPull(playbackIdFor(payload.StreamName), i)
 		if err == nil || errors.Is(err, api.ErrNotExists) {
 			if pullURL == "" {
 				// not a stream pull, stream is not active or does not exist, usual situation when a viewer tries to play inactive stream
@@ -206,12 +208,12 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 			// stream is active, but STREAM_SOURCE cannot be found
 			glog.Errorf("error querying mist for active stream STREAM_SOURCE: %s", errMist)
 			return "push://", nil
-		} else if !errors.Is(err, errLockPull) {
+		} else if !errors.Is(err, errLockPull) && !errors.Is(err, errPullWrongRegion) {
 			// stream pull failed for unknown reason
 			glog.Errorf("getStreamPull failed for %s: %s", payload.StreamName, err)
 			return "push://", nil
 		}
-		// stream pull failed, because another node started to pull at the same time
+		// stream pull failed, because it should be pulled from another region or it the pull was already started by another node
 		glog.Warningf("another node is currently pulling the stream, waiting %v and retrying", streamSourceRetryInterval)
 		time.Sleep(streamSourceRetryInterval)
 	}
@@ -238,7 +240,7 @@ func (c *GeolocationHandlersCollection) resolveReplicatedStream(dtscURL string, 
 	return outURL, nil
 }
 
-func (c *GeolocationHandlersCollection) getStreamPull(playbackID string) (string, error) {
+func (c *GeolocationHandlersCollection) getStreamPull(playbackID string, retryCount int) (string, error) {
 	if c.Lapi == nil {
 		return "", nil
 	}
@@ -263,6 +265,14 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string) (string
 		return "", nil
 	}
 
+	if stream.PullRegion != "" && c.Config.OwnRegion != stream.PullRegion && retryCount < streamSourceMaxWrongRegionRetries {
+		if retryCount == 0 {
+			glog.Infof("Stream pull requested in the incorrect region, sending playback request to the correct region, playbackID=%s, region=%s", playbackID, stream.PullRegion)
+			c.sendPlaybackRequestAsync(playbackID, stream.PullRegion)
+		}
+		return "", errPullWrongRegion
+	}
+
 	glog.Infof("LockPull for stream %v", playbackID)
 	if err := c.Lapi.LockPull(stream.ID, lockPullLeaseTimeout, c.Config.NodeName); err != nil {
 		return "", errLockPull
@@ -279,6 +289,22 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string) (string
 	}
 	finalPullURL := stream.Pull.Source + "?" + strings.Join(params, "&")
 	return finalPullURL, nil
+}
+
+func (c *GeolocationHandlersCollection) sendPlaybackRequestAsync(playbackID string, region string) {
+	members, err := c.Cluster.MembersFiltered(map[string]string{"region": region}, "", "")
+	if err != nil || len(members) == 0 {
+		glog.Errorf("Error fetching member list: %v", err)
+		return
+	}
+	m := members[rand.Intn(len(members))]
+
+	go func() {
+		url := fmt.Sprintf("%s/hls/%s+%s/index.m3u8", m.Tags["https"], c.Config.MistBaseStreamName, playbackID)
+		if _, err := http.Get(url); err != nil {
+			glog.Errorf("Error making a playback request url=%s, err=%v", url, err)
+		}
+	}()
 }
 
 func parsePlus(plusString string) (string, string) {
