@@ -103,6 +103,24 @@ func TestDeniedAccessInvalidToken(t *testing.T) {
 	require.Equal(t, "false", result)
 }
 
+func TestAllowedRedirect(t *testing.T) {
+	payloadUserNew := misttriggers.UserNewPayload{
+		StreamName: "1bbbqz6753hcli1t",
+		URL:        nil,
+		FullURL:    "http://localhost:8080/hls/1bbbqz6753hcli1t/index.m3u8?stream=1bbbqz6753hcli1t&jwt=",
+		AccessKey:  "123",
+		JWT:        "x",
+		OriginIP:   "1.1.1.1",
+		Referer:    "",
+		Origin:     "null",
+		Host:       "fra-prod-catalyst-0",
+	}
+
+	ctx := context.Background()
+	allowed, _ := testTriggerHandler()(ctx, &payloadUserNew)
+	require.Equal(t, false, allowed)
+}
+
 func TestDeniedMissingPlaybackID(t *testing.T) {
 	token, _ := craftToken(privateKey, publicKey, "", expiration)
 	payload := []byte(fmt.Sprint(playbackID, "\n1\n2\n3\nhttp://localhost:8080/hls/", playbackID, "/index.m3u8?stream=", playbackID, "&jwt=", token, "\n5"))
