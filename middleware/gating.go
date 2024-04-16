@@ -42,7 +42,7 @@ func (h *GatingHandler) GatingCheck(next httprouter.Handle) httprouter.Handle {
 		}
 
 		originIP := req.Header.Get("X-Forwarded-For")
-		refrerer := req.Header.Get("Referer")
+		referer := req.Header.Get("Referer")
 		userAgent := req.Header.Get("User-Agent")
 		forwardedProto := req.Header.Get("X-Forwarded-Proto")
 		host := req.Header.Get("Host")
@@ -53,7 +53,7 @@ func (h *GatingHandler) GatingCheck(next httprouter.Handle) httprouter.Handle {
 			AccessKey:      accessKey,
 			JWT:            jwt,
 			OriginIP:       originIP,
-			Referrer:       refrerer,
+			Referer:        referer,
 			UserAgent:      userAgent,
 			ForwardedProto: forwardedProto,
 			Host:           host,
