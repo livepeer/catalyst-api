@@ -22,7 +22,7 @@ type UserNewPayload struct {
 	JWT            string
 	OriginIP       string
 	OriginalURL    string
-	Referrer       string
+	Referer        string
 	UserAgent      string
 	ForwardedProto string
 	Host           string
@@ -74,7 +74,7 @@ func (d *MistCallbackHandlersCollection) TriggerUserNew(ctx context.Context, w h
 		case "X-Forwarded-For":
 			payload.OriginIP = cookie.Value
 		case "Referer":
-			payload.Referrer = cookie.Value
+			payload.Referer = cookie.Value
 		case "User-Agent":
 			payload.UserAgent = cookie.Value
 		case "X-Forwarded-Proto":

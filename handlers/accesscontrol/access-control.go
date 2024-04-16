@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -176,6 +177,16 @@ func (ac *AccessControlHandlersCollection) HandleUserNew(ctx context.Context, pa
 }
 
 func (ac *AccessControlHandlersCollection) IsAuthorized(ctx context.Context, playbackID string, payload *misttriggers.UserNewPayload) (allowed bool, err error) {
+
+	if payload.Origin == "null" && payload.Referer == "" {
+		// Allow redirects without caching
+		match, _ := regexp.MatchString(`(?:prod|staging)-.*catalyst-\d+`, payload.Host)
+		if match {
+			glog.Infof("Allowing on redirect for playbackID %v origin=%v referer=%v host=%v", playbackID, payload.Origin, payload.Referer, payload.Host)
+			return true, nil
+		}
+	}
+
 	start := time.Now()
 	defer func() {
 		metrics.Metrics.AccessControlRequestDurationSec.
@@ -193,7 +204,7 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 	webhookHeaders := make(map[string]string)
 
 	webhookHeaders["User-Agent"] = payload.UserAgent
-	webhookHeaders["Referer"] = payload.Referrer
+	webhookHeaders["Referer"] = payload.Referer
 	webhookHeaders["X-Forwarded-Proto"] = payload.ForwardedProto
 	webhookHeaders["X-Tlive-Spanid"] = payload.SessionID
 	webhookHeaders["Tx-Stream-Id"] = playbackID
