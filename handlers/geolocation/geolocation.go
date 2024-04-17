@@ -17,6 +17,7 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/balancer"
+	"github.com/livepeer/catalyst-api/balancer/catabalancer"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
@@ -139,6 +140,18 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			glog.Errorf("failed to find either origin or fallback server for playbackID=%s err=%s", playbackID, err)
 			w.WriteHeader(http.StatusBadGateway)
 			return
+		}
+
+		su, err := catabalancer.GetSystemUsage()
+		if err != nil {
+			glog.Warningf("failed to get system usage: %v", err)
+		} else {
+			if su.CPUUsagePercentage < c.Config.NoMistRedirectThresholdPercent && su.RAMUsagePercentage < c.Config.NoMistRedirectThresholdPercent {
+				glog.Infof("Low system usage, not using MistUtilLoad for redirect, cpuUsage=%.2f%% , ramUsage=%f", su.CPUUsagePercentage, su.RAMUsagePercentage)
+				bestNode = c.Config.NodeName
+			} else {
+				glog.Infof("High system usage, using MistUtilLoad for redirect, cpuUsage=%.2f%% , ramUsage=%f", su.CPUUsagePercentage, su.RAMUsagePercentage)
+			}
 		}
 
 		rPath := fmt.Sprintf(pathTmpl, fullPlaybackID)
