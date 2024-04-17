@@ -134,7 +134,15 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			return
 		}
 
+		cpuUsage := 95    // it's just an example, we should get it from the OS
+		memoryUsage := 95 // we should get this value from the OS
+
 		bestNode, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix)
+		if cpuUsage < 90 || memoryUsage < 90 {
+			// avoid unnecessary redirects if the current node has still some capacity to serve
+			bestNode = nodeHost
+		}
+
 		if err != nil {
 			glog.Errorf("failed to find either origin or fallback server for playbackID=%s err=%s", playbackID, err)
 			w.WriteHeader(http.StatusBadGateway)
