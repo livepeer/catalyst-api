@@ -54,7 +54,7 @@ type AccessControlWebhookPayload struct {
 }
 
 type GateAPICaller interface {
-	QueryGate(body []byte) (bool, GateConfig, error)
+	QueryGate(body []byte) (bool, GateConfig, int, error)
 }
 
 type GateClient struct {
@@ -321,7 +321,7 @@ func isStale(entry *PlaybackAccessControlEntry) bool {
 }
 
 func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playbackID, cacheKey string, requestBody []byte) error {
-	allow, gateConfig, err := ac.gateClient.QueryGate(requestBody)
+	allow, gateConfig, statusCode, err := ac.gateClient.QueryGate(requestBody)
 
 	rateLimit := gateConfig.RateLimit
 	refreshInterval := gateConfig.RefreshInterval
@@ -348,6 +348,11 @@ func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playba
 	}
 	refreshIntervalCache.mux.Unlock()
 
+	if statusCode/100 == 5 {
+		// Skip caching on 5xx errors
+		return nil
+	}
+
 	var maxAgeTime = time.Now().Add(time.Duration(maxAge) * time.Second)
 	var staleTime = time.Now().Add(time.Duration(stale) * time.Second)
 	ac.mutex.Lock()
@@ -359,7 +364,7 @@ func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playba
 	return nil
 }
 
-func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
+func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, int, error) {
 	gateConfig := GateConfig{
 		MaxAge:               0,
 		StaleWhileRevalidate: 0,
@@ -372,7 +377,7 @@ func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 
 	req, err := http.NewRequestWithContext(ctx, "POST", g.gateURL, bytes.NewReader(body))
 	if err != nil {
-		return false, gateConfig, err
+		return false, gateConfig, 0, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -385,15 +390,15 @@ func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 			gateConfig.MaxAge = 120
 			gateConfig.StaleWhileRevalidate = 600
 			gateConfig.RefreshInterval = 60
-			return true, gateConfig, nil
+			return true, gateConfig, 200, nil
 		}
-		return false, gateConfig, err
+		return false, gateConfig, 0, err
 	}
 	defer res.Body.Close()
 
 	cc, err := cacheobject.ParseResponseCacheControl(res.Header.Get("Cache-Control"))
 	if err != nil {
-		return false, gateConfig, err
+		return false, gateConfig, 0, err
 	}
 
 	var rateLimit int32 = 0
@@ -403,13 +408,13 @@ func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 		var result map[string]interface{}
 		err = json.NewDecoder(res.Body).Decode(&result)
 		if err != nil {
-			return false, gateConfig, err
+			return false, gateConfig, res.StatusCode, err
 		}
 
 		if rl, ok := result["rate_limit"]; ok {
 			rateLimitFloat64, ok := rl.(float64)
 			if !ok {
-				return false, gateConfig, fmt.Errorf("rate_limit is not a number")
+				return false, gateConfig, res.StatusCode, fmt.Errorf("rate_limit is not a number")
 			}
 			rateLimit = int32(rateLimitFloat64)
 		}
@@ -417,7 +422,7 @@ func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 		if ri, ok := result["refresh_interval"]; ok {
 			refreshIntervalFloat64, ok := ri.(float64)
 			if !ok {
-				return false, gateConfig, fmt.Errorf("refresh_interval is not a number")
+				return false, gateConfig, res.StatusCode, fmt.Errorf("refresh_interval is not a number")
 			}
 			refreshInterval = int32(refreshIntervalFloat64)
 		}
@@ -428,7 +433,7 @@ func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 	gateConfig.RateLimit = rateLimit
 	gateConfig.RefreshInterval = refreshInterval
 
-	return res.StatusCode/100 == 2, gateConfig, nil
+	return res.StatusCode/100 == 2, gateConfig, res.StatusCode, nil
 }
 
 type PlaybackGateClaims struct {

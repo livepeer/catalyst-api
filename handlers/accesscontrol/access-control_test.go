@@ -30,38 +30,38 @@ var expiration = time.Now().Add(time.Duration(1 * time.Hour))
 
 type stubGateClient struct{}
 
-func (g *stubGateClient) QueryGate(body []byte) (bool, GateConfig, error) {
+func (g *stubGateClient) QueryGate(body []byte) (bool, GateConfig, int, error) {
 	return queryGate(body)
 }
 
-var queryGate = func(body []byte) (bool, GateConfig, error) {
+var queryGate = func(body []byte) (bool, GateConfig, int, error) {
 	gateConfig := GateConfig{
 		RateLimit:            0,
 		MaxAge:               0,
 		StaleWhileRevalidate: 0,
 		RefreshInterval:      0,
 	}
-	return false, gateConfig, errors.New("not implemented")
+	return false, gateConfig, 500, errors.New("not implemented")
 }
 
-var allowAccess = func(body []byte) (bool, GateConfig, error) {
+var allowAccess = func(body []byte) (bool, GateConfig, int, error) {
 	gateConfig := GateConfig{
 		RateLimit:            0,
 		MaxAge:               120,
 		StaleWhileRevalidate: 300,
 		RefreshInterval:      0,
 	}
-	return true, gateConfig, nil
+	return true, gateConfig, 200, nil
 }
 
-var denyAccess = func(body []byte) (bool, GateConfig, error) {
+var denyAccess = func(body []byte) (bool, GateConfig, int, error) {
 	gateConfig := GateConfig{
 		RateLimit:            0,
 		MaxAge:               120,
 		StaleWhileRevalidate: 300,
 		RefreshInterval:      0,
 	}
-	return false, gateConfig, nil
+	return false, gateConfig, 403, nil
 }
 
 func testTriggerHandler() func(context.Context, *misttriggers.UserNewPayload) (bool, error) {
@@ -159,7 +159,7 @@ func TestCacheHit(t *testing.T) {
 	handler := testTriggerHandler()
 
 	var callCount = 0
-	var countableAllowAccess = func(body []byte) (bool, GateConfig, error) {
+	var countableAllowAccess = func(body []byte) (bool, GateConfig, int, error) {
 		callCount++
 		gateConfig := GateConfig{
 			RateLimit:            0,
@@ -167,7 +167,7 @@ func TestCacheHit(t *testing.T) {
 			StaleWhileRevalidate: 20,
 			RefreshInterval:      0,
 		}
-		return true, gateConfig, nil
+		return true, gateConfig, 200, nil
 	}
 
 	executeFlow(payload, handler, countableAllowAccess)
@@ -183,7 +183,7 @@ func TestStaleCache(t *testing.T) {
 	handler := testTriggerHandler()
 
 	var callCount = 0
-	var countableAllowAccess = func(body []byte) (bool, GateConfig, error) {
+	var countableAllowAccess = func(body []byte) (bool, GateConfig, int, error) {
 		callCount++
 		gateConfig := GateConfig{
 			RateLimit:            0,
@@ -191,7 +191,7 @@ func TestStaleCache(t *testing.T) {
 			StaleWhileRevalidate: -20,
 			RefreshInterval:      0,
 		}
-		return true, gateConfig, nil
+		return true, gateConfig, 200, nil
 	}
 
 	// Assign testable function ourselves so executeFlow() can't restore original
@@ -222,7 +222,7 @@ func TestInvalidCache(t *testing.T) {
 	handler := testTriggerHandler()
 
 	var callCount = 0
-	var countableAllowAccess = func(body []byte) (bool, GateConfig, error) {
+	var countableAllowAccess = func(body []byte) (bool, GateConfig, int, error) {
 		callCount++
 		gateConfig := GateConfig{
 			RateLimit:            0,
@@ -230,7 +230,7 @@ func TestInvalidCache(t *testing.T) {
 			StaleWhileRevalidate: -20,
 			RefreshInterval:      0,
 		}
-		return true, gateConfig, nil
+		return true, gateConfig, 200, nil
 	}
 
 	executeFlow(payload, handler, countableAllowAccess)
@@ -239,7 +239,7 @@ func TestInvalidCache(t *testing.T) {
 	require.Equal(t, 2, callCount)
 }
 
-func executeFlow(body []byte, handler func(context.Context, *misttriggers.UserNewPayload) (bool, error), request func(body []byte) (bool, GateConfig, error)) string {
+func executeFlow(body []byte, handler func(context.Context, *misttriggers.UserNewPayload) (bool, error), request func(body []byte) (bool, GateConfig, int, error)) string {
 	original := queryGate
 	queryGate = request
 	defer func() { queryGate = original }()
