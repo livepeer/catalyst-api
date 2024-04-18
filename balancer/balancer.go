@@ -4,6 +4,7 @@ package balancer
 
 import (
 	"context"
+
 	"github.com/livepeer/catalyst-api/balancer/catabalancer"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/log"
@@ -122,4 +123,5 @@ type Config struct {
 	NodeName                 string
 	MistPort                 int
 	MistHost                 string
+	OwnRegion                string
 }
