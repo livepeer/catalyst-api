@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"encoding/json"
+
 	"github.com/golang/glog"
 
 	"github.com/julienschmidt/httprouter"
@@ -135,6 +136,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 		}
 
 		bestNode, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix)
+
 		if err != nil {
 			glog.Errorf("failed to find either origin or fallback server for playbackID=%s err=%s", playbackID, err)
 			w.WriteHeader(http.StatusBadGateway)

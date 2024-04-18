@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/livepeer/catalyst-api/balancer/catabalancer"
 	"io"
 	"net/http"
 	"net/url"
@@ -14,6 +13,8 @@ import (
 	"regexp"
 	"sync"
 	"time"
+
+	"github.com/livepeer/catalyst-api/balancer/catabalancer"
 
 	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/balancer"
@@ -339,8 +340,11 @@ func fallbackNode(fallbackAddr, fallbackPrefix, playbackID, defaultPrefix string
 }
 
 // make a balancing request to MistUtilLoad, returns a server suitable for playback
-func (b *MistBalancer) MistUtilLoadBalance(ctx context.Context, stream, lat, lon string) (string, error) {
-	str, err := b.mistUtilLoadRequest(ctx, "/", stream, lat, lon)
+func (b *MistBalancer) MistUtilLoadBalance(ctx context.Context, stream, lat, lon string, urlSuffix ...string) (string, error) {
+	// add `tag_adjust={"region_name":1000}` to bump current region weight so it's more important that other params like
+	// cpu, memory, bandwidth or distance. It's meant to minimise redirects to other regions after current region is "selected"
+	// by the DNS rules.
+	str, err := b.mistUtilLoadRequest(ctx, "/", stream, lat, lon, fmt.Sprintf("?tag_adjust={\"%s\":1000}", b.config.OwnRegion))
 	if err != nil {
 		return "", err
 	}
@@ -353,7 +357,7 @@ func (b *MistBalancer) MistUtilLoadBalance(ctx context.Context, stream, lat, lon
 
 // make a source request to MistUtilLoad, returns the DTSC url of the origin server
 func (b *MistBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error) {
-	str, err := b.mistUtilLoadRequest(ctx, "?source=", stream, lat, lon)
+	str, err := b.mistUtilLoadRequest(ctx, "?source=", stream, lat, lon, "")
 	if err != nil {
 		return "", err
 	}
@@ -372,16 +376,16 @@ func (b *MistBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon 
 // make a streamStats request to MistUtilLoad; response is opaque but a
 // successful call means the stream is active somewhere in the world
 func (b *MistBalancer) MistUtilLoadStreamStats(ctx context.Context, stream string) error {
-	_, err := b.mistUtilLoadRequest(ctx, "?streamstats=", stream, "0", "0")
+	_, err := b.mistUtilLoadRequest(ctx, "?streamstats=", stream, "0", "0", "")
 	return err
 }
 
 // Internal method to make a request to MistUtilLoad
-func (b *MistBalancer) mistUtilLoadRequest(ctx context.Context, route, stream, lat, lon string) (string, error) {
+func (b *MistBalancer) mistUtilLoadRequest(ctx context.Context, route, stream, lat, lon, urlSuffix string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, mistUtilLoadSingleRequestTimeout)
 	defer cancel()
-	enc := url.QueryEscape(stream)
-	murl := fmt.Sprintf("%s%s%s", b.endpoint, route, enc)
+	streamEscaped := url.QueryEscape(stream)
+	murl := fmt.Sprintf("%s%s%s%s", b.endpoint, route, streamEscaped, urlSuffix)
 	glog.V(8).Infof("MistUtilLoad started request=%s", murl)
 	req, err := http.NewRequest("GET", murl, nil)
 	if err != nil {

@@ -285,6 +285,7 @@ func main() {
 		MistHost:                 cli.MistHost,
 		MistPort:                 cli.MistPort,
 		NodeName:                 cli.NodeName,
+		OwnRegion:                cli.OwnRegion,
 	})
 
 	bal := mistBalancer
