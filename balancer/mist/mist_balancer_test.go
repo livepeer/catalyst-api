@@ -26,8 +26,10 @@ func start(t *testing.T) (*MistBalancer, *mockMistUtilLoad) {
 
 	b := &MistBalancer{
 		config: &balancer.Config{
-			MistHost: u.Hostname(),
-			MistPort: port,
+			MistHost:           u.Hostname(),
+			MistPort:           port,
+			OwnRegion:          "fra",
+			OwnRegionTagAdjust: 1000,
 		},
 		cmd:      nil,
 		endpoint: mul.Server.URL,
@@ -180,8 +182,6 @@ func TestGetBestNode(t *testing.T) {
 	bal, mul := start(t)
 	defer mul.Close()
 
-	bal.config.OwnRegion = "fra"
-
 	mul.BalancedHosts = map[string]string{
 		"http://one.example.com:4242": "Online",
 		"http://two.example.com:4242": "Online",
@@ -254,6 +254,7 @@ func (mul *mockMistUtilLoad) Handle(t *testing.T) http.HandlerFunc {
 
 		// Default balancer implementation
 		if len(queryVals) == 0 || (len(queryVals) == 1 && queryVals.Has("tag_adjust")) {
+			require.Equal(t, queryVals.Get("tag_adjust"), `{"fra":1000}`)
 			for node := range mul.BalancedHosts {
 				u, err := url.Parse(node)
 				require.NoError(t, err)

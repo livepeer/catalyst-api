@@ -37,6 +37,7 @@ type Cli struct {
 	LogSysUsage               bool
 	AMQPURL                   string
 	OwnRegion                 string
+	OwnRegionTagAdjust        int
 	APIToken                  string
 	APIServer                 string
 	SourceOutput              string
