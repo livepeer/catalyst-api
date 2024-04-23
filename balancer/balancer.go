@@ -124,4 +124,5 @@ type Config struct {
 	MistPort                 int
 	MistHost                 string
 	OwnRegion                string
+	OwnRegionTagAdjust       int
 }

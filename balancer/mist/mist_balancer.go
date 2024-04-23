@@ -344,7 +344,7 @@ func (b *MistBalancer) MistUtilLoadBalance(ctx context.Context, stream, lat, lon
 	// add `tag_adjust={"region_name":1000}` to bump current region weight so it's more important that other params like
 	// cpu, memory, bandwidth or distance. It's meant to minimise redirects to other regions after current region is "selected"
 	// by the DNS rules.
-	str, err := b.mistUtilLoadRequest(ctx, "/", stream, lat, lon, fmt.Sprintf("?tag_adjust={\"%s\":1000}", b.config.OwnRegion))
+	str, err := b.mistUtilLoadRequest(ctx, "/", stream, lat, lon, fmt.Sprintf("?tag_adjust={\"%s\":%d}", b.config.OwnRegion, b.config.OwnRegionTagAdjust))
 	if err != nil {
 		return "", err
 	}
