@@ -13,7 +13,7 @@ import (
 type Balancer interface {
 	Start(ctx context.Context) error
 	UpdateMembers(ctx context.Context, members []cluster.Member) error
-	GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error)
+	GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq bool) (string, string, error)
 	MistUtilLoadSource(ctx context.Context, streamID, lat, lon string) (string, error)
 	UpdateNodes(id string, nodeMetrics catabalancer.NodeMetrics)
 	UpdateStreams(id string, stream string, isIngest bool)
@@ -69,13 +69,13 @@ func (c CombinedBalancer) UpdateMembers(ctx context.Context, members []cluster.M
 	return c.MistBalancer.UpdateMembers(ctx, members)
 }
 
-func (c CombinedBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error) {
-	cataBestNode, cataFullPlaybackID, cataErr := c.Catabalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix)
+func (c CombinedBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq bool) (string, string, error) {
+	cataBestNode, cataFullPlaybackID, cataErr := c.Catabalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix, isStudioReq)
 	if c.CatabalancerPlaybackEnabled {
 		return cataBestNode, cataFullPlaybackID, cataErr
 	}
 
-	bestNode, fullPlaybackID, err := c.MistBalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix)
+	bestNode, fullPlaybackID, err := c.MistBalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix, isStudioReq)
 	log.LogNoRequestID("catabalancer GetBestNode",
 		"bestNode", bestNode,
 		"fullPlaybackID", fullPlaybackID,
@@ -85,6 +85,7 @@ func (c CombinedBalancer) GetBestNode(ctx context.Context, redirectPrefixes []st
 		"nodeMatch", cataBestNode == bestNode,
 		"playbackIDMatch", cataFullPlaybackID == fullPlaybackID,
 		"playbackID", playbackID,
+		"isStudioReq", isStudioReq,
 	)
 	return bestNode, fullPlaybackID, err
 }

@@ -263,12 +263,12 @@ func (b *MistBalancer) execBalancer(ctx context.Context, balancerArgs []string) 
 	return fmt.Errorf("MistUtilLoad exited cleanly")
 }
 
-func (b *MistBalancer) queryMistForClosestNode(ctx context.Context, playbackID, lat, lon, prefix string) (string, error) {
+func (b *MistBalancer) queryMistForClosestNode(ctx context.Context, playbackID, lat, lon, prefix string, isStudioReq bool) (string, error) {
 	streamName := fmt.Sprintf("%s+%s", prefix, playbackID)
 	// First, check to see if any server has this stream
 	err1 := b.MistUtilLoadStreamStats(ctx, streamName)
 	// Then, check the best playback server
-	node, err2 := b.MistUtilLoadBalance(ctx, streamName, lat, lon)
+	node, err2 := b.MistUtilLoadBalance(ctx, streamName, lat, lon, isStudioReq)
 	// If we can't get a playback server, error
 	if err2 != nil {
 		return "", err2
@@ -282,7 +282,7 @@ func (b *MistBalancer) queryMistForClosestNode(ctx context.Context, playbackID, 
 }
 
 // return the best node available for a given stream. will return any node if nobody has the stream.
-func (b *MistBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error) {
+func (b *MistBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq bool) (string, string, error) {
 	var nodeAddr, fullPlaybackID, fallbackAddr string
 	var mu sync.Mutex
 	var err error
@@ -292,7 +292,7 @@ func (b *MistBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 		waitGroup.Add(1)
 		go func(prefix string) {
 			defer waitGroup.Done()
-			addr, e := b.queryMistForClosestNode(ctx, playbackID, lat, lon, prefix)
+			addr, e := b.queryMistForClosestNode(ctx, playbackID, lat, lon, prefix, isStudioReq)
 			mu.Lock()
 			defer mu.Unlock()
 			if e != nil {
@@ -340,11 +340,18 @@ func fallbackNode(fallbackAddr, fallbackPrefix, playbackID, defaultPrefix string
 }
 
 // make a balancing request to MistUtilLoad, returns a server suitable for playback
-func (b *MistBalancer) MistUtilLoadBalance(ctx context.Context, stream, lat, lon string, urlSuffix ...string) (string, error) {
+func (b *MistBalancer) MistUtilLoadBalance(ctx context.Context, stream, lat, lon string, isStudioReq bool) (string, error) {
 	// add `tag_adjust={"region_name":1000}` to bump current region weight so it's more important that other params like
 	// cpu, memory, bandwidth or distance. It's meant to minimise redirects to other regions after current region is "selected"
 	// by the DNS rules.
-	str, err := b.mistUtilLoadRequest(ctx, "/", stream, lat, lon, fmt.Sprintf("?tag_adjust={\"%s\":%d}", b.config.OwnRegion, b.config.OwnRegionTagAdjust))
+	// However, if the current request is a Studio request (e.g. to start a pull ingest), then don't bump the current region weight at all
+	// since DNS rules might select a wrong node where this code runs. In this case, the lat/lon specified in the Studio request should be
+	// used to geolocate for which a higher global geo weight is applied (in livepeer-infra).
+	tagAdjustVal := b.config.OwnRegionTagAdjust
+	if isStudioReq {
+		tagAdjustVal = 0
+	}
+	str, err := b.mistUtilLoadRequest(ctx, "/", stream, lat, lon, fmt.Sprintf("?tag_adjust={\"%s\":%d}", b.config.OwnRegion, tagAdjustVal))
 	if err != nil {
 		return "", err
 	}

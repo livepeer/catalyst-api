@@ -132,7 +132,7 @@ func TestBalancing(t *testing.T) {
 	}
 	mul.StreamsLive = map[string][]string{"http://one.example.com:4242": {"prefix+fakeid"}}
 
-	node, err := bal.MistUtilLoadBalance(context.Background(), "prefix+fakeid", "0", "0")
+	node, err := bal.MistUtilLoadBalance(context.Background(), "prefix+fakeid", "0", "0", false)
 	require.NoError(t, err)
 	require.Equal(t, node, "one.example.com")
 
@@ -152,7 +152,7 @@ func TestBalancingLocalNode(t *testing.T) {
 		"http://127.0.0.1:4242": "Online",
 	}
 
-	node, err := bal.MistUtilLoadBalance(context.Background(), "prefix+fakeid", "0", "0")
+	node, err := bal.MistUtilLoadBalance(context.Background(), "prefix+fakeid", "0", "0", false)
 	require.NoError(t, err)
 	require.Equal(t, node, "example.com")
 
@@ -191,13 +191,13 @@ func TestGetBestNode(t *testing.T) {
 	redirectPrefixes := []string{"firstprefix", "prefix", "thirdprefix"}
 
 	// Test success case
-	node, streamName, err := bal.GetBestNode(context.Background(), redirectPrefixes, "fakeid", "0", "0", redirectPrefixes[0])
+	node, streamName, err := bal.GetBestNode(context.Background(), redirectPrefixes, "fakeid", "0", "0", redirectPrefixes[0], false)
 	require.NoError(t, err)
 	require.Equal(t, streamName, "prefix+fakeid")
 	require.Contains(t, []string{"one.example.com", "two.example.com"}, node)
 
 	// Test returning stream as 404 handler
-	node, streamName, err = bal.GetBestNode(context.Background(), redirectPrefixes, "notlive", "0", "0", redirectPrefixes[0])
+	node, streamName, err = bal.GetBestNode(context.Background(), redirectPrefixes, "notlive", "0", "0", redirectPrefixes[0], false)
 	require.NoError(t, err)
 	require.Equal(t, streamName, "firstprefix+notlive")
 	require.Contains(t, []string{"one.example.com", "two.example.com"}, node)
@@ -217,13 +217,13 @@ func TestGetBestNodeForWebRTC(t *testing.T) {
 	redirectPrefixes := []string{"firstprefix", "prefix", "thirdprefix"}
 
 	// Test success case
-	node, streamName, err := bal.GetBestNode(context.Background(), redirectPrefixes, "fakeid", "0", "0", redirectPrefixes[0])
+	node, streamName, err := bal.GetBestNode(context.Background(), redirectPrefixes, "fakeid", "0", "0", redirectPrefixes[0], false)
 	require.NoError(t, err)
 	require.Equal(t, "prefix+fakeid", streamName)
 	require.Contains(t, []string{"one.example.com", "two.example.com"}, node)
 
 	// Test returning stream as 404 handler
-	node, streamName, err = bal.GetBestNode(context.Background(), redirectPrefixes, webrtcStreamKey, "0", "0", redirectPrefixes[0])
+	node, streamName, err = bal.GetBestNode(context.Background(), redirectPrefixes, webrtcStreamKey, "0", "0", redirectPrefixes[0], false)
 	require.NoError(t, err)
 	require.Equal(t, webrtcStreamKey, streamName)
 	require.Contains(t, []string{"one.example.com", "two.example.com"}, node)

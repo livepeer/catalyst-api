@@ -42,7 +42,7 @@ var BandwidthOverloadedNode = ScoredNode{
 
 func TestItReturnsItselfWhenNoOtherNodesPresent(t *testing.T) {
 	c := NewBalancer("me", time.Second, time.Second)
-	nodeName, prefix, err := c.GetBestNode(context.Background(), nil, "playbackID", "", "", "")
+	nodeName, prefix, err := c.GetBestNode(context.Background(), nil, "playbackID", "", "", "", false)
 	require.NoError(t, err)
 	require.Equal(t, "me", nodeName)
 	require.Equal(t, "video+playbackID", prefix)
@@ -56,7 +56,7 @@ func TestStaleNodes(t *testing.T) {
 	// node is stale, old timestamp
 	c.UpdateNodes("node1", NodeMetrics{})
 	c.metricTimeout = -5 * time.Second
-	nodeName, prefix, err := c.GetBestNode(context.Background(), nil, "playbackID", "", "", "")
+	nodeName, prefix, err := c.GetBestNode(context.Background(), nil, "playbackID", "", "", "", false)
 	require.NoError(t, err)
 	require.Equal(t, "me", nodeName) // we expect node1 to be ignored
 	require.Equal(t, "video+playbackID", prefix)
@@ -64,7 +64,7 @@ func TestStaleNodes(t *testing.T) {
 	// node is fresh, recent timestamp
 	c.UpdateNodes("node1", NodeMetrics{})
 	c.metricTimeout = 5 * time.Second
-	nodeName, prefix, err = c.GetBestNode(context.Background(), nil, "playbackID", "", "", "")
+	nodeName, prefix, err = c.GetBestNode(context.Background(), nil, "playbackID", "", "", "", false)
 	require.NoError(t, err)
 	require.Equal(t, "node1", nodeName) // we expect node1 this time
 	require.Equal(t, "video+playbackID", prefix)
@@ -288,7 +288,7 @@ func TestSetMetrics(t *testing.T) {
 	c.UpdateNodes("node1", NodeMetrics{CPUUsagePercentage: 90})
 	c.UpdateNodes("node2", NodeMetrics{CPUUsagePercentage: 0})
 
-	node, fullPlaybackID, err := c.GetBestNode(context.Background(), nil, "1234", "", "", "")
+	node, fullPlaybackID, err := c.GetBestNode(context.Background(), nil, "1234", "", "", "", false)
 	require.NoError(t, err)
 	require.Equal(t, "node2", node)
 	require.Equal(t, "video+1234", fullPlaybackID)
@@ -301,7 +301,7 @@ func TestUnknownNode(t *testing.T) {
 	c.UpdateNodes("node1", NodeMetrics{CPUUsagePercentage: 90})
 	c.UpdateNodes("bgw-node1", NodeMetrics{CPUUsagePercentage: 10})
 
-	node, _, err := c.GetBestNode(context.Background(), nil, "1234", "", "", "")
+	node, _, err := c.GetBestNode(context.Background(), nil, "1234", "", "", "", false)
 	require.NoError(t, err)
 	require.Equal(t, "node1", node)
 }
@@ -468,7 +468,7 @@ func TestSimulate(t *testing.T) {
 
 	for j := 0; j < loadBalanceCallCount; j++ {
 		start := time.Now()
-		_, _, err = c.GetBestNode(context.Background(), nil, "playbackID", "0", "0", "")
+		_, _, err = c.GetBestNode(context.Background(), nil, "playbackID", "0", "0", "", false)
 		require.NoError(t, err)
 		require.LessOrEqual(t, time.Since(start), expectedResponseTime)
 		time.Sleep(100 * time.Millisecond)
