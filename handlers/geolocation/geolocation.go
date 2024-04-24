@@ -53,6 +53,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 		host := r.Host
 		pathType, prefix, playbackID, pathTmpl := parsePlaybackID(r.URL.Path)
 		redirectPrefixes := c.Config.RedirectPrefixes
+		isStudioReq := false
 
 		// `X-Latitude` and `X-Longitude` headers are populated by nginx/geoip when requests come from viewers. The `lat`
 		// and `lon` queries can override these and are used by the `studio API` to trigger stream pulls from a desired loc.
@@ -66,6 +67,10 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 				lat, lon = "", ""
 				glog.Warningf("invalid coordinates from=%s lat=%s lon=%s", r.URL.String(), lat, lon)
 			}
+		} else {
+			// if lat/lon values were passed in as query params and are valid, then this is
+			// a request from Studio API (e.g request to trigger a stream pull from desired location)
+			isStudioReq = true
 		}
 
 		if c.Config.CdnRedirectPrefix != nil && (pathType == "hls" || pathType == "webrtc") {
@@ -81,7 +86,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 					return
 				}
 
-				bestNode, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix)
+				bestNode, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix, isStudioReq)
 				if err != nil {
 					glog.Errorf("failed to find either origin or fallback server for playbackID=%s err=%s", playbackID, err)
 					w.WriteHeader(http.StatusBadGateway)
