@@ -254,7 +254,7 @@ func (mul *mockMistUtilLoad) Handle(t *testing.T) http.HandlerFunc {
 
 		// Default balancer implementation
 		if len(queryVals) == 0 || (len(queryVals) == 1 && queryVals.Has("tag_adjust")) {
-			require.Equal(t, queryVals.Get("tag_adjust"), `{"fra":1000,"geo":0}`)
+			require.Equal(t, queryVals.Get("tag_adjust"), `{"fra":1000}`)
 			for node := range mul.BalancedHosts {
 				u, err := url.Parse(node)
 				require.NoError(t, err)
