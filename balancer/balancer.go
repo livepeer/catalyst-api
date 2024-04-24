@@ -118,12 +118,13 @@ func (c CombinedBalancer) UpdateStreams(id string, stream string, isIngest bool)
 }
 
 type Config struct {
-	Args                     []string
-	MistUtilLoadPort         uint32
-	MistLoadBalancerTemplate string
-	NodeName                 string
-	MistPort                 int
-	MistHost                 string
-	OwnRegion                string
-	OwnRegionTagAdjust       int
+	Args                         []string
+	MistUtilLoadPort             uint32
+	MistLoadBalancerTemplate     string
+	NodeName                     string
+	MistPort                     int
+	MistHost                     string
+	OwnRegion                    string
+	OwnRegionTagAdjust           int
+	PullStreamIngestGeoTagAdjust int
 }

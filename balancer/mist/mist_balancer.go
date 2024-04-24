@@ -347,11 +347,13 @@ func (b *MistBalancer) MistUtilLoadBalance(ctx context.Context, stream, lat, lon
 	// However, if the current request is a Studio request (e.g. to start a pull ingest), then don't bump the current region weight at all
 	// since DNS rules might select a wrong node where this code runs. In this case, the lat/lon specified in the Studio request should be
 	// used to geolocate for which a higher global geo weight is applied (in livepeer-infra).
-	tagAdjustVal := b.config.OwnRegionTagAdjust
+	regionTagAdjust := b.config.OwnRegionTagAdjust
+	geoTagAdjust := 0
 	if isStudioReq {
-		tagAdjustVal = 0
+		regionTagAdjust = 0
+		geoTagAdjust = b.config.PullStreamIngestGeoTagAdjust
 	}
-	str, err := b.mistUtilLoadRequest(ctx, "/", stream, lat, lon, fmt.Sprintf("?tag_adjust={\"%s\":%d}", b.config.OwnRegion, tagAdjustVal))
+	str, err := b.mistUtilLoadRequest(ctx, "/", stream, lat, lon, fmt.Sprintf("?tag_adjust={\"%s\":%d,\"geo\":%d}", b.config.OwnRegion, regionTagAdjust, geoTagAdjust))
 	if err != nil {
 		return "", err
 	}
