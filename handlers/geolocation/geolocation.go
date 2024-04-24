@@ -140,7 +140,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			return
 		}
 
-		bestNode, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix)
+		bestNode, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix, isStudioReq)
 
 		if err != nil {
 			glog.Errorf("failed to find either origin or fallback server for playbackID=%s err=%s", playbackID, err)

@@ -133,7 +133,7 @@ func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Memb
 	return nil
 }
 
-func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string) (string, string, error) {
+func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq bool) (string, string, error) {
 	var err error
 	latf := 0.0
 	if lat != "" {
