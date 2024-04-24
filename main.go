@@ -97,7 +97,6 @@ func main() {
 	fs.StringVar(&cli.AMQPURL, "amqp-url", "", "RabbitMQ url")
 	fs.StringVar(&cli.OwnRegion, "own-region", "", "Identifier of the region where the service is running, used for mapping external data back to current region")
 	fs.IntVar(&cli.OwnRegionTagAdjust, "own-region-tag-adjust", 1000, "Bonus weight for 'own-region' to minimise cross-region redirects done by mist load balancer (MistUtilLoad)")
-	fs.IntVar(&cli.PullStreamIngestGeoTagAdjust, "pull-stream-gro-tag-adjust", 2000, "Geo weight for stream pull ingest request to prioritize geo for ingest nodes by mist load balancer (MistUtilLoad)")
 	fs.StringVar(&cli.StreamHealthHookURL, "stream-health-hook-url", "http://localhost:3004/api/stream/hook/health", "Address to POST stream health payloads to (response is ignored)")
 
 	// catalyst-node parameters
@@ -281,15 +280,14 @@ func main() {
 
 	// Start balancer
 	mistBalancer := mist_balancer.NewBalancer(&balancer.Config{
-		Args:                         cli.BalancerArgs,
-		MistUtilLoadPort:             uint32(cli.MistLoadBalancerPort),
-		MistLoadBalancerTemplate:     cli.MistLoadBalancerTemplate,
-		MistHost:                     cli.MistHost,
-		MistPort:                     cli.MistPort,
-		NodeName:                     cli.NodeName,
-		OwnRegion:                    cli.OwnRegion,
-		OwnRegionTagAdjust:           cli.OwnRegionTagAdjust,
-		PullStreamIngestGeoTagAdjust: cli.PullStreamIngestGeoTagAdjust,
+		Args:                     cli.BalancerArgs,
+		MistUtilLoadPort:         uint32(cli.MistLoadBalancerPort),
+		MistLoadBalancerTemplate: cli.MistLoadBalancerTemplate,
+		MistHost:                 cli.MistHost,
+		MistPort:                 cli.MistPort,
+		NodeName:                 cli.NodeName,
+		OwnRegion:                cli.OwnRegion,
+		OwnRegionTagAdjust:       cli.OwnRegionTagAdjust,
 	})
 
 	bal := mistBalancer
