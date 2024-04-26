@@ -289,6 +289,11 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string, retryCo
 		return stream.Pull.Source, nil
 	}
 
+	if stream.Pull.IsMobile {
+		// Todo: handle mobile
+		glog.Infof("Mobile stream pull requested, playbackID=%s", playbackID)
+	}
+
 	params := []string{"readtimeout=180"}
 	for k, v := range stream.Pull.Headers {
 		param := "addheader=" + url.QueryEscape(k+" "+v)
