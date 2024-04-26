@@ -187,6 +187,14 @@ func (ac *AccessControlHandlersCollection) IsAuthorized(ctx context.Context, pla
 		}
 	}
 
+	if payload.Origin == "null" && payload.Referer != "" {
+		match, _ := regexp.MatchString(`(?:prod|staging)-.*catalyst-\d+`, payload.Referer)
+		if match {
+			glog.Infof("Allowing on redirect for playbackID %v origin=%v referer=%v host=%v", playbackID, payload.Origin, payload.Referer, payload.Host)
+			return true, nil
+		}
+	}
+
 	start := time.Now()
 	defer func() {
 		metrics.Metrics.AccessControlRequestDurationSec.
