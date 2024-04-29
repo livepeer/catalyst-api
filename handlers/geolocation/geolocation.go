@@ -156,13 +156,20 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		var redirectType string
+		if isStudioReq {
+			redirectType = "ingest"
+		} else {
+			redirectType = "playback"
+		}
 		jsonRedirectInfo, _ := json.Marshal(map[string]interface{}{
-			"redirect-type": "playback-or-ingest",
-			"playbackID":    playbackID,
-			"from":          r.URL.String(),
-			"to":            bestNode,
-			"lat":           lat,
-			"lon":           lon,
+			"redirect-type":      redirectType,
+			"playbackID":         playbackID,
+			"from":               r.URL.String(),
+			"dns-chosen-region":  c.Config.OwnRegion,
+			"mist-chosen-region": bestNode,
+			"lat":                lat,
+			"lon":                lon,
 		})
 		glog.Infof(string(jsonRedirectInfo))
 		http.Redirect(w, r, rURL, http.StatusTemporaryRedirect)
