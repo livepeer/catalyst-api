@@ -433,7 +433,7 @@ func output(container, name string, height, maxBitrate int64) *mediaconvert.Outp
 					MaxBitrate:         aws.Int64(maxBitrate),
 					RateControlMode:    aws.String("QVBR"),
 					SceneChangeDetect:  aws.String("TRANSITION_DETECTION"),
-					QualityTuningLevel: aws.String("MULTI_PASS_HQ"),
+					QualityTuningLevel: aws.String("SINGLE_PASS"),
 					FramerateControl:   aws.String("INITIALIZE_FROM_SOURCE"),
 				}}},
 		AudioDescriptions: []*mediaconvert.AudioDescription{
