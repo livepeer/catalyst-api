@@ -156,11 +156,9 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		var redirectType string
+		var redirectType = "playback"
 		if isStudioReq {
 			redirectType = "ingest"
-		} else {
-			redirectType = "playback"
 		}
 		jsonRedirectInfo, _ := json.Marshal(map[string]interface{}{
 			"redirect-type":      redirectType,
