@@ -161,13 +161,13 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			redirectType = "ingest"
 		}
 		jsonRedirectInfo, _ := json.Marshal(map[string]interface{}{
-			"redirectType":      redirectType,
-			"playbackID":         playbackID,
-			"from":               r.URL.String(),
+			"redirectType":     redirectType,
+			"playbackID":       playbackID,
+			"from":             r.URL.String(),
 			"dnsChosenRegion":  c.Config.OwnRegion,
 			"mistChosenRegion": bestNode,
-			"lat":                lat,
-			"lon":                lon,
+			"lat":              lat,
+			"lon":              lon,
 		})
 		glog.Infof(string(jsonRedirectInfo))
 		http.Redirect(w, r, rURL, http.StatusTemporaryRedirect)
