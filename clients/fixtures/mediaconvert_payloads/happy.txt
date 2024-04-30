@@ -49,7 +49,7 @@
                   FramerateControl: "INITIALIZE_FROM_SOURCE",
                   GopSizeUnits: "AUTO",
                   MaxBitrate: 1000000,
-                  QualityTuningLevel: "MULTI_PASS_HQ",
+                  QualityTuningLevel: "SINGLE_PASS",
                   RateControlMode: "QVBR",
                   SceneChangeDetect: "TRANSITION_DETECTION"
                 }
@@ -78,7 +78,7 @@
                   FramerateControl: "INITIALIZE_FROM_SOURCE",
                   GopSizeUnits: "AUTO",
                   MaxBitrate: 4000000,
-                  QualityTuningLevel: "MULTI_PASS_HQ",
+                  QualityTuningLevel: "SINGLE_PASS",
                   RateControlMode: "QVBR",
                   SceneChangeDetect: "TRANSITION_DETECTION"
                 }
@@ -122,7 +122,7 @@
                   FramerateControl: "INITIALIZE_FROM_SOURCE",
                   GopSizeUnits: "AUTO",
                   MaxBitrate: 1000000,
-                  QualityTuningLevel: "MULTI_PASS_HQ",
+                  QualityTuningLevel: "SINGLE_PASS",
                   RateControlMode: "QVBR",
                   SceneChangeDetect: "TRANSITION_DETECTION"
                 }
@@ -151,7 +151,7 @@
                   FramerateControl: "INITIALIZE_FROM_SOURCE",
                   GopSizeUnits: "AUTO",
                   MaxBitrate: 4000000,
-                  QualityTuningLevel: "MULTI_PASS_HQ",
+                  QualityTuningLevel: "SINGLE_PASS",
                   RateControlMode: "QVBR",
                   SceneChangeDetect: "TRANSITION_DETECTION"
                 }
