@@ -121,7 +121,7 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (outs []video.OutputVideo, err error) {
 	inputDuration := args.InputFileInfo.Duration
 	if inputDuration <= 0 || inputDuration > maxMediaconvertDuration.Seconds() {
-		return nil, fmt.Errorf("input too long for mediaconvert")
+		return nil, fmt.Errorf("input too long for mediaconvert: %v", inputDuration)
 	}
 
 	var (

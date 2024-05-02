@@ -37,7 +37,7 @@ var inputVideo = video.InputVideo{
 		},
 		AudioTrack: video.AudioTrack{},
 	}},
-	Duration: 60_000,
+	Duration: 60,
 }
 
 func TestReportsMediaConvertProgress(t *testing.T) {
@@ -366,6 +366,11 @@ func (s *stubMediaConvertClient) GetJob(input *mediaconvert.GetJobInput) (*media
 		return nil, errors.New("not implemented")
 	}
 	return s.getJob(input)
+}
+
+func (s *stubMediaConvertClient) CancelJob(input *mediaconvert.CancelJobInput) (*mediaconvert.CancelJobOutput, error) {
+	// noop
+	return nil, nil
 }
 
 type stubS3Client struct {
