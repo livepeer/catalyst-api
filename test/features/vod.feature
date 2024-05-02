@@ -25,11 +25,16 @@ Feature: VOD Streaming
     Then I get an HTTP response with code "200"
     And my "successful" vod request metrics get recorded
 
-  Scenario: Submit a bad request to `/api/vod`
-    And I submit to the internal "/api/vod" endpoint with "an invalid upload vod request"
+  Scenario Outline: Submit a bad request to `/api/vod`
+    And I submit to the internal "/api/vod" endpoint with "<payload>"
     And receive a response within "3" seconds
     Then I get an HTTP response with code "400"
     And my "failed" vod request metrics get recorded
+
+    Examples:
+      | payload                                             |
+      | an invalid upload vod request                       |
+      | a valid upload vod request with no write permission |
 
   Scenario Outline: Submit a video asset for ingestion with the FFMPEG / Livepeer pipeline
     When I submit to the internal "/api/vod" endpoint with "<payload>"

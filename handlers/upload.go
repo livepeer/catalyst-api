@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
@@ -310,6 +311,13 @@ func toTargetURL(ol UploadVODRequestOutputLocation, reqID string) (*url.URL, err
 			tURL.Host = reqID
 			log.AddContext(reqID, "w3s-url", tURL.String())
 		}
+
+		err = clients.CheckWritePermission(tURL.String())
+		if err != nil {
+			log.LogError(reqID, "failed write permission check", err)
+			return nil, fmt.Errorf("failed write permission check for %s", tURL.String())
+		}
+
 		return tURL, nil
 	}
 	return nil, nil

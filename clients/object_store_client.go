@@ -93,6 +93,24 @@ func UploadToOSURLFields(osURL, filename string, data io.Reader, timeout time.Du
 	return nil
 }
 
+func CheckWritePermission(url string) error {
+	tmpFileName := "tmp"
+	err := UploadToOSURL(url, tmpFileName, strings.NewReader(""), time.Second)
+	if err != nil {
+		return fmt.Errorf("failed to upload tmp file for %s: %w", url, err)
+	}
+
+	storageDriver, err := drivers.ParseOSURL(url, true)
+	if err != nil {
+		return fmt.Errorf("failed to get OS driver for %s: %w", url, err)
+	}
+	err = storageDriver.NewSession("").DeleteFile(context.Background(), tmpFileName)
+	if err != nil {
+		return fmt.Errorf("failed to delete tmp file for %s: %w", url, err)
+	}
+	return nil
+}
+
 func ListOSURL(ctx context.Context, osURL string) (drivers.PageInfo, error) {
 	osDriver, err := drivers.ParseOSURL(osURL, true)
 	if err != nil {

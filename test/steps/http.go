@@ -114,7 +114,10 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 	}
 	s.TranscodedOutputDir = destinationDir
 
-	req := DefaultUploadRequest
+	var (
+		req     = DefaultUploadRequest
+		reqBody string
+	)
 	if strings.HasPrefix(payload, "a valid upload vod request") {
 		req.PipelineStrategy = "fallback_external"
 		req.URL = "file://" + sourceFile.Name()
@@ -130,7 +133,7 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 				},
 			}
 		}
-		if payload, err = req.ToJSON(); err != nil {
+		if reqBody, err = req.ToJSON(); err != nil {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}
 	}
@@ -154,7 +157,7 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 		if strings.Contains(payload, "and thumbnails") {
 			req.OutputLocations[0].Outputs.Thumbnails = "enabled"
 		}
-		if payload, err = req.ToJSON(); err != nil {
+		if reqBody, err = req.ToJSON(); err != nil {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}
 	}
@@ -174,15 +177,21 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 		if strings.Contains(payload, "and thumbnails") {
 			req.OutputLocations[0].Outputs.Thumbnails = "enabled"
 		}
-		if payload, err = req.ToJSON(); err != nil {
+		if reqBody, err = req.ToJSON(); err != nil {
+			return fmt.Errorf("failed to build upload request JSON: %s", err)
+		}
+	}
+	if strings.HasSuffix(payload, "with no write permission") {
+		req.OutputLocations[0].URL = "s3+https://u:p@gateway.storjshare.io/foo/bar"
+		if reqBody, err = req.ToJSON(); err != nil {
 			return fmt.Errorf("failed to build upload request JSON: %s", err)
 		}
 	}
 	if payload == "an invalid upload vod request" {
-		payload = "{}"
+		reqBody = "{}"
 	}
 
-	r, err := http.NewRequest(http.MethodPost, baseURL+endpoint, strings.NewReader(payload))
+	r, err := http.NewRequest(http.MethodPost, baseURL+endpoint, strings.NewReader(reqBody))
 	r.Header.Set("Authorization", s.authHeaders)
 	r.Header.Set("Content-Type", "application/json")
 	for k, v := range headers {
