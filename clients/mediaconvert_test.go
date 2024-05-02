@@ -84,6 +84,23 @@ func TestReportsMediaConvertProgress(t *testing.T) {
 	require.Equal(1, reportProgressCalls)
 }
 
+func TestInputDurationCheck(t *testing.T) {
+	require := require.New(t)
+
+	awsStub := &stubMediaConvertClient{}
+	mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
+	defer cleanup()
+
+	_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
+		InputFile:         mustParseURL(t, "file://"+f.Name()),
+		HLSOutputLocation: mustParseURL(t, "s3+https://endpoint.com/bucket/1234"),
+		InputFileInfo: video.InputVideo{
+			Duration: 60_000,
+		},
+	})
+	require.EqualError(err, "input too long for mediaconvert: 60000")
+}
+
 func TestRetriesOnAccelerationError(t *testing.T) {
 	require := require.New(t)
 
