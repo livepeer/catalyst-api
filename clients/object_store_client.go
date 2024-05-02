@@ -93,20 +93,28 @@ func UploadToOSURLFields(osURL, filename string, data io.Reader, timeout time.Du
 	return nil
 }
 
-func CheckWritePermission(url string) error {
-	tmpFileName := "tmp"
-	err := UploadToOSURL(url, tmpFileName, strings.NewReader(""), time.Second)
-	if err != nil {
-		return fmt.Errorf("failed to upload tmp file for %s: %w", url, err)
+func CheckWritePermission(url *url.URL) error {
+	if url.Scheme == "memory" {
+		// delete is not supported for memory and it's only used for tests so just return here
+		return nil
 	}
 
-	storageDriver, err := drivers.ParseOSURL(url, true)
+	tmpFileName := "tmp"
+	urlString := url.String()
+
+	// check write permission by uploading a file
+	err := UploadToOSURL(urlString, tmpFileName, strings.NewReader(""), time.Second)
 	if err != nil {
-		return fmt.Errorf("failed to get OS driver for %s: %w", url, err)
+		return fmt.Errorf("failed to upload tmp file for %s: %w", log.RedactURL(urlString), err)
+	}
+
+	storageDriver, err := drivers.ParseOSURL(urlString, true)
+	if err != nil {
+		return fmt.Errorf("failed to get OS driver for %s: %w", log.RedactURL(urlString), err)
 	}
 	err = storageDriver.NewSession("").DeleteFile(context.Background(), tmpFileName)
 	if err != nil {
-		return fmt.Errorf("failed to delete tmp file for %s: %w", url, err)
+		return fmt.Errorf("failed to delete tmp file for %s: %w", log.RedactURL(urlString), err)
 	}
 	return nil
 }

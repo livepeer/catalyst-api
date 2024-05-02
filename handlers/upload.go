@@ -312,7 +312,7 @@ func toTargetURL(ol UploadVODRequestOutputLocation, reqID string) (*url.URL, err
 			log.AddContext(reqID, "w3s-url", tURL.String())
 		}
 
-		err = clients.CheckWritePermission(tURL.String())
+		err = clients.CheckWritePermission(tURL)
 		if err != nil {
 			log.LogError(reqID, "failed write permission check", err)
 			return nil, fmt.Errorf("failed write permission check for %s", tURL.String())

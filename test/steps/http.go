@@ -115,7 +115,7 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 	s.TranscodedOutputDir = destinationDir
 
 	var (
-		req     = DefaultUploadRequest
+		req     = DefaultUploadRequest()
 		reqBody string
 	)
 	if strings.HasPrefix(payload, "a valid upload vod request") {
@@ -191,6 +191,9 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 		reqBody = "{}"
 	}
 
+	if reqBody == "" {
+		reqBody = payload
+	}
 	r, err := http.NewRequest(http.MethodPost, baseURL+endpoint, strings.NewReader(reqBody))
 	r.Header.Set("Authorization", s.authHeaders)
 	r.Header.Set("Content-Type", "application/json")
