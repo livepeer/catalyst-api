@@ -27,6 +27,8 @@ const (
 	rateLimitedPollDelay   = 15 * time.Second
 	mp4OutFilePrefix       = "static"
 	mediaConvertJobTimeout = time.Hour
+	// don't run mediaconvert for inputs longer than this
+	maxMediaconvertDuration = 4 * time.Hour
 )
 
 // https://docs.aws.amazon.com/mediaconvert/latest/ug/mediaconvert_error_codes.html
@@ -117,6 +119,11 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 // It calls the input.ReportProgress function to report the progress of the job
 // during the polling loop.
 func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (outs []video.OutputVideo, err error) {
+	inputDuration := args.InputFileInfo.Duration
+	if inputDuration <= 0 || inputDuration > maxMediaconvertDuration.Seconds() {
+		return nil, fmt.Errorf("input too long for mediaconvert")
+	}
+
 	var (
 		mcArgs    = args
 		hlsTarget = args.HLSOutputLocation
