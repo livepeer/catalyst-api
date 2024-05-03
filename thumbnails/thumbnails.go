@@ -216,11 +216,14 @@ func processSegment(input string, thumbOut string) error {
 	return nil
 }
 
-var segmentPrefix = "index"
+var segmentPrefix = []string{"index", "clip_"}
 
 func thumbFilename(segmentURI string) (string, error) {
-	// segmentURI will be index%d.ts
-	index := strings.TrimSuffix(strings.TrimPrefix(segmentURI, segmentPrefix), ".ts")
+	// segmentURI will be indexX.ts or clip_X.ts
+	for _, prefix := range segmentPrefix {
+		segmentURI = strings.TrimPrefix(segmentURI, prefix)
+	}
+	index := strings.TrimSuffix(segmentURI, ".ts")
 	i, err := strconv.ParseInt(index, 10, 32)
 	if err != nil {
 		return "", fmt.Errorf("thumbFilename failed for %s: %w", segmentURI, err)
