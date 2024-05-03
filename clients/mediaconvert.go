@@ -24,8 +24,11 @@ const MAX_COPY_DIR_DURATION = 2 * time.Hour
 var pollDelay = 10 * time.Second
 
 const (
-	rateLimitedPollDelay = 15 * time.Second
-	mp4OutFilePrefix     = "static"
+	rateLimitedPollDelay   = 15 * time.Second
+	mp4OutFilePrefix       = "static"
+	mediaConvertJobTimeout = time.Hour
+	// don't run mediaconvert for inputs longer than this
+	maxMediaconvertDuration = 4 * time.Hour
 )
 
 // https://docs.aws.amazon.com/mediaconvert/latest/ug/mediaconvert_error_codes.html
@@ -61,6 +64,7 @@ type MediaConvertOptions struct {
 type AWSMediaConvertClient interface {
 	CreateJob(*mediaconvert.CreateJobInput) (*mediaconvert.CreateJobOutput, error)
 	GetJob(*mediaconvert.GetJobInput) (*mediaconvert.GetJobOutput, error)
+	CancelJob(input *mediaconvert.CancelJobInput) (*mediaconvert.CancelJobOutput, error)
 }
 
 type MediaConvert struct {
@@ -115,6 +119,11 @@ func NewMediaConvertClient(opts MediaConvertOptions) (TranscodeProvider, error) 
 // It calls the input.ReportProgress function to report the progress of the job
 // during the polling loop.
 func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (outs []video.OutputVideo, err error) {
+	inputDuration := args.InputFileInfo.Duration
+	if inputDuration <= 0 || inputDuration > maxMediaconvertDuration.Seconds() {
+		return nil, fmt.Errorf("input too long for mediaconvert: %v", inputDuration)
+	}
+
 	var (
 		mcArgs    = args
 		hlsTarget = args.HLSOutputLocation
@@ -291,6 +300,16 @@ func (mc *MediaConvert) coreAwsTranscode(ctx context.Context, args TranscodeJobA
 		case mediaconvert.JobStatusSubmitted, mediaconvert.JobStatusProgressing:
 			progress := float64(aws.Int64Value(job.Job.JobPercentComplete)) / 100
 			log.Log(args.RequestID, "Got mediaconvert job progress", "progress", progress, "status")
+
+			// cancel job if taking too long
+			if job.Job.CreatedAt != nil && time.Since(*job.Job.CreatedAt) > mediaConvertJobTimeout {
+				_, err := mc.client.CancelJob(&mediaconvert.CancelJobInput{Id: jobID})
+				if err == nil {
+					// cancel succeeded so we can return here
+					return fmt.Errorf("job took too long so was cancelled")
+				}
+				log.LogError(args.RequestID, "failed to cancel mediaconvert job", err)
+			}
 			if args.ReportProgress != nil {
 				args.ReportProgress(progress)
 			}
