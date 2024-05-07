@@ -37,7 +37,7 @@ var inputVideo = video.InputVideo{
 		},
 		AudioTrack: video.AudioTrack{},
 	}},
-	Duration: 60_000,
+	Duration: 60,
 }
 
 func TestReportsMediaConvertProgress(t *testing.T) {
@@ -82,6 +82,23 @@ func TestReportsMediaConvertProgress(t *testing.T) {
 	require.Equal(1, createJobCalls)
 	require.Equal(2, getJobCalls)
 	require.Equal(1, reportProgressCalls)
+}
+
+func TestInputDurationCheck(t *testing.T) {
+	require := require.New(t)
+
+	awsStub := &stubMediaConvertClient{}
+	mc, f, _, cleanup := setupTestMediaConvert(t, awsStub)
+	defer cleanup()
+
+	_, err := mc.Transcode(context.Background(), TranscodeJobArgs{
+		InputFile:         mustParseURL(t, "file://"+f.Name()),
+		HLSOutputLocation: mustParseURL(t, "s3+https://endpoint.com/bucket/1234"),
+		InputFileInfo: video.InputVideo{
+			Duration: 60_000,
+		},
+	})
+	require.EqualError(err, "input too long for mediaconvert: 60000")
 }
 
 func TestRetriesOnAccelerationError(t *testing.T) {
@@ -366,6 +383,11 @@ func (s *stubMediaConvertClient) GetJob(input *mediaconvert.GetJobInput) (*media
 		return nil, errors.New("not implemented")
 	}
 	return s.getJob(input)
+}
+
+func (s *stubMediaConvertClient) CancelJob(input *mediaconvert.CancelJobInput) (*mediaconvert.CancelJobOutput, error) {
+	// noop
+	return nil, nil
 }
 
 type stubS3Client struct {

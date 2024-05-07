@@ -20,7 +20,7 @@ func generateThumb(t *testing.T, filename string, out *url.URL) {
 }
 
 func TestGenerateThumbs(t *testing.T) {
-	segmentPrefix = "seg-"
+	segmentPrefix = append(segmentPrefix, "seg-")
 	wd, err := os.Getwd()
 	require.NoError(t, err)
 
@@ -87,5 +87,31 @@ keyframes_2.jpg
 		require.NotNil(t, data.FirstVideoStream())
 		require.Equal(t, 853, data.FirstVideoStream().Width)
 		require.Equal(t, 480, data.FirstVideoStream().Height)
+	}
+}
+
+func Test_thumbFilename(t *testing.T) {
+	tests := []struct {
+		name       string
+		segmentURI string
+		want       string
+	}{
+		{
+			name:       "index",
+			segmentURI: "index0.ts",
+			want:       "keyframes_0.jpg",
+		},
+		{
+			name:       "clip",
+			segmentURI: "clip_1.ts",
+			want:       "keyframes_1.jpg",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := thumbFilename(tt.segmentURI)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
 	}
 }
