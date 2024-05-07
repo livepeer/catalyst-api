@@ -258,6 +258,10 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("invalid value provided for pipeline strategy: %q", uploadVODRequest.PipelineStrategy))
 	}
 
+	if err = checkWritePermission(requestID, uploadVODRequest.ExternalID, hlsTargetURL, mp4TargetURL, fragMp4TargetURL, clipTargetURL, thumbsTargetURL); err != nil {
+		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+	}
+
 	log.Log(requestID, "Received VOD Upload request", "pipeline_strategy", uploadVODRequest.PipelineStrategy, "num_profiles", len(uploadVODRequest.Profiles), "hlsTargetURL", hlsTargetURL)
 
 	// Once we're happy with the request, do the rest of the Segmenting stage asynchronously to allow us to
@@ -312,15 +316,30 @@ func toTargetURL(ol UploadVODRequestOutputLocation, reqID string) (*url.URL, err
 			log.AddContext(reqID, "w3s-url", tURL.String())
 		}
 
-		err = clients.CheckWritePermission(tURL)
-		if err != nil {
-			log.LogError(reqID, "failed write permission check", err)
-			return nil, fmt.Errorf("failed write permission check for %s", tURL.String())
-		}
-
 		return tURL, nil
 	}
 	return nil, nil
+}
+
+func checkWritePermission(reqID, externalID string, urls ...*url.URL) error {
+	// we don't want to re-check the same locations so track them with this map
+	alreadyChecked := make(map[string]bool)
+
+	for _, u := range urls {
+		if u == nil || alreadyChecked[u.String()] {
+			continue
+		}
+
+		urlString := u.String()
+		// check write permission by uploading a file
+		err := clients.UploadToOSURL(u.String(), "metadata.json", strings.NewReader(fmt.Sprintf(`{"external_id": "%s"}`, externalID)), time.Second)
+		if err != nil {
+			log.LogError(reqID, "failed write permission check", err, "url", log.RedactURL(urlString))
+			return fmt.Errorf("failed write permission check for %s", urlString)
+		}
+		alreadyChecked[urlString] = true
+	}
+	return nil
 }
 
 func CheckSourceURLValid(sourceURL string) error {
