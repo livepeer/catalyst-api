@@ -115,7 +115,7 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 	s.TranscodedOutputDir = destinationDir
 
 	var (
-		req     = DefaultUploadRequest()
+		req     = DefaultUploadRequest(destinationDir)
 		reqBody string
 	)
 	if strings.HasPrefix(payload, "a valid upload vod request") {

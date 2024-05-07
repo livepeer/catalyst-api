@@ -10,6 +10,7 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/pipeline"
+	"github.com/livepeer/go-tools/drivers"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,6 +33,7 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer callbackServer.Close()
 
+	drivers.Testing = true
 	catalystApiHandlers := CatalystAPIHandlersCollection{VODEngine: pipeline.NewStubCoordinator()}
 	var jsonData = `{
 		"url": "http://localhost/input",

@@ -29,13 +29,13 @@ type UploadRequest struct {
 	Profiles              []video.EncodedProfile `json:"profiles,omitempty"`
 }
 
-func DefaultUploadRequest() UploadRequest {
+func DefaultUploadRequest(dest string) UploadRequest {
 	return UploadRequest{
 		CallbackURL: "http://localhost:3333/callback/123",
 		OutputLocations: []OutputLocation{
 			{
 				Type: "object_store",
-				URL:  "memory://localhost/output.m3u8",
+				URL:  "file://" + dest,
 				Outputs: Output{
 					HLS: "enabled",
 				},
