@@ -46,8 +46,9 @@ type ClusterImpl struct {
 }
 
 type Member struct {
-	Name string            `json:"name"`
-	Tags map[string]string `json:"tags"`
+	Name   string            `json:"name"`
+	Tags   map[string]string `json:"tags"`
+	Status string            `json:"status"`
 }
 
 var mediaFilter = map[string]string{"node": "media"}
@@ -111,7 +112,6 @@ func (c *ClusterImpl) Start(ctx context.Context) error {
 	memberlistConfig.AdvertisePort = aport
 	memberlistConfig.EnableCompression = true
 	memberlistConfig.SecretKey = encryptBytes
-	memberlistConfig.RetransmitMult = 1
 	memberlistConfig.LogOutput = serfLogger{}
 	serfConfig := serf.DefaultConfig()
 	serfConfig.UserEventSizeLimit = 1024
@@ -205,8 +205,9 @@ func (c *ClusterImpl) MembersFiltered(filter map[string]string, status, name str
 		}
 		if matches {
 			nodes = append(nodes, Member{
-				Name: member.Name,
-				Tags: member.Tags,
+				Name:   member.Name,
+				Tags:   member.Tags,
+				Status: member.Status.String(),
 			})
 		}
 	}
@@ -214,7 +215,7 @@ func (c *ClusterImpl) MembersFiltered(filter map[string]string, status, name str
 }
 
 func (c *ClusterImpl) Member(filter map[string]string, status, name string) (Member, error) {
-	members, err := c.MembersFiltered(filter, status, name)
+	members, err := c.MembersFiltered(filter, "", name)
 	if err != nil {
 		return Member{}, err
 	}
@@ -224,6 +225,10 @@ func (c *ClusterImpl) Member(filter map[string]string, status, name string) (Mem
 	if len(members) > 1 {
 		glog.Errorf("found multiple serf members with the same name! this shouldn't happen! name=%s count=%d", name, len(members))
 	}
+	if members[0].Status != status {
+		return Member{}, fmt.Errorf("found serf member name=%s but status=%s (wanted %s)", name, members[0].Status, status)
+	}
+
 	return members[0], nil
 }
 
