@@ -155,7 +155,8 @@ func TestGetDefaultPlaybackProfiles(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetDefaultPlaybackProfiles(tt.track)
+			// TODO: add tests for copySource
+			got, err := GetDefaultPlaybackProfiles(tt.track, false)
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
 		})
@@ -196,7 +197,7 @@ func TestGetDefaultPlaybackProfilesFixtures(t *testing.T) {
 			}
 			vt, err := iv.GetTrack(TrackTypeVideo)
 			require.NoError(t, err)
-			current, err := GetDefaultPlaybackProfiles(vt)
+			current, err := GetDefaultPlaybackProfiles(vt, false)
 			require.NoError(t, err)
 
 			if os.Getenv("REGENERATE_FIXTURES") != "" {
