@@ -72,11 +72,11 @@ func TestGenerateThumbsOffset(t *testing.T) {
 #EXT-X-MEDIA-SEQUENCE:0
 #EXT-X-TARGETDURATION:10
 #EXTINF:10.000000,
-seg-100.ts
+clip_100.ts
 #EXTINF:10.000000,
-seg-101.ts
+clip_101.ts
 #EXTINF:10.000000,
-seg-102.ts
+clip_102.ts
 #EXT-X-ENDLIST
 `
 	err = os.WriteFile(inputFile, []byte(manifest), 0644)
@@ -85,7 +85,7 @@ seg-102.ts
 	for i := 0; i < 3; i++ {
 		b, err := os.ReadFile(path.Join(wd, "..", fmt.Sprintf("test/fixtures/seg-%d.ts", i)))
 		require.NoError(t, err)
-		err = os.WriteFile(path.Join(outDir, "in", fmt.Sprintf("seg-%d.ts", i+100)), b, 0644)
+		err = os.WriteFile(path.Join(outDir, "in", fmt.Sprintf("clip_%d.ts", i+100)), b, 0644)
 		require.NoError(t, err)
 	}
 
