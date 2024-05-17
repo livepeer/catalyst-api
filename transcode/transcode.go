@@ -545,6 +545,17 @@ func transcodeSegment(
 		var r io.Reader = rc
 		if copySource {
 			sourceSegment = new(bytes.Buffer)
+
+			if len(transcodeProfiles) == 0 {
+				// This is a copy-only job, so skip transcoding with the broadcaster
+				_, err = io.Copy(sourceSegment, rc)
+				if err != nil {
+					return fmt.Errorf("failed to copy source segment: %s", err)
+				}
+				return nil
+			}
+
+			// Otherwise if there are profiles to transcode, then only tee the source segment to the buffer
 			r = io.TeeReader(rc, sourceSegment)
 		}
 
