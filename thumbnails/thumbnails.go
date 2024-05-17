@@ -16,6 +16,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/clients"
+	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/go-tools/drivers"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 	"golang.org/x/sync/errgroup"
@@ -69,11 +70,19 @@ func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
 	if err != nil {
 		return err
 	}
+	segments := mediaPlaylist.GetAllSegments()
+	if len(segments) < 1 {
+		return fmt.Errorf("no segments found for %s", log.RedactURL(input))
+	}
+	segmentOffset, err := segmentIndex(path.Base(segments[0].URI))
+	if err != nil {
+		return fmt.Errorf("failed to get segment index: %w", err)
+	}
 
 	var currentTime time.Time
 	// loop through each segment, generate a vtt entry for it
 	for _, segment := range mediaPlaylist.GetAllSegments() {
-		filename, err := thumbFilename(path.Base(segment.URI))
+		filename, err := thumbFilename(path.Base(segment.URI), segmentOffset)
 		if err != nil {
 			return err
 		}
@@ -106,7 +115,7 @@ func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
 	return nil
 }
 
-func GenerateThumb(segmentURI string, input []byte, output *url.URL) error {
+func GenerateThumb(segmentURI string, input []byte, output *url.URL, segmentOffset int64) error {
 	tempDir, err := os.MkdirTemp(os.TempDir(), "thumbs-*")
 	if err != nil {
 		return fmt.Errorf("failed to make temp dir: %w", err)
@@ -119,7 +128,7 @@ func GenerateThumb(segmentURI string, input []byte, output *url.URL) error {
 		return err
 	}
 
-	filename, err := thumbFilename(segmentURI)
+	filename, err := thumbFilename(segmentURI, segmentOffset)
 	if err != nil {
 		return err
 	}
@@ -159,11 +168,19 @@ func GenerateThumbsFromManifest(requestID, input string, output *url.URL) error 
 	if err != nil {
 		return err
 	}
+	segments := mediaPlaylist.GetAllSegments()
+	if len(segments) < 1 {
+		return fmt.Errorf("no segments found for %s", log.RedactURL(input))
+	}
+	segmentOffset, err := segmentIndex(path.Base(segments[0].URI))
+	if err != nil {
+		return fmt.Errorf("failed to get segment index: %w", err)
+	}
 
 	// parallelise the thumb uploads
 	uploadGroup, _ := errgroup.WithContext(context.Background())
 	uploadGroup.SetLimit(5)
-	for _, segment := range mediaPlaylist.GetAllSegments() {
+	for _, segment := range segments {
 		segment := segment
 		uploadGroup.Go(func() error {
 			segURL := inputURL.JoinPath("..", segment.URI)
@@ -185,7 +202,7 @@ func GenerateThumbsFromManifest(requestID, input string, output *url.URL) error 
 			}
 
 			// generate thumbnail for the segment
-			return GenerateThumb(path.Base(segment.URI), bs, output)
+			return GenerateThumb(path.Base(segment.URI), bs, output, segmentOffset)
 		})
 	}
 	return uploadGroup.Wait()
@@ -218,15 +235,23 @@ func processSegment(input string, thumbOut string) error {
 
 var segmentPrefix = []string{"index", "clip_"}
 
-func thumbFilename(segmentURI string) (string, error) {
+func segmentIndex(segmentURI string) (int64, error) {
 	// segmentURI will be indexX.ts or clip_X.ts
 	for _, prefix := range segmentPrefix {
 		segmentURI = strings.TrimPrefix(segmentURI, prefix)
 	}
 	index := strings.TrimSuffix(segmentURI, ".ts")
-	i, err := strconv.ParseInt(index, 10, 32)
+	i, err := strconv.ParseInt(index, 10, 64)
 	if err != nil {
-		return "", fmt.Errorf("thumbFilename failed for %s: %w", segmentURI, err)
+		return 0, fmt.Errorf("thumbFilename failed for %s: %w", segmentURI, err)
 	}
-	return fmt.Sprintf("keyframes_%d.jpg", i), nil
+	return i, nil
+}
+
+func thumbFilename(segmentURI string, segmentOffset int64) (string, error) {
+	i, err := segmentIndex(segmentURI)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("keyframes_%d.jpg", i-segmentOffset), nil
 }

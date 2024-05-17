@@ -89,7 +89,7 @@ func (h *HandlersCollection) NewFile() httprouter.Handle {
 				if job.ThumbnailsTargetURL == nil {
 					return
 				}
-				if err := thumbnails.GenerateThumb(filename, content, job.ThumbnailsTargetURL); err != nil {
+				if err := thumbnails.GenerateThumb(filename, content, job.ThumbnailsTargetURL, 0); err != nil {
 					log.LogError(job.RequestID, "generate thumb failed", err, "in", path.Join(targetURLBase, filename), "out", job.ThumbnailsTargetURL)
 				}
 			}()
