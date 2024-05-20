@@ -16,7 +16,6 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/clients"
-	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/go-tools/drivers"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 	"golang.org/x/sync/errgroup"
@@ -56,6 +55,18 @@ func getMediaManifest(requestID string, input string) (*m3u8.MediaPlaylist, erro
 	return mediaPlaylist, nil
 }
 
+func getSegmentOffset(mediaPlaylist *m3u8.MediaPlaylist) (int64, error) {
+	segments := mediaPlaylist.GetAllSegments()
+	if len(segments) < 1 {
+		return 0, fmt.Errorf("no segments found for")
+	}
+	segmentOffset, err := segmentIndex(path.Base(segments[0].URI))
+	if err != nil {
+		return 0, fmt.Errorf("failed to get segment index: %w", err)
+	}
+	return segmentOffset, nil
+}
+
 func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
 	// download and parse the manifest
 	mediaPlaylist, err := getMediaManifest(requestID, input)
@@ -70,13 +81,9 @@ func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
 	if err != nil {
 		return err
 	}
-	segments := mediaPlaylist.GetAllSegments()
-	if len(segments) < 1 {
-		return fmt.Errorf("no segments found for %s", log.RedactURL(input))
-	}
-	segmentOffset, err := segmentIndex(path.Base(segments[0].URI))
+	segmentOffset, err := getSegmentOffset(mediaPlaylist)
 	if err != nil {
-		return fmt.Errorf("failed to get segment index: %w", err)
+		return err
 	}
 
 	var currentTime time.Time
@@ -168,19 +175,15 @@ func GenerateThumbsFromManifest(requestID, input string, output *url.URL) error 
 	if err != nil {
 		return err
 	}
-	segments := mediaPlaylist.GetAllSegments()
-	if len(segments) < 1 {
-		return fmt.Errorf("no segments found for %s", log.RedactURL(input))
-	}
-	segmentOffset, err := segmentIndex(path.Base(segments[0].URI))
+	segmentOffset, err := getSegmentOffset(mediaPlaylist)
 	if err != nil {
-		return fmt.Errorf("failed to get segment index: %w", err)
+		return err
 	}
 
 	// parallelise the thumb uploads
 	uploadGroup, _ := errgroup.WithContext(context.Background())
 	uploadGroup.SetLimit(5)
-	for _, segment := range segments {
+	for _, segment := range mediaPlaylist.GetAllSegments() {
 		segment := segment
 		uploadGroup.Go(func() error {
 			segURL := inputURL.JoinPath("..", segment.URI)
