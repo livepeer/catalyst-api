@@ -27,7 +27,7 @@ const MaxSegmentSizeSecs = 20
 // Separate limits are set for the the maximum number of regular VOD jobs and clipping
 // VOD jobs. The limits are somewhat arbitrary and will need to be tweaked based on
 // requirements.
-var MaxInFlightJobs int = 8
+var MaxInFlightJobs int = 5
 var MaxInFlightClipJobs int = 20
 
 // How long to try writing a single segment to storage for before giving up
