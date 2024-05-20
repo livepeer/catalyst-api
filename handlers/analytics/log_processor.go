@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"github.com/golang/glog"
+	census "github.com/livepeer/catalyst-api/mapic/metrics"
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl/plain"
 	"time"
@@ -138,6 +139,8 @@ func (p *LogProcessor) processLog(d LogData) {
 }
 
 func (p *LogProcessor) sendEvents() {
+	defer p.logWriteMetrics()
+
 	if len(p.logs) > 0 {
 		glog.Infof("sending analytics logs, count=%d", len(p.logs))
 	} else {
@@ -166,6 +169,14 @@ func (p *LogProcessor) sendEvents() {
 
 	err := p.writer.WriteMessages(context.Background(), msgs...)
 	if err != nil {
+		census.IncLogProcessorWriteErrors()
 		glog.Errorf("error while sending analytics log to Kafka, err=%v", err)
 	}
+}
+
+func (p *LogProcessor) logWriteMetrics() {
+	stats := p.writer.Stats()
+	census.KafkaWriteErrors(stats.Errors)
+	census.KafkaWriteMessages(stats.Messages)
+	census.KafkaWriteAvgTime(stats.WriteTime.Avg.Seconds())
 }

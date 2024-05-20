@@ -46,6 +46,11 @@ type (
 		mConsulErrors  *stats.Int64Measure
 		mConsulLatency *stats.Float64Measure
 
+		mLogProcessorWriteErrors *stats.Int64Measure
+		mKafkaWriteErrors        *stats.Int64Measure
+		mKafkaWriteMessages      *stats.Int64Measure
+		mKafkaWriteAvgTime       *stats.Float64Measure
+
 		activeStreams int64
 		lock          sync.Mutex
 
@@ -95,6 +100,10 @@ func InitCensus(nodeID, version, namespace string) {
 
 	Census.mMultistreamUsageMb = stats.Float64("multistream_usage_megabytes", "Total number of megabytes multistreamed, or pushed, to external services", "megabyte")
 	Census.mMultistreamUsageMin = stats.Float64("multistream_usage_minutes", "Total minutes multistreamed, or pushed, to external services", "min")
+
+	Census.mKafkaWriteErrors = stats.Int64("kafka_write_errors", "Number of errors during Kafka write", "tot")
+	Census.mKafkaWriteMessages = stats.Int64("kafka_write_messages", "Number of messages in the last Kafka write", "tot")
+	Census.mKafkaWriteAvgTime = stats.Float64("kafka_write_avg_time", "Average Kafka write time", "sec")
 
 	glog.Infof("Compiler: %s Arch %s OS %s Go version %s", runtime.Compiler, runtime.GOARCH, runtime.GOOS, runtime.Version())
 	glog.Infof("Streamtester version: %s", version)
@@ -225,6 +234,34 @@ func InitCensus(nodeID, version, namespace string) {
 			TagKeys:     append([]tag.Key{Census.kType}, baseTags...),
 			Aggregation: view.Distribution(0, 0.050, 0.100, .250, .500, .750, 1.000, 1.250, 1.500, 2.000, 2.500, 3.000, 3.500, 4.000, 4.500, 5.000, 10.000, 20.0, 30.0, 60.0),
 		},
+		{
+			Name:        "log_processor_write_errors_count",
+			Measure:     Census.mLogProcessorWriteErrors,
+			Description: "Number of log processors errors while writing to Kafka",
+			TagKeys:     baseTags,
+			Aggregation: view.Count(),
+		},
+		{
+			Name:        "kafka_write_errors",
+			Measure:     Census.mKafkaWriteErrors,
+			Description: "Number of errors during Kafka write",
+			TagKeys:     baseTags,
+			Aggregation: view.Sum(),
+		},
+		{
+			Name:        "kafka_write_messages",
+			Measure:     Census.mKafkaWriteMessages,
+			Description: "Number of messages in the last Kafka write",
+			TagKeys:     baseTags,
+			Aggregation: view.Sum(),
+		},
+		{
+			Name:        "kafka_write_avg_time",
+			Measure:     Census.mKafkaWriteAvgTime,
+			Description: "Average Kafka write time",
+			TagKeys:     baseTags,
+			Aggregation: view.Sum(),
+		},
 	}
 
 	// Register the views
@@ -284,6 +321,22 @@ func IncMultistreamTime(mediaTime time.Duration, manifestID string) {
 		return
 	}
 	stats.Record(ctx, Census.mMultistreamUsageMin.M(mediaTime.Minutes()))
+}
+
+func IncLogProcessorWriteErrors() {
+	stats.Record(Census.ctx, Census.mLogProcessorWriteErrors.M(1))
+}
+
+func KafkaWriteErrors(errors int64) {
+	stats.Record(Census.ctx, Census.mKafkaWriteErrors.M(errors))
+}
+
+func KafkaWriteMessages(messages int64) {
+	stats.Record(Census.ctx, Census.mKafkaWriteMessages.M(messages))
+}
+
+func KafkaWriteAvgTime(avgTime float64) {
+	stats.Record(Census.ctx, Census.mKafkaWriteAvgTime.M(avgTime))
 }
 
 // CurrentStreams set number of active streams
