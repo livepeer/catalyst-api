@@ -101,6 +101,7 @@ func InitCensus(nodeID, version, namespace string) {
 	Census.mMultistreamUsageMb = stats.Float64("multistream_usage_megabytes", "Total number of megabytes multistreamed, or pushed, to external services", "megabyte")
 	Census.mMultistreamUsageMin = stats.Float64("multistream_usage_minutes", "Total minutes multistreamed, or pushed, to external services", "min")
 
+	Census.mLogProcessorWriteErrors = stats.Int64("log_processor_write_errors_count", "Number of log processors errors while writing to Kafka", "tot")
 	Census.mKafkaWriteErrors = stats.Int64("kafka_write_errors", "Number of errors during Kafka write", "tot")
 	Census.mKafkaWriteMessages = stats.Int64("kafka_write_messages", "Number of messages in the last Kafka write", "tot")
 	Census.mKafkaWriteAvgTime = stats.Float64("kafka_write_avg_time", "Average Kafka write time", "sec")
