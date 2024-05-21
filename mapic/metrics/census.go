@@ -47,6 +47,7 @@ type (
 		mConsulLatency *stats.Float64Measure
 
 		mLogProcessorWriteErrors *stats.Int64Measure
+		mAnalyticsLogErrors      *stats.Int64Measure
 		mKafkaWriteErrors        *stats.Int64Measure
 		mKafkaWriteMessages      *stats.Int64Measure
 		mKafkaWriteAvgTime       *stats.Float64Measure
@@ -102,6 +103,7 @@ func InitCensus(nodeID, version, namespace string) {
 	Census.mMultistreamUsageMin = stats.Float64("multistream_usage_minutes", "Total minutes multistreamed, or pushed, to external services", "min")
 
 	Census.mLogProcessorWriteErrors = stats.Int64("log_processor_write_errors_count", "Number of log processors errors while writing to Kafka", "tot")
+	Census.mAnalyticsLogErrors = stats.Int64("analytics_log_errors", "Number of errors while posting analytics log", "tot")
 	Census.mKafkaWriteErrors = stats.Int64("kafka_write_errors", "Number of errors during Kafka write", "tot")
 	Census.mKafkaWriteMessages = stats.Int64("kafka_write_messages", "Number of messages in the last Kafka write", "tot")
 	Census.mKafkaWriteAvgTime = stats.Float64("kafka_write_avg_time", "Average Kafka write time", "sec")
@@ -243,6 +245,13 @@ func InitCensus(nodeID, version, namespace string) {
 			Aggregation: view.Count(),
 		},
 		{
+			Name:        "analytics_log_errors",
+			Measure:     Census.mAnalyticsLogErrors,
+			Description: "Number of errors while posting analytics log",
+			TagKeys:     baseTags,
+			Aggregation: view.Count(),
+		},
+		{
 			Name:        "kafka_write_errors",
 			Measure:     Census.mKafkaWriteErrors,
 			Description: "Number of errors during Kafka write",
@@ -326,6 +335,10 @@ func IncMultistreamTime(mediaTime time.Duration, manifestID string) {
 
 func IncLogProcessorWriteErrors() {
 	stats.Record(Census.ctx, Census.mLogProcessorWriteErrors.M(1))
+}
+
+func IncAnalyticsLogErrors() {
+	stats.Record(Census.ctx, Census.mAnalyticsLogErrors.M(1))
 }
 
 func KafkaWriteErrors(errors int64) {
