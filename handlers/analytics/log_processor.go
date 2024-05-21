@@ -179,4 +179,5 @@ func (p *LogProcessor) logWriteMetrics() {
 	metrics.Metrics.AnalyticsMetrics.KafkaWriteErrors.Add(float64(stats.Errors))
 	metrics.Metrics.AnalyticsMetrics.KafkaWriteMessages.Add(float64(stats.Messages))
 	metrics.Metrics.AnalyticsMetrics.KafkaWriteAvgTime.Observe(stats.WriteTime.Avg.Seconds())
+	metrics.Metrics.AnalyticsMetrics.KafkaWriteRetries.Add(float64(stats.Retries))
 }

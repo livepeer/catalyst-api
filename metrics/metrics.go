@@ -26,6 +26,7 @@ type AnalyticsMetrics struct {
 	AnalyticsLogsErrors     prometheus.Counter
 	KafkaWriteErrors        prometheus.Counter
 	KafkaWriteMessages      prometheus.Counter
+	KafkaWriteRetries       prometheus.Counter
 	KafkaWriteAvgTime       prometheus.Summary
 }
 
@@ -231,6 +232,10 @@ func NewMetrics() *CatalystAPIMetrics {
 			KafkaWriteMessages: promauto.NewCounter(prometheus.CounterOpts{
 				Name: "kafka_write_messages",
 				Help: "Number of messages written to Kafka",
+			}),
+			KafkaWriteRetries: promauto.NewCounter(prometheus.CounterOpts{
+				Name: "kafka_write_retries",
+				Help: "Number of retries while writing to Kafka",
 			}),
 			KafkaWriteAvgTime: promauto.NewSummary(prometheus.SummaryOpts{
 				Name: "kafka_write_avg_time",
