@@ -3,6 +3,7 @@ package accesscontrol
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -257,7 +258,12 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 	if accessKey != "" {
 		acReq.Type = "accessKey"
 		acReq.AccessKey = accessKey
-		cacheKey = "accessKey_" + accessKey
+		hashCacheKey, err := ac.ProduceHashCacheKey(acReq)
+		if err != nil {
+			glog.Errorf("Error producing hash key: %v", err)
+			return false, err
+		}
+		cacheKey = "accessKey_" + hashCacheKey
 	} else if jwt != "" {
 		for _, blocked := range ac.blockedJWTs {
 			if jwt == blocked {
@@ -272,9 +278,13 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 			return false, nil
 		}
 		acReq.Pub = pub
-
 		acReq.Type = "jwt"
-		cacheKey = "jwtPubKey_" + acReq.Pub
+		hashCacheKey, err := ac.ProduceHashCacheKey(acReq)
+		if err != nil {
+			glog.Errorf("Error producing hash key: %v", err)
+			return false, err
+		}
+		cacheKey = "jwtPubKey_" + hashCacheKey
 	}
 
 	body, err := json.Marshal(acReq)
@@ -318,6 +328,19 @@ func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(ctx cont
 	ac.mutex.RUnlock()
 
 	return entry.Allow, nil
+}
+
+func (ac *AccessControlHandlersCollection) ProduceHashCacheKey(cachePayload PlaybackAccessControlRequest) (string, error) {
+	jsonData, err := json.Marshal(cachePayload)
+	if err != nil {
+		fmt.Println("Error marshalling JSON:", err)
+		return "", err
+	}
+
+	// Compute the SHA-256 hash of the cachePayload
+	hash := sha256.Sum256(jsonData)
+	hashHex := fmt.Sprintf("%x", hash)
+	return hashHex, nil
 }
 
 func isExpired(entry *PlaybackAccessControlEntry) bool {
