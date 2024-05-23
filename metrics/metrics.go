@@ -21,6 +21,15 @@ type VODPipelineMetrics struct {
 	SourceDuration     *prometheus.SummaryVec
 }
 
+type AnalyticsMetrics struct {
+	LogProcessorWriteErrors prometheus.Counter
+	AnalyticsLogsErrors     prometheus.Counter
+	KafkaWriteErrors        prometheus.Counter
+	KafkaWriteMessages      prometheus.Counter
+	KafkaWriteRetries       prometheus.Counter
+	KafkaWriteAvgTime       prometheus.Summary
+}
+
 type CatalystAPIMetrics struct {
 	Version                         *prometheus.CounterVec
 	UploadVODRequestCount           prometheus.Counter
@@ -44,6 +53,8 @@ type CatalystAPIMetrics struct {
 	ObjectStoreClient       ClientMetrics
 
 	VODPipelineMetrics VODPipelineMetrics
+
+	AnalyticsMetrics AnalyticsMetrics
 }
 
 var vodLabels = []string{"source_codec_video", "source_codec_audio", "pipeline", "catalyst_region", "num_profiles", "stage", "version", "is_fallback_mode", "is_livepeer_supported", "is_clip", "is_thumbs"}
@@ -203,6 +214,33 @@ func NewMetrics() *CatalystAPIMetrics {
 				Name: "vod_source_duration",
 				Help: "Duration of the source asset",
 			}, vodLabels),
+		},
+
+		AnalyticsMetrics: AnalyticsMetrics{
+			LogProcessorWriteErrors: promauto.NewCounter(prometheus.CounterOpts{
+				Name: "log_processor_write_errors",
+				Help: "Number of log processors errors while writing to Kafka",
+			}),
+			AnalyticsLogsErrors: promauto.NewCounter(prometheus.CounterOpts{
+				Name: "analytics_logs_errors",
+				Help: "Number of errors while processing analytics logs",
+			}),
+			KafkaWriteErrors: promauto.NewCounter(prometheus.CounterOpts{
+				Name: "kafka_write_errors",
+				Help: "Number of errors while writing to Kafka",
+			}),
+			KafkaWriteMessages: promauto.NewCounter(prometheus.CounterOpts{
+				Name: "kafka_write_messages",
+				Help: "Number of messages written to Kafka",
+			}),
+			KafkaWriteRetries: promauto.NewCounter(prometheus.CounterOpts{
+				Name: "kafka_write_retries",
+				Help: "Number of retries while writing to Kafka",
+			}),
+			KafkaWriteAvgTime: promauto.NewSummary(prometheus.SummaryOpts{
+				Name: "kafka_write_avg_time",
+				Help: "Average time taken to write to Kafka",
+			}),
 		},
 	}
 

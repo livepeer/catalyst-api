@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"github.com/golang/glog"
+	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl/plain"
 	"time"
@@ -138,6 +139,8 @@ func (p *LogProcessor) processLog(d LogData) {
 }
 
 func (p *LogProcessor) sendEvents() {
+	defer p.logWriteMetrics()
+
 	if len(p.logs) > 0 {
 		glog.Infof("sending analytics logs, count=%d", len(p.logs))
 	} else {
@@ -166,6 +169,15 @@ func (p *LogProcessor) sendEvents() {
 
 	err := p.writer.WriteMessages(context.Background(), msgs...)
 	if err != nil {
+		metrics.Metrics.AnalyticsMetrics.LogProcessorWriteErrors.Inc()
 		glog.Errorf("error while sending analytics log to Kafka, err=%v", err)
 	}
+}
+
+func (p *LogProcessor) logWriteMetrics() {
+	stats := p.writer.Stats()
+	metrics.Metrics.AnalyticsMetrics.KafkaWriteErrors.Add(float64(stats.Errors))
+	metrics.Metrics.AnalyticsMetrics.KafkaWriteMessages.Add(float64(stats.Messages))
+	metrics.Metrics.AnalyticsMetrics.KafkaWriteAvgTime.Observe(stats.WriteTime.Avg.Seconds())
+	metrics.Metrics.AnalyticsMetrics.KafkaWriteRetries.Add(float64(stats.Retries))
 }

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/ua-parser/uap-go/uaparser"
 	"io"
 	"net"
@@ -115,6 +116,7 @@ func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 		}
 		extData, err := c.extFetcher.Fetch(log.PlaybackID)
 		if err != nil {
+			metrics.Metrics.AnalyticsMetrics.AnalyticsLogsErrors.Inc()
 			glog.Warning("error enriching analytics log with external data, err=%v", err)
 			cerrors.WriteHTTPBadRequest(w, "Invalid playback_id", nil)
 		}
