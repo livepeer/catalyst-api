@@ -66,6 +66,7 @@ type LogData struct {
 	Player                string       `json:"player"`
 	Version               string       `json:"version"`
 	UserID                string       `json:"user_id"`
+	ProjectID             string       `json:"project_id"`
 	DStorageURL           string       `json:"d_storage_url"`
 	Source                string       `json:"source"`
 	CreatorID             string       `json:"creator_id"`

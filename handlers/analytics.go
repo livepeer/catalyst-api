@@ -220,6 +220,7 @@ func (c *AnalyticsHandlersCollection) toAnalyticsData(log *AnalyticsLog, geo Ana
 			Player:                log.Player,
 			Version:               log.Version,
 			UserID:                extData.UserID,
+			ProjectID:             extData.ProjectID,
 			DStorageURL:           extData.DStorageURL,
 			Source:                extData.SourceType,
 			CreatorID:             extData.CreatorID,
