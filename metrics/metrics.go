@@ -22,6 +22,9 @@ type VODPipelineMetrics struct {
 }
 
 type AnalyticsMetrics struct {
+	AnalyticsLogsPlaytimeMs   *prometheus.SummaryVec
+	AnalyticsLogsBufferTimeMs *prometheus.SummaryVec
+
 	LogProcessorWriteErrors prometheus.Counter
 	AnalyticsLogsErrors     prometheus.Counter
 	KafkaWriteErrors        prometheus.Counter
@@ -217,6 +220,14 @@ func NewMetrics() *CatalystAPIMetrics {
 		},
 
 		AnalyticsMetrics: AnalyticsMetrics{
+			AnalyticsLogsPlaytimeMs: promauto.NewSummaryVec(prometheus.SummaryOpts{
+				Name: "analytics_logs_playtime_ms",
+				Help: "Playtime in milliseconds gathered from Analytics Logs",
+			}, []string{"playback_id", "user_id", "continent"}),
+			AnalyticsLogsBufferTimeMs: promauto.NewSummaryVec(prometheus.SummaryOpts{
+				Name: "analytics_logs_buffer_time_ms",
+				Help: "Buffer time in milliseconds gathered from Analytics Logs",
+			}, []string{"playback_id", "user_id", "continent"}),
 			LogProcessorWriteErrors: promauto.NewCounter(prometheus.CounterOpts{
 				Name: "log_processor_write_errors",
 				Help: "Number of log processors errors while writing to Kafka",
