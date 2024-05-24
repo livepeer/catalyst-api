@@ -145,10 +145,10 @@ func updateMetrics(d LogData) {
 		return
 	}
 	metrics.Metrics.AnalyticsMetrics.AnalyticsLogsPlaytimeMs.
-		WithLabelValues(d.PlaybackID, d.UserID, d.PlaybackContinentName).
+		WithLabelValues(d.PlaybackID, d.UserID, d.ProjectID, d.PlaybackContinentName).
 		Observe(float64(*d.EventData.TimePlayingMS))
 	metrics.Metrics.AnalyticsMetrics.AnalyticsLogsBufferTimeMs.
-		WithLabelValues(d.PlaybackID, d.UserID, d.PlaybackContinentName).
+		WithLabelValues(d.PlaybackID, d.UserID, d.ProjectID, d.PlaybackContinentName).
 		Observe(float64(*d.EventData.TimeStalledMS + *d.EventData.TimeWaitingMS))
 }
 
