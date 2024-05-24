@@ -542,21 +542,13 @@ func transcodeSegment(
 		}
 		defer rc.Close()
 
-		var r io.Reader = rc
-		if copySource {
-			sourceSegment = new(bytes.Buffer)
-
-			if len(transcodeProfiles) == 0 {
-				// This is a copy-only job, so skip transcoding with the broadcaster
-				_, err = io.Copy(sourceSegment, rc)
-				if err != nil {
-					return fmt.Errorf("failed to copy source segment: %s", err)
-				}
-				return nil
-			}
-
-			// Otherwise if there are profiles to transcode, then only tee the source segment to the buffer
-			r = io.TeeReader(rc, sourceSegment)
+		var r io.Reader
+		r, sourceSegment, err = withPipedSource(rc, copySource, transcodeProfiles)
+		if err != nil {
+			return err
+		} else if r == nil {
+			// In this case the pipe already consumed the input (no transcode needed), so source segment is already copied. Just return.
+			return nil
 		}
 
 		// If an AccessToken is provided via the request for transcode, then use remote Broadcasters.
@@ -664,6 +656,29 @@ func transcodeSegment(
 	}
 
 	return nil
+}
+
+// withPipedSource is used to duplicate the reading of the `in` reader in case we need a copy of the contents. If
+// `copySource` is false then the `in` reader is returned as is. Otherwise, then a non-nill buffer will be returned and
+// filled after the returned reader is consumed (if present). If no reader is returned (empty transcodeProfiles) the
+// buffer will be already filled with the contents of the `in` reader.
+func withPipedSource(in io.Reader, copySource bool, transcodeProfiles []video.EncodedProfile) (io.Reader, *bytes.Buffer, error) {
+	if !copySource {
+		return in, nil, nil
+	}
+
+	source := new(bytes.Buffer)
+	if len(transcodeProfiles) == 0 {
+		// This is a copy-only job, so skip transcoding with the broadcaster
+		_, err := io.Copy(source, in)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to copy source segment: %s", err)
+		}
+		return nil, source, nil
+	}
+
+	// Otherwise if there are profiles to transcode, then tee the source segment to the buffer
+	return io.TeeReader(in, source), source, nil
 }
 
 func getProfileIndex(transcodeProfiles []video.EncodedProfile, profile string) int {
