@@ -154,7 +154,7 @@ func GenerateSingleProfileWithTargetParams(videoTrack InputTrack, videoProfile E
 func GetSourceCopyProfile(video InputTrack) EncodedProfile {
 	return EncodedProfile{
 		Copy:    true,
-		Name:    "source",
+		Name:    strconv.FormatInt(video.Height, 10) + "p0",
 		Bitrate: video.Bitrate,
 		FPS:     0,
 		Width:   video.Width,
