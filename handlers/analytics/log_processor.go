@@ -135,7 +135,20 @@ func (lp *LogProcessor) Start(ch chan LogData) {
 }
 
 func (p *LogProcessor) processLog(d LogData) {
+	updateMetrics(d)
 	p.logs = append(p.logs, d)
+}
+
+func updateMetrics(d LogData) {
+	if d.EventType != "heartbeat" {
+		return
+	}
+	metrics.Metrics.AnalyticsMetrics.AnalyticsLogsPlaytimeMs.
+		WithLabelValues(d.PlaybackID, d.UserID, d.PlaybackContinentName).
+		Observe(float64(*d.EventData.TimePlayingMS))
+	metrics.Metrics.AnalyticsMetrics.AnalyticsLogsBufferTimeMs.
+		WithLabelValues(d.PlaybackID, d.UserID, d.PlaybackContinentName).
+		Observe(float64(*d.EventData.TimeStalledMS + *d.EventData.TimeWaitingMS))
 }
 
 func (p *LogProcessor) sendEvents() {
