@@ -277,12 +277,16 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string, retryCo
 		return "", nil
 	}
 
-	if stream.PullRegion != "" && c.Config.OwnRegion != stream.PullRegion && retryCount < streamSourceMaxWrongRegionRetries {
-		if retryCount == 0 {
-			glog.Infof("Stream pull requested in the incorrect region, sending playback request to the correct region, playbackID=%s, region=%s", playbackID, stream.PullRegion)
-			c.sendPlaybackRequestAsync(playbackID, stream.PullRegion)
+	if stream.PullRegion != "" && c.Config.OwnRegion != stream.PullRegion {
+		if retryCount < streamSourceMaxWrongRegionRetries {
+			if retryCount == 0 {
+				glog.Infof("Stream pull requested in the incorrect region, sending playback request to the correct region, playbackID=%s, region=%s", playbackID, stream.PullRegion)
+				c.sendPlaybackRequestAsync(playbackID, stream.PullRegion)
+			}
+			return "", errPullWrongRegion
+		} else {
+			glog.Infof("Stream pull requested in the incorrect region, retries exceeded, playbackID=%s, region=%s", playbackID, stream.PullRegion)
 		}
-		return "", errPullWrongRegion
 	}
 
 	glog.Infof("LockPull for stream %v", playbackID)
