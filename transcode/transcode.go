@@ -597,12 +597,53 @@ func transcodeSegment(
 	duration := time.Since(start)
 	metrics.Metrics.TranscodeSegmentDurationSec.Observe(duration.Seconds())
 
+	err = processTranscodeResult(segment, transcodeRequest, sourceSegment, tr, encodedProfiles, targetOSURL, transcodedStats, renditionList, segmentChannel)
+	if err != nil {
+		return fmt.Errorf("failed to process transcode result: %w", err)
+	}
+
+	return nil
+}
+
+// withPipedSource is used to duplicate the reading of the `in` reader in case we need a copy of the contents. If
+// `copySource` is false then the `in` reader is returned as is. Otherwise, then a non-nill buffer will be returned and
+// filled after the returned reader is consumed (if present). If no reader is returned (empty transcodeProfiles) the
+// buffer will be already filled with the contents of the `in` reader.
+func withPipedSource(in io.Reader, copySource bool, transcodeProfiles []video.EncodedProfile) (io.Reader, *bytes.Buffer, error) {
+	if !copySource {
+		return in, nil, nil
+	}
+
+	source := new(bytes.Buffer)
+	if len(transcodeProfiles) == 0 {
+		// This is a copy-only job, so skip transcoding with the broadcaster
+		_, err := io.Copy(source, in)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to copy source segment: %s", err)
+		}
+		return nil, source, nil
+	}
+
+	// Otherwise if there are profiles to transcode, then tee the source segment to the buffer
+	return io.TeeReader(in, source), source, nil
+}
+
+func processTranscodeResult(
+	segment segmentInfo,
+	transcodeRequest TranscodeSegmentRequest,
+	sourceSegment *bytes.Buffer,
+	transcodeResult clients.TranscodeResult,
+	encodedProfiles []video.EncodedProfile,
+	targetOSURL *url.URL,
+	transcodedStats []*video.RenditionStats,
+	renditionList *video.TRenditionList,
+	segmentChannel chan<- video.TranscodedSegmentInfo) error {
 	for renditionIndex, profile := range encodedProfiles {
 		var mediaData []byte
 		if profile.Copy {
 			mediaData = sourceSegment.Bytes()
 		} else {
-			for _, transcodedSegment := range tr.Renditions {
+			for _, transcodedSegment := range transcodeResult.Renditions {
 				if transcodedSegment.Name == profile.Name {
 					mediaData = transcodedSegment.MediaData
 					break
@@ -656,29 +697,6 @@ func transcodeSegment(
 	}
 
 	return nil
-}
-
-// withPipedSource is used to duplicate the reading of the `in` reader in case we need a copy of the contents. If
-// `copySource` is false then the `in` reader is returned as is. Otherwise, then a non-nill buffer will be returned and
-// filled after the returned reader is consumed (if present). If no reader is returned (empty transcodeProfiles) the
-// buffer will be already filled with the contents of the `in` reader.
-func withPipedSource(in io.Reader, copySource bool, transcodeProfiles []video.EncodedProfile) (io.Reader, *bytes.Buffer, error) {
-	if !copySource {
-		return in, nil, nil
-	}
-
-	source := new(bytes.Buffer)
-	if len(transcodeProfiles) == 0 {
-		// This is a copy-only job, so skip transcoding with the broadcaster
-		_, err := io.Copy(source, in)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to copy source segment: %s", err)
-		}
-		return nil, source, nil
-	}
-
-	// Otherwise if there are profiles to transcode, then tee the source segment to the buffer
-	return io.TeeReader(in, source), source, nil
 }
 
 func getProfileIndex(transcodeProfiles []video.EncodedProfile, profile string) int {
