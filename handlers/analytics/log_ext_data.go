@@ -14,6 +14,7 @@ type IExternalDataFetcher interface {
 
 type ExternalData struct {
 	UserID      string
+	ProjectID   string
 	DStorageURL string
 	SourceType  string
 	CreatorID   string
@@ -79,6 +80,7 @@ func (e *ExternalDataFetcher) extDataFromStream(playbackID string, stream *api.S
 	extData := ExternalData{
 		SourceType: "stream",
 		UserID:     stream.UserID,
+		ProjectID:  stream.ProjectID,
 		CreatorID:  toCreatorID(stream.CreatorID),
 	}
 	e.cacheExtData(playbackID, extData)
@@ -89,6 +91,7 @@ func (e *ExternalDataFetcher) extDataFromAsset(playbackID string, asset *api.Ass
 	extData := ExternalData{
 		SourceType:  "asset",
 		UserID:      asset.UserID,
+		ProjectID:   asset.ProjectID,
 		DStorageURL: toDStorageURL(asset.Storage.IPFS),
 		CreatorID:   toCreatorID(asset.CreatorID),
 	}

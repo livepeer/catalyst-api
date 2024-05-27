@@ -223,11 +223,11 @@ func NewMetrics() *CatalystAPIMetrics {
 			AnalyticsLogsPlaytimeMs: promauto.NewSummaryVec(prometheus.SummaryOpts{
 				Name: "analytics_logs_playtime_ms",
 				Help: "Playtime in milliseconds gathered from Analytics Logs",
-			}, []string{"playback_id", "user_id", "continent"}),
+			}, []string{"playback_id", "user_id", "project_id", "continent"}),
 			AnalyticsLogsBufferTimeMs: promauto.NewSummaryVec(prometheus.SummaryOpts{
 				Name: "analytics_logs_buffer_time_ms",
 				Help: "Buffer time in milliseconds gathered from Analytics Logs",
-			}, []string{"playback_id", "user_id", "continent"}),
+			}, []string{"playback_id", "user_id", "project_id", "continent"}),
 			LogProcessorWriteErrors: promauto.NewCounter(prometheus.CounterOpts{
 				Name: "log_processor_write_errors",
 				Help: "Number of log processors errors while writing to Kafka",
