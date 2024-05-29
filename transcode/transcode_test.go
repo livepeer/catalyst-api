@@ -437,3 +437,56 @@ func TestHandleAVStartTimeOffsetsWhenSingleSegment(t *testing.T) {
 		})
 	}
 }
+
+func TestWithPipedSource(t *testing.T) {
+	dummyProfiles := []video.EncodedProfile{{Name: "dummy"}}
+
+	t.Run("returns original reader when copySource is false", func(t *testing.T) {
+		require := require.New(t)
+		in := strings.NewReader("hello")
+
+		reader, buffer, err := withPipedSource(in, false, nil)
+		require.NoError(err)
+		require.Nil(buffer)
+		require.Equal(in, reader)
+
+		reader, buffer, err = withPipedSource(in, false, dummyProfiles)
+		require.NoError(err)
+		require.Nil(buffer)
+		require.Equal(in, reader)
+	})
+	t.Run("returns nil reader and filled buffer when copySource is true and transcodeProfiles is empty", func(t *testing.T) {
+		require := require.New(t)
+		in := strings.NewReader("hello")
+
+		reader, buffer, err := withPipedSource(in, true, nil)
+		require.NoError(err)
+		require.Equal(nil, reader)
+		require.Equal("hello", buffer.String())
+
+		// check input was consumed
+		require.Equal(0, in.Len())
+	})
+	t.Run("returns tee'd reader and buffer when copySource is true and transcodeProfiles is not empty", func(t *testing.T) {
+		require := require.New(t)
+		in := strings.NewReader("hello")
+		originalLen := in.Len()
+
+		reader, buffer, err := withPipedSource(in, true, dummyProfiles)
+		require.NoError(err)
+		require.NotNil(reader)
+		require.NotNil(buffer)
+
+		// check input was not consumed
+		require.Equal(originalLen, in.Len())
+		require.Equal(0, buffer.Len())
+		// check that bytes read from reader get copied into buffer
+		buf := make([]byte, 2)
+		n, err := io.ReadFull(reader, buf)
+		require.NoError(err)
+		require.Equal(2, n)
+		require.Equal("he", string(buf))
+		require.Equal("he", buffer.String())
+		require.Equal(originalLen-2, in.Len())
+	})
+}
