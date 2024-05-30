@@ -256,7 +256,8 @@ func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filen
 			if err != nil {
 				return fmt.Errorf("error decrypting file: %w", err)
 			}
-			c = io.NopCloser(decryptedFile)
+			defer decryptedFile.Close()
+			c = decryptedFile
 		}
 
 		content := io.TeeReader(c, &byteAccWriter)
