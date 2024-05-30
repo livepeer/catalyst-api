@@ -387,10 +387,16 @@ func TestProcessTranscodeResult(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for idx, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			require := require.New(t)
 			assert := assert.New(t)
+
+			// patch the output dir not to interfere with each other
+			dir := filepath.Join(dir, fmt.Sprintf("case-%d", idx))
+			err := os.MkdirAll(dir, os.ModePerm)
+			require.NoError(err)
+			tt.targetOSURL.Path = dir
 
 			transcodedStats := statsFromProfiles(tt.encodedProfiles)
 			renditionList := &video.TRenditionList{RenditionSegmentTable: make(map[string]*video.TSegmentList)}
@@ -399,7 +405,7 @@ func TestProcessTranscodeResult(t *testing.T) {
 				renditionList.AddRenditionSegment("profile1", &video.TSegmentList{SegmentDataTable: make(map[int][]byte)})
 			}
 			segmentChannel := make(chan video.TranscodedSegmentInfo, 100)
-			err := processTranscodeResult(
+			err = processTranscodeResult(
 				tt.segment,
 				tt.transcodeRequest,
 				tt.sourceSegment,
@@ -419,6 +425,7 @@ func TestProcessTranscodeResult(t *testing.T) {
 			require.NoError(err)
 			assert.EqualValues(tt.expectedTranscodedStats, transcodedStats)
 			assert.EqualValues(tt.expectedRenditionList, renditionList)
+
 			// check segment channel msgs
 			for _, expectedMsg := range tt.expectedSegmentChannelMsgs {
 				select {
@@ -432,6 +439,13 @@ func TestProcessTranscodeResult(t *testing.T) {
 			case msg := <-segmentChannel:
 				require.Fail(fmt.Sprintf("unexpected message in segment channel: %v", msg))
 			default:
+			}
+
+			// check that segment files are written to disk
+			for _, profile := range tt.encodedProfiles {
+				fileName := filepath.Join(dir, profile.Name, "0.ts")
+				_, err := os.Stat(fileName)
+				assert.NoError(err, "expected segment file to exist: %s", fileName)
 			}
 		})
 	}
