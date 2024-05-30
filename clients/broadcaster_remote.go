@@ -84,6 +84,8 @@ func findBroadcaster(c Credentials) (BroadcasterList, error) {
 	if err != nil {
 		return BroadcasterList{}, fmt.Errorf("http do(%s): %v", requestURL, err)
 	}
+	defer res.Body.Close()
+
 	if !httpOk(res.StatusCode) {
 		return BroadcasterList{}, fmt.Errorf("http GET(%s) returned %d %s", requestURL, res.StatusCode, res.Status)
 	}
@@ -124,6 +126,8 @@ func CreateStream(c Credentials, streamName string, profiles []video.EncodedProf
 	if err != nil {
 		return "", fmt.Errorf("http do(%s): %v", requestURL, err)
 	}
+	defer res.Body.Close()
+
 	if !httpOk(res.StatusCode) {
 		return "", fmt.Errorf("http POST(%s) returned %d %s", requestURL, res.StatusCode, res.Status)
 	}
@@ -156,6 +160,7 @@ func ReleaseManifestID(c Credentials, manifestId string) error {
 	if err != nil {
 		return fmt.Errorf("Releasing Manifest ID failed. URL: %s, manifestID: %s, err: %s", requestURL, manifestId, err)
 	}
+	defer res.Body.Close()
 
 	if !httpOk(res.StatusCode) {
 		return fmt.Errorf("Releasing Manifest ID failed. URL: %s, manifestID: %s, HTTP Code: %s", requestURL, manifestId, res.Status)

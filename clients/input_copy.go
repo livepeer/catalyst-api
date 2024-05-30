@@ -126,6 +126,9 @@ func getSignedURL(osTransferURL *url.URL) (string, error) {
 	signedURL := httpURL.String()
 
 	resp, err := http.Head(signedURL)
+	if resp != nil {
+		resp.Body.Close()
+	}
 	if err == nil && resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusBadRequest {
 		return signedURL, nil
 	}
@@ -253,7 +256,8 @@ func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filen
 			if err != nil {
 				return fmt.Errorf("error decrypting file: %w", err)
 			}
-			c = io.NopCloser(decryptedFile)
+			defer decryptedFile.Close()
+			c = decryptedFile
 		}
 
 		content := io.TeeReader(c, &byteAccWriter)

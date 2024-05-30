@@ -167,6 +167,7 @@ func (b *MistBalancer) changeLoadBalancerServers(ctx context.Context, server, ac
 		glog.Errorf("Error making request: %v", err)
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	bytes, err := io.ReadAll(resp.Body)
 
@@ -202,6 +203,7 @@ func (b *MistBalancer) getMistLoadBalancerServers(ctx context.Context) (map[stri
 		glog.Errorf("Error making request: %v", err)
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)

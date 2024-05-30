@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/grafov/m3u8"
 	"math"
 	"net/url"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/grafov/m3u8"
 
 	"github.com/cenkalti/backoff/v4"
 	c2pa2 "github.com/livepeer/catalyst-api/c2pa"
@@ -538,6 +539,7 @@ func transcodeSegment(
 		if err != nil {
 			return fmt.Errorf("failed to download source segment %q: %s", segment.Input, err)
 		}
+		defer rc.Close()
 
 		// If an AccessToken is provided via the request for transcode, then use remote Broadcasters.
 		// Otherwise, use the local harcoded Broadcaster.

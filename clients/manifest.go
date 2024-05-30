@@ -42,6 +42,8 @@ func DownloadRenditionManifest(requestID, sourceManifestOSURL string) (m3u8.Medi
 		if err != nil {
 			return fmt.Errorf("error downloading manifest: %s", err)
 		}
+		defer rc.Close()
+
 		playlist, playlistType, err = m3u8.DecodeFrom(rc, true)
 		if err != nil {
 			return fmt.Errorf("error decoding manifest: %s", err)
@@ -276,12 +278,13 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnix
 			if err != nil {
 				return fmt.Errorf("error clipping: failed to download segment %d: %w", v.SeqId, err)
 			}
+			defer rc.Close()
+
 			// Write the segment data to the temp local file
 			_, err = io.Copy(clipSegmentFile, rc)
 			if err != nil {
 				return fmt.Errorf("error clipping: failed to write segment %d: %w", v.SeqId, err)
 			}
-			rc.Close()
 			return nil
 		}, DownloadRetryBackoff())
 		if err != nil {
