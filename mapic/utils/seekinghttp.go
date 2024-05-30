@@ -206,6 +206,7 @@ func (s *SeekingHTTP) Size() (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	defer resp.Body.Close()
 
 	if resp.ContentLength < 0 {
 		return 0, errors.New("no content length for Size()")

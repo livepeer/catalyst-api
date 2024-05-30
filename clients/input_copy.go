@@ -126,6 +126,9 @@ func getSignedURL(osTransferURL *url.URL) (string, error) {
 	signedURL := httpURL.String()
 
 	resp, err := http.Head(signedURL)
+	if resp != nil {
+		resp.Body.Close()
+	}
 	if err == nil && resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusBadRequest {
 		return signedURL, nil
 	}

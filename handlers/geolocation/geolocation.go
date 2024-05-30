@@ -317,9 +317,12 @@ func (c *GeolocationHandlersCollection) sendPlaybackRequestAsync(playbackID stri
 
 	go func() {
 		url := fmt.Sprintf("%s/hls/%s+%s/index.m3u8", m.Tags["https"], c.Config.MistBaseStreamName, playbackID)
-		if _, err := http.Get(url); err != nil {
+		resp, err := http.Get(url)
+		if err != nil {
 			glog.Errorf("Error making a playback request url=%s, err=%v", url, err)
+			return
 		}
+		resp.Body.Close()
 	}()
 }
 
