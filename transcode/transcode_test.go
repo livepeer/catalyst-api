@@ -52,11 +52,11 @@ func (c StubBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumbe
 
 func TestItCanTranscode(t *testing.T) {
 	dir := filepath.Join(testDataDir, "it-can-transcode")
-	err := os.MkdirAll(dir, os.ModePerm)
+	inputDir := filepath.Join(dir, "input")
+	err := os.MkdirAll(inputDir, os.ModePerm)
 	require.NoError(t, err)
 
 	// Create temporary manifest + segment files on the local filesystem
-	inputDir := filepath.Join(dir, "input")
 	manifestFile, err := os.CreateTemp(inputDir, "index.m3u8")
 	require.NoError(t, err)
 
