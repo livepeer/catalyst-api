@@ -40,6 +40,8 @@ func getMediaManifest(requestID string, input string) (*m3u8.MediaPlaylist, erro
 	if err != nil {
 		return nil, fmt.Errorf("error downloading manifest: %w", err)
 	}
+	defer rc.Close()
+
 	manifest, playlistType, err := m3u8.DecodeFrom(rc, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode manifest: %w", err)
@@ -95,7 +97,10 @@ func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
 		}
 		// check thumbnail file exists on storage
 		err = backoff.Retry(func() error {
-			_, err := clients.GetFile(context.Background(), requestID, outputLocation.JoinPath(filename).String(), nil)
+			rc, err := clients.GetFile(context.Background(), requestID, outputLocation.JoinPath(filename).String(), nil)
+			if rc != nil {
+				rc.Close()
+			}
 			return err
 		}, thumbWaitBackoff)
 		if err != nil {
@@ -199,6 +204,8 @@ func GenerateThumbsFromManifest(requestID, input string, output *url.URL) error 
 			if err != nil {
 				return fmt.Errorf("error downloading manifest: %w", err)
 			}
+			defer rc.Close()
+
 			bs, err := io.ReadAll(rc)
 			if err != nil {
 				return err
