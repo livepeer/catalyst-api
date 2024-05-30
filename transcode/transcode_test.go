@@ -1,6 +1,7 @@
 package transcode
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/video"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,6 +38,10 @@ const exampleMediaManifest = `#EXTM3U
 10000.ts
 #EXT-X-ENDLIST`
 
+// Create 2 layers of subdirectories to ensure runs of the test don't interfere with each other
+// and that it simulates the production layout
+var testDataDir = filepath.Join(os.TempDir(), "unit-test-dir-"+config.RandomTrailer(8))
+
 type StubBroadcasterClient struct {
 	tr clients.TranscodeResult
 }
@@ -45,33 +51,26 @@ func (c StubBroadcasterClient) TranscodeSegment(segment io.Reader, sequenceNumbe
 }
 
 func TestItCanTranscode(t *testing.T) {
-	dir := os.TempDir()
-
-	// Create 2 layers of subdirectories to ensure runs of the test don't interfere with each other
-	// and that it simulates the production layout
-	topLevelDir := filepath.Join(dir, "unit-test-dir-"+config.RandomTrailer(8))
-	err := os.Mkdir(topLevelDir, os.ModePerm)
-	require.NoError(t, err)
-
-	dir = filepath.Join(topLevelDir, "unit-test-subdir")
-	err = os.Mkdir(dir, os.ModePerm)
+	dir := filepath.Join(testDataDir, "it-can-transcode")
+	err := os.MkdirAll(dir, os.ModePerm)
 	require.NoError(t, err)
 
 	// Create temporary manifest + segment files on the local filesystem
-	manifestFile, err := os.CreateTemp(dir, "index.m3u8")
+	inputDir := filepath.Join(dir, "input")
+	manifestFile, err := os.CreateTemp(inputDir, "index.m3u8")
 	require.NoError(t, err)
 
-	segment0, err := os.Create(dir + "/0.ts")
+	segment0, err := os.Create(inputDir + "/0.ts")
 	require.NoError(t, err)
 
-	segment1, err := os.Create(dir + "/5000.ts")
+	segment1, err := os.Create(inputDir + "/5000.ts")
 	require.NoError(t, err)
 
-	segment2, err := os.Create(dir + "/10000.ts")
+	segment2, err := os.Create(inputDir + "/10000.ts")
 	require.NoError(t, err)
 
 	totalSegments := 0
-	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(inputDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -142,7 +141,7 @@ func TestItCanTranscode(t *testing.T) {
 				err := statusClient.SendTranscodeStatus(clients.NewTranscodeStatusProgress(callbackServer.URL, "", stage, completionRatio))
 				require.NoError(t, err)
 			},
-			HlsTargetURL: topLevelDir,
+			HlsTargetURL: dir,
 		},
 		"streamName",
 		video.InputVideo{
@@ -169,7 +168,7 @@ low-bitrate/index.m3u8
 2020p0/index.m3u8
 `
 
-	masterManifestBytes, err := os.ReadFile(filepath.Join(topLevelDir, "index.m3u8"))
+	masterManifestBytes, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
 
 	require.NoError(t, err)
 	require.Greater(t, len(masterManifestBytes), 0)
@@ -192,8 +191,250 @@ low-bitrate/index.m3u8
 
 	// Check we received a final Transcode Completed callback
 	require.Equal(t, 1, len(outputs))
-	require.Equal(t, path.Join(topLevelDir, "index.m3u8"), outputs[0].Manifest)
+	require.Equal(t, path.Join(dir, "index.m3u8"), outputs[0].Manifest)
 	require.Equal(t, 2, len(outputs[0].Videos))
+}
+
+func TestProcessTranscodeResult(t *testing.T) {
+	dir := filepath.Join(testDataDir, "process-transcode-result")
+	err := os.MkdirAll(dir, os.ModePerm)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name                       string
+		segment                    segmentInfo
+		transcodeRequest           TranscodeSegmentRequest
+		sourceSegment              *bytes.Buffer
+		transcodeResult            clients.TranscodeResult
+		encodedProfiles            []video.EncodedProfile
+		targetOSURL                *url.URL
+		expectedTranscodedStats    []*video.RenditionStats
+		expectedRenditionList      *video.TRenditionList
+		expectedSegmentChannelMsgs []video.TranscodedSegmentInfo
+		expectedError              string
+	}{
+		{
+			name:             "Error when profile not found",
+			segment:          segmentInfo{Index: 0, IsLastSegment: false},
+			transcodeRequest: TranscodeSegmentRequest{IsClip: false, RequestID: "request-id"},
+			sourceSegment:    bytes.NewBuffer([]byte("source data")),
+			transcodeResult: clients.TranscodeResult{
+				Renditions: []*clients.RenditionSegment{{Name: "profile2", MediaData: []byte("media data")}},
+			},
+			encodedProfiles:         []video.EncodedProfile{{Name: "profile1", Copy: false}},
+			targetOSURL:             &url.URL{Scheme: "file", Path: dir},
+			expectedTranscodedStats: []*video.RenditionStats{},
+
+			expectedError: "failed to find rendition with name \"profile1\"",
+		},
+		{
+			name:             "Successful with only copy profile",
+			segment:          segmentInfo{Index: 0, IsLastSegment: false, Input: clients.SourceSegment{DurationMillis: 4000}},
+			transcodeRequest: TranscodeSegmentRequest{IsClip: false, RequestID: "request-id"},
+			sourceSegment:    bytes.NewBuffer([]byte("source data")),
+			transcodeResult:  clients.TranscodeResult{},
+			encodedProfiles:  []video.EncodedProfile{{Name: "profile1", Copy: true}},
+			targetOSURL:      &url.URL{Scheme: "file", Path: dir},
+			expectedTranscodedStats: []*video.RenditionStats{
+				{
+					Name:          "profile1",
+					Bytes:         11, // len("source data")
+					BitsPerSecond: 22,
+					DurationMs:    4000,
+				}},
+			expectedRenditionList: &video.TRenditionList{RenditionSegmentTable: map[string]*video.TSegmentList{}},
+		},
+		{
+			name:             "Successful with transcode profiles",
+			segment:          segmentInfo{Index: 0, IsLastSegment: false, Input: clients.SourceSegment{DurationMillis: 4000}},
+			transcodeRequest: TranscodeSegmentRequest{IsClip: false, RequestID: "request-id"},
+			sourceSegment:    bytes.NewBuffer([]byte("source data")),
+			transcodeResult: clients.TranscodeResult{
+				Renditions: []*clients.RenditionSegment{
+					{Name: "profile1", MediaData: []byte("media data")},
+					{Name: "profile2", MediaData: []byte("mdat")},
+				},
+			},
+			encodedProfiles: []video.EncodedProfile{
+				{Name: "profile1", Width: 1280, Height: 720, Bitrate: 3_000_000},
+				{Name: "profile2", Width: 640, Height: 420, Bitrate: 1_500_000},
+			},
+			targetOSURL: &url.URL{Scheme: "file", Path: dir},
+			expectedTranscodedStats: []*video.RenditionStats{
+				{
+					Name:          "profile1",
+					Width:         1280,
+					Height:        720,
+					Bytes:         10, // len("media data")
+					BitsPerSecond: 20,
+					DurationMs:    4000,
+				},
+				{
+					Name:          "profile2",
+					Width:         640,
+					Height:        420,
+					Bytes:         4, // len("mdat")
+					BitsPerSecond: 8,
+					DurationMs:    4000,
+				},
+			},
+			expectedRenditionList: &video.TRenditionList{RenditionSegmentTable: map[string]*video.TSegmentList{}},
+		},
+		{
+			name:             "Successful with copy and transcode profiles",
+			segment:          segmentInfo{Index: 0, IsLastSegment: false, Input: clients.SourceSegment{DurationMillis: 4000}},
+			transcodeRequest: TranscodeSegmentRequest{IsClip: false, RequestID: "request-id"},
+			sourceSegment:    bytes.NewBuffer([]byte("source data")),
+			transcodeResult: clients.TranscodeResult{
+				Renditions: []*clients.RenditionSegment{
+					{Name: "profile1", MediaData: []byte("media data")},
+					{Name: "profile2", MediaData: []byte("mdat")},
+				},
+			},
+			encodedProfiles: []video.EncodedProfile{
+				{Name: "profile0", Width: 1920, Height: 1080, Copy: true},
+				{Name: "profile1", Width: 1280, Height: 720, Bitrate: 3_000_000},
+				{Name: "profile2", Width: 640, Height: 420, Bitrate: 1_500_000},
+			},
+			targetOSURL: &url.URL{Scheme: "file", Path: dir},
+			expectedTranscodedStats: []*video.RenditionStats{
+				{
+					Name:          "profile0",
+					Width:         1920,
+					Height:        1080,
+					Bytes:         11, // len("source data")
+					BitsPerSecond: 22,
+					DurationMs:    4000,
+				},
+				{
+					Name:          "profile1",
+					Width:         1280,
+					Height:        720,
+					Bytes:         10, // len("media data")
+					BitsPerSecond: 20,
+					DurationMs:    4000,
+				},
+				{
+					Name:          "profile2",
+					Width:         640,
+					Height:        420,
+					Bytes:         4, // len("mdat")
+					BitsPerSecond: 8,
+					DurationMs:    4000,
+				},
+			},
+			expectedRenditionList: &video.TRenditionList{RenditionSegmentTable: map[string]*video.TSegmentList{}},
+		},
+		{
+			name:             "Propagates segments for mp4 generation",
+			segment:          segmentInfo{Index: 0, IsLastSegment: false, Input: clients.SourceSegment{DurationMillis: 4000}},
+			transcodeRequest: TranscodeSegmentRequest{IsClip: false, RequestID: "request-id", GenerateMP4: true},
+			sourceSegment:    bytes.NewBuffer([]byte("source data")),
+			transcodeResult: clients.TranscodeResult{
+				Renditions: []*clients.RenditionSegment{
+					{Name: "profile1", MediaData: []byte("media data")},
+				},
+			},
+			encodedProfiles: []video.EncodedProfile{
+				{Name: "profile0", Width: 1920, Height: 1080, Copy: true},
+				{Name: "profile1", Width: 1280, Height: 720, Bitrate: 3_000_000},
+			},
+			targetOSURL: &url.URL{Scheme: "file", Path: dir},
+			expectedTranscodedStats: []*video.RenditionStats{
+				{
+					Name:          "profile0",
+					Width:         1920,
+					Height:        1080,
+					Bytes:         11, // len("source data")
+					BitsPerSecond: 22,
+					DurationMs:    4000,
+				},
+				{
+					Name:          "profile1",
+					Width:         1280,
+					Height:        720,
+					Bytes:         10, // len("media data")
+					BitsPerSecond: 20,
+					DurationMs:    4000,
+				},
+			},
+			expectedRenditionList: &video.TRenditionList{
+				RenditionSegmentTable: map[string]*video.TSegmentList{
+					"profile0": {
+						SegmentDataTable: map[int][]byte{
+							0: []byte("source data"),
+						},
+					},
+					"profile1": {
+						SegmentDataTable: map[int][]byte{
+							0: []byte("media data"),
+						},
+					},
+				},
+			},
+			expectedSegmentChannelMsgs: []video.TranscodedSegmentInfo{
+				{
+					RequestID:     "request-id",
+					RenditionName: "profile0",
+					SegmentIndex:  0,
+				},
+				{
+					RequestID:     "request-id",
+					RenditionName: "profile1",
+					SegmentIndex:  0,
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+			assert := assert.New(t)
+
+			transcodedStats := statsFromProfiles(tt.encodedProfiles)
+			renditionList := &video.TRenditionList{RenditionSegmentTable: make(map[string]*video.TSegmentList)}
+			if tt.transcodeRequest.GenerateMP4 {
+				renditionList.AddRenditionSegment("profile0", &video.TSegmentList{SegmentDataTable: make(map[int][]byte)})
+				renditionList.AddRenditionSegment("profile1", &video.TSegmentList{SegmentDataTable: make(map[int][]byte)})
+			}
+			segmentChannel := make(chan video.TranscodedSegmentInfo, 100)
+			err := processTranscodeResult(
+				tt.segment,
+				tt.transcodeRequest,
+				tt.sourceSegment,
+				tt.transcodeResult,
+				tt.encodedProfiles,
+				tt.targetOSURL,
+				transcodedStats,
+				renditionList,
+				segmentChannel,
+			)
+
+			if tt.expectedError != "" {
+				require.ErrorContains(err, tt.expectedError)
+				return
+			}
+
+			require.NoError(err)
+			assert.EqualValues(tt.expectedTranscodedStats, transcodedStats)
+			assert.EqualValues(tt.expectedRenditionList, renditionList)
+			// check segment channel msgs
+			for _, expectedMsg := range tt.expectedSegmentChannelMsgs {
+				select {
+				case actualMsg := <-segmentChannel:
+					assert.EqualValues(expectedMsg, actualMsg)
+				default:
+					require.Fail("expected message not found in segment channel")
+				}
+			}
+			select {
+			case msg := <-segmentChannel:
+				require.Fail(fmt.Sprintf("unexpected message in segment channel: %v", msg))
+			default:
+			}
+		})
+	}
 }
 
 func TestItCalculatesTheTranscodeCompletionPercentageCorrectly(t *testing.T) {

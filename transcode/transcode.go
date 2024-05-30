@@ -638,6 +638,7 @@ func processTranscodeResult(
 	transcodedStats []*video.RenditionStats,
 	renditionList *video.TRenditionList,
 	segmentChannel chan<- video.TranscodedSegmentInfo) error {
+
 	for renditionIndex, profile := range encodedProfiles {
 		var mediaData []byte
 		if profile.Copy {
@@ -684,7 +685,7 @@ func processTranscodeResult(
 			return clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(mediaData), UploadTimeout)
 		}, clients.UploadRetryBackoff())
 		if err != nil {
-			return fmt.Errorf("failed to upload master playlist: %s", err)
+			return fmt.Errorf("failed to upload segment %d of profile %s: %w", segment.Index, profile.Name, err)
 		}
 
 		// bitrate calculation
