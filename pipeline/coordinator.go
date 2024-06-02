@@ -326,7 +326,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		si.SourceFile = osTransferURL.String()  // OS URL used by mist
 		si.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert
 		si.InputFileInfo = inputVideoProbe
-		si.GenerateMP4 = ShouldGenerateMP4(sourceURL, p.Mp4TargetURL, p.FragMp4TargetURL, p.Mp4OnlyShort, si.InputFileInfo.Duration)
+		si.GenerateMP4 = ShouldGenerateMP4(p.RequestID, sourceURL, p.Mp4TargetURL, p.FragMp4TargetURL, p.Mp4OnlyShort, si.InputFileInfo.Duration)
 		si.DownloadDone = time.Now()
 
 		log.AddContext(p.RequestID, "new_source_url", si.SourceFile)
@@ -377,14 +377,16 @@ func checkClipResolution(p UploadJobPayload, inputVideoProbe *video.InputVideo, 
 	}
 }
 
-func ShouldGenerateMP4(sourceURL, mp4TargetUrl *url.URL, fragMp4TargetUrl *url.URL, mp4OnlyShort bool, durationSecs float64) bool {
+func ShouldGenerateMP4(requestID string, sourceURL, mp4TargetUrl *url.URL, fragMp4TargetUrl *url.URL, mp4OnlyShort bool, durationSecs float64) bool {
 	// Skip mp4 generation if we weren't able to determine the duration of the input file for any reason
 	if durationSecs == 0.0 {
+		log.Log(requestID, "Skipping MP4 generation because duration of input could not be determined")
 		return false
 	}
 	// We're currently memory-bound for generating MP4s above a certain file size
 	// This has been hitting us for long recordings, so do a crude "is it longer than 12 hours?" check and skip the MP4 if it is
 	if clients.IsHLSInput(sourceURL) && durationSecs > maxRecordingMP4Duration.Seconds() {
+		log.Log(requestID, "Skipping MP4 generation because duration of HLS input exceeds maxRecordingMP4Duration")
 		return false
 	}
 
@@ -396,6 +398,7 @@ func ShouldGenerateMP4(sourceURL, mp4TargetUrl *url.URL, fragMp4TargetUrl *url.U
 		return true
 	}
 
+	log.Log(requestID, "Skipping MP4 generation because a MP4 target URL is not set")
 	return false
 }
 
