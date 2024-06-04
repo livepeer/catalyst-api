@@ -13,7 +13,7 @@ build:
 .PHONY: build-linux
 build-linux:
 	# Useful for cross-compiling from Mac for testing on an environment
-	env GOOS=linux GOARCH=amd64 go build -o "$(GO_BUILD_DIR)catalyst-api-linux" main.go
+	env GOOS=linux GOARCH=amd64 go build -ldflags="$(ldflags)" -o "$(GO_BUILD_DIR)catalyst-api-linux" main.go
 
 .PHONY: fmt
 fmt:
