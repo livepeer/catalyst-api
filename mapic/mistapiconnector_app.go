@@ -708,7 +708,12 @@ func (mc *mac) reconcileMultistream(mistState clients.MistState) {
 	for k, v := range cachedMap {
 		if v.enabled && !mistMap[toKey(k.stream, k.target)] {
 			glog.Infof("adding AUTO_PUSH for stream=%s target=%s", k.stream, k.target)
-			if err := mc.mist.PushAutoAdd(k.stream, k.target); err != nil {
+			// Support for streamKeys with a question mark
+			target := k.target
+			if strings.Contains(target, "?") {
+				target += "?"
+			}
+			if err := mc.mist.PushAutoAdd(k.stream, target); err != nil {
 				glog.Errorf("cannot add AUTO_PUSH for stream=%s target=%s err=%v", k.stream, k.target, err)
 			}
 		}
