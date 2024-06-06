@@ -51,15 +51,17 @@ func newStreamPullRateLimit(timeout time.Duration) *streamPullRateLimit {
 	}
 }
 
-func (l *streamPullRateLimit) acquire(playbackID string) bool {
+func (l *streamPullRateLimit) shouldLimit(playbackID string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	lastMarked, ok := l.pulls[playbackID]
-	if ok && time.Since(lastMarked) < l.timeout {
-		return false
-	}
+	return ok && time.Since(lastMarked) < l.timeout
+}
+
+func (l *streamPullRateLimit) acquire(playbackID string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.pulls[playbackID] = time.Now()
-	return true
 }
 
 type GeolocationHandlersCollection struct {
@@ -295,7 +297,7 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string, retryCo
 	}
 
 	// To prevent overloading the LAPI, we limit the rate at which we query for stream pulls
-	if ok := c.streamPullRateLimit.acquire(playbackID); !ok {
+	if c.streamPullRateLimit.shouldLimit(playbackID) {
 		return "", errRateLimit
 	}
 
@@ -318,6 +320,9 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string, retryCo
 		}
 		return "", nil
 	}
+
+	// For stream pull, we limit the rate to prevent overloading the LAPI
+	c.streamPullRateLimit.acquire(playbackID)
 
 	if stream.PullRegion != "" && c.Config.OwnRegion != stream.PullRegion {
 		if retryCount < streamSourceMaxWrongRegionRetries {
