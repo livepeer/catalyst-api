@@ -710,7 +710,7 @@ func (mc *mac) reconcileMultistream(mistState clients.MistState) {
 			glog.Infof("adding AUTO_PUSH for stream=%s target=%s", k.stream, k.target)
 			// Support for streamKeys with a question mark
 			target := k.target
-			if strings.Contains(target, "?") {
+			if strings.Contains(target, "?") && !strings.HasSuffix(target, "?") {
 				target += "?"
 			}
 			if err := mc.mist.PushAutoAdd(k.stream, target); err != nil {
