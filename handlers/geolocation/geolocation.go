@@ -51,11 +51,11 @@ func newStreamPullRateLimit(timeout time.Duration) *streamPullRateLimit {
 	}
 }
 
-func (l streamPullRateLimit) acquire(playbackID string) bool {
+func (l *streamPullRateLimit) acquire(playbackID string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	lastMarked, ok := l.pulls[playbackID]
-	if ok && time.Now().Sub(lastMarked) < l.timeout {
+	if ok && time.Since(lastMarked) < l.timeout {
 		return false
 	}
 	l.pulls[playbackID] = time.Now()
