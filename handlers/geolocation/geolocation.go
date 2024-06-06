@@ -243,11 +243,12 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 			return c.resolveReplicatedStream(dtscURL, payload.StreamName)
 		}
 
-		pullURL, err := c.getStreamPull(playbackIdFor(payload.StreamName), i)
+		playbackID := playbackIdFor(payload.StreamName)
+		pullURL, err := c.getStreamPull(playbackID, i)
 		if err == nil || errors.Is(err, api.ErrNotExists) {
 			if pullURL == "" {
 				// not a stream pull, stream is not active or does not exist, usual situation when a viewer tries to play inactive stream
-				glog.V(6).Infof("unable to find STREAM_SOURCE: %s", errMist)
+				glog.V(6).Infof("unable to find STREAM_SOURCE: playbackID=%s, mistErr=%v", playbackID, errMist)
 				return "push://", nil
 			} else {
 				// start stream pull
@@ -257,7 +258,7 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 		}
 		if errors.Is(err, errNoStreamSourceForActiveStream) {
 			// stream is active, but STREAM_SOURCE cannot be found
-			glog.Errorf("error querying mist for active stream STREAM_SOURCE: %s", errMist)
+			glog.Errorf("error querying mist for active stream STREAM_SOURCE: playbackID=%s, mistErr=%v", playbackID, errMist)
 			return "push://", nil
 		} else if !errors.Is(err, errLockPull) && !errors.Is(err, errPullWrongRegion) && !errors.Is(err, errRateLimit) {
 			// stream pull failed for unknown reason
@@ -265,10 +266,10 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 			return "push://", nil
 		}
 		// stream pull failed, because it should be pulled from another region or it the pull was already started by another node
-		glog.Warningf("another node is currently pulling the stream, waiting %v and retrying", streamSourceRetryInterval)
+		glog.Warningf("another node is currently pulling the stream, waiting %v and retrying, err=%v", streamSourceRetryInterval, err)
 		time.Sleep(streamSourceRetryInterval)
 	}
-	glog.Errorf("error querying mist for STREAM_SOURCE for stream pull request: %s", errMist)
+	glog.Errorf("error querying mist for STREAM_SOURCE for stream pull request: mistErr=%v", errMist)
 	return "push://", nil
 }
 
