@@ -27,6 +27,7 @@ const streamPlaybackPrefix = "playback_"
 const waitForPushError = 7 * time.Second
 const waitForPushErrorIncreased = 2 * time.Minute
 const keepStreamAfterEnd = 15 * time.Second
+const minReconcileInterval = time.Second
 
 const ownExchangeName = "lp_mist_api_connector"
 const webhooksExchangeName = "webhook_default_exchange"
@@ -538,6 +539,7 @@ func (mc *mac) wildcardPlaybackID(stream *api.Stream) string {
 // reconcileLoop calls reconcileStream, reconcileMultistream and processStats
 // periodically or when streamUpdated is triggered on demand (from serf event).
 func (mc *mac) reconcileLoop(ctx context.Context) {
+	var lastStreamUpdated time.Time
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -546,6 +548,11 @@ func (mc *mac) reconcileLoop(ctx context.Context) {
 			return
 		case <-ticker.C:
 		case <-mc.streamUpdated:
+			if time.Since(lastStreamUpdated) < minReconcileInterval {
+				glog.V(7).Info("rate limiting reconcileLoop")
+				continue
+			}
+			lastStreamUpdated = time.Now()
 		}
 		mistState, err := mc.mist.GetState()
 		if err != nil {
