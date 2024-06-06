@@ -598,13 +598,13 @@ func TestStreamPullRateLimit(t *testing.T) {
 	playbackID2 := "playbackID2"
 	rateLimit := newStreamPullRateLimit(2 * time.Second)
 
-	// Before acquire(), we should not limit rate
+	// Before mark(), we should not limit rate
 	require.False(rateLimit.shouldLimit(playbackID1))
 	require.False(rateLimit.shouldLimit(playbackID1))
 	require.False(rateLimit.shouldLimit(playbackID2))
 
-	// After acquire(), we should limit rate, but only for playbackID1
-	rateLimit.acquire(playbackID1)
+	// After mark(), we should limit rate, but only for playbackID1
+	rateLimit.mark(playbackID1)
 	require.True(rateLimit.shouldLimit(playbackID1))
 	require.False(rateLimit.shouldLimit(playbackID2))
 
