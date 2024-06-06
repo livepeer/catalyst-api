@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/julienschmidt/httprouter"
@@ -588,4 +589,26 @@ func (hc httpCheck) hasHeader(key string, values ...string) httpCheck {
 	header := hc.Header().Get(key)
 	require.Contains(hc, values, header)
 	return hc
+}
+
+func TestStreamPullRateLimit(t *testing.T) {
+	require := require.New(t)
+
+	playbackID1 := "playbackID1"
+	playbackID2 := "playbackID2"
+	rateLimit := newStreamPullRateLimit(2 * time.Second)
+
+	// Before acquire(), we should not limit rate
+	require.False(rateLimit.shouldLimit(playbackID1))
+	require.False(rateLimit.shouldLimit(playbackID1))
+	require.False(rateLimit.shouldLimit(playbackID2))
+
+	// After acquire(), we should limit rate, but only for playbackID1
+	rateLimit.acquire(playbackID1)
+	require.True(rateLimit.shouldLimit(playbackID1))
+	require.False(rateLimit.shouldLimit(playbackID2))
+
+	// After 5 seconds, we should not limit rate for playbackID1
+	time.Sleep(2 * time.Second)
+	require.False(rateLimit.shouldLimit(playbackID1))
 }
