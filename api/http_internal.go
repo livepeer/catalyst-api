@@ -68,12 +68,7 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 		Server:      cli.APIServer,
 		AccessToken: cli.APIToken,
 	})
-	geoHandlers := &geolocation.GeolocationHandlersCollection{
-		Config:   cli,
-		Balancer: bal,
-		Cluster:  c,
-		Lapi:     lapi,
-	}
+	geoHandlers := geolocation.NewGeolocationHandlersCollection(bal, c, cli, lapi)
 
 	spkiPublicKey, _ := crypto.ConvertToSpki(cli.VodDecryptPublicKey)
 

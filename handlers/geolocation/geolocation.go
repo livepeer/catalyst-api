@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"encoding/json"
@@ -34,13 +35,49 @@ const (
 
 var errPullWrongRegion = errors.New("failed to pull stream, wrong region")
 var errLockPull = errors.New("failed to lock pull")
+var errRateLimit = errors.New("pull stream rate limit exceeded")
 var errNoStreamSourceForActiveStream = errors.New("failed to get stream source for active stream")
 
+type streamPullRateLimit struct {
+	timeout time.Duration
+	pulls   map[string]time.Time
+	mu      sync.Mutex
+}
+
+func newStreamPullRateLimit(timeout time.Duration) *streamPullRateLimit {
+	return &streamPullRateLimit{
+		timeout: timeout,
+		pulls:   make(map[string]time.Time),
+	}
+}
+
+func (l streamPullRateLimit) acquire(playbackID string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	lastMarked, ok := l.pulls[playbackID]
+	if ok && time.Now().Sub(lastMarked) < l.timeout {
+		return false
+	}
+	l.pulls[playbackID] = time.Now()
+	return true
+}
+
 type GeolocationHandlersCollection struct {
-	Balancer balancer.Balancer
-	Cluster  cluster.Cluster
-	Config   config.Cli
-	Lapi     *api.Client
+	Balancer            balancer.Balancer
+	Cluster             cluster.Cluster
+	Config              config.Cli
+	Lapi                *api.Client
+	streamPullRateLimit *streamPullRateLimit
+}
+
+func NewGeolocationHandlersCollection(balancer balancer.Balancer, cluster cluster.Cluster, config config.Cli, lapi *api.Client) *GeolocationHandlersCollection {
+	return &GeolocationHandlersCollection{
+		Balancer:            balancer,
+		Cluster:             cluster,
+		Config:              config,
+		Lapi:                lapi,
+		streamPullRateLimit: newStreamPullRateLimit(streamSourceRetryInterval),
+	}
 }
 
 // this package handles geolocation for playback and origin discovery for node replication
@@ -220,7 +257,7 @@ func (c *GeolocationHandlersCollection) HandleStreamSource(ctx context.Context, 
 			// stream is active, but STREAM_SOURCE cannot be found
 			glog.Errorf("error querying mist for active stream STREAM_SOURCE: %s", errMist)
 			return "push://", nil
-		} else if !errors.Is(err, errLockPull) && !errors.Is(err, errPullWrongRegion) {
+		} else if !errors.Is(err, errLockPull) && !errors.Is(err, errPullWrongRegion) && !errors.Is(err, errRateLimit) {
 			// stream pull failed for unknown reason
 			glog.Errorf("getStreamPull failed for %s: %s", payload.StreamName, err)
 			return "push://", nil
@@ -255,6 +292,11 @@ func (c *GeolocationHandlersCollection) resolveReplicatedStream(dtscURL string, 
 func (c *GeolocationHandlersCollection) getStreamPull(playbackID string, retryCount int) (string, error) {
 	if c.Lapi == nil {
 		return "", nil
+	}
+
+	// To prevent overloading the LAPI, we limit the rate at which we query for stream pulls
+	if ok := c.streamPullRateLimit.acquire(playbackID); !ok {
+		return "", errRateLimit
 	}
 
 	stream, err := c.Lapi.GetStreamByPlaybackID(playbackID)
