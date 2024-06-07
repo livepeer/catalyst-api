@@ -166,11 +166,11 @@ func TestReconcileMultistream(t *testing.T) {
 	expectedAutoToAdd := []streamTarget{
 		{
 			stream: "video+6736xac7u1hj36pa",
-			target: "rtmp://localhost/live/3c36-sgjq-qbsb-abcd?video=maxbps&audio=maxbps",
+			target: "rtmp://localhost/live/3c36-sgjq-qbsb-abcd?video=maxbps&audio=maxbps?",
 		},
 		{
 			stream: "video+abcdefghi",
-			target: "rtmp://localhost/live/3c36-sgjq-qbsb-efgi?video=maxbps&audio=maxbps",
+			target: "rtmp://localhost/live/3c36-sgjq-qbsb-efgi?video=maxbps&audio=maxbps?",
 		},
 	}
 	expectedAutoToRemove := [][]interface{}{
