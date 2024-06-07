@@ -16,7 +16,8 @@ func TestLocalBroadcasterValidatesProfiles(t *testing.T) {
 	testserver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called++
 		w.WriteHeader(http.StatusTeapot)
-		w.Write([]byte("hissss"))
+		_, err := w.Write([]byte("hissss"))
+		require.NoError(err)
 	}))
 	defer testserver.Close()
 

@@ -16,12 +16,14 @@ func TestRemoteBroadcasterValidatesProfiles(t *testing.T) {
 	called := 0
 	testserver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/broadcaster") {
-			w.Write([]byte(`[{"address":"0x1234"}]`))
+			_, err := w.Write([]byte(`[{"address":"0x1234"}]`))
+			require.NoError(err)
 			return
 		}
 		called++
 		w.WriteHeader(http.StatusTeapot)
-		w.Write([]byte("🫖"))
+		_, err := w.Write([]byte("🫖"))
+		require.NoError(err)
 	}))
 	defer testserver.Close()
 
