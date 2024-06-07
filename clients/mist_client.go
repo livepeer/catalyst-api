@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/patrickmn/go-cache"
 )
@@ -428,6 +429,7 @@ func (mc *MistClient) GetStreamInfo(streamName string) (MistStreamInfo, error) {
 func (mc *MistClient) GetState() (MistState, error) {
 	cachedState, found := mc.cache.Get(stateCacheKey)
 	if found {
+		glog.V(6).Info("returning mist GetState from cache")
 		return *cachedState.(*MistState), nil
 	}
 
