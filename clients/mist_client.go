@@ -12,11 +12,20 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/metrics"
+	"github.com/patrickmn/go-cache"
 )
 
 //go:generate mockgen -source=./mist_client.go -destination=../mocks/clients/mist_client.go
+
+const (
+	stateCacheKey          = "stateCacheKey"
+	defaultCacheExpiration = time.Second
+	cacheCleanupInterval   = 10 * time.Minute
+)
 
 type MistAPIClient interface {
 	AddStream(streamName, sourceUrl string) error
@@ -38,12 +47,14 @@ type MistClient struct {
 	HttpReqUrl      string
 	TriggerCallback string
 	configMu        sync.Mutex
+	cache           *cache.Cache
 }
 
 func NewMistAPIClient(user, password, host string, port int, ownURL string) MistAPIClient {
 	mist := &MistClient{
 		ApiUrl:          fmt.Sprintf("http://%s:%d", host, port),
 		TriggerCallback: ownURL,
+		cache:           cache.New(defaultCacheExpiration, cacheCleanupInterval),
 	}
 	return mist
 }
@@ -416,6 +427,12 @@ func (mc *MistClient) GetStreamInfo(streamName string) (MistStreamInfo, error) {
 }
 
 func (mc *MistClient) GetState() (MistState, error) {
+	cachedState, found := mc.cache.Get(stateCacheKey)
+	if found {
+		glog.V(6).Info("returning mist GetState from cache")
+		return *cachedState.(*MistState), nil
+	}
+
 	c := commandState()
 	resp, err := mc.sendCommand(c)
 	if err := validateAuth(resp, err); err != nil {
@@ -426,6 +443,8 @@ func (mc *MistClient) GetState() (MistState, error) {
 	if err := json.Unmarshal([]byte(resp), &stats); err != nil {
 		return MistState{}, err
 	}
+
+	mc.cache.SetDefault(stateCacheKey, &stats)
 
 	return stats, nil
 }

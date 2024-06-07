@@ -1,7 +1,6 @@
 package mistapiconnector
 
 import (
-	"context"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -259,27 +258,4 @@ func TestReconcileStreams(t *testing.T) {
 		"video+abcdefghi",
 	}
 	require.ElementsMatch(t, expectedNuked, recodedNuked)
-}
-
-func Test_reconcileLoopRateLimit(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	mm := mockmistclient.NewMockMistAPIClient(ctrl)
-
-	streamUpdated := make(chan struct{}, 1)
-	mc := mac{
-		mist:          mm,
-		streamUpdated: streamUpdated,
-	}
-	go func() {
-		mc.reconcileLoop(context.Background())
-	}()
-
-	// expect rate limiting to only allow one call
-	mm.EXPECT().GetState().DoAndReturn(func() (clients.MistState, error) {
-		return clients.MistState{}, nil
-	}).Times(1)
-
-	for i := 0; i < 10; i++ {
-		mc.streamUpdated <- struct{}{}
-	}
 }

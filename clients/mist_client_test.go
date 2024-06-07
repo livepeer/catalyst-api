@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
+	"github.com/patrickmn/go-cache"
 	"github.com/stretchr/testify/require"
 )
 
@@ -370,7 +372,9 @@ func TestItCanGetStreamStats(t *testing.T) {
 	  }
 	`
 
+	callCount := 0
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		require.Equal(t, string(body), "command="+url.QueryEscape(`{"active_streams":["source"],"stats_streams":["clients","lastms"],"push_list":true,"push_auto_list":true}`))
@@ -382,6 +386,7 @@ func TestItCanGetStreamStats(t *testing.T) {
 
 	mc := &MistClient{
 		ApiUrl: svr.URL,
+		cache:  cache.New(200*time.Millisecond, time.Minute),
 	}
 
 	status, err := mc.GetState()
@@ -398,6 +403,17 @@ func TestItCanGetStreamStats(t *testing.T) {
 	require.Equal(t, status.PushAutoList[0].Target, "s3+https://***:***@storage.googleapis.com/target")
 	require.Len(t, status.ActiveStreams, 1)
 	require.Equal(t, status.ActiveStreams["video+c447r0acdmqhhhpb"].Source, "push://")
+	require.Equal(t, 1, callCount)
+
+	// verify caching
+	_, err = mc.GetState() // this call should be cached
+	require.NoError(t, err)
+	require.Equal(t, 1, callCount)
+
+	time.Sleep(300 * time.Millisecond)
+	_, err = mc.GetState() // this call should not be cached
+	require.NoError(t, err)
+	require.Equal(t, 2, callCount)
 }
 
 func TestUnmarshalJSONArray(t *testing.T) {
