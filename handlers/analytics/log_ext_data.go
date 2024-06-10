@@ -92,7 +92,7 @@ func (e *ExternalDataFetcher) extDataFromAsset(playbackID string, asset *api.Ass
 		SourceType:  "asset",
 		UserID:      asset.UserID,
 		ProjectID:   asset.ProjectID,
-		DStorageURL: toDStorageURL(asset.Storage.IPFS),
+		DStorageURL: toDStorageURL(asset.Storage),
 		CreatorID:   toCreatorID(asset.CreatorID),
 	}
 	e.cacheExtData(playbackID, extData)
@@ -106,14 +106,14 @@ func toCreatorID(c *api.CreatorID) string {
 	return ""
 }
 
-func toDStorageURL(ipfs *api.AssetIPFS) string {
-	if ipfs == nil {
+func toDStorageURL(ds *api.AssetStorage) string {
+	if ds == nil || ds.IPFS == nil {
 		return ""
 	}
-	if ipfs.CID != "" {
-		return fmt.Sprintf("ipfs://%s", ipfs.CID)
+	if ds.IPFS.CID != "" {
+		return fmt.Sprintf("ipfs://%s", ds.IPFS.CID)
 	}
-	return ipfs.Url
+	return ds.IPFS.Url
 }
 
 func (e *ExternalDataFetcher) cacheExtData(playbackID string, extData ExternalData) {
