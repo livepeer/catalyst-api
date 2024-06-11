@@ -31,6 +31,9 @@ func MonitorRequest(clientMetrics ClientMetrics, client *http.Client, r *http.Re
 
 	clientMetrics.RequestDuration.WithLabelValues(req.URL.Host).Observe(duration.Seconds())
 	clientMetrics.RetryCount.WithLabelValues(req.URL.Host).Set(float64(retries.count))
+	if clientMetrics.RequestCount != nil {
+		clientMetrics.RequestCount.WithLabelValues(req.URL.Host).Inc()
+	}
 
 	return res, err
 }
