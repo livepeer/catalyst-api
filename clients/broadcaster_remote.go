@@ -63,7 +63,7 @@ func (c *RemoteBroadcasterClient) TranscodeSegmentWithRemoteBroadcaster(segment 
 		return TranscodeResult{}, fmt.Errorf("pickRandomBroadcaster failed %v", err)
 	}
 
-	return transcodeSegment(segment, sequenceNumber, durationMillis, broadcasterURL, manifestId, profiles, "")
+	return transcodeSegment(segment, sequenceNumber, durationMillis, broadcasterURL, manifestId, "")
 }
 
 // findBroadcaster contacts Livepeer API for a broadcaster to use if localBroadcaster is not defined
@@ -109,9 +109,13 @@ func CreateStream(c Credentials, streamName string, profiles []video.EncodedProf
 	if err != nil {
 		return "", fmt.Errorf("appending stream to api url %s: %v", c.CustomAPIURL, err)
 	}
-	// prepare payload
-	payload := createStreamPayload{Name: streamName}
-	payload.Profiles = append(payload.Profiles, profiles...)
+	if err := validateProfiles(profiles); err != nil {
+		return "", err
+	}
+	payload := createStreamPayload{
+		Name:     streamName,
+		Profiles: append([]video.EncodedProfile(nil), profiles...),
+	}
 	payloadBytes, err := json.Marshal(&payload)
 	if err != nil {
 		return "", fmt.Errorf("POST url=%s json encode error %v struct=%v", requestURL, err, payload)

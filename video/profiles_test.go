@@ -11,9 +11,10 @@ import (
 
 func TestGetDefaultPlaybackProfiles(t *testing.T) {
 	tests := []struct {
-		name  string
-		track InputTrack
-		want  []EncodedProfile
+		name       string
+		track      InputTrack
+		copySource bool
+		want       []EncodedProfile
 	}{
 		{
 			name: "360p input",
@@ -92,6 +93,23 @@ func TestGetDefaultPlaybackProfiles(t *testing.T) {
 			},
 		},
 		{
+			name: "1080p input copying source",
+			track: InputTrack{
+				Type:    "video",
+				Bitrate: 5_000_000,
+				VideoTrack: VideoTrack{
+					Width:  1920,
+					Height: 1080,
+				},
+			},
+			copySource: true,
+			want: []EncodedProfile{
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 666_666, Quality: DefaultQuality},
+				{Name: "720p0", Width: 1280, Height: 720, Bitrate: 2_666_666, Quality: DefaultQuality},
+				{Name: "1080p0", Width: 1920, Height: 1080, Bitrate: 5_000_000, Copy: true},
+			},
+		},
+		{
 			name: "240p input with odd number resolution",
 			track: InputTrack{
 				Type:    "video",
@@ -155,7 +173,130 @@ func TestGetDefaultPlaybackProfiles(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetDefaultPlaybackProfiles(tt.track)
+			got, err := GetDefaultPlaybackProfiles(tt.track, tt.copySource)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestSetTranscodeProfiles(t *testing.T) {
+	tests := []struct {
+		name              string
+		input             InputVideo
+		transcodeProfiles []EncodedProfile
+		want              []EncodedProfile
+	}{
+		{
+			name: "bitrate only",
+			input: InputVideo{
+				Format: "mp4",
+				Tracks: []InputTrack{{
+					Type:    "video",
+					Bitrate: 3_000_001,
+					VideoTrack: VideoTrack{
+						Width:  1280,
+						Height: 720,
+					},
+				}},
+			},
+			transcodeProfiles: []EncodedProfile{{Name: "720p-low", Bitrate: 1_500_000}},
+			want: []EncodedProfile{
+				{Name: "720p-low", Width: 1280, Height: 720, Bitrate: 1_500_000, Quality: DefaultQuality},
+			},
+		},
+		{
+			name: "bitrate and quality only",
+			input: InputVideo{
+				Format: "mp4",
+				Tracks: []InputTrack{{
+					Type:    "video",
+					Bitrate: 3_000_001,
+					VideoTrack: VideoTrack{
+						Width:  1280,
+						Height: 720,
+					},
+				}},
+			},
+			transcodeProfiles: []EncodedProfile{{Name: "720p-low", Bitrate: 1_500_000, Quality: 5}},
+			want: []EncodedProfile{
+				{Name: "720p-low", Width: 1280, Height: 720, Bitrate: 1_500_000, Quality: 5},
+			},
+		},
+		{
+			name: "uses default for no transcode profiles input",
+			input: InputVideo{
+				Format: "mp4",
+				Tracks: []InputTrack{{
+					Type:    "video",
+					Bitrate: 3_000_001,
+					VideoTrack: VideoTrack{
+						Width:  1280,
+						Height: 720,
+					},
+				}},
+			},
+			transcodeProfiles: nil,
+			want: []EncodedProfile{
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 900_000, Quality: DefaultQuality},
+				{Name: "720p0", Width: 1280, Height: 720, Bitrate: 3_600_001, Quality: DefaultQuality},
+			},
+		},
+		{
+			name: "keeps empty transcode profiles input",
+			input: InputVideo{
+				Format: "mp4",
+				Tracks: []InputTrack{{
+					Type:    "video",
+					Bitrate: 3_000_001,
+					VideoTrack: VideoTrack{
+						Width:  1280,
+						Height: 720,
+					},
+				}},
+			},
+			transcodeProfiles: []EncodedProfile{},
+			want:              []EncodedProfile{},
+		},
+		{
+			name: "adds copy profile if hls input",
+			input: InputVideo{
+				Format: "hls",
+				Tracks: []InputTrack{{
+					Type:    "video",
+					Bitrate: 3_000_001,
+					VideoTrack: VideoTrack{
+						Width:  1280,
+						Height: 720,
+					},
+				}},
+			},
+			transcodeProfiles: []EncodedProfile{},
+			want:              []EncodedProfile{{Name: "720p0", Width: 1280, Height: 720, Bitrate: 3_000_001, Copy: true}},
+		},
+		{
+			name: "includes copy profile in default profiles if hls input",
+			input: InputVideo{
+				Format: "hls",
+				Tracks: []InputTrack{{
+					Type:    "video",
+					Bitrate: 3_000_001,
+					VideoTrack: VideoTrack{
+						Width:  1280,
+						Height: 720,
+					},
+				}},
+			},
+			transcodeProfiles: nil,
+			want: []EncodedProfile{
+				{Name: "360p0", Width: 640, Height: 360, Bitrate: 900_000, Quality: DefaultQuality},
+				{Name: "720p0", Width: 1280, Height: 720, Bitrate: 3_000_001, Copy: true},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := SetTranscodeProfiles(tt.input, tt.transcodeProfiles)
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
 		})
@@ -196,7 +337,7 @@ func TestGetDefaultPlaybackProfilesFixtures(t *testing.T) {
 			}
 			vt, err := iv.GetTrack(TrackTypeVideo)
 			require.NoError(t, err)
-			current, err := GetDefaultPlaybackProfiles(vt)
+			current, err := GetDefaultPlaybackProfiles(vt, false)
 			require.NoError(t, err)
 
 			if os.Getenv("REGENERATE_FIXTURES") != "" {

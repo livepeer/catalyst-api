@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"net/url"
 	"os"
@@ -74,8 +75,10 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 
 	// transcodeProfiles are desired constraints for transcoding process
 	transcodeProfiles, err := video.SetTranscodeProfiles(inputInfo, transcodeRequest.Profiles)
-	if err != nil || len(transcodeProfiles) == 0 {
+	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("failed to set playback profiles: %w", err)
+	} else if len(transcodeProfiles) == 0 {
+		return outputs, segmentsCount, fmt.Errorf("no transcode profiles could be resolved")
 	}
 
 	// Download the "source" manifest that contains all the segments we'll be transcoding
@@ -499,7 +502,7 @@ func getHlsTargetURL(tsr TranscodeSegmentRequest) (*url.URL, error) {
 func transcodeSegment(
 	segment segmentInfo, streamName, manifestID string,
 	transcodeRequest TranscodeSegmentRequest,
-	transcodeProfiles []video.EncodedProfile,
+	encodedProfiles []video.EncodedProfile,
 	targetOSURL *url.URL,
 	transcodedStats []*video.RenditionStats,
 	renditionList *video.TRenditionList,
@@ -508,22 +511,6 @@ func transcodeSegment(
 ) error {
 	start := time.Now()
 
-	transcodeConf := clients.LivepeerTranscodeConfiguration{
-		TimeoutMultiplier: 10,
-	}
-	// If this is a request to transcode a Clip source input, then
-	// force T to do a re-init of transcoder after segment at idx=0.
-	// This is required because the segment at idx=0 is a locally
-	// re-encoded segment and the following segment at idx=1 is a
-	// source recorded segment. Without a re-init of the transcoder,
-	// the different encoding between the two segments causes the
-	// transcode operation to incorrectly tag the output segment as
-	// having two video tracks.
-	if transcodeRequest.IsClip && (int64(segment.Index) == 0 || segment.IsLastSegment) {
-		transcodeConf.ForceSessionReinit = true
-	} else {
-		transcodeConf.ForceSessionReinit = false
-	}
 	// This is a temporary workaround that implements the same logic
 	// as the previous if block -- a new manifestID will force a
 	// T session re-init between segment at index=0 and index=1.
@@ -531,7 +518,21 @@ func transcodeSegment(
 		manifestID = manifestID + "_clip"
 	}
 
+	transcodeProfiles := make([]video.EncodedProfile, 0, len(encodedProfiles))
+	copySource := false
+	for _, profile := range encodedProfiles {
+		if profile.Copy {
+			if copySource {
+				return fmt.Errorf("multiple source copy profiles found")
+			}
+			copySource = true
+		} else {
+			transcodeProfiles = append(transcodeProfiles, profile)
+		}
+	}
+
 	var tr clients.TranscodeResult
+	var sourceSegment *bytes.Buffer
 	err := backoff.Retry(func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), clients.MaxCopyFileDuration)
 		defer cancel()
@@ -540,6 +541,15 @@ func transcodeSegment(
 			return fmt.Errorf("failed to download source segment %q: %s", segment.Input, err)
 		}
 		defer rc.Close()
+
+		var r io.Reader
+		r, sourceSegment, err = withPipedSource(rc, copySource, transcodeProfiles)
+		if err != nil {
+			return err
+		} else if r == nil {
+			// In this case the pipe already consumed the input (no transcode needed), so source segment is already copied. Just return.
+			return nil
+		}
 
 		// If an AccessToken is provided via the request for transcode, then use remote Broadcasters.
 		// Otherwise, use the local harcoded Broadcaster.
@@ -550,12 +560,29 @@ func transcodeSegment(
 			}
 			broadcasterClient, _ := clients.NewRemoteBroadcasterClient(creds)
 			// TODO: failed to run TranscodeSegmentWithRemoteBroadcaster: CreateStream(): http POST(https://origin.livepeer.com/api/stream) returned 422 422 Unprocessable Entity
-			tr, err = broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(rc, int64(segment.Index), transcodeProfiles, streamName, segment.Input.DurationMillis)
+			tr, err = broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(r, int64(segment.Index), transcodeProfiles, streamName, segment.Input.DurationMillis)
 			if err != nil {
 				return fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
 			}
 		} else {
-			tr, err = broadcaster.TranscodeSegment(rc, int64(segment.Index), transcodeProfiles, segment.Input.DurationMillis, manifestID, transcodeConf)
+			transcodeConf := clients.LivepeerTranscodeConfiguration{
+				TimeoutMultiplier: 10,
+				Profiles:          transcodeProfiles,
+			}
+			// If this is a request to transcode a Clip source input, then
+			// force T to do a re-init of transcoder after segment at idx=0.
+			// This is required because the segment at idx=0 is a locally
+			// re-encoded segment and the following segment at idx=1 is a
+			// source recorded segment. Without a re-init of the transcoder,
+			// the different encoding between the two segments causes the
+			// transcode operation to incorrectly tag the output segment as
+			// having two video tracks.
+			if transcodeRequest.IsClip && (int64(segment.Index) == 0 || segment.IsLastSegment) {
+				transcodeConf.ForceSessionReinit = true
+			} else {
+				transcodeConf.ForceSessionReinit = false
+			}
+			tr, err = broadcaster.TranscodeSegment(r, int64(segment.Index), segment.Input.DurationMillis, manifestID, transcodeConf)
 			if err != nil {
 				return fmt.Errorf("failed to run TranscodeSegment: %s", err)
 			}
@@ -570,47 +597,99 @@ func transcodeSegment(
 	duration := time.Since(start)
 	metrics.Metrics.TranscodeSegmentDurationSec.Observe(duration.Seconds())
 
-	for _, transcodedSegment := range tr.Renditions {
-		renditionIndex := getProfileIndex(transcodeProfiles, transcodedSegment.Name)
-		if renditionIndex == -1 {
-			return fmt.Errorf("failed to find profile with name %q while parsing rendition segment", transcodedSegment.Name)
+	err = processTranscodeResult(segment, transcodeRequest, sourceSegment, tr, encodedProfiles, targetOSURL, transcodedStats, renditionList, segmentChannel)
+	if err != nil {
+		return fmt.Errorf("failed to process transcode result: %w", err)
+	}
+
+	return nil
+}
+
+// withPipedSource is used to duplicate the reading of the `in` reader in case we need a copy of the contents. If
+// `copySource` is false then the `in` reader is returned as is. Otherwise, then a non-nill buffer will be returned and
+// filled after the returned reader is consumed (if present). If no reader is returned (empty transcodeProfiles) the
+// buffer will be already filled with the contents of the `in` reader.
+func withPipedSource(in io.Reader, copySource bool, transcodeProfiles []video.EncodedProfile) (io.Reader, *bytes.Buffer, error) {
+	if !copySource {
+		return in, nil, nil
+	}
+
+	source := new(bytes.Buffer)
+	if len(transcodeProfiles) == 0 {
+		// This is a copy-only job, so skip transcoding with the broadcaster
+		_, err := io.Copy(source, in)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to copy source segment: %s", err)
+		}
+		return nil, source, nil
+	}
+
+	// Otherwise if there are profiles to transcode, then tee the source segment to the buffer
+	return io.TeeReader(in, source), source, nil
+}
+
+func processTranscodeResult(
+	segment segmentInfo,
+	transcodeRequest TranscodeSegmentRequest,
+	sourceSegment *bytes.Buffer,
+	transcodeResult clients.TranscodeResult,
+	encodedProfiles []video.EncodedProfile,
+	targetOSURL *url.URL,
+	transcodedStats []*video.RenditionStats,
+	renditionList *video.TRenditionList,
+	segmentChannel chan<- video.TranscodedSegmentInfo) error {
+
+	for renditionIndex, profile := range encodedProfiles {
+		var mediaData []byte
+		if profile.Copy {
+			mediaData = sourceSegment.Bytes()
+		} else {
+			for _, transcodedSegment := range transcodeResult.Renditions {
+				if transcodedSegment.Name == profile.Name {
+					mediaData = transcodedSegment.MediaData
+					break
+				}
+			}
+		}
+		if mediaData == nil {
+			return fmt.Errorf("failed to find rendition with name %q while parsing transcode result", profile.Name)
 		}
 
-		targetRenditionURL, err := url.JoinPath(targetOSURL.String(), transcodedSegment.Name)
+		targetRenditionURL, err := url.JoinPath(targetOSURL.String(), profile.Name)
 		if err != nil {
 			return fmt.Errorf("error building rendition segment URL %q: %s", targetRenditionURL, err)
 		}
 
 		if transcodeRequest.GenerateMP4 {
 			// get inner segments table from outer rendition table
-			segmentsList := renditionList.GetSegmentList(transcodedSegment.Name)
+			segmentsList := renditionList.GetSegmentList(profile.Name)
 			if segmentsList != nil {
 				// add new entry for segment # and corresponding byte stream if the profile
 				// exists in the renditionList which contains only profiles for which mp4s will
 				// be generated i.e. all profiles for mp4 inputs and only highest quality
 				// rendition for hls inputs like recordings.
-				segmentsList.AddSegmentData(segment.Index, transcodedSegment.MediaData)
+				segmentsList.AddSegmentData(segment.Index, mediaData)
 
 				// send this transcoded segment to the segment channel so that it can be written
 				// to disk in parallel
 				segmentChannel <- video.TranscodedSegmentInfo{
 					RequestID:     transcodeRequest.RequestID,
-					RenditionName: transcodedSegment.Name, // Use actual rendition name
-					SegmentIndex:  segment.Index,          // Use actual segment index
+					RenditionName: profile.Name,  // Use actual rendition name
+					SegmentIndex:  segment.Index, // Use actual segment index
 				}
 
 			}
 		}
 
 		err = backoff.Retry(func() error {
-			return clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(transcodedSegment.MediaData), UploadTimeout)
+			return clients.UploadToOSURL(targetRenditionURL, fmt.Sprintf("%d.ts", segment.Index), bytes.NewReader(mediaData), UploadTimeout)
 		}, clients.UploadRetryBackoff())
 		if err != nil {
-			return fmt.Errorf("failed to upload master playlist: %s", err)
+			return fmt.Errorf("failed to upload segment %d of profile %s: %w", segment.Index, profile.Name, err)
 		}
 
 		// bitrate calculation
-		transcodedStats[renditionIndex].Bytes += int64(len(transcodedSegment.MediaData))
+		transcodedStats[renditionIndex].Bytes += int64(len(mediaData))
 		transcodedStats[renditionIndex].DurationMs += float64(segment.Input.DurationMillis)
 	}
 

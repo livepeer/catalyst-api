@@ -105,28 +105,32 @@ var DefaultProfile720p = EncodedProfile{
 // DefaultTranscodeProfiles defines the default set of encoding profiles to use when none are specified
 var DefaultTranscodeProfiles = []EncodedProfile{DefaultProfile360p, DefaultProfile720p}
 
-func SetTranscodeProfiles(inputVideoStats InputVideo, reqTranscodeProfiles []EncodedProfile) ([]EncodedProfile, error) {
-	var transcodeProfiles []EncodedProfile
+func SetTranscodeProfiles(inputVideoStats InputVideo, transcodeProfiles []EncodedProfile) ([]EncodedProfile, error) {
 	videoTrack, err := inputVideoStats.GetTrack(TrackTypeVideo)
 	if err != nil {
 		return nil, fmt.Errorf("no video track found in input video: %w", err)
 	}
-	// If Profiles haven't been overridden, use the default set
-	if len(reqTranscodeProfiles) == 0 {
-		transcodeProfiles, err = GetDefaultPlaybackProfiles(videoTrack)
+
+	// If it's a special case where only the bitrate is set, we generate a single
+	// profile that matches the input video's specs with the target bitrate
+	if len(transcodeProfiles) == 1 {
+		if transcodeProfiles[0].Width == 0 && transcodeProfiles[0].Height == 0 && transcodeProfiles[0].Bitrate != 0 {
+			transcodeProfiles = GenerateSingleProfileWithTargetParams(videoTrack, transcodeProfiles[0])
+		}
+	}
+	// Always copy the source video for HLS input
+	copySource := inputVideoStats.Format == "hls"
+	// If Profiles were not specified, use the default set. Notice that they can come
+	// as an empty array for no transcoding, which is why we check nil instead of len
+	if transcodeProfiles == nil {
+		transcodeProfiles, err = GetDefaultPlaybackProfiles(videoTrack, copySource)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get default transcode profiles: %w", err)
 		}
-		return transcodeProfiles, nil
-		// Otherwise, if it's a special case where only the bitrate is set, then we generate
-		// a single profile that matches the input video's specs with the target bitrate
-	} else if len(reqTranscodeProfiles) == 1 {
-		if reqTranscodeProfiles[0].Width == 0 && reqTranscodeProfiles[0].Height == 0 && reqTranscodeProfiles[0].Bitrate != 0 {
-			transcodeProfiles = GenerateSingleProfileWithTargetParams(videoTrack, reqTranscodeProfiles[0])
-			return transcodeProfiles, nil
-		}
+	} else if copySource {
+		transcodeProfiles = append(transcodeProfiles, GetSourceCopyProfile(videoTrack))
 	}
-	return reqTranscodeProfiles, nil
+	return transcodeProfiles, nil
 }
 
 func GenerateSingleProfileWithTargetParams(videoTrack InputTrack, videoProfile EncodedProfile) []EncodedProfile {
@@ -147,7 +151,18 @@ func GenerateSingleProfileWithTargetParams(videoTrack InputTrack, videoProfile E
 	return profiles
 }
 
-func GetDefaultPlaybackProfiles(video InputTrack) ([]EncodedProfile, error) {
+func GetSourceCopyProfile(video InputTrack) EncodedProfile {
+	return EncodedProfile{
+		Copy:    true,
+		Name:    strconv.FormatInt(video.Height, 10) + "p0",
+		Bitrate: video.Bitrate,
+		FPS:     0,
+		Width:   video.Width,
+		Height:  video.Height,
+	}
+}
+
+func GetDefaultPlaybackProfiles(video InputTrack, copySource bool) ([]EncodedProfile, error) {
 	videoBitrate := video.Bitrate
 	if videoBitrate > MaxVideoBitrate {
 		videoBitrate = MaxVideoBitrate
@@ -168,14 +183,18 @@ func GetDefaultPlaybackProfiles(video InputTrack) ([]EncodedProfile, error) {
 	if len(profiles) == 0 {
 		profiles = []EncodedProfile{lowBitrateProfile(video)}
 	}
-	profiles = append(profiles, EncodedProfile{
-		Name:    strconv.FormatInt(nearestEven(video.Height), 10) + "p0",
-		Bitrate: int64(math.Min(MaxBitrateFactor*float64(videoBitrate), MaxVideoBitrate)),
-		FPS:     0,
-		Width:   nearestEven(video.Width),
-		Height:  nearestEven(video.Height),
-		Quality: DefaultQuality,
-	})
+	if copySource {
+		profiles = append(profiles, GetSourceCopyProfile(video))
+	} else {
+		profiles = append(profiles, EncodedProfile{
+			Name:    strconv.FormatInt(nearestEven(video.Height), 10) + "p0",
+			Bitrate: int64(math.Min(MaxBitrateFactor*float64(videoBitrate), MaxVideoBitrate)),
+			FPS:     0,
+			Width:   nearestEven(video.Width),
+			Height:  nearestEven(video.Height),
+			Quality: DefaultQuality,
+		})
+	}
 	return profiles, nil
 }
 
@@ -217,6 +236,10 @@ type EncodedProfile struct {
 	ColorDepth   int64  `json:"colorDepth,omitempty"`
 	ChromaFormat int64  `json:"chromaFormat,omitempty"`
 	Quality      uint   `json:"quality,omitempty"`
+	// Copy is a flag to indicate that the profile should be a copy of the input video, no transcoding required. Copying
+	// cannot be specified externally, but is automatically set when the input is in HLS format. This field is not
+	// supported on broadcasters trancode request, so should be used only for internal logic.
+	Copy bool `json:"-"`
 }
 
 type OutputVideo struct {

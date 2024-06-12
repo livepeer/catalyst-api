@@ -135,7 +135,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 
 	if hasVideoTrack {
 		if len(mcArgs.Profiles) == 0 {
-			mcArgs.Profiles, err = video.GetDefaultPlaybackProfiles(videoTrack)
+			mcArgs.Profiles, err = video.GetDefaultPlaybackProfiles(videoTrack, false)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get playback profiles: %w", err)
 			}

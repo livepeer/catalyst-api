@@ -56,7 +56,7 @@ var client = newRetryableClient(&http.Client{Timeout: TRANSCODE_TIMEOUT})
 
 // TranscodeSegment sends media to Livepeer network and returns rendition segments
 // If manifestId == "" one will be created and deleted after use, pass real value to reuse across multiple calls
-func transcodeSegment(inputSegment io.Reader, sequenceNumber, mediaDurationMillis int64, broadcasterURL url.URL, manifestId string, profiles []video.EncodedProfile, transcodeConfigHeader string) (TranscodeResult, error) {
+func transcodeSegment(inputSegment io.Reader, sequenceNumber, mediaDurationMillis int64, broadcasterURL url.URL, manifestId string, transcodeConfigHeader string) (TranscodeResult, error) {
 	t := TranscodeResult{}
 
 	// Send segment to be transcoded
@@ -136,6 +136,15 @@ func transcodeSegment(inputSegment io.Reader, sequenceNumber, mediaDurationMilli
 		}
 	}
 	return t, nil
+}
+
+func validateProfiles(profiles []video.EncodedProfile) error {
+	for _, profile := range profiles {
+		if profile.Copy {
+			return fmt.Errorf("copy profile not supported on transcode pipeline")
+		}
+	}
+	return nil
 }
 
 func httpOk(statusCode int) bool {
