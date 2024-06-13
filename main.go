@@ -66,7 +66,7 @@ func main() {
 	config.URLSliceVarFlag(fs, &cli.ImportIPFSGatewayURLs, "import-ipfs-gateway-urls", "https://vod-import-gtw.mypinata.cloud/ipfs/?pinataGatewayToken={{secrets.LP_PINATA_GATEWAY_TOKEN}},https://w3s.link/ipfs/,https://ipfs.io/ipfs/,https://cloudflare-ipfs.com/ipfs/", "Comma delimited ordered list of IPFS gateways (includes /ipfs/ suffix) to import assets from")
 	config.URLSliceVarFlag(fs, &cli.ImportArweaveGatewayURLs, "import-arweave-gateway-urls", "https://arweave.net/", "Comma delimited ordered list of arweave gateways")
 	fs.BoolVar(&cli.MistCleanup, "run-mist-cleanup", true, "Run mist-cleanup.sh to cleanup shm")
-	fs.BoolVar(&cli.LogSysUsage, "run-pod-mon", false, "Run pod-mon script to monitor sys usage")
+	fs.BoolVar(&cli.LogSysUsage, "run-pod-mon", true, "Run pod-mon script to monitor sys usage")
 	fs.StringVar(&cli.BroadcasterURL, "broadcaster-url", config.DefaultBroadcasterURL, "URL of local broadcaster")
 	config.InvertedBoolFlag(fs, &cli.MistEnabled, "mist", true, "Disable all Mist integrations. Should only be used for development and CI")
 	config.CommaMapFlag(fs, &cli.SourcePlaybackHosts, "source-playback-hosts", map[string]string{}, "Hostname to prefix mappings for source playback URLs")
@@ -244,8 +244,8 @@ func main() {
 	}
 	if cli.ShouldLogSysUsage() {
 		app := "pod-mon.sh"
-		// schedule pod-mon every 60s with timeout of 15s
-		podMon, err := middleware.NewShell(60*time.Second, 15*time.Second, app)
+		// schedule pod-mon every 5min with timeout of 5s
+		podMon, err := middleware.NewShell(300*time.Second, 5*time.Second, app)
 		if err != nil {
 			glog.Info("Failed to shell out:", app, err)
 		}
