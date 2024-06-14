@@ -48,6 +48,10 @@ type MistClient struct {
 	TriggerCallback string
 	configMu        sync.Mutex
 	cache           *cache.Cache
+	// The cache uses a RWMutex which means multiple routines can end up with a cache miss at the same time and end up
+	// calling through to the mist API. We want to avoid this and have the other routines wait so we lock for the
+	// whole of the GetState function.
+	stateCacheMu sync.Mutex
 }
 
 func NewMistAPIClient(user, password, host string, port int, ownURL string) MistAPIClient {
@@ -427,6 +431,9 @@ func (mc *MistClient) GetStreamInfo(streamName string) (MistStreamInfo, error) {
 }
 
 func (mc *MistClient) GetState() (MistState, error) {
+	mc.stateCacheMu.Lock()
+	defer mc.stateCacheMu.Unlock()
+
 	cachedState, found := mc.cache.Get(stateCacheKey)
 	if found {
 		glog.V(6).Info("returning mist GetState from cache")
