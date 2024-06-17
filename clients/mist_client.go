@@ -48,7 +48,7 @@ type MistClient struct {
 	TriggerCallback string
 	configMu        sync.Mutex
 	cache           *cache.Cache
-	// The cache uses a RWMutex which means multiple routines can end up with a cache miss at the same time and end up
+	// The go-cache library uses a RWMutex which means multiple routines can end up with a cache miss at the same time and end up
 	// calling through to the mist API. We want to avoid this and have the other routines wait so we lock for the
 	// whole of the GetState function.
 	stateCacheMu sync.Mutex
