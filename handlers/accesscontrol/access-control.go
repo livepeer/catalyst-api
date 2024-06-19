@@ -74,23 +74,23 @@ type HitRecords struct {
 	mux  sync.Mutex
 }
 
+// ViewerLimitCache comes from Gate API
 type ViewerLimitCache struct {
 	data map[string]*ViewerLimitCacheEntry
 	mux  sync.RWMutex
 }
 
-// ViewerLimitCacheEntry is cached from Gate API
 type ViewerLimitCacheEntry struct {
 	ViewerLimitPerUser int32
 	UserID             string
 }
 
+// ConcurrentViewersCache comes from the server-side realtime viewership (livepeer-data)
 type ConcurrentViewersCache struct {
 	data map[string]*ConcurrentViewersCacheEntry
 	mux  sync.RWMutex
 }
 
-// ConcurrentViewersCacheEntry is cached from the server-side realtime viewership
 type ConcurrentViewersCacheEntry struct {
 	ViewCount   int32
 	LastRefresh time.Time
