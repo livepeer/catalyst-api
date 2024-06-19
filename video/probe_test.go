@@ -35,6 +35,21 @@ func TestItRejectsWhenMJPEGVideoTrackPresent(t *testing.T) {
 	require.ErrorContains(t, err, "jpeg is not supported")
 }
 
+func TestItRejectsProresVideos(t *testing.T) {
+	_, err := parseProbeOutput(&ffprobe.ProbeData{
+		Format: &ffprobe.Format{
+			Size: "1",
+		},
+		Streams: []*ffprobe.Stream{
+			{
+				CodecType: "video",
+				CodecName: "prores",
+			},
+		},
+	})
+	require.ErrorContains(t, err, "prores is not supported")
+}
+
 func TestItRejectsWhenFormatMissing(t *testing.T) {
 	_, err := parseProbeOutput(&ffprobe.ProbeData{
 		Streams: []*ffprobe.Stream{

@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	unsupportedVideoCodecList = []string{"mjpeg", "jpeg", "png"}
+	unsupportedVideoCodecList = []string{"mjpeg", "jpeg", "png", "prores"}
 	supportedFormats          = []string{"mp4", "mov", "hls"}
 )
 
