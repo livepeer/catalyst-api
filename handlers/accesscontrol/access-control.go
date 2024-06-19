@@ -340,10 +340,6 @@ func checkRateLimit(playbackID string) bool {
 
 // checkViewerLimit is used to limit viewers per user globally (as configured with Gate API)
 func (ac *AccessControlHandlersCollection) checkViewerLimit(playbackID string) bool {
-	// We don't want to make any blocking calls, so refreshing the cache async
-	// The worse that can happen is that we allow a few users above the limit for a few seconds
-	defer func() { ac.refreshConcurrentViewerCache(playbackID) }()
-
 	viewerLimitCache.mux.RLock()
 	defer viewerLimitCache.mux.RUnlock()
 
@@ -351,6 +347,9 @@ func (ac *AccessControlHandlersCollection) checkViewerLimit(playbackID string) b
 	defer concurrentViewersCache.mux.RUnlock()
 
 	if viewerLimit, ok := viewerLimitCache.data[playbackID]; ok {
+		// We don't want to make any blocking calls, so refreshing the cache async
+		// The worse that can happen is that we allow a few users above the limit for a few seconds
+		defer func() { go ac.refreshConcurrentViewerCache(playbackID) }()
 		if concurrentViewers, ok2 := concurrentViewersCache.data[playbackID]; ok2 {
 			if viewerLimit.ViewerLimitPerUser != 0 && concurrentViewers.ViewCount > viewerLimit.ViewerLimitPerUser {
 				glog.Infof("Viewer limit reached for playbackID=%s, viewerLimit=%d, viewCount=%d", playbackID, viewerLimit.ViewerLimitPerUser, concurrentViewers.ViewCount)
@@ -380,6 +379,16 @@ func (ac *AccessControlHandlersCollection) refreshConcurrentViewerCache(playback
 
 	vc.mux.Lock()
 	if time.Since(vc.LastRefresh) > 30*time.Second {
+		// double check if the cache was not updated in the meantime
+		concurrentViewersCache.mux.RLock()
+		vc2, ok2 := concurrentViewersCache.data[playbackID]
+		if ok2 && time.Since(vc2.LastRefresh) < 30*time.Second {
+			concurrentViewersCache.mux.RUnlock()
+			vc.mux.Unlock()
+			return
+		}
+		concurrentViewersCache.mux.RUnlock()
+
 		viewCount, err := ac.dataClient.QueryServerViewCount(viewerLimit.UserID)
 		if err != nil {
 			glog.Errorf("Error querying server view count: %v", err)
@@ -563,6 +572,20 @@ func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 				return false, gateConfig, fmt.Errorf("refresh_interval is not a number")
 			}
 			refreshInterval = int32(refreshIntervalFloat64)
+		}
+		if ri, ok := result["viewer_limit_per_user"]; ok {
+			viewerLimitPerUser, ok := ri.(float64)
+			if !ok {
+				return false, gateConfig, fmt.Errorf("viewer_limit_per_user is not a number")
+			}
+			gateConfig.ViewerLimitPerUser = int32(viewerLimitPerUser)
+		}
+		if ri, ok := result["user_id"]; ok {
+			userID, ok := ri.(string)
+			if !ok {
+				return false, gateConfig, fmt.Errorf("user_id is not a string")
+			}
+			gateConfig.UserID = userID
 		}
 	}
 
