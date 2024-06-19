@@ -25,6 +25,10 @@ import (
 	"github.com/pquerna/cachecontrol/cacheobject"
 )
 
+const (
+	concurrentViewerCacheTimeout = 30 * time.Second
+)
+
 type AccessControlHandlersCollection struct {
 	cache       map[string]map[string]*PlaybackAccessControlEntry
 	mutex       sync.RWMutex
@@ -372,11 +376,11 @@ func (ac *AccessControlHandlersCollection) checkViewerLimit(playbackID string) b
 func (ac *AccessControlHandlersCollection) refreshConcurrentViewerCache(playbackID string) {
 	viewerLimitCache.mux.RLock()
 	viewerLimit, ok := viewerLimitCache.data[playbackID]
+	viewerLimitCache.mux.RUnlock()
 	if !ok {
-		viewerLimitCache.mux.RUnlock()
+		// no viewer limit, no need to refresh
 		return
 	}
-	viewerLimitCache.mux.RUnlock()
 
 	concurrentViewersCache.mux.Lock()
 	vc, ok := concurrentViewersCache.data[playbackID]
@@ -387,16 +391,15 @@ func (ac *AccessControlHandlersCollection) refreshConcurrentViewerCache(playback
 	concurrentViewersCache.mux.Unlock()
 
 	vc.mux.Lock()
-	if time.Since(vc.LastRefresh) > 30*time.Second {
+	defer vc.mux.Unlock()
+	if time.Since(vc.LastRefresh) > concurrentViewerCacheTimeout {
 		// double check if the cache was not updated in the meantime
 		concurrentViewersCache.mux.RLock()
 		vc2, ok2 := concurrentViewersCache.data[playbackID]
-		if ok2 && time.Since(vc2.LastRefresh) < 30*time.Second {
-			concurrentViewersCache.mux.RUnlock()
-			vc.mux.Unlock()
+		concurrentViewersCache.mux.RUnlock()
+		if ok2 && time.Since(vc2.LastRefresh) < concurrentViewerCacheTimeout {
 			return
 		}
-		concurrentViewersCache.mux.RUnlock()
 
 		viewCount, err := ac.dataClient.QueryServerViewCount(viewerLimit.UserID)
 		if err != nil {
@@ -409,7 +412,6 @@ func (ac *AccessControlHandlersCollection) refreshConcurrentViewerCache(playback
 		concurrentViewersCache.data[playbackID].LastRefresh = time.Now()
 		concurrentViewersCache.mux.Unlock()
 	}
-	vc.mux.Unlock()
 }
 
 func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(ctx context.Context, playbackID, cacheKey string, requestBody []byte) (bool, error) {
