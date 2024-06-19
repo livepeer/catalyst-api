@@ -94,6 +94,7 @@ type ConcurrentViewersCache struct {
 type ConcurrentViewersCacheEntry struct {
 	ViewCount   int32
 	LastRefresh time.Time
+	mux         sync.Mutex
 }
 
 type RefreshIntervalRecord struct {
@@ -367,20 +368,27 @@ func (ac *AccessControlHandlersCollection) refreshConcurrentViewerCacheAsync(pla
 		viewerLimitCache.mux.RUnlock()
 
 		concurrentViewersCache.mux.Lock()
-		defer concurrentViewersCache.mux.Unlock()
-
-		if _, ok := concurrentViewersCache.data[playbackID]; !ok {
-			concurrentViewersCache.data[playbackID] = &ConcurrentViewersCacheEntry{}
+		vc, ok := concurrentViewersCache.data[playbackID]
+		if !ok {
+			vc = &ConcurrentViewersCacheEntry{}
+			concurrentViewersCache.data[playbackID] = vc
 		}
-		if time.Since(concurrentViewersCache.data[playbackID].LastRefresh) > 30*time.Second {
+		concurrentViewersCache.mux.Unlock()
+
+		vc.mux.Lock()
+		if time.Since(vc.LastRefresh) > 30*time.Second {
 			viewCount, err := ac.dataClient.QueryServerViewCount(viewerLimit.UserID)
 			if err != nil {
 				glog.Errorf("Error querying server view count: %v", err)
 				return
 			}
+
+			concurrentViewersCache.mux.Lock()
 			concurrentViewersCache.data[playbackID].ViewCount = viewCount
 			concurrentViewersCache.data[playbackID].LastRefresh = time.Now()
+			concurrentViewersCache.mux.Unlock()
 		}
+		vc.mux.Unlock()
 	}()
 }
 
