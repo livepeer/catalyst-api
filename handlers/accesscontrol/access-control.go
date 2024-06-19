@@ -29,6 +29,7 @@ type AccessControlHandlersCollection struct {
 	cache       map[string]map[string]*PlaybackAccessControlEntry
 	mutex       sync.RWMutex
 	gateClient  GateAPICaller
+	dataClient  DataAPICaller
 	blockedJWTs []string
 }
 
@@ -58,6 +59,10 @@ type GateAPICaller interface {
 	QueryGate(body []byte) (bool, GateConfig, error)
 }
 
+type DataAPICaller interface {
+	QueryServerViewCount(userID string) (int32, error)
+}
+
 type GateClient struct {
 	Client  *http.Client
 	gateURL string
@@ -73,21 +78,47 @@ type HitRecords struct {
 	mux  sync.Mutex
 }
 
+type ViewerLimitCache struct {
+	data map[string]*ViewerLimitCacheEntry
+	mux  sync.RWMutex
+}
+
+// ViewerLimitCacheEntry is cached from Gate API
+type ViewerLimitCacheEntry struct {
+	ViewerLimitPerUser int32
+	UserID             string
+}
+
+type ConcurrentViewersCache struct {
+	data map[string]*ConcurrentViewersCacheEntry
+	mux  sync.RWMutex
+}
+
+// ConcurrentViewersCacheEntry is cached from the server-side realtime viewership
+type ConcurrentViewersCacheEntry struct {
+	ViewCount   int32
+	LastRefresh time.Time
+}
+
 type RefreshIntervalRecord struct {
 	RefreshInterval int32
 	LastRefresh     time.Time
 }
 
 type GateConfig struct {
-	MaxAge               int32 `json:"max_age"`
-	StaleWhileRevalidate int32 `json:"stale_while_revalidate"`
-	RateLimit            int32 `json:"rate_limit"`
-	RefreshInterval      int32 `json:"refresh_interval"`
+	MaxAge               int32  `json:"max_age"`
+	StaleWhileRevalidate int32  `json:"stale_while_revalidate"`
+	RateLimit            int32  `json:"rate_limit"`
+	RefreshInterval      int32  `json:"refresh_interval"`
+	ViewerLimitPerUser   int32  `json:"viewer_limit_per_user"`
+	UserID               string `json:"user_id"`
 }
 
-var hitRecordCache = HitRecords{
-	data: make(map[string]*HitRecord),
-}
+var (
+	hitRecordCache         = HitRecords{data: make(map[string]*HitRecord)}
+	viewerLimitCache       = ViewerLimitCache{data: make(map[string]*ViewerLimitCacheEntry)}
+	concurrentViewersCache = ConcurrentViewersCache{data: make(map[string]*ConcurrentViewersCacheEntry)}
+)
 
 type RefreshIntervalCache struct {
 	data map[string]*RefreshIntervalRecord
@@ -244,15 +275,12 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 		jwt = payload.JWT
 	}
 
-	if _, ok := hitRecordCache.data[playbackID]; ok {
-		hitRecordCache.mux.Lock()
-		if len(hitRecordCache.data[playbackID].hits) >= hitRecordCache.data[playbackID].rateLimit {
-			glog.Infof("Rate limit reached for playbackID %v", playbackID)
-			hitRecordCache.mux.Unlock()
-			return false, nil
-		}
-		hitRecordCache.data[playbackID].hits = append(hitRecordCache.data[playbackID].hits, time.Now())
-		hitRecordCache.mux.Unlock()
+	if !checkRateLimit(playbackID) {
+		return false, nil
+	}
+
+	if !ac.checkViewerLimit(playbackID) {
+		return false, nil
 	}
 
 	if accessKey != "" {
@@ -293,6 +321,71 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 	}
 
 	return ac.GetPlaybackAccessControlInfo(ctx, acReq.Stream, cacheKey, body)
+}
+
+// checkRateLimit is used to limit viewers per catalyst node in the hacker tier
+func checkRateLimit(playbackID string) bool {
+	hitRecordCache.mux.Lock()
+	defer hitRecordCache.mux.Unlock()
+	if _, ok := hitRecordCache.data[playbackID]; ok {
+		if len(hitRecordCache.data[playbackID].hits) >= hitRecordCache.data[playbackID].rateLimit {
+			glog.Infof("Rate limit reached for playbackID %v", playbackID)
+			return false
+		}
+		hitRecordCache.data[playbackID].hits = append(hitRecordCache.data[playbackID].hits, time.Now())
+	}
+	return true
+}
+
+// checkViewerLimit is used to limit viewers per user globally (as configured with Gate API)
+func (ac *AccessControlHandlersCollection) checkViewerLimit(playbackID string) bool {
+	// We don't want to make any blocking calls, so refreshing the cache async
+	// The worse that can happen is that we allow a few users above the limit for a few seconds
+	defer ac.refreshConcurrentViewerCacheAsync(playbackID)
+
+	viewerLimitCache.mux.RLock()
+	defer viewerLimitCache.mux.RUnlock()
+
+	concurrentViewersCache.mux.RLock()
+	defer concurrentViewersCache.mux.RUnlock()
+
+	if viewerLimit, ok := viewerLimitCache.data[playbackID]; ok {
+		if concurrentViewers, ok2 := concurrentViewersCache.data[playbackID]; ok2 {
+			if viewerLimit.ViewerLimitPerUser != 0 && concurrentViewers.ViewCount > viewerLimit.ViewerLimitPerUser {
+				glog.Infof("Viewer limit reached for playbackID=%s, viewerLimit=%d, viewCount=%d", playbackID, viewerLimit.ViewerLimitPerUser, concurrentViewers.ViewCount)
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (ac *AccessControlHandlersCollection) refreshConcurrentViewerCacheAsync(playbackID string) {
+	go func() {
+		viewerLimitCache.mux.RLock()
+		viewerLimit, ok := viewerLimitCache.data[playbackID]
+		if !ok {
+			viewerLimitCache.mux.RUnlock()
+			return
+		}
+		viewerLimitCache.mux.RUnlock()
+
+		concurrentViewersCache.mux.Lock()
+		defer concurrentViewersCache.mux.Unlock()
+
+		if _, ok := concurrentViewersCache.data[playbackID]; !ok {
+			concurrentViewersCache.data[playbackID] = &ConcurrentViewersCacheEntry{}
+		}
+		if time.Since(concurrentViewersCache.data[playbackID].LastRefresh) > 30*time.Second {
+			viewCount, err := ac.dataClient.QueryServerViewCount(viewerLimit.UserID)
+			if err != nil {
+				glog.Errorf("Error querying server view count: %v", err)
+				return
+			}
+			concurrentViewersCache.data[playbackID].ViewCount = viewCount
+			concurrentViewersCache.data[playbackID].LastRefresh = time.Now()
+		}
+	}()
 }
 
 func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(ctx context.Context, playbackID, cacheKey string, requestBody []byte) (bool, error) {
@@ -378,6 +471,19 @@ func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playba
 		}
 	}
 	refreshIntervalCache.mux.Unlock()
+
+	// cache viewer limit per user data
+	viewerLimitCache.mux.Lock()
+	if gateConfig.ViewerLimitPerUser != 0 && gateConfig.UserID != "" {
+		if _, ok := viewerLimitCache.data[playbackID]; !ok {
+			viewerLimitCache.data[playbackID] = &ViewerLimitCacheEntry{}
+		}
+		viewerLimitCache.data[playbackID].ViewerLimitPerUser = gateConfig.ViewerLimitPerUser
+		viewerLimitCache.data[playbackID].UserID = gateConfig.UserID
+	} else {
+		delete(viewerLimitCache.data, playbackID)
+	}
+	viewerLimitCache.mux.Unlock()
 
 	var maxAgeTime = time.Now().Add(time.Duration(maxAge) * time.Second)
 	var staleTime = time.Now().Add(time.Duration(stale) * time.Second)
