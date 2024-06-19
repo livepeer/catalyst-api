@@ -59,10 +59,6 @@ type GateAPICaller interface {
 	QueryGate(body []byte) (bool, GateConfig, error)
 }
 
-type DataAPICaller interface {
-	QueryServerViewCount(userID string) (int32, error)
-}
-
 type GateClient struct {
 	Client  *http.Client
 	gateURL string
