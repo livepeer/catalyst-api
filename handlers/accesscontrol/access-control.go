@@ -338,7 +338,7 @@ func checkRateLimit(playbackID string) bool {
 func (ac *AccessControlHandlersCollection) checkViewerLimit(playbackID string) bool {
 	// We don't want to make any blocking calls, so refreshing the cache async
 	// The worse that can happen is that we allow a few users above the limit for a few seconds
-	defer ac.refreshConcurrentViewerCacheAsync(playbackID)
+	defer func() { ac.refreshConcurrentViewerCache(playbackID) }()
 
 	viewerLimitCache.mux.RLock()
 	defer viewerLimitCache.mux.RUnlock()
@@ -357,39 +357,37 @@ func (ac *AccessControlHandlersCollection) checkViewerLimit(playbackID string) b
 	return true
 }
 
-func (ac *AccessControlHandlersCollection) refreshConcurrentViewerCacheAsync(playbackID string) {
-	go func() {
-		viewerLimitCache.mux.RLock()
-		viewerLimit, ok := viewerLimitCache.data[playbackID]
-		if !ok {
-			viewerLimitCache.mux.RUnlock()
+func (ac *AccessControlHandlersCollection) refreshConcurrentViewerCache(playbackID string) {
+	viewerLimitCache.mux.RLock()
+	viewerLimit, ok := viewerLimitCache.data[playbackID]
+	if !ok {
+		viewerLimitCache.mux.RUnlock()
+		return
+	}
+	viewerLimitCache.mux.RUnlock()
+
+	concurrentViewersCache.mux.Lock()
+	vc, ok := concurrentViewersCache.data[playbackID]
+	if !ok {
+		vc = &ConcurrentViewersCacheEntry{}
+		concurrentViewersCache.data[playbackID] = vc
+	}
+	concurrentViewersCache.mux.Unlock()
+
+	vc.mux.Lock()
+	if time.Since(vc.LastRefresh) > 30*time.Second {
+		viewCount, err := ac.dataClient.QueryServerViewCount(viewerLimit.UserID)
+		if err != nil {
+			glog.Errorf("Error querying server view count: %v", err)
 			return
 		}
-		viewerLimitCache.mux.RUnlock()
 
 		concurrentViewersCache.mux.Lock()
-		vc, ok := concurrentViewersCache.data[playbackID]
-		if !ok {
-			vc = &ConcurrentViewersCacheEntry{}
-			concurrentViewersCache.data[playbackID] = vc
-		}
+		concurrentViewersCache.data[playbackID].ViewCount = viewCount
+		concurrentViewersCache.data[playbackID].LastRefresh = time.Now()
 		concurrentViewersCache.mux.Unlock()
-
-		vc.mux.Lock()
-		if time.Since(vc.LastRefresh) > 30*time.Second {
-			viewCount, err := ac.dataClient.QueryServerViewCount(viewerLimit.UserID)
-			if err != nil {
-				glog.Errorf("Error querying server view count: %v", err)
-				return
-			}
-
-			concurrentViewersCache.mux.Lock()
-			concurrentViewersCache.data[playbackID].ViewCount = viewCount
-			concurrentViewersCache.data[playbackID].LastRefresh = time.Now()
-			concurrentViewersCache.mux.Unlock()
-		}
-		vc.mux.Unlock()
-	}()
+	}
+	vc.mux.Unlock()
 }
 
 func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(ctx context.Context, playbackID, cacheKey string, requestBody []byte) (bool, error) {
