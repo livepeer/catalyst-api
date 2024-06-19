@@ -9,7 +9,6 @@ import (
 type ClientMetrics struct {
 	RetryCount      *prometheus.GaugeVec
 	FailureCount    *prometheus.CounterVec
-	RequestCount    *prometheus.CounterVec
 	RequestDuration *prometheus.HistogramVec
 }
 
@@ -143,10 +142,6 @@ func NewMetrics() *CatalystAPIMetrics {
 				Help:    "Time taken to send transcoding status updates",
 				Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
 			}, []string{"host"}),
-			RequestCount: promauto.NewCounterVec(prometheus.CounterOpts{
-				Name: "transcoding_status_update_request_count",
-				Help: "The total number of transcoding status updates",
-			}, []string{"host"}),
 		},
 
 		BroadcasterClient: ClientMetrics{
@@ -162,10 +157,6 @@ func NewMetrics() *CatalystAPIMetrics {
 				Name:    "broadcaster_client_request_duration",
 				Help:    "Time taken to send broadcaster requests",
 				Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
-			}, []string{"host"}),
-			RequestCount: promauto.NewCounterVec(prometheus.CounterOpts{
-				Name: "broadcaster_client_request_count",
-				Help: "The total number of broadcaster requests",
 			}, []string{"host"}),
 		},
 
@@ -183,10 +174,6 @@ func NewMetrics() *CatalystAPIMetrics {
 				Help:    "Time taken to send mist requests",
 				Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
 			}, []string{"host"}),
-			RequestCount: promauto.NewCounterVec(prometheus.CounterOpts{
-				Name: "mist_client_request_count",
-				Help: "The total number of mist requests",
-			}, []string{"host"}),
 		},
 
 		ObjectStoreClient: ClientMetrics{
@@ -203,10 +190,6 @@ func NewMetrics() *CatalystAPIMetrics {
 				Help:    "Time taken to send object store requests",
 				Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
 			}, []string{"host", "operation", "bucket"}),
-			RequestCount: promauto.NewCounterVec(prometheus.CounterOpts{
-				Name: "object_store_request_count",
-				Help: "The total number of object store requests",
-			}, []string{"host"}),
 		},
 
 		VODPipelineMetrics: VODPipelineMetrics{
