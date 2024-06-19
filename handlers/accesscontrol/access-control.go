@@ -348,7 +348,7 @@ func (ac *AccessControlHandlersCollection) checkViewerLimit(playbackID string) b
 
 	if viewerLimit, ok := viewerLimitCache.data[playbackID]; ok {
 		// We don't want to make any blocking calls, so refreshing the cache async
-		// The worse that can happen is that we allow a few users above the limit for a few seconds
+		// The worse that can happen is that we allow a few viewers above the limit for a few seconds
 		defer func() { go ac.refreshConcurrentViewerCache(playbackID) }()
 		if concurrentViewers, ok2 := concurrentViewersCache.data[playbackID]; ok2 {
 			if viewerLimit.ViewerLimitPerUser != 0 && concurrentViewers.ViewCount > viewerLimit.ViewerLimitPerUser {
