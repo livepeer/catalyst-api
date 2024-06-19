@@ -178,6 +178,10 @@ func NewAccessControlHandlersCollection(cli config.Cli, mapic mistapiconnector.I
 				gateURL: cli.GateURL,
 				Client:  &http.Client{},
 			},
+			dataClient: &DataClient{
+				Endpoint:    cli.DataURL,
+				AccessToken: cli.APIToken,
+			},
 			blockedJWTs: cli.BlockedJWTs,
 		}
 		accessControlHandlersCollection.periodicCleanUpRecordCache()
