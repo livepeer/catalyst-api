@@ -346,16 +346,25 @@ func (ac *AccessControlHandlersCollection) checkViewerLimit(playbackID string) b
 	concurrentViewersCache.mux.RLock()
 	defer concurrentViewersCache.mux.RUnlock()
 
-	if viewerLimit, ok := viewerLimitCache.data[playbackID]; ok {
-		// We don't want to make any blocking calls, so refreshing the cache async
-		// The worse that can happen is that we allow a few viewers above the limit for a few seconds
-		defer func() { go ac.refreshConcurrentViewerCache(playbackID) }()
-		if concurrentViewers, ok2 := concurrentViewersCache.data[playbackID]; ok2 {
-			if viewerLimit.ViewerLimitPerUser != 0 && concurrentViewers.ViewCount > viewerLimit.ViewerLimitPerUser {
-				glog.Infof("Viewer limit reached for playbackID=%s, viewerLimit=%d, viewCount=%d", playbackID, viewerLimit.ViewerLimitPerUser, concurrentViewers.ViewCount)
-				return false
-			}
-		}
+	viewerLimit, ok := viewerLimitCache.data[playbackID]
+	if !ok || viewerLimit.ViewerLimitPerUser == 0 {
+		// no viewer limit, allow all viewers
+		return true
+	}
+
+	// We don't want to make any blocking calls, so refreshing the cache async
+	// The worse that can happen is that we allow a few viewers above the limit for a few seconds
+	defer func() { go ac.refreshConcurrentViewerCache(playbackID) }()
+
+	concurrentViewers, ok := concurrentViewersCache.data[playbackID]
+	if !ok || concurrentViewers.ViewCount == 0 {
+		// no concurrent viewer data, allow all viewers
+		return true
+	}
+
+	if concurrentViewers.ViewCount > viewerLimit.ViewerLimitPerUser {
+		glog.Infof("Viewer limit exceeded for playbackID=%s, viewerLimit=%d, viewCount=%d", playbackID, viewerLimit.ViewerLimitPerUser, concurrentViewers.ViewCount)
+		return false
 	}
 	return true
 }
