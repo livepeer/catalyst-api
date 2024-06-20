@@ -40,6 +40,7 @@ func TestDownloadRenditionManifestFailsWhenItCantFindTheManifest(t *testing.T) {
 	_, err := DownloadRenditionManifest("blah", "/tmp/something/x.m3u8")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "error downloading manifest")
+	require.Contains(t, err.Error(), "ObjectNotFoundError")
 }
 
 func TestDownloadRenditionManifestFailsWhenItCantParseTheManifest(t *testing.T) {

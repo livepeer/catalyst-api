@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -11,10 +12,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/grafov/m3u8"
+	"github.com/livepeer/catalyst-api/config"
+	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/video"
 )
 
@@ -33,25 +37,9 @@ func DownloadRetryBackoffLong() backoff.BackOff {
 var DownloadRetryBackoff = DownloadRetryBackoffLong
 
 func DownloadRenditionManifest(requestID, sourceManifestOSURL string) (m3u8.MediaPlaylist, error) {
-	var playlist m3u8.Playlist
-	var playlistType m3u8.ListType
-
-	dStorage := NewDStorageDownload()
-	err := backoff.Retry(func() error {
-		rc, err := GetFile(context.Background(), requestID, sourceManifestOSURL, dStorage)
-		if err != nil {
-			return fmt.Errorf("error downloading manifest: %s", err)
-		}
-		defer rc.Close()
-
-		playlist, playlistType, err = m3u8.DecodeFrom(rc, true)
-		if err != nil {
-			return fmt.Errorf("error decoding manifest: %s", err)
-		}
-		return nil
-	}, DownloadRetryBackoff())
+	playlist, playlistType, err := downloadManifestWithBackup(requestID, sourceManifestOSURL)
 	if err != nil {
-		return m3u8.MediaPlaylist{}, err
+		return m3u8.MediaPlaylist{}, fmt.Errorf("error downloading manifest: %w", err)
 	}
 
 	// We shouldn't ever receive Master playlists from the previous section
@@ -66,6 +54,76 @@ func DownloadRenditionManifest(requestID, sourceManifestOSURL string) (m3u8.Medi
 	}
 
 	return *mediaPlaylist, nil
+}
+
+func downloadManifestWithBackup(requestID, sourceManifestOSURL string) (m3u8.Playlist, m3u8.ListType, error) {
+	var playlist, playlistBackup m3u8.Playlist
+	var playlistType, playlistTypeBackup m3u8.ListType
+	var size, sizeBackup int
+	var errPrimary, errBackup error
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		playlist, playlistType, size, errPrimary = downloadManifest(requestID, sourceManifestOSURL)
+	}()
+
+	backupManifestURL := config.GetStorageBackupURL(sourceManifestOSURL)
+	if backupManifestURL != "" {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			playlistBackup, playlistTypeBackup, sizeBackup, errBackup = downloadManifest(requestID, backupManifestURL)
+		}()
+	}
+	wg.Wait()
+
+	// If the file is not found in either storage, return the not found err from
+	// the primary. Otherwise, return any error that is not a simple not found
+	// (only not found errors passthrough below)
+	primaryNotFound, backupNotFound := errors.IsObjectNotFound(errPrimary), errors.IsObjectNotFound(errBackup)
+	if primaryNotFound && backupNotFound {
+		return nil, 0, errPrimary
+	}
+	if errPrimary != nil && !primaryNotFound {
+		return nil, 0, errPrimary
+	}
+	if errBackup != nil && !backupNotFound {
+		return nil, 0, errBackup
+	}
+
+	// Return the largest manifest as the most recent version
+	hasBackup := backupManifestURL != "" && errBackup == nil
+	if hasBackup && (errPrimary != nil || sizeBackup > size) {
+		return playlistBackup, playlistTypeBackup, nil
+	}
+	return playlist, playlistType, errPrimary
+}
+
+func downloadManifest(requestID, sourceManifestOSURL string) (playlist m3u8.Playlist, playlistType m3u8.ListType, size int, err error) {
+	dStorage := NewDStorageDownload()
+	err = backoff.Retry(func() error {
+		rc, err := GetFile(context.Background(), requestID, sourceManifestOSURL, dStorage)
+		if err != nil {
+			return err
+		}
+		defer rc.Close()
+
+		data := new(bytes.Buffer)
+		_, err = data.ReadFrom(rc)
+		if err != nil {
+			return fmt.Errorf("error reading manifest: %s", err)
+		}
+
+		size = data.Len()
+		playlist, playlistType, err = m3u8.Decode(*data, true)
+		if err != nil {
+			return fmt.Errorf("error decoding manifest: %s", err)
+		}
+		return nil
+	}, DownloadRetryBackoff())
+	return
 }
 
 type SourceSegment struct {
