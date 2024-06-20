@@ -2,6 +2,7 @@ package clients
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	xerrors "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 
 	"github.com/cenkalti/backoff/v4"
@@ -29,7 +31,7 @@ func DownloadOSURL(osURL string) (io.ReadCloser, error) {
 func GetOSURL(osURL, byteRange string) (*drivers.FileInfoReader, error) {
 	storageDriver, err := drivers.ParseOSURL(osURL, true)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse OS URL %q: %s", log.RedactURL(osURL), err)
+		return nil, xerrors.Unretriable(fmt.Errorf("failed to parse OS URL %q: %w", log.RedactURL(osURL), err))
 	}
 
 	start := time.Now()
@@ -50,6 +52,10 @@ func GetOSURL(osURL, byteRange string) (*drivers.FileInfoReader, error) {
 
 	if err != nil {
 		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(host, "read", bucket).Inc()
+
+		if errors.Is(err, drivers.ErrNotExist) {
+			return nil, xerrors.NewObjectNotFoundError("not found in OS", err)
+		}
 		return nil, fmt.Errorf("failed to read from OS URL %q: %w", log.RedactURL(osURL), err)
 	}
 

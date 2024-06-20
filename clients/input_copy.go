@@ -2,6 +2,7 @@ package clients
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -312,13 +313,17 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error on import request: %w", err)
 	}
+
 	if resp.StatusCode >= 300 {
 		resp.Body.Close()
-		err := fmt.Errorf("bad status code from import request: %d %s", resp.StatusCode, resp.Status)
-		if resp.StatusCode < 500 {
-			err = xerrors.Unretriable(err)
+
+		msg := fmt.Sprintf("bad status code from import request: %d %s", resp.StatusCode, resp.Status)
+		if resp.StatusCode == 404 {
+			return nil, xerrors.NewObjectNotFoundError(msg, nil)
+		} else if resp.StatusCode < 500 {
+			return nil, xerrors.Unretriable(errors.New(msg))
 		}
-		return nil, err
+		return nil, errors.New(msg)
 	}
 	return resp.Body, nil
 }
