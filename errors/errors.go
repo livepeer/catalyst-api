@@ -3,6 +3,7 @@ package errors
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -71,13 +72,44 @@ func Unretriable(err error) error {
 	return UnretriableError{err}
 }
 
+func (e UnretriableError) Unwrap() error {
+	return e.error
+}
+
 // Returns whether the given error is an unretriable error.
 func IsUnretriable(err error) bool {
 	return errors.As(err, &UnretriableError{})
 }
 
+type ObjectNotFoundError struct {
+	msg   string
+	cause error
+}
+
+func (e ObjectNotFoundError) Error() string {
+	return e.msg
+}
+
+func (e ObjectNotFoundError) Unwrap() error {
+	return e.cause
+}
+
+func NewObjectNotFoundError(msg string, cause error) error {
+	if cause != nil {
+		msg = fmt.Sprintf("ObjectNotFoundError: %s: %s", msg, cause)
+	} else {
+		msg = fmt.Sprintf("ObjectNotFoundError: %s", msg)
+	}
+	// every not found is unretriable
+	return Unretriable(ObjectNotFoundError{msg: msg, cause: cause})
+}
+
+// IsObjectNotFound checks if the error is an ObjectNotFoundError.
+func IsObjectNotFound(err error) bool {
+	return errors.As(err, &ObjectNotFoundError{})
+}
+
 var (
-	ObjectNotFoundError = errors.New("ObjectNotFoundError")
-	UnauthorisedError   = errors.New("UnauthorisedError")
-	InvalidJWT          = errors.New("InvalidJWTError")
+	UnauthorisedError = errors.New("UnauthorisedError")
+	InvalidJWT        = errors.New("InvalidJWTError")
 )

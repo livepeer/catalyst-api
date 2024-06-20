@@ -82,7 +82,7 @@ func (p *PlaybackHandler) Handle(w http.ResponseWriter, req *http.Request, param
 func handleError(err error, req *http.Request, requestID string, w http.ResponseWriter) {
 	log.LogError(requestID, "error in playback handler", err, "url", req.URL)
 	switch {
-	case errors.Is(err, catErrs.ObjectNotFoundError):
+	case catErrs.IsObjectNotFound(err):
 		catErrs.WriteHTTPNotFound(w, "not found", nil)
 	case errors.Is(err, catErrs.UnauthorisedError):
 		catErrs.WriteHTTPUnauthorized(w, "denied", nil)
