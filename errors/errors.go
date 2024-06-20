@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/xeipuuv/gojsonschema"
 )
@@ -64,21 +65,24 @@ func WriteHTTPBadBodySchema(where string, w http.ResponseWriter, errors []gojson
 	return writeHttpError(w, sb.String(), http.StatusBadRequest, nil)
 }
 
-// Special wrapper for errors that should set the `Unretriable` field in the
-// error callback sent on VOD upload jobs.
-type UnretriableError struct{ error }
+type unretriableError struct{ error }
 
+// Unretriable returns an error that should be treated as final. This effectively means that the error stops backoff
+// retry loops automatically and that it should be propagated back to the caller as such. This is done through the
+// status callback through the "unretriable" field.
 func Unretriable(err error) error {
-	return UnretriableError{err}
+	// Notice that permanent errors get unwrapped by the backoff lib when they're used to stop the retry loop. So we need
+	// to keep the unretriableError inside it so it's propagated upstream.
+	return backoff.Permanent(unretriableError{err})
 }
 
-func (e UnretriableError) Unwrap() error {
-	return e.error
-}
-
-// Returns whether the given error is an unretriable error.
+// IsUnretriable returns whether the given error is an unretriable error.
 func IsUnretriable(err error) bool {
-	return errors.As(err, &UnretriableError{})
+	return errors.As(err, &unretriableError{})
+}
+
+func (e unretriableError) Unwrap() error {
+	return e.error
 }
 
 type ObjectNotFoundError struct {
