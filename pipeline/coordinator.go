@@ -168,11 +168,16 @@ type Coordinator struct {
 	MetricsDB            *sql.DB
 	InputCopy            clients.InputCopier
 	VodDecryptPrivateKey *rsa.PrivateKey
+	StorageFallbackURLs  map[string]string
 	SourceOutputURL      *url.URL
 	C2PA                 *c2pa.C2PA
 }
 
-func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient, metricsDB *sql.DB, VodDecryptPrivateKey *rsa.PrivateKey, broadcasterURL string, sourcePlaybackHosts map[string]string, c2pa *c2pa.C2PA) (*Coordinator, error) {
+func NewCoordinator(
+	strategy Strategy, sourceOutputURL, extTranscoderURL string, statusClient clients.TranscodeStatusClient,
+	metricsDB *sql.DB, VodDecryptPrivateKey *rsa.PrivateKey, storageFallbackURLs map[string]string, broadcasterURL string,
+	sourcePlaybackHosts map[string]string, c2pa *c2pa.C2PA) (*Coordinator, error) {
+
 	if !strategy.IsValid() {
 		return nil, fmt.Errorf("invalid strategy: %s", strategy)
 	}
@@ -205,12 +210,14 @@ func NewCoordinator(strategy Strategy, sourceOutputURL, extTranscoderURL string,
 			Broadcaster:         broadcaster,
 			probe:               video.Probe{},
 			sourcePlaybackHosts: sourcePlaybackHosts,
+			storageFallbackURLs: storageFallbackURLs,
 		},
 		pipeExternal:         &external{extTranscoder},
 		Jobs:                 cache.New[*JobInfo](),
 		MetricsDB:            metricsDB,
 		InputCopy:            clients.NewInputCopy(),
 		VodDecryptPrivateKey: VodDecryptPrivateKey,
+		StorageFallbackURLs:  storageFallbackURLs,
 		SourceOutputURL:      sourceOutput,
 		C2PA:                 c2pa,
 	}, nil
