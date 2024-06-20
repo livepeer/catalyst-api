@@ -37,7 +37,6 @@ func (d *DataClient) QueryServerViewCount(userID string) (int32, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to create request, err=%v", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", d.AccessToken))
 
 	res, err := http.DefaultClient.Do(req)
