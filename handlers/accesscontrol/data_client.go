@@ -10,6 +10,7 @@ type DataAPICaller interface {
 	QueryServerViewCount(userID string) (int32, error)
 }
 
+// DataClient is a client for the Livepeer Data API
 type DataClient struct {
 	Endpoint    string
 	AccessToken string
