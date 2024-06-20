@@ -262,7 +262,7 @@ func TestViewerLimit(t *testing.T) {
 			MaxAge:               120,
 			StaleWhileRevalidate: 300,
 			RefreshInterval:      0,
-			ViewerLimitPerUser:   1,
+			UserViewerLimit:      1,
 			UserID:               userID,
 		}
 		return true, gateConfig, nil

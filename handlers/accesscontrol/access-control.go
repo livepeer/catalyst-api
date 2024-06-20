@@ -111,7 +111,7 @@ type GateConfig struct {
 	StaleWhileRevalidate int32  `json:"stale_while_revalidate"`
 	RateLimit            int32  `json:"rate_limit"`
 	RefreshInterval      int32  `json:"refresh_interval"`
-	ViewerLimitPerUser   int32  `json:"viewer_limit_per_user"`
+	UserViewerLimit      int32  `json:"user_viewer_limit"`
 	UserID               string `json:"user_id"`
 }
 
@@ -500,11 +500,11 @@ func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playba
 
 	// cache viewer limit per user data
 	viewerLimitCache.mux.Lock()
-	if gateConfig.ViewerLimitPerUser != 0 && gateConfig.UserID != "" {
+	if gateConfig.UserViewerLimit != 0 && gateConfig.UserID != "" {
 		if _, ok := viewerLimitCache.data[playbackID]; !ok {
 			viewerLimitCache.data[playbackID] = &ViewerLimitCacheEntry{}
 		}
-		viewerLimitCache.data[playbackID].ViewerLimitPerUser = gateConfig.ViewerLimitPerUser
+		viewerLimitCache.data[playbackID].ViewerLimitPerUser = gateConfig.UserViewerLimit
 		viewerLimitCache.data[playbackID].UserID = gateConfig.UserID
 	} else {
 		delete(viewerLimitCache.data, playbackID)
@@ -584,12 +584,12 @@ func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 			}
 			refreshInterval = int32(refreshIntervalFloat64)
 		}
-		if ri, ok := result["viewer_limit_per_user"]; ok {
+		if ri, ok := result["user_viewer_limit"]; ok {
 			viewerLimitPerUser, ok := ri.(float64)
 			if !ok {
-				return false, gateConfig, fmt.Errorf("viewer_limit_per_user is not a number")
+				return false, gateConfig, fmt.Errorf("user_viewer_limit is not a number")
 			}
-			gateConfig.ViewerLimitPerUser = int32(viewerLimitPerUser)
+			gateConfig.UserViewerLimit = int32(viewerLimitPerUser)
 		}
 		if ri, ok := result["user_id"]; ok {
 			userID, ok := ri.(string)
