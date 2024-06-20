@@ -748,16 +748,13 @@ func (mc *mac) getPushUrl(stream *api.Stream, targetRef *api.MultistreamTargetRe
 		}
 		videoSelector = fmt.Sprintf("~%dx%d", prof.Width, prof.Height)
 	}
-	join := "?"
-	if strings.Contains(target.URL, "?") {
-		join = "&"
-	}
 	audioSelector := "maxbps"
 	if targetRef.VideoOnly {
 		audioSelector = "silent"
 	}
-	// Inject ?video=~widthxheight to send the correct rendition
-	return target, fmt.Sprintf("%s%svideo=%s&audio=%s", target.URL, join, videoSelector, audioSelector), nil
+	// Inject ?video=~widthxheight to send the correct rendition. Notice that we don't care if there is already a
+	// query-string in the URL since Mist will always strip from the last `?` in the push URL for its configs.
+	return target, fmt.Sprintf("%s?video=%s&audio=%s", target.URL, videoSelector, audioSelector), nil
 }
 
 func (mc *mac) getStreamInfoLogged(playbackID string) (*streamInfo, bool) {
