@@ -15,6 +15,7 @@ import (
 )
 
 const (
+	userID         = "some-user"
 	playbackID     = "1bbbqz6753hcli1t"
 	plusPlaybackID = "video+1bbbqz6753hcli1t"
 	publicKey      = `LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFNzRoTHBSUkx0TzBQS01Vb08yV3ptY2xOemFBaQp6RTd2UnUrdmtHQXFEVzBEVzB5eW9LV3ZKakZNcWdOb0dCakpiZDM2c3ZiTzhVRnN6aXlSZzJYdXlnPT0KLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg==`
@@ -32,6 +33,12 @@ type stubGateClient struct{}
 
 func (g *stubGateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 	return queryGate(body)
+}
+
+type stubDataClient struct{}
+
+func (d *stubDataClient) QueryServerViewCount(userID string) (int32, error) {
+	return 2, nil
 }
 
 var queryGate = func(body []byte) (bool, GateConfig, error) {
@@ -65,10 +72,16 @@ var denyAccess = func(body []byte) (bool, GateConfig, error) {
 }
 
 func testTriggerHandler() func(context.Context, *misttriggers.UserNewPayload) (bool, error) {
-	return (&AccessControlHandlersCollection{
+	c := &AccessControlHandlersCollection{
 		cache:      make(map[string]map[string]*PlaybackAccessControlEntry),
 		gateClient: &stubGateClient{},
-	}).HandleUserNew
+		dataClient: &stubDataClient{},
+	}
+	// Make sure the concurrent viewer data is available
+	// In the code it's done async, so to make sure this test is not flaky,
+	// we need to execute it here synchronously
+	c.refreshConcurrentViewerCache(playbackID)
+	return c.HandleUserNew
 }
 
 func TestAllowedAccessValidToken(t *testing.T) {
@@ -237,6 +250,34 @@ func TestInvalidCache(t *testing.T) {
 	executeFlow(payload, handler, countableAllowAccess)
 
 	require.Equal(t, 2, callCount)
+}
+
+func TestViewerLimit(t *testing.T) {
+	token, _ := craftToken(privateKey, publicKey, playbackID, expiration)
+	payload := []byte(fmt.Sprint(playbackID, "\n1\n2\n3\nhttp://localhost:8080/hls/", playbackID, "/index.m3u8?stream=", playbackID, "&jwt=", token, "\n5"))
+
+	access := func(body []byte) (bool, GateConfig, error) {
+		gateConfig := GateConfig{
+			RateLimit:            0,
+			MaxAge:               120,
+			StaleWhileRevalidate: 300,
+			RefreshInterval:      0,
+			UserViewerLimit:      1,
+			UserID:               userID,
+		}
+		return true, gateConfig, nil
+	}
+
+	// The first called is allowed, because the viewer limit is not cached yet
+	// This is ok, because we don't need to be so strict about limiting viewers
+	// It's better to return fast and let the user watch the stream
+	result1 := executeFlow(payload, testTriggerHandler(), access)
+	require.Equal(t, "true", result1)
+
+	// The second call should be blocked, because we already cached the viewer limit
+	// and it's exceeded
+	result2 := executeFlow(payload, testTriggerHandler(), access)
+	require.Equal(t, "false", result2)
 }
 
 func executeFlow(body []byte, handler func(context.Context, *misttriggers.UserNewPayload) (bool, error), request func(body []byte) (bool, GateConfig, error)) string {
