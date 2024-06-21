@@ -180,10 +180,11 @@ func main() {
 		glog.Warning("DEPRECATION NOTICE: mist-user and mist-password are no longer used and will be removed in a later version")
 	}
 
-	// TODO: I don't love the global variables for these
+	// TODO: I don't love the global variables for these. Me neither.
 	config.ImportIPFSGatewayURLs = cli.ImportIPFSGatewayURLs
 	config.ImportArweaveGatewayURLs = cli.ImportArweaveGatewayURLs
 	config.HTTPInternalAddress = cli.HTTPInternalAddress
+	config.StorageFallbackURLs = cli.StorageFallbackURLs
 
 	var (
 		metricsDB *sql.DB
@@ -228,7 +229,7 @@ func main() {
 	}
 	// Start the "co-ordinator" that determines whether to send jobs to the Catalyst transcoding pipeline
 	// or an external one
-	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB, vodDecryptPrivateKey, cli.StorageFallbackURLs, cli.BroadcasterURL, cli.SourcePlaybackHosts, c2)
+	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB, vodDecryptPrivateKey, cli.BroadcasterURL, cli.SourcePlaybackHosts, c2)
 	if err != nil {
 		glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 	}

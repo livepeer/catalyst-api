@@ -30,7 +30,6 @@ type ffmpeg struct {
 	Broadcaster         clients.BroadcasterClient
 	probe               video.Prober
 	sourcePlaybackHosts map[string]string
-	storageFallbackURLs map[string]string
 }
 
 func init() {
