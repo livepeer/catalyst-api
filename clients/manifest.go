@@ -332,7 +332,7 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnix
 		segmentURL := sourceSegmentURLs[v.SeqId].URL
 		dStorage := NewDStorageDownload()
 		err = backoff.Retry(func() error {
-			rc, err := GetFile(context.Background(), requestID, segmentURL.String(), dStorage)
+			rc, err := GetFileWithBackup(context.Background(), requestID, segmentURL.String(), dStorage)
 			if err != nil {
 				return fmt.Errorf("error clipping: failed to download segment %d: %w", v.SeqId, err)
 			}

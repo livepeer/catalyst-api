@@ -171,7 +171,7 @@ func GenerateThumbsFromManifest(requestID, input string, output *url.URL) error 
 			)
 			// save the segment to memory
 			err = backoff.Retry(func() error {
-				rc, err = clients.GetFile(context.Background(), requestID, segURL.String(), nil)
+				rc, err = clients.GetFileWithBackup(context.Background(), requestID, segURL.String(), nil)
 				return err
 			}, clients.DownloadRetryBackoff())
 			if err != nil {
