@@ -305,7 +305,7 @@ func (f *ffmpeg) probeSourceSegments(job *JobInfo, sourceSegments []*m3u8.MediaS
 }
 
 func (f *ffmpeg) probeSourceSegment(requestID string, seg *m3u8.MediaSegment, sourceManifestURL string) error {
-	u, err := clients.ManifestURLToSegmentURL(sourceManifestURL, seg.URI)
+	u, err := clients.ManifestURLToSegmentURL(requestID, sourceManifestURL, seg.URI)
 	if err != nil {
 		return fmt.Errorf("error checking source segments: %w", err)
 	}

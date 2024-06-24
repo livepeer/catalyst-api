@@ -132,7 +132,7 @@ type SourceSegment struct {
 }
 
 // Loop over each segment in a given manifest and convert it from a relative path to a full ObjectStore-compatible URL
-func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist) ([]SourceSegment, error) {
+func GetSourceSegmentURLs(requestID, sourceManifestURL string, manifest m3u8.MediaPlaylist) ([]SourceSegment, error) {
 	var urls []SourceSegment
 	for _, segment := range manifest.Segments {
 		// The segments list is a ring buffer - see https://github.com/grafov/m3u8/issues/140
@@ -141,7 +141,7 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 			break
 		}
 
-		u, err := ManifestURLToSegmentURL(sourceManifestURL, segment.URI)
+		u, err := ManifestURLToSegmentURL(requestID, sourceManifestURL, segment.URI)
 		if err != nil {
 			return nil, err
 		}
@@ -247,7 +247,7 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 	return res, nil
 }
 
-func ManifestURLToSegmentURL(manifestURL, segmentFilename string) (*url.URL, error) {
+func ManifestURLToSegmentURL(requestID, manifestURL, segmentFilename string) (*url.URL, error) {
 	base, err := url.Parse(manifestURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse manifest URL when converting to segment URL: %s", err)
@@ -258,7 +258,27 @@ func ManifestURLToSegmentURL(manifestURL, segmentFilename string) (*url.URL, err
 		return nil, fmt.Errorf("failed to parse segment filename when converting to segment URL: %s", err)
 	}
 
-	return base.ResolveReference(relative), nil
+	segmentURL := base.ResolveReference(relative)
+	// Try to read the file from object store, to get the backup URL if it's not in the primary storage.
+	var actualSegURL string
+	dStorage := NewDStorageDownload()
+	err = backoff.Retry(func() error {
+		var rc io.ReadCloser
+		rc, actualSegURL, err = GetFileWithBackup(context.Background(), requestID, segmentURL.String(), dStorage)
+		if rc != nil {
+			rc.Close()
+		}
+		return err
+	}, DownloadRetryBackoff())
+	if err != nil {
+		return nil, fmt.Errorf("failed to find segment file: %s", err)
+	}
+
+	segmentURL, err = url.Parse(actualSegURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse segment URL: %s", err)
+	}
+	return segmentURL, nil
 }
 
 func SortTranscodedStats(transcodedStats []*video.RenditionStats) {
@@ -284,7 +304,7 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnix
 
 	// Generate the absolute path URLS for segmens from the manifest's relative path
 	// TODO: optimize later and only get absolute path URLs for the start/end segments
-	sourceSegmentURLs, err := GetSourceSegmentURLs(sourceURL, origManifest)
+	sourceSegmentURLs, err := GetSourceSegmentURLs(requestID, sourceURL, origManifest)
 	if err != nil {
 		return nil, fmt.Errorf("error clipping: failed to get segment urls: %w", err)
 	}
@@ -332,7 +352,7 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnix
 		segmentURL := sourceSegmentURLs[v.SeqId].URL
 		dStorage := NewDStorageDownload()
 		err = backoff.Retry(func() error {
-			rc, err := GetFileWithBackup(context.Background(), requestID, segmentURL.String(), dStorage)
+			rc, _, err := GetFileWithBackup(context.Background(), requestID, segmentURL.String(), dStorage)
 			if err != nil {
 				return fmt.Errorf("error clipping: failed to download segment %d: %w", v.SeqId, err)
 			}

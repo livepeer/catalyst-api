@@ -64,6 +64,8 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 		}
 	}
 
+	// We're probing the raw HLS input file here and skipping storage fallback logic. Figure out how to handle this.
+	// TODO: Always copy HLS files above? Only when there are missing files? Create a local manifest pointing to fallback'ed segment URLs?
 	log.Log(requestID, "starting probe", "source", inputFile.String(), "dest", osTransferURL.String())
 	inputFileProbe, err := s.Probe.ProbeFile(requestID, signedURL, "-analyzeduration", "15000000")
 	if err != nil {
@@ -193,7 +195,7 @@ func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, dec
 		// Save the mapping between the input m3u8 manifest file to its corresponding OS-transfer destination url
 		fileList[srcInputUrl.String()] = dstOutputUrl.String()
 		// Now get a list of the OS-compatible segment URLs from the input manifest file
-		sourceSegmentUrls, err := GetSourceSegmentURLs(srcInputUrl.String(), playlist)
+		sourceSegmentUrls, err := GetSourceSegmentURLs(requestID, srcInputUrl.String(), playlist)
 		if err != nil {
 			return fmt.Errorf("error generating source segment URLs for HLS input manifest: %s", err)
 		}
@@ -287,28 +289,28 @@ func GetFile(ctx context.Context, requestID, url string, dStorage *DStorageDownl
 	}
 }
 
-func GetFileWithBackup(ctx context.Context, requestID, url string, dStorage *DStorageDownload) (io.ReadCloser, error) {
+func GetFileWithBackup(ctx context.Context, requestID, url string, dStorage *DStorageDownload) (io.ReadCloser, string, error) {
 	rc, err := GetFile(ctx, requestID, url, dStorage)
 	if err == nil {
-		return rc, nil
+		return rc, url, nil
 	}
 
 	backupURL := config.GetStorageBackupURL(url)
 	if backupURL == "" {
-		return nil, err
+		return nil, url, err
 	}
 	rc, backupErr := GetFile(ctx, requestID, backupURL, dStorage)
 	if backupErr == nil {
-		return rc, nil
+		return rc, backupURL, nil
 	}
 
 	// prioritize retriable errors in the response so we don't skip retries
 	if !xerrors.IsUnretriable(err) {
-		return nil, err
+		return nil, url, err
 	} else if !xerrors.IsUnretriable(backupErr) {
-		return nil, backupErr
+		return nil, backupURL, backupErr
 	}
-	return nil, err
+	return nil, url, err
 }
 
 var retryableHttpClient = newRetryableHttpClient()
