@@ -59,6 +59,7 @@ func (p Probe) runProbe(url string, ffProbeOptions ...string) (iv InputVideo, er
 	backOff.InitialInterval = 500 * time.Millisecond
 	backOff.MaxInterval = 2 * time.Second
 	backOff.MaxElapsedTime = 0 // don't impose a timeout as part of the retries
+	backOff.Reset()
 	err = backoff.Retry(operation, backoff.WithMaxRetries(backOff, 3))
 	if err != nil {
 		return InputVideo{}, fmt.Errorf("error probing: %w", err)

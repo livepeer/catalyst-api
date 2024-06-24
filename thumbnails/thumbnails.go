@@ -25,8 +25,10 @@ const resolution = "854:480"
 const vttFilename = "thumbnails.vtt"
 const outputDir = "thumbnails"
 
-// Wait a maximum of 5 mins for thumbnails to finish
-var thumbWaitBackoff = backoff.WithMaxRetries(backoff.NewConstantBackOff(30*time.Second), 10)
+func thumbWaitBackoff() backoff.BackOff {
+	// Wait a maximum of 5 mins for thumbnails to finish
+	return backoff.WithMaxRetries(backoff.NewConstantBackOff(30*time.Second), 10)
+}
 
 func getMediaManifest(requestID string, input string) (*m3u8.MediaPlaylist, error) {
 	var (
@@ -102,7 +104,7 @@ func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
 				rc.Close()
 			}
 			return err
-		}, thumbWaitBackoff)
+		}, thumbWaitBackoff())
 		if err != nil {
 			return fmt.Errorf("failed to find thumb %s: %w", filename, err)
 		}
