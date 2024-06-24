@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net/http"
+	"net/http/httputil"
 	"os"
 	"os/signal"
 	"strings"
@@ -39,7 +41,35 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+func startProxyServer() error {
+	proxy := &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			req.URL.Scheme = "http"
+			req.URL.Host = "localhost:9000"
+		},
+	}
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		errorChance := float32(0.5)
+		if r.Method != "GET" {
+			errorChance = 0.95
+		}
+		if rand.Float32() < errorChance {
+			glog.Errorf("Random error for path=%s", r.URL.Path)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	})
+
+	return http.ListenAndServe(":9420", nil)
+}
+
 func main() {
+	go func() {
+		log.Fatal(startProxyServer())
+	}()
+
 	err := flag.Set("logtostderr", "true")
 	if err != nil {
 		glog.Fatal(err)
