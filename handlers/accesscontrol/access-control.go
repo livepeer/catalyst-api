@@ -284,10 +284,6 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 		return false, nil
 	}
 
-	if !ac.checkViewerLimit(playbackID) {
-		return false, nil
-	}
-
 	if accessKey != "" {
 		acReq.Type = "accessKey"
 		acReq.AccessKey = accessKey
@@ -325,7 +321,13 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 		return false, fmt.Errorf("json marshalling failed: %w", err)
 	}
 
-	return ac.GetPlaybackAccessControlInfo(ctx, acReq.Stream, cacheKey, body)
+	gateAllowed, err := ac.GetPlaybackAccessControlInfo(ctx, acReq.Stream, cacheKey, body)
+	if err != nil {
+		return gateAllowed, err
+	}
+
+	viewerLimitPassed := ac.checkViewerLimit(playbackID)
+	return gateAllowed && viewerLimitPassed, nil
 }
 
 // checkRateLimit is used to limit viewers per catalyst node in the hacker tier
