@@ -407,5 +407,6 @@ func retries(retries uint64) backoff.BackOff {
 	backOff.InitialInterval = 1 * time.Second
 	backOff.MaxInterval = 30 * time.Second
 	backOff.MaxElapsedTime = 0 // don't impose a timeout as part of the retries
+	backOff.Reset()
 	return backoff.WithMaxRetries(backOff, retries)
 }
