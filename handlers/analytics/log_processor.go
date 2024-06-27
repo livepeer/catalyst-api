@@ -32,6 +32,7 @@ type LogDataEvent struct {
 	AutoplayStatus      *string `json:"autoplay_status,omitempty"`
 	StalledCount        *int    `json:"stalled_count,omitempty"`
 	WaitingCount        *int    `json:"waiting_count,omitempty"`
+	TimeWarningMS       *int    `json:"time_warning_ms,omitempty"`
 	TimeErroredMS       *int    `json:"time_errored_ms,omitempty"`
 	TimeStalledMS       *int    `json:"time_stalled_ms,omitempty"`
 	TimePlayingMS       *int    `json:"time_playing_ms,omitempty"`
