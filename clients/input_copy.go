@@ -15,7 +15,7 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/crypto"
-	xerrors "github.com/livepeer/catalyst-api/errors"
+	catErrs "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/video"
 	"github.com/livepeer/go-tools/drivers"
@@ -307,7 +307,7 @@ func newRetryableHttpClient() *http.Client {
 func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, xerrors.Unretriable(fmt.Errorf("error creating http request: %w", err))
+		return nil, catErrs.Unretriable(fmt.Errorf("error creating http request: %w", err))
 	}
 	resp, err := retryableHttpClient.Do(req)
 	if err != nil {
@@ -319,9 +319,9 @@ func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
 
 		msg := fmt.Sprintf("bad status code from import request: %d %s", resp.StatusCode, resp.Status)
 		if resp.StatusCode == 404 {
-			return nil, xerrors.NewObjectNotFoundError(msg, nil)
+			return nil, catErrs.NewObjectNotFoundError(msg, nil)
 		} else if resp.StatusCode < 500 {
-			return nil, xerrors.Unretriable(errors.New(msg))
+			return nil, catErrs.Unretriable(errors.New(msg))
 		}
 		return nil, errors.New(msg)
 	}

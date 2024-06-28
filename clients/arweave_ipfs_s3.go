@@ -11,7 +11,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/livepeer/catalyst-api/config"
-	xerrors "github.com/livepeer/catalyst-api/errors"
+	catErrs "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 )
 
@@ -92,7 +92,7 @@ func downloadDStorageResourceFromSingleGateway(gateway *url.URL, resourceId, req
 	if resp.StatusCode == 404 {
 		resp.Body.Close()
 		log.Log(requestID, "dstorage gateway not found", "status_code", resp.StatusCode, "url", fullURL)
-		return nil, xerrors.NewObjectNotFoundError("not found in dstorage", nil)
+		return nil, catErrs.NewObjectNotFoundError("not found in dstorage", nil)
 	} else if resp.StatusCode >= 300 {
 		resp.Body.Close()
 		log.Log(requestID, "unexpected response from gateway", "status_code", resp.StatusCode, "url", fullURL)

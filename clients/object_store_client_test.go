@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	caterrors "github.com/livepeer/catalyst-api/errors"
+	catErrs "github.com/livepeer/catalyst-api/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,7 +42,7 @@ func TestItFailsWithMissingFile(t *testing.T) {
 	_, err := DownloadOSURL("/tmp/this/should/not/exist.m3u8")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ObjectNotFoundError")
-	require.True(t, caterrors.IsObjectNotFound(err))
+	require.True(t, catErrs.IsObjectNotFound(err))
 }
 
 func TestPublish(t *testing.T) {
