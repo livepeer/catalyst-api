@@ -53,6 +53,7 @@ type AnalyticsLogEvent struct {
 	AutoplayStatus      *string `json:"autoplay_status"`
 	StalledCount        *int    `json:"stalled_count"`
 	WaitingCount        *int    `json:"waiting_count"`
+	TimeWarningMS       *int    `json:"time_warning_ms"`
 	TimeErroredMS       *int    `json:"time_errored_ms"`
 	TimeStalledMS       *int    `json:"time_stalled_ms"`
 	TimePlayingMS       *int    `json:"time_playing_ms"`
@@ -244,6 +245,7 @@ func (c *AnalyticsHandlersCollection) toAnalyticsData(log *AnalyticsLog, geo Ana
 				AutoplayStatus:      e.AutoplayStatus,
 				StalledCount:        e.StalledCount,
 				WaitingCount:        e.WaitingCount,
+				TimeWarningMS:       e.TimeWarningMS,
 				TimeErroredMS:       e.TimeErroredMS,
 				TimeStalledMS:       e.TimeStalledMS,
 				TimePlayingMS:       e.TimePlayingMS,
