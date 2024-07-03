@@ -41,6 +41,7 @@ func (s *StepContext) AllOfTheSourceSegmentsAreWrittenToStorageWithinSeconds(num
 }
 
 func (s *StepContext) TheSourceManifestIsWrittenToStorageWithinSeconds(secs, numSegments int) error {
+	// TODO fix. this is now a minio object store url
 	// Comes in looking like file:/var/folders/qr/sr8gs8916zd2wjbx50d3c3yc0000gn/T/livepeer/source
 	// and we want /var/folders/qr/sr8gs8916zd2wjbx50d3c3yc0000gn/T/livepeer/source/aceaegdf/source/index.m3u8
 	sourceManifest := filepath.Join(strings.TrimPrefix(s.SourceOutputDir, "file:"), s.latestRequestID, "source/index.m3u8")

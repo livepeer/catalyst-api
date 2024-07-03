@@ -78,11 +78,11 @@ func TestItCanDownloadAValidRenditionManifest(t *testing.T) {
 }
 
 func TestItCanConvertRelativeURLsToOSURLs(t *testing.T) {
-	u, err := ManifestURLToSegmentURL("blah", "/tmp/file/something.m3u8", "001.ts")
+	u, err := ManifestURLToSegmentURL("/tmp/file/something.m3u8", "001.ts")
 	require.NoError(t, err)
 	require.Equal(t, "/tmp/file/001.ts", u.String())
 
-	u, err = ManifestURLToSegmentURL("blah", "s3+https://REDACTED:REDACTED@storage.googleapis.com/something/output.m3u8", "001.ts")
+	u, err = ManifestURLToSegmentURL("s3+https://REDACTED:REDACTED@storage.googleapis.com/something/output.m3u8", "001.ts")
 	require.NoError(t, err)
 	require.Equal(t, "s3+https://REDACTED:REDACTED@storage.googleapis.com/something/001.ts", u.String())
 }
@@ -94,7 +94,7 @@ func TestItParsesManifestAndConvertsRelativeURLs(t *testing.T) {
 	sourceMediaManifest, ok := sourceManifest.(*m3u8.MediaPlaylist)
 	require.True(t, ok)
 
-	us, err := GetSourceSegmentURLs("blah", "s3+https://REDACTED:REDACTED@storage.googleapis.com/something/output.m3u8", *sourceMediaManifest)
+	us, err := GetSourceSegmentURLs("s3+https://REDACTED:REDACTED@storage.googleapis.com/something/output.m3u8", *sourceMediaManifest)
 	require.NoError(t, err)
 
 	require.Equal(t, 2, len(us))

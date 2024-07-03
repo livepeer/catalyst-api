@@ -84,24 +84,24 @@ Feature: VOD Streaming
     And I receive a "success" callback within "30" seconds
     And thumbnails are written to storage within "10" seconds
     And a row is written to the "vod_completed" database table containing the following values
-      | column                   | value           |
-      | in_fallback_mode         | false           |
-      | is_clip                  | false           |
-      | pipeline                 | catalyst_ffmpeg |
-      | profiles_count           | 2               |
-      | source_codec_audio       | aac             |
-      | source_codec_video       | h264            |
-      | source_duration          | 30000           |
-      | source_segment_count     | <segment_count> |
-      | state                    | completed       |
-      | transcoded_segment_count | <segment_count> |
+      | column                   | value             |
+      | in_fallback_mode         | false             |
+      | is_clip                  | false             |
+      | pipeline                 | catalyst_ffmpeg   |
+      | profiles_count           | 2                 |
+      | source_codec_audio       | aac               |
+      | source_codec_video       | h264              |
+      | source_duration          | <source_duration> |
+      | source_segment_count     | <segment_count>   |
+      | state                    | completed         |
+      | transcoded_segment_count | <segment_count>   |
 
     Examples:
-      | payload                                                                     | segment_count |
-      | a valid ffmpeg upload vod request with a source manifest                    | 3             |
-      | a valid ffmpeg upload vod request with a source manifest and source copying | 3             |
-      | a valid ffmpeg upload vod request with a source manifest and thumbnails     | 3             |
-      | a valid ffmpeg upload vod request with a source manifest from object store  | 4             |
+      | payload                                                                     | segment_count | source_duration |
+      | a valid ffmpeg upload vod request with a source manifest                    | 3             | 30000           |
+      | a valid ffmpeg upload vod request with a source manifest and source copying | 3             | 30000           |
+      | a valid ffmpeg upload vod request with a source manifest and thumbnails     | 3             | 30000           |
+      | a valid ffmpeg upload vod request with a source manifest from object store  | 4             | 40000           |
 
   Scenario Outline: Submit an audio-only asset for ingestion
     When I submit to the internal "/api/vod" endpoint with "<payload>"

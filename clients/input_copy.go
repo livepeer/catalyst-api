@@ -195,7 +195,7 @@ func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, dec
 		// Save the mapping between the input m3u8 manifest file to its corresponding OS-transfer destination url
 		fileList[srcInputUrl.String()] = dstOutputUrl.String()
 		// Now get a list of the OS-compatible segment URLs from the input manifest file
-		sourceSegmentUrls, err := GetSourceSegmentURLs(requestID, srcInputUrl.String(), playlist)
+		sourceSegmentUrls, err := GetSourceSegmentURLs(srcInputUrl.String(), playlist)
 		if err != nil {
 			return fmt.Errorf("error generating source segment URLs for HLS input manifest: %s", err)
 		}
@@ -305,9 +305,9 @@ func GetFileWithBackup(ctx context.Context, requestID, url string, dStorage *DSt
 	}
 
 	// prioritize retriable errors in the response so we don't skip retries
-	if !xerrors.IsUnretriable(err) {
+	if !catErrs.IsUnretriable(err) {
 		return nil, url, err
-	} else if !xerrors.IsUnretriable(backupErr) {
+	} else if !catErrs.IsUnretriable(backupErr) {
 		return nil, backupURL, backupErr
 	}
 	return nil, url, err

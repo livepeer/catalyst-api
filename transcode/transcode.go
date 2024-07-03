@@ -88,7 +88,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	}
 
 	// Generate the full segment URLs from the manifest
-	sourceSegmentURLs, err := clients.GetSourceSegmentURLs(transcodeRequest.RequestID, sourceManifestOSURL, sourceManifest)
+	sourceSegmentURLs, err := clients.GetSourceSegmentURLs(sourceManifestOSURL, sourceManifest)
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("error generating source segment URLs: %s", err)
 	}
@@ -536,7 +536,7 @@ func transcodeSegment(
 	err := backoff.Retry(func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), clients.MaxCopyFileDuration)
 		defer cancel()
-		rc, _, err := clients.GetFileWithBackup(ctx, transcodeRequest.RequestID, segment.Input.URL.String(), nil)
+		rc, err := clients.GetFile(ctx, transcodeRequest.RequestID, segment.Input.URL.String(), nil)
 		if err != nil {
 			return fmt.Errorf("failed to download source segment %q: %w", segment.Input, err)
 		}

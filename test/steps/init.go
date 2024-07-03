@@ -18,7 +18,10 @@ import (
 	"github.com/minio/madmin-go"
 )
 
-var minioAddress = "127.0.0.1:9000"
+const (
+	minioAddress = "127.0.0.1:9000"
+	minioKey     = "minioadmin"
+)
 
 func (s *StepContext) StartStudioAPI(listen string) error {
 	router := httprouter.New()
@@ -78,14 +81,14 @@ func (s *StepContext) StartObjectStore() error {
 		return err
 	}
 
-	admin, err := madmin.New(minioAddress, "minioadmin", "minioadmin", false)
+	admin, err := madmin.New(minioAddress, minioKey, minioKey, false)
 	if err != nil {
 		return err
 	}
 	s.MinioAdmin = admin
 
 	minioClient, err := minio.New(minioAddress, &minio.Options{
-		Creds:  credentials.NewStaticV4("minioadmin", "minioadmin", ""),
+		Creds:  credentials.NewStaticV4(minioKey, minioKey, ""),
 		Secure: false,
 	})
 	if err != nil {
@@ -98,7 +101,7 @@ func (s *StepContext) StartObjectStore() error {
 	ctx := context.Background()
 
 	// Create buckets if they do not exist.
-	buckets := []string{"rec-bucket", "rec-fallback-bucket"}
+	buckets := []string{"rec-bucket", "rec-fallback-bucket", "source"}
 	for _, bucket := range buckets {
 		exists, err := minioClient.BucketExists(ctx, bucket)
 		if err != nil {

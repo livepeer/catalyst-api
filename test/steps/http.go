@@ -215,7 +215,7 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 }
 
 func (s *StepContext) StartApp() error {
-	s.SourceOutputDir = fmt.Sprintf("file://%s/%s/", os.TempDir(), "livepeer/source")
+	s.SourceOutputDir = fmt.Sprintf("s3+http://%s:%s@%s/source", minioKey, minioKey, minioAddress)
 
 	App = exec.Command(
 		"./app",
@@ -227,9 +227,8 @@ func (s *StepContext) StartApp() error {
 		"-private-bucket=fixtures/playback-bucket",
 		"-gate-url=http://localhost:13000/api/access-control/gate",
 		"-external-transcoder=mediaconverthttp://examplekey:examplepass@127.0.0.1:11111?region=us-east-1&role=arn:aws:iam::exampleaccountid:examplerole&s3_aux_bucket=s3://example-bucket",
-		"-storage-fallback-urls=http://127.0.0.1:9000/rec-bucket=http://127.0.0.1:9000/rec-fallback-bucket",
-		"-source-output",
-		s.SourceOutputDir,
+		fmt.Sprintf("-storage-fallback-urls=http://%s/rec-bucket=http://%s/rec-fallback-bucket", minioAddress, minioAddress),
+		fmt.Sprintf("-source-output=%s", s.SourceOutputDir),
 		"-no-mist",
 	)
 	outfile, err := os.Create("logs/app.log")
