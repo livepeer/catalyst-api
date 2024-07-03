@@ -56,6 +56,7 @@ func DownloadRenditionManifest(requestID, sourceManifestOSURL string) (m3u8.Medi
 	return *mediaPlaylist, nil
 }
 
+// TODO only call with backup on first call from coordinator. return the url of the playlist used so that we can replace the job input url
 func downloadManifestWithBackup(requestID, sourceManifestOSURL string) (m3u8.Playlist, m3u8.ListType, error) {
 	var playlist, playlistBackup m3u8.Playlist
 	var playlistType, playlistTypeBackup m3u8.ListType

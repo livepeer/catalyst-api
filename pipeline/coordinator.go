@@ -290,6 +290,10 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 
 		// Update osTransferURL if needed
 		if clients.IsHLSInput(sourceURL) {
+			// TODO get hls manifest with backup and replace input url with the one returned
+			// TODO check all segments whether they're available on main url (the manifest being used could be the backup so segment check needs to handle both primary and backup urls)
+			// TODO if any were not available on main url then write a new manifest with absolute segment urls pointing to wherever the segment is available (primary or backup)
+
 			// Currently we only clip an HLS source (e.g recordings or transcoded asset)
 			if p.ClipStrategy.Enabled {
 				err := backoff.Retry(func() error {
@@ -323,8 +327,8 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		if p.C2PA {
 			si.C2PA = c.C2PA
 		}
-		si.SourceFile = osTransferURL.String()  // OS URL used by mist
-		si.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert
+		si.SourceFile = osTransferURL.String()  // OS URL used by ffmpeg pipeline
+		si.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert pipeline
 		si.InputFileInfo = inputVideoProbe
 		si.GenerateMP4 = ShouldGenerateMP4(sourceURL, p.Mp4TargetURL, p.FragMp4TargetURL, p.Mp4OnlyShort, si.InputFileInfo.Duration)
 		si.DownloadDone = time.Now()

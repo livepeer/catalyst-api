@@ -1,12 +1,16 @@
 package steps
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -62,7 +66,7 @@ func WaitForStartup(url string) {
 }
 
 func (s *StepContext) StartObjectStore() error {
-	app := exec.Command("./minio", "--address "+minioAddress, "server", fmt.Sprint(os.TempDir(), "/minio"))
+	app := exec.Command("./minio", "server", "--address", minioAddress, path.Join(os.TempDir(), "catalyst-minio"))
 	outfile, err := os.Create("logs/minio.log")
 	if err != nil {
 		return err
@@ -74,12 +78,78 @@ func (s *StepContext) StartObjectStore() error {
 		return err
 	}
 
-	madmin, err := madmin.New(minioAddress, "minioadmin", "minioadmin", false)
+	admin, err := madmin.New(minioAddress, "minioadmin", "minioadmin", false)
+	if err != nil {
+		return err
+	}
+	s.MinioAdmin = admin
+
+	minioClient, err := minio.New(minioAddress, &minio.Options{
+		Creds:  credentials.NewStaticV4("minioadmin", "minioadmin", ""),
+		Secure: false,
+	})
 	if err != nil {
 		return err
 	}
 
-	s.MinioAdmin = madmin
+	// TODO replace with a proper check for minio startup
+	time.Sleep(time.Second * 5)
+
+	ctx := context.Background()
+
+	// Create buckets if they do not exist.
+	buckets := []string{"rec-bucket", "rec-fallback-bucket"}
+	for _, bucket := range buckets {
+		exists, err := minioClient.BucketExists(ctx, bucket)
+		if err != nil {
+			return fmt.Errorf("failed to check if bucket exists: %w", err)
+		}
+		if exists {
+			continue
+		}
+		err = minioClient.MakeBucket(ctx, bucket, minio.MakeBucketOptions{})
+		if err != nil {
+			return err
+		}
+	}
+
+	// Set bucket policy to allow anonymous download.
+	for _, bucket := range buckets {
+		policy := fmt.Sprintf(`{
+			"Version": "2012-10-17",
+			"Statement": [
+				{
+					"Effect": "Allow",
+					"Principal": {"AWS": ["*"]},
+					"Action": ["s3:GetObject"],
+					"Resource": ["arn:aws:s3:::%s/*"]
+				}
+			]
+		}`, bucket)
+
+		err = minioClient.SetBucketPolicy(ctx, bucket, policy)
+		if err != nil {
+			return err
+		}
+	}
+
+	// populate recording bucket
+	files := []string{"fixtures/tiny.m3u8", "fixtures/seg-0.ts", "fixtures/seg-1.ts", "fixtures/seg-2.ts"}
+	for _, file := range files {
+		_, err := minioClient.FPutObject(ctx, "rec-bucket", path.Base(file), file, minio.PutObjectOptions{})
+		if err != nil {
+			return err
+		}
+	}
+
+	// populate recording fallback bucket
+	files = []string{"fixtures/rec-fallback-bucket/tiny.m3u8", "fixtures/rec-fallback-bucket/seg-3.ts"}
+	for _, file := range files {
+		_, err := minioClient.FPutObject(ctx, "rec-fallback-bucket", path.Base(file), file, minio.PutObjectOptions{})
+		if err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

@@ -163,6 +163,10 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 	}
 	if strings.HasPrefix(payload, "a valid ffmpeg upload vod request with a source manifest") {
 		req.URL = "file://" + filepath.Join(sourceManifestDir, "tiny.m3u8")
+		if strings.Contains(payload, "from object store") {
+			req.URL = "http://" + minioAddress + "/rec-bucket/tiny.m3u8"
+		}
+
 		req.PipelineStrategy = "catalyst_ffmpeg"
 		req.OutputLocations = []OutputLocation{
 			{
@@ -220,10 +224,10 @@ func (s *StepContext) StartApp() error {
 		"-cluster-addr=127.0.0.1:19935",
 		"-broadcaster-url=http://127.0.0.1:18935",
 		`-metrics-db-connection-string=`+DB_CONNECTION_STRING,
-		"-private-bucket",
-		"fixtures/playback-bucket",
+		"-private-bucket=fixtures/playback-bucket",
 		"-gate-url=http://localhost:13000/api/access-control/gate",
 		"-external-transcoder=mediaconverthttp://examplekey:examplepass@127.0.0.1:11111?region=us-east-1&role=arn:aws:iam::exampleaccountid:examplerole&s3_aux_bucket=s3://example-bucket",
+		"-storage-fallback-urls=http://127.0.0.1:9000/rec-bucket=http://127.0.0.1:9000/rec-fallback-bucket",
 		"-source-output",
 		s.SourceOutputDir,
 		"-no-mist",
