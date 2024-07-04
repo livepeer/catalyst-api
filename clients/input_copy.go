@@ -64,8 +64,6 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 		}
 	}
 
-	// We're probing the raw HLS input file here and skipping storage fallback logic. Figure out how to handle this.
-	// TODO: Always copy HLS files above? Only when there are missing files? Create a local manifest pointing to fallback'ed segment URLs?
 	log.Log(requestID, "starting probe", "source", inputFile.String(), "dest", osTransferURL.String())
 	inputFileProbe, err := s.Probe.ProbeFile(requestID, signedURL, "-analyzeduration", "15000000")
 	if err != nil {
