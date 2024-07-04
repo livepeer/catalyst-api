@@ -39,7 +39,7 @@ func TestDownloadRenditionManifestFailsWhenItCantFindTheManifest(t *testing.T) {
 	defer func() { DownloadRetryBackoff = DownloadRetryBackoffLong }()
 	_, err := DownloadRenditionManifest("blah", "/tmp/something/x.m3u8")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "error downloading manifest")
+	require.Contains(t, err.Error(), "the specified file does not exist")
 	require.Contains(t, err.Error(), "ObjectNotFoundError")
 }
 
