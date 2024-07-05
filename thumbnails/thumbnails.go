@@ -172,6 +172,18 @@ func GenerateThumb(segmentURI string, input []byte, output *url.URL, segmentOffs
 	return nil
 }
 
+func GenerateThumbsAndVTT(requestID, input string, output *url.URL) error {
+	err := GenerateThumbsFromManifest(requestID, input, output)
+	if err != nil {
+		return err
+	}
+	err = GenerateThumbsVTT(requestID, input, output)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func GenerateThumbsFromManifest(requestID, input string, output *url.URL) error {
 	// parse manifest and generate one thumbnail per segment
 	mediaPlaylist, err := getMediaManifest(requestID, input)
@@ -245,10 +257,10 @@ func processSegment(input string, thumbOut string) error {
 	return nil
 }
 
-var segmentPrefix = []string{"index", "clip_"}
+var segmentPrefix = []string{"index360p0_", "index", "clip_"}
 
 func segmentIndex(segmentURI string) (int64, error) {
-	// segmentURI will be indexX.ts or clip_X.ts
+	// segmentURI will be indexX.ts or clip_X.ts or index360p0_00001.ts
 	for _, prefix := range segmentPrefix {
 		segmentURI = strings.TrimPrefix(segmentURI, prefix)
 	}
