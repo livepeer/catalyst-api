@@ -20,6 +20,29 @@
         }
       }],
     OutputGroups: [{
+        CustomName: "thumbs",
+        Name: "File Group",
+        OutputGroupSettings: {
+          FileGroupSettings: {
+            Destination: "thumbs"
+          },
+          Type: "FILE_GROUP_SETTINGS"
+        },
+        Outputs: [{
+            ContainerSettings: {
+              Container: "RAW"
+            },
+            VideoDescription: {
+              CodecSettings: {
+                Codec: "FRAME_CAPTURE",
+                FrameCaptureSettings: {
+                  FramerateDenominator: 10,
+                  FramerateNumerator: 1
+                }
+              }
+            }
+          }]
+      },{
         CustomName: "hls",
         Name: "Apple HLS",
         OutputGroupSettings: {

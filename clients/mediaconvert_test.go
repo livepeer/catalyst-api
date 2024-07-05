@@ -252,7 +252,7 @@ func Test_createJobPayload(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actual := createJobPayload(inputFile, hlsOutputFile, tt.args.mp4OutputFile, role, tt.args.accelerated, tt.args.profiles, config.DefaultSegmentSizeSecs)
+			actual := createJobPayload(inputFile, hlsOutputFile, tt.args.mp4OutputFile, "thumbs", role, tt.args.accelerated, tt.args.profiles, config.DefaultSegmentSizeSecs)
 			require.NotNil(t, actual)
 			require.Equal(t, loadFixture(t, tt.want, actual.String()), actual.String())
 		})
@@ -271,13 +271,13 @@ func Test_MP4OutDurationCheck(t *testing.T) {
 		{
 			name:        "hls and mp4",
 			duration:    120,
-			outputs:     []string{"hls", "mp4"},
+			outputs:     []string{"thumbs", "hls", "mp4"},
 			generatemp4: true,
 		},
 		{
 			name:        "hls only",
 			duration:    121,
-			outputs:     []string{"hls"},
+			outputs:     []string{"thumbs", "hls"},
 			generatemp4: false,
 		},
 	}
