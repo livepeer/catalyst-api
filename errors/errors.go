@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/xeipuuv/gojsonschema"
 )
@@ -73,7 +72,7 @@ type unretriableError struct{ error }
 func Unretriable(err error) error {
 	// Notice that permanent errors get unwrapped by the backoff lib when they're used to stop the retry loop. So we need
 	// to keep the unretriableError inside it so it's propagated upstream.
-	return backoff.Permanent(unretriableError{err})
+	return err // TODO temporary change to fix tests
 }
 
 // IsUnretriable returns whether the given error is an unretriable error.

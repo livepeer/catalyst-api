@@ -152,7 +152,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 
 	sourceManifest, err := clients.DownloadRenditionManifest(transcodeRequest.RequestID, transcodeRequest.SourceManifestURL)
 	if err != nil {
-		return nil, fmt.Errorf("error downloading source manifest: %s", err)
+		return nil, fmt.Errorf("error downloading source manifest %s: %w", transcodeRequest.SourceManifestURL, err)
 	}
 
 	sourceSegments := sourceManifest.GetAllSegments()
