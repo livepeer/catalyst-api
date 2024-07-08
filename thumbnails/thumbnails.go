@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -257,10 +258,13 @@ func processSegment(input string, thumbOut string) error {
 	return nil
 }
 
-var segmentPrefix = []string{"index360p0_", "index", "clip_"}
+var segmentPrefix = []string{"index", "clip_"}
+var reg = regexp.MustCompile(`index.*?_(.*?\.ts)`) // to match something like index360p0_1.ts
 
 func segmentIndex(segmentURI string) (int64, error) {
-	// segmentURI will be indexX.ts or clip_X.ts or index360p0_00001.ts
+	segmentURI = reg.ReplaceAllString(segmentURI, "${1}")
+
+	// segmentURI will be indexX.ts or clip_X.ts
 	for _, prefix := range segmentPrefix {
 		segmentURI = strings.TrimPrefix(segmentURI, prefix)
 	}
