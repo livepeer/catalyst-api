@@ -68,16 +68,6 @@ type GateClient struct {
 	gateURL string
 }
 
-type HitRecord struct {
-	hits      []time.Time
-	rateLimit int
-}
-
-type HitRecords struct {
-	data map[string]*HitRecord
-	mux  sync.Mutex
-}
-
 // ViewerLimitCache comes from Gate API
 type ViewerLimitCache struct {
 	data map[string]*ViewerLimitCacheEntry
@@ -109,14 +99,12 @@ type RefreshIntervalRecord struct {
 type GateConfig struct {
 	MaxAge               int32  `json:"max_age"`
 	StaleWhileRevalidate int32  `json:"stale_while_revalidate"`
-	RateLimit            int32  `json:"rate_limit"`
 	RefreshInterval      int32  `json:"refresh_interval"`
 	UserViewerLimit      int32  `json:"user_viewer_limit"`
 	UserID               string `json:"user_id"`
 }
 
 var (
-	hitRecordCache         = HitRecords{data: make(map[string]*HitRecord)}
 	viewerLimitCache       = ViewerLimitCache{data: make(map[string]*ViewerLimitCacheEntry)}
 	concurrentViewersCache = ConcurrentViewersCache{data: make(map[string]*ConcurrentViewersCacheEntry)}
 )
@@ -128,19 +116,6 @@ type RefreshIntervalCache struct {
 
 var refreshIntervalCache = RefreshIntervalCache{
 	data: make(map[string]*RefreshIntervalRecord),
-}
-
-func (ac *AccessControlHandlersCollection) periodicCleanUpRecordCache() {
-	go func() {
-		for {
-			time.Sleep(time.Duration(30) * time.Second)
-			hitRecordCache.mux.Lock()
-			for key := range ac.cache {
-				delete(hitRecordCache.data, key)
-			}
-			hitRecordCache.mux.Unlock()
-		}
-	}()
 }
 
 func (ac *AccessControlHandlersCollection) periodicRefreshIntervalCache(mapic mistapiconnector.IMac) {
@@ -188,7 +163,6 @@ func NewAccessControlHandlersCollection(cli config.Cli, mapic mistapiconnector.I
 			},
 			blockedJWTs: cli.BlockedJWTs,
 		}
-		accessControlHandlersCollection.periodicCleanUpRecordCache()
 		accessControlHandlersCollection.periodicRefreshIntervalCache(mapic)
 	}
 
@@ -280,10 +254,6 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 		jwt = payload.JWT
 	}
 
-	if !checkRateLimit(playbackID) {
-		return false, nil
-	}
-
 	if accessKey != "" {
 		acReq.Type = "accessKey"
 		acReq.AccessKey = accessKey
@@ -328,20 +298,6 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 
 	viewerLimitPassed := ac.checkViewerLimit(playbackID)
 	return gateAllowed && viewerLimitPassed, nil
-}
-
-// checkRateLimit is used to limit viewers per catalyst node in the hacker tier
-func checkRateLimit(playbackID string) bool {
-	hitRecordCache.mux.Lock()
-	defer hitRecordCache.mux.Unlock()
-	if _, ok := hitRecordCache.data[playbackID]; ok {
-		if len(hitRecordCache.data[playbackID].hits) >= hitRecordCache.data[playbackID].rateLimit {
-			glog.Infof("Rate limit reached for playbackID %v", playbackID)
-			return false
-		}
-		hitRecordCache.data[playbackID].hits = append(hitRecordCache.data[playbackID].hits, time.Now())
-	}
-	return true
 }
 
 // checkViewerLimit is used to limit viewers per user globally (as configured with Gate API)
@@ -475,19 +431,12 @@ func isStale(entry *PlaybackAccessControlEntry) bool {
 func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playbackID, cacheKey string, requestBody []byte) error {
 	allow, gateConfig, err := ac.gateClient.QueryGate(requestBody)
 
-	rateLimit := gateConfig.RateLimit
 	refreshInterval := gateConfig.RefreshInterval
 	maxAge := gateConfig.MaxAge
 	stale := gateConfig.StaleWhileRevalidate
 
 	if err != nil {
 		return err
-	}
-
-	if rateLimit > 0 {
-		if _, ok := hitRecordCache.data[playbackID]; !ok {
-			hitRecordCache.data[playbackID] = &HitRecord{hits: make([]time.Time, 0), rateLimit: int(rateLimit)}
-		}
 	}
 
 	refreshIntervalCache.mux.Lock()
@@ -528,7 +477,6 @@ func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 	gateConfig := GateConfig{
 		MaxAge:               0,
 		StaleWhileRevalidate: 0,
-		RateLimit:            0,
 		RefreshInterval:      0,
 	}
 
@@ -561,7 +509,6 @@ func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 		return false, gateConfig, err
 	}
 
-	var rateLimit int32 = 0
 	var refreshInterval int32 = 0
 
 	if res.ContentLength != 0 {
@@ -569,14 +516,6 @@ func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 		err = json.NewDecoder(res.Body).Decode(&result)
 		if err != nil {
 			return false, gateConfig, err
-		}
-
-		if rl, ok := result["rate_limit"]; ok {
-			rateLimitFloat64, ok := rl.(float64)
-			if !ok {
-				return false, gateConfig, fmt.Errorf("rate_limit is not a number")
-			}
-			rateLimit = int32(rateLimitFloat64)
 		}
 
 		if ri, ok := result["refresh_interval"]; ok {
@@ -604,7 +543,6 @@ func (g *GateClient) QueryGate(body []byte) (bool, GateConfig, error) {
 
 	gateConfig.MaxAge = int32(cc.MaxAge)
 	gateConfig.StaleWhileRevalidate = int32(cc.StaleWhileRevalidate)
-	gateConfig.RateLimit = rateLimit
 	gateConfig.RefreshInterval = refreshInterval
 
 	return res.StatusCode/100 == 2, gateConfig, nil
