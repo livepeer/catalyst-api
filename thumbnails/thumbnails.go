@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -172,6 +173,18 @@ func GenerateThumb(segmentURI string, input []byte, output *url.URL, segmentOffs
 	return nil
 }
 
+func GenerateThumbsAndVTT(requestID, input string, output *url.URL) error {
+	err := GenerateThumbsFromManifest(requestID, input, output)
+	if err != nil {
+		return err
+	}
+	err = GenerateThumbsVTT(requestID, input, output)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func GenerateThumbsFromManifest(requestID, input string, output *url.URL) error {
 	// parse manifest and generate one thumbnail per segment
 	mediaPlaylist, err := getMediaManifest(requestID, input)
@@ -246,8 +259,11 @@ func processSegment(input string, thumbOut string) error {
 }
 
 var segmentPrefix = []string{"index", "clip_"}
+var reg = regexp.MustCompile(`index.*?_(.*?\.ts)`) // to match something like index360p0_1.ts
 
 func segmentIndex(segmentURI string) (int64, error) {
+	segmentURI = reg.ReplaceAllString(segmentURI, "${1}")
+
 	// segmentURI will be indexX.ts or clip_X.ts
 	for _, prefix := range segmentPrefix {
 		segmentURI = strings.TrimPrefix(segmentURI, prefix)

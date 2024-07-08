@@ -166,3 +166,36 @@ func Test_thumbFilename(t *testing.T) {
 		})
 	}
 }
+
+func Test_segmentIndex(t *testing.T) {
+	tests := []struct {
+		name       string
+		segmentURI string
+		want       int64
+	}{
+		{
+			name:       "normal index",
+			segmentURI: "index0.ts",
+			want:       0,
+		},
+		{
+			name:       "clip",
+			segmentURI: "clip_0.ts",
+			want:       0,
+		},
+		{
+			name:       "mediaconvert",
+			segmentURI: "index360p0_001.ts",
+			want:       1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := segmentIndex(tt.segmentURI)
+			require.NoError(t, err)
+			if got != tt.want {
+				t.Errorf("segmentIndex() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

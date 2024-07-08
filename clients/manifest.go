@@ -409,3 +409,51 @@ func CreateClippedPlaylist(origManifest m3u8.MediaPlaylist, segs []*m3u8.MediaSe
 	clippedPlaylist.Close()
 	return clippedPlaylist, nil
 }
+
+func GetFirstRenditionURL(requestID string, masterManifestURL *url.URL) (*url.URL, error) {
+	var playlist m3u8.Playlist
+	var playlistType m3u8.ListType
+
+	dStorage := NewDStorageDownload()
+	err := backoff.Retry(func() error {
+		rc, err := GetFile(context.Background(), requestID, masterManifestURL.String(), dStorage)
+		if err != nil {
+			return fmt.Errorf("error downloading manifest %s: %w", masterManifestURL.Redacted(), err)
+		}
+		defer rc.Close()
+
+		playlist, playlistType, err = m3u8.DecodeFrom(rc, true)
+		if err != nil {
+			return fmt.Errorf("error decoding manifest %s: %w", masterManifestURL.Redacted(), err)
+		}
+		return nil
+	}, DownloadRetryBackoff())
+	if err != nil {
+		return nil, err
+	}
+
+	if playlistType != m3u8.MASTER {
+		return nil, fmt.Errorf("received non-Master manifest")
+	}
+
+	// The check above means we should be able to cast to the correct type
+	masterPlaylist, ok := playlist.(*m3u8.MasterPlaylist)
+	if !ok || masterPlaylist == nil {
+		return nil, fmt.Errorf("failed to parse playlist as MasterPlaylist")
+	}
+
+	if len(masterPlaylist.Variants) < 1 {
+		return nil, fmt.Errorf("no variants found")
+	}
+
+	variantURL, err := url.Parse(masterPlaylist.Variants[0].URI)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing variant URL: %w", err)
+	}
+
+	if variantURL.Scheme != "" {
+		return variantURL, nil
+	}
+
+	return masterManifestURL.JoinPath("..", variantURL.String()), nil
+}
