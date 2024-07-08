@@ -1,14 +1,12 @@
 package clients
 
 import (
+	"github.com/stretchr/testify/require"
 	"io"
 	"path"
 	"strings"
 	"testing"
 	"time"
-
-	catErrs "github.com/livepeer/catalyst-api/errors"
-	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -41,8 +39,8 @@ func TestItFailsWithInvalidURLs(t *testing.T) {
 func TestItFailsWithMissingFile(t *testing.T) {
 	_, err := DownloadOSURL("/tmp/this/should/not/exist.m3u8")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "ObjectNotFoundError")
-	require.True(t, catErrs.IsObjectNotFound(err))
+	require.Contains(t, err.Error(), "failed to read from OS URL")
+	require.Contains(t, err.Error(), "no such file or directory")
 }
 
 func TestPublish(t *testing.T) {
