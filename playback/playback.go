@@ -7,11 +7,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/clients"
-	caterrs "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/go-tools/drivers"
 )
 
@@ -120,13 +117,7 @@ func osFetch(buckets []*url.URL, playbackID, file, byteRange string) (*drivers.F
 			return f, nil
 		}
 		// if this is the final bucket in the list then the error set here will be used in the final return
-		var awsErr awserr.Error
-		if errors.As(err, &awsErr) && awsErr.Code() == s3.ErrCodeNoSuchKey ||
-			strings.Contains(err.Error(), "no such file") {
-			err = fmt.Errorf("invalid request: %w %v", caterrs.ObjectNotFoundError, err)
-		} else {
-			err = fmt.Errorf("failed to get file for playback: %w", err)
-		}
+		err = fmt.Errorf("failed to get file for playback: %w", err)
 	}
 	return nil, err
 }
