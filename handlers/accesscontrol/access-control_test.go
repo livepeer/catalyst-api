@@ -43,7 +43,6 @@ func (d *stubDataClient) QueryServerViewCount(userID string) (int32, error) {
 
 var queryGate = func(body []byte) (bool, GateConfig, error) {
 	gateConfig := GateConfig{
-		RateLimit:            0,
 		MaxAge:               0,
 		StaleWhileRevalidate: 0,
 		RefreshInterval:      0,
@@ -53,7 +52,6 @@ var queryGate = func(body []byte) (bool, GateConfig, error) {
 
 var allowAccess = func(body []byte) (bool, GateConfig, error) {
 	gateConfig := GateConfig{
-		RateLimit:            0,
 		MaxAge:               120,
 		StaleWhileRevalidate: 300,
 		RefreshInterval:      0,
@@ -63,7 +61,6 @@ var allowAccess = func(body []byte) (bool, GateConfig, error) {
 
 var denyAccess = func(body []byte) (bool, GateConfig, error) {
 	gateConfig := GateConfig{
-		RateLimit:            0,
 		MaxAge:               120,
 		StaleWhileRevalidate: 300,
 		RefreshInterval:      0,
@@ -175,7 +172,6 @@ func TestCacheHit(t *testing.T) {
 	var countableAllowAccess = func(body []byte) (bool, GateConfig, error) {
 		callCount++
 		gateConfig := GateConfig{
-			RateLimit:            0,
 			MaxAge:               10,
 			StaleWhileRevalidate: 20,
 			RefreshInterval:      0,
@@ -199,7 +195,6 @@ func TestStaleCache(t *testing.T) {
 	var countableAllowAccess = func(body []byte) (bool, GateConfig, error) {
 		callCount++
 		gateConfig := GateConfig{
-			RateLimit:            0,
 			MaxAge:               -10,
 			StaleWhileRevalidate: -20,
 			RefreshInterval:      0,
@@ -238,7 +233,6 @@ func TestInvalidCache(t *testing.T) {
 	var countableAllowAccess = func(body []byte) (bool, GateConfig, error) {
 		callCount++
 		gateConfig := GateConfig{
-			RateLimit:            0,
 			MaxAge:               -10,
 			StaleWhileRevalidate: -20,
 			RefreshInterval:      0,
@@ -258,7 +252,6 @@ func TestViewerLimit(t *testing.T) {
 
 	access := func(body []byte) (bool, GateConfig, error) {
 		gateConfig := GateConfig{
-			RateLimit:            0,
 			MaxAge:               120,
 			StaleWhileRevalidate: 300,
 			RefreshInterval:      0,
