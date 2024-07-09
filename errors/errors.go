@@ -3,11 +3,9 @@ package errors
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/xeipuuv/gojsonschema"
 )
@@ -65,55 +63,21 @@ func WriteHTTPBadBodySchema(where string, w http.ResponseWriter, errors []gojson
 	return writeHttpError(w, sb.String(), http.StatusBadRequest, nil)
 }
 
-type unretriableError struct{ error }
+// Special wrapper for errors that should set the `Unretriable` field in the
+// error callback sent on VOD upload jobs.
+type UnretriableError struct{ error }
 
-// Unretriable returns an error that should be treated as final. This effectively means that the error stops backoff
-// retry loops automatically and that it should be propagated back to the caller as such. This is done through the
-// status callback through the "unretriable" field.
 func Unretriable(err error) error {
-	// Notice that permanent errors get unwrapped by the backoff lib when they're used to stop the retry loop. So we need
-	// to keep the unretriableError inside it so it's propagated upstream.
-	return backoff.Permanent(unretriableError{err})
+	return UnretriableError{err}
 }
 
-// IsUnretriable returns whether the given error is an unretriable error.
+// Returns whether the given error is an unretriable error.
 func IsUnretriable(err error) bool {
-	return errors.As(err, &unretriableError{})
-}
-
-func (e unretriableError) Unwrap() error {
-	return e.error
-}
-
-type ObjectNotFoundError struct {
-	msg   string
-	cause error
-}
-
-func (e ObjectNotFoundError) Error() string {
-	return e.msg
-}
-
-func (e ObjectNotFoundError) Unwrap() error {
-	return e.cause
-}
-
-func NewObjectNotFoundError(msg string, cause error) error {
-	if cause != nil {
-		msg = fmt.Sprintf("ObjectNotFoundError: %s: %s", msg, cause)
-	} else {
-		msg = fmt.Sprintf("ObjectNotFoundError: %s", msg)
-	}
-	// every not found is unretriable
-	return Unretriable(ObjectNotFoundError{msg: msg, cause: cause})
-}
-
-// IsObjectNotFound checks if the error is an ObjectNotFoundError.
-func IsObjectNotFound(err error) bool {
-	return errors.As(err, &ObjectNotFoundError{})
+	return errors.As(err, &UnretriableError{})
 }
 
 var (
-	UnauthorisedError = errors.New("UnauthorisedError")
-	InvalidJWT        = errors.New("InvalidJWTError")
+	ObjectNotFoundError = errors.New("ObjectNotFoundError")
+	UnauthorisedError   = errors.New("UnauthorisedError")
+	InvalidJWT          = errors.New("InvalidJWTError")
 )

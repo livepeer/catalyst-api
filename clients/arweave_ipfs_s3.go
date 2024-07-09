@@ -11,7 +11,6 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/livepeer/catalyst-api/config"
-	catErrs "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 )
 
@@ -65,41 +64,35 @@ func (d *DStorageDownload) DownloadDStorageFromGatewayList(u, requestID string) 
 	defer func() { d.gatewaysListPosition++ }()
 	length := len(gateways)
 	until := d.gatewaysListPosition + length
-	var lastErr error
 	for i := d.gatewaysListPosition; i < until; i++ {
 		d.gatewaysListPosition = i % length
 		gateway := gateways[d.gatewaysListPosition]
-		opContent, err := downloadDStorageResourceFromSingleGateway(gateway, resourceID, requestID)
-		if err == nil {
+		opContent := downloadDStorageResourceFromSingleGateway(gateway, resourceID, requestID)
+		if opContent != nil {
 			return opContent, nil
 		}
-		lastErr = err
 	}
 
-	return nil, fmt.Errorf("failed to fetch %s from any of the gateways: %w", u, lastErr)
+	return nil, fmt.Errorf("failed to fetch %s from any of the gateways", u)
 }
 
-func downloadDStorageResourceFromSingleGateway(gateway *url.URL, resourceId, requestID string) (io.ReadCloser, error) {
+func downloadDStorageResourceFromSingleGateway(gateway *url.URL, resourceId, requestID string) io.ReadCloser {
 	fullURL := gateway.JoinPath(resourceId).String()
 	log.Log(requestID, "downloading from gateway", "resourceID", resourceId, "url", fullURL)
 	resp, err := http.DefaultClient.Get(fullURL)
 
 	if err != nil {
 		log.LogError(requestID, "failed to fetch content from gateway", err, "url", fullURL)
-		return nil, err
+		return nil
 	}
 
-	if resp.StatusCode == 404 {
-		resp.Body.Close()
-		log.Log(requestID, "dstorage gateway not found", "status_code", resp.StatusCode, "url", fullURL)
-		return nil, catErrs.NewObjectNotFoundError("not found in dstorage", nil)
-	} else if resp.StatusCode >= 300 {
+	if resp.StatusCode >= 300 {
 		resp.Body.Close()
 		log.Log(requestID, "unexpected response from gateway", "status_code", resp.StatusCode, "url", fullURL)
-		return nil, fmt.Errorf("unexpected response from gateway: %d", resp.StatusCode)
+		return nil
 	}
 
-	return resp.Body, nil
+	return resp.Body
 }
 
 func IsDStorageResource(dStorage string) bool {
