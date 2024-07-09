@@ -104,8 +104,10 @@ func NewObjectNotFoundError(msg string, cause error) error {
 	} else {
 		msg = fmt.Sprintf("ObjectNotFoundError: %s", msg)
 	}
-	// every not found is unretriable
-	return Unretriable(ObjectNotFoundError{msg: msg, cause: cause})
+
+	// we want 404s to be unretriable at the studio task level but we still want retries at the catalyst-api app level
+	// so we don't use backoff.Permanent or the Unretriable func which uses backoff.Permanent
+	return unretriableError{ObjectNotFoundError{msg: msg, cause: cause}}
 }
 
 // IsObjectNotFound checks if the error is an ObjectNotFoundError.
