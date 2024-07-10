@@ -365,56 +365,49 @@ seg-1.ts
 `
 
 	tests := []struct {
-		name             string
-		primaryManifest  string
-		backupManifest   string
-		primarySegments  []string
-		backupSegments   []string
-		expectedAbsPaths bool
+		name            string
+		primaryManifest string
+		backupManifest  string
+		primarySegments []string
+		backupSegments  []string
 	}{
 		{
-			name:             "happy. all segments and manifest available on primary",
-			primaryManifest:  completeManifest,
-			backupManifest:   "",
-			primarySegments:  []string{"seg-0.ts", "seg-1.ts", "seg-2.ts", "seg-3.ts"},
-			expectedAbsPaths: false,
+			name:            "happy. all segments and manifest available on primary",
+			primaryManifest: completeManifest,
+			backupManifest:  "",
+			primarySegments: []string{"seg-0.ts", "seg-1.ts", "seg-2.ts", "seg-3.ts"},
 		},
 		{
-			name:             "all segments and manifest available on backup",
-			primaryManifest:  inCompleteManifest,
-			backupManifest:   completeManifest,
-			backupSegments:   []string{"seg-0.ts", "seg-1.ts", "seg-2.ts", "seg-3.ts"},
-			expectedAbsPaths: true,
+			name:            "all segments and manifest available on backup",
+			primaryManifest: inCompleteManifest,
+			backupManifest:  completeManifest,
+			backupSegments:  []string{"seg-0.ts", "seg-1.ts", "seg-2.ts", "seg-3.ts"},
 		},
 		{
-			name:             "all segments on backup and newest manifest on primary",
-			primaryManifest:  completeManifest,
-			backupManifest:   inCompleteManifest,
-			backupSegments:   []string{"seg-0.ts", "seg-1.ts", "seg-2.ts", "seg-3.ts"},
-			expectedAbsPaths: true,
+			name:            "all segments on backup and newest manifest on primary",
+			primaryManifest: completeManifest,
+			backupManifest:  inCompleteManifest,
+			backupSegments:  []string{"seg-0.ts", "seg-1.ts", "seg-2.ts", "seg-3.ts"},
 		},
 		{
-			name:             "all segments on primary and newest manifest on backup",
-			primaryManifest:  inCompleteManifest,
-			backupManifest:   completeManifest,
-			primarySegments:  []string{"seg-0.ts", "seg-1.ts", "seg-2.ts", "seg-3.ts"},
-			expectedAbsPaths: true,
+			name:            "all segments on primary and newest manifest on backup",
+			primaryManifest: inCompleteManifest,
+			backupManifest:  completeManifest,
+			primarySegments: []string{"seg-0.ts", "seg-1.ts", "seg-2.ts", "seg-3.ts"},
 		},
 		{
-			name:             "segments split between primary and backup, newest manifest on primary",
-			primaryManifest:  completeManifest,
-			backupManifest:   inCompleteManifest,
-			primarySegments:  []string{"seg-0.ts", "seg-2.ts"},
-			backupSegments:   []string{"seg-1.ts", "seg-3.ts"},
-			expectedAbsPaths: true,
+			name:            "segments split between primary and backup, newest manifest on primary",
+			primaryManifest: completeManifest,
+			backupManifest:  inCompleteManifest,
+			primarySegments: []string{"seg-0.ts", "seg-2.ts"},
+			backupSegments:  []string{"seg-1.ts", "seg-3.ts"},
 		},
 		{
-			name:             "segments split between primary and backup, newest manifest on backup",
-			primaryManifest:  inCompleteManifest,
-			backupManifest:   completeManifest,
-			primarySegments:  []string{"seg-0.ts", "seg-2.ts"},
-			backupSegments:   []string{"seg-1.ts", "seg-3.ts"},
-			expectedAbsPaths: true,
+			name:            "segments split between primary and backup, newest manifest on backup",
+			primaryManifest: inCompleteManifest,
+			backupManifest:  completeManifest,
+			primarySegments: []string{"seg-0.ts", "seg-2.ts"},
+			backupSegments:  []string{"seg-1.ts", "seg-3.ts"},
 		},
 	}
 	for _, tt := range tests {
@@ -445,7 +438,7 @@ seg-1.ts
 				require.NoError(t, err)
 			}
 
-			renditionUrl, err := DownloadRenditionManifestWithBackup("requestID", toUrl(t, filepath.Join(dir, "primary", "index.m3u8")), toUrl(t, filepath.Join(dir, "transfer")))
+			renditionUrl, err := RecordingBackupCheck("requestID", toUrl(t, filepath.Join(dir, "primary", "index.m3u8")), toUrl(t, filepath.Join(dir, "transfer")))
 			require.NoError(t, err)
 
 			file, err := os.Open(renditionUrl.String())
@@ -460,7 +453,7 @@ seg-1.ts
 
 			require.Len(t, mediaPlaylist.GetAllSegments(), 4)
 			for i, segment := range mediaPlaylist.GetAllSegments() {
-				require.Equal(t, tt.expectedAbsPaths, filepath.IsAbs(segment.URI))
+				require.True(t, filepath.IsAbs(segment.URI))
 				require.True(t, true, strings.HasSuffix(segment.URI, fmt.Sprintf("seg-%d.ts", i)))
 			}
 		})

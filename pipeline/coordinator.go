@@ -290,7 +290,8 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 
 		// Update osTransferURL if needed
 		if clients.IsHLSInput(sourceURL) {
-			sourceURL, err = clients.DownloadRenditionManifestWithBackup(p.RequestID, sourceURL, osTransferURL.JoinPath(".."))
+			// Handle falling back to backup bucket for manifest and segments
+			sourceURL, err = clients.RecordingBackupCheck(p.RequestID, sourceURL, osTransferURL.JoinPath(".."))
 			if err != nil {
 				return nil, err
 			}

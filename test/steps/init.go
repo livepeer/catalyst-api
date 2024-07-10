@@ -95,8 +95,7 @@ func (s *StepContext) StartObjectStore() error {
 		return err
 	}
 
-	// TODO replace with a proper check for minio startup
-	time.Sleep(time.Second * 5)
+	WaitForStartup("http://" + minioAddress + "/minio/health/live")
 
 	ctx := context.Background()
 

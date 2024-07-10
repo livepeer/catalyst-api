@@ -44,7 +44,14 @@ func DownloadRenditionManifest(requestID, sourceManifestOSURL string) (m3u8.Medi
 	return convertToMediaPlaylist(playlist, playlistType)
 }
 
-func DownloadRenditionManifestWithBackup(requestID string, primaryManifestURL, osTransferURL *url.URL) (*url.URL, error) {
+// RecordingBackupCheck checks whether manifests and segments are available on the primary or
+// the backup store and returns a URL to new manifest with absolute segment URLs pointing to either primary or
+// backup locations depending on where the segments are available.
+func RecordingBackupCheck(requestID string, primaryManifestURL, osTransferURL *url.URL) (*url.URL, error) {
+	if config.GetStorageBackupURL(primaryManifestURL.String()) == "" {
+		return primaryManifestURL, nil
+	}
+
 	manifestURL, playlist, playlistType, err := downloadManifestWithBackup(requestID, primaryManifestURL.String())
 	if err != nil {
 		return nil, fmt.Errorf("error downloading manifest: %w", err)
@@ -53,10 +60,6 @@ func DownloadRenditionManifestWithBackup(requestID string, primaryManifestURL, o
 	if err != nil {
 		return nil, err
 	}
-
-	// If we had to fall back to the backup manifest then we need a new manifest with absolute URLs because
-	// successful segment uploads will exist in the primary store and therefore the relative URLs will be broken.
-	newPlaylistNeeded := manifestURL != primaryManifestURL.String()
 
 	// Check whether segments are available from primary or backup storage
 	dStorage := NewDStorageDownload()
@@ -68,7 +71,7 @@ func DownloadRenditionManifestWithBackup(requestID string, primaryManifestURL, o
 		var actualSegURL string
 		err = backoff.Retry(func() error {
 			var rc io.ReadCloser
-			rc, actualSegURL, err = GetFileWithBackup(context.TODO(), requestID, segURL.String(), dStorage)
+			rc, actualSegURL, err = GetFileWithBackup(context.Background(), requestID, segURL.String(), dStorage)
 			if rc != nil {
 				rc.Close()
 			}
@@ -77,28 +80,20 @@ func DownloadRenditionManifestWithBackup(requestID string, primaryManifestURL, o
 		if err != nil {
 			return nil, fmt.Errorf("failed to find segment file %s: %w", segURL.Redacted(), err)
 		}
-		if actualSegURL != segURL.String() {
-			// If we had to fall back to a backup segment then we'll need a new manifest with absolute URLs
-			newPlaylistNeeded = true
-		}
 		segment.URI = actualSegURL
 	}
 
-	if newPlaylistNeeded {
-		// TODO log line
-
-		// write the manifest to storage and update the manifestURL variable
-		outputStorageURL := osTransferURL.JoinPath("input.m3u8")
-		err = backoff.Retry(func() error {
-			return UploadToOSURL(outputStorageURL.String(), "", strings.NewReader(mediaPlaylist.String()), ManifestUploadTimeout)
-		}, UploadRetryBackoff())
-		if err != nil {
-			return nil, fmt.Errorf("failed to upload rendition playlist: %w", err)
-		}
-		manifestURL, err = SignURL(outputStorageURL)
-		if err != nil {
-			return nil, fmt.Errorf("failed to sign manifest url: %w", err)
-		}
+	// write the manifest to storage and update the manifestURL variable
+	outputStorageURL := osTransferURL.JoinPath("input.m3u8")
+	err = backoff.Retry(func() error {
+		return UploadToOSURL(outputStorageURL.String(), "", strings.NewReader(mediaPlaylist.String()), ManifestUploadTimeout)
+	}, UploadRetryBackoff())
+	if err != nil {
+		return nil, fmt.Errorf("failed to upload rendition playlist: %w", err)
+	}
+	manifestURL, err = SignURL(outputStorageURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign manifest url: %w", err)
 	}
 
 	newURL, err := url.Parse(manifestURL)
@@ -169,9 +164,13 @@ func downloadManifestWithBackup(requestID, sourceManifestOSURL string) (string, 
 
 func downloadManifest(requestID, sourceManifestOSURL string) (playlist m3u8.Playlist, playlistType m3u8.ListType, size int, err error) {
 	dStorage := NewDStorageDownload()
+	start := time.Now()
 	err = backoff.Retry(func() error {
 		rc, err := GetFile(context.Background(), requestID, sourceManifestOSURL, dStorage)
 		if err != nil {
+			if time.Since(start) > 10*time.Second && errors.IsObjectNotFound(err) {
+				return backoff.Permanent(err)
+			}
 			return err
 		}
 		defer rc.Close()
