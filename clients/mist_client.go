@@ -2,6 +2,7 @@ package clients
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,6 +45,8 @@ type MistAPIClient interface {
 
 type MistClient struct {
 	ApiUrl          string
+	Username        string
+	Password        string
 	HttpReqUrl      string
 	TriggerCallback string
 	configMu        sync.Mutex
@@ -53,6 +56,8 @@ type MistClient struct {
 func NewMistAPIClient(user, password, host string, port int, ownURL string) MistAPIClient {
 	mist := &MistClient{
 		ApiUrl:          fmt.Sprintf("http://%s:%d", host, port),
+		Username:        user,
+		Password:        password,
 		TriggerCallback: ownURL,
 		cache:           cache.New(defaultCacheExpiration, cacheCleanupInterval),
 	}
@@ -115,6 +120,13 @@ type MistState struct {
 	StreamsStats  map[string]*MistStreamStats `json:"stats_streams"`
 	PushList      []*MistPush                 `json:"push_list"`
 	PushAutoList  []*MistPushAuto             `json:"push_auto_list"`
+}
+
+type AuthorizationResponse struct {
+	Authorize struct {
+		Status    string `json:"status"`
+		Challenge string `json:"challenge"`
+	} `json:"authorize"`
 }
 
 func (ms MistState) IsIngestStream(stream string) bool {
@@ -351,6 +363,38 @@ func (mc *MistClient) getCurrentTriggers() (Triggers, error) {
 }
 
 func (mc *MistClient) sendCommand(command interface{}) (string, error) {
+	resp, err := mc.sendCommandToMist(command)
+	if authErr := validateAuth(resp, err); authErr != nil {
+		glog.Infof("Request to Mist not authorized, authorizing and retrying command: %v", command)
+		if authErr := mc.authorize(resp); authErr != nil {
+			glog.Warningf("Failed to authorize Mist request: %v", authErr)
+			return resp, err
+		}
+		return mc.sendCommandToMist(command)
+	}
+	return resp, err
+}
+
+// authorize authorizes the communication with Mist Server by sending the authorization command.
+// Mist doc: https://docs.mistserver.org/docs/mistserver/integration/api/authentication
+func (mc *MistClient) authorize(unauthResp string) error {
+	r := AuthorizationResponse{}
+	if err := json.Unmarshal([]byte(unauthResp), &r); err != nil {
+		return err
+	}
+	passwordMd5, err := computeMD5Hash(mc.Password)
+	if err != nil {
+		return err
+	}
+	password, err := computeMD5Hash(passwordMd5 + r.Authorize.Challenge)
+	if err != nil {
+		return err
+	}
+	c := commandAuthorize(mc.Username, password)
+	return validateAuth(mc.sendCommandToMist(c))
+}
+
+func (mc *MistClient) sendCommandToMist(command interface{}) (string, error) {
 	c, err := commandToString(command)
 	if err != nil {
 		return "", err
@@ -447,6 +491,24 @@ func (mc *MistClient) GetState() (MistState, error) {
 	mc.cache.SetDefault(stateCacheKey, &stats)
 
 	return stats, nil
+}
+
+type authorizeCommand struct {
+	Authorize Authorize `json:"authorize"`
+}
+
+type Authorize struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func commandAuthorize(username, password string) interface{} {
+	return authorizeCommand{
+		Authorize: Authorize{
+			Username: username,
+			Password: password,
+		},
+	}
 }
 
 type addStreamCommand struct {
@@ -723,11 +785,7 @@ func validateAuth(resp string, err error) error {
 	if err != nil {
 		return err
 	}
-	r := struct {
-		Authorize struct {
-			Status string `json:"status"`
-		} `json:"authorize"`
-	}{}
+	r := AuthorizationResponse{}
 
 	if err := json.Unmarshal([]byte(resp), &r); err != nil {
 		return err
@@ -736,6 +794,15 @@ func validateAuth(resp string, err error) error {
 		return errors.New("authorization to Mist API failed")
 	}
 	return nil
+}
+
+func computeMD5Hash(input string) (string, error) {
+	hasher := md5.New()
+	_, err := io.WriteString(hasher, input)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
 }
 
 func wrapErr(err error, streamName string) error {
