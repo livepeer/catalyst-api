@@ -52,7 +52,7 @@ func RecordingBackupCheck(requestID string, primaryManifestURL, osTransferURL *u
 		return primaryManifestURL, nil
 	}
 
-	manifestURL, playlist, playlistType, err := downloadManifestWithBackup(requestID, primaryManifestURL.String())
+	playlist, playlistType, err := downloadManifestWithBackup(requestID, primaryManifestURL.String())
 	if err != nil {
 		return nil, fmt.Errorf("error downloading manifest: %w", err)
 	}
@@ -91,7 +91,7 @@ func RecordingBackupCheck(requestID string, primaryManifestURL, osTransferURL *u
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload rendition playlist: %w", err)
 	}
-	manifestURL, err = SignURL(outputStorageURL)
+	manifestURL, err := SignURL(outputStorageURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign manifest url: %w", err)
 	}
@@ -117,7 +117,7 @@ func convertToMediaPlaylist(playlist m3u8.Playlist, playlistType m3u8.ListType) 
 	return *mediaPlaylist, nil
 }
 
-func downloadManifestWithBackup(requestID, sourceManifestOSURL string) (string, m3u8.Playlist, m3u8.ListType, error) {
+func downloadManifestWithBackup(requestID, sourceManifestOSURL string) (m3u8.Playlist, m3u8.ListType, error) {
 	var playlist, playlistBackup m3u8.Playlist
 	var playlistType, playlistTypeBackup m3u8.ListType
 	var size, sizeBackup int
@@ -145,21 +145,21 @@ func downloadManifestWithBackup(requestID, sourceManifestOSURL string) (string, 
 	// (only not found errors passthrough below)
 	primaryNotFound, backupNotFound := errors.IsObjectNotFound(errPrimary), errors.IsObjectNotFound(errBackup)
 	if primaryNotFound && backupNotFound {
-		return "", nil, 0, errPrimary
+		return nil, 0, errPrimary
 	}
 	if errPrimary != nil && !primaryNotFound {
-		return "", nil, 0, errPrimary
+		return nil, 0, errPrimary
 	}
 	if errBackup != nil && !backupNotFound {
-		return "", nil, 0, errBackup
+		return nil, 0, errBackup
 	}
 
 	// Return the largest manifest as the most recent version
 	hasBackup := backupManifestURL != "" && errBackup == nil
 	if hasBackup && (errPrimary != nil || sizeBackup > size) {
-		return backupManifestURL, playlistBackup, playlistTypeBackup, nil
+		return playlistBackup, playlistTypeBackup, nil
 	}
-	return sourceManifestOSURL, playlist, playlistType, errPrimary
+	return playlist, playlistType, errPrimary
 }
 
 func downloadManifest(requestID, sourceManifestOSURL string) (playlist m3u8.Playlist, playlistType m3u8.ListType, size int, err error) {
