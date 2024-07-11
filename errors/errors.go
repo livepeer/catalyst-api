@@ -3,9 +3,11 @@ package errors
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/xeipuuv/gojsonschema"
 )
@@ -63,21 +65,57 @@ func WriteHTTPBadBodySchema(where string, w http.ResponseWriter, errors []gojson
 	return writeHttpError(w, sb.String(), http.StatusBadRequest, nil)
 }
 
-// Special wrapper for errors that should set the `Unretriable` field in the
-// error callback sent on VOD upload jobs.
-type UnretriableError struct{ error }
+type unretriableError struct{ error }
 
+// Unretriable returns an error that should be treated as final. This effectively means that the error stops backoff
+// retry loops automatically and that it should be propagated back to the caller as such. This is done through the
+// status callback through the "unretriable" field.
 func Unretriable(err error) error {
-	return UnretriableError{err}
+	// Notice that permanent errors get unwrapped by the backoff lib when they're used to stop the retry loop. So we need
+	// to keep the unretriableError inside it so it's propagated upstream.
+	return backoff.Permanent(unretriableError{err})
 }
 
-// Returns whether the given error is an unretriable error.
+// IsUnretriable returns whether the given error is an unretriable error.
 func IsUnretriable(err error) bool {
-	return errors.As(err, &UnretriableError{})
+	return errors.As(err, &unretriableError{})
+}
+
+func (e unretriableError) Unwrap() error {
+	return e.error
+}
+
+type ObjectNotFoundError struct {
+	msg   string
+	cause error
+}
+
+func (e ObjectNotFoundError) Error() string {
+	return e.msg
+}
+
+func (e ObjectNotFoundError) Unwrap() error {
+	return e.cause
+}
+
+func NewObjectNotFoundError(msg string, cause error) error {
+	if cause != nil {
+		msg = fmt.Sprintf("ObjectNotFoundError: %s: %s", msg, cause)
+	} else {
+		msg = fmt.Sprintf("ObjectNotFoundError: %s", msg)
+	}
+
+	// we want 404s to be unretriable at the studio task level but we still want retries at the catalyst-api app level
+	// so we don't use backoff.Permanent or the Unretriable func which uses backoff.Permanent
+	return unretriableError{ObjectNotFoundError{msg: msg, cause: cause}}
+}
+
+// IsObjectNotFound checks if the error is an ObjectNotFoundError.
+func IsObjectNotFound(err error) bool {
+	return errors.As(err, &ObjectNotFoundError{})
 }
 
 var (
-	ObjectNotFoundError = errors.New("ObjectNotFoundError")
-	UnauthorisedError   = errors.New("UnauthorisedError")
-	InvalidJWT          = errors.New("InvalidJWTError")
+	UnauthorisedError = errors.New("UnauthorisedError")
+	InvalidJWT        = errors.New("InvalidJWTError")
 )
