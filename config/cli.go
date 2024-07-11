@@ -37,6 +37,7 @@ type Cli struct {
 	MistCleanup               bool
 	LogSysUsage               bool
 	AMQPURL                   string
+	OwnHost                   string
 	OwnRegion                 string
 	OwnRegionTagAdjust        int
 	APIToken                  string
@@ -96,6 +97,9 @@ func (cli *Cli) OwnInternalURL() string {
 	ip := net.ParseIP(host)
 	if ip.IsUnspecified() {
 		host = "127.0.0.1"
+	}
+	if cli.OwnHost != "" {
+		host = cli.OwnHost
 	}
 	addr := net.JoinHostPort(host, port)
 	return fmt.Sprintf("http://%s", addr)
