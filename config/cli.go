@@ -25,6 +25,7 @@ type Cli struct {
 	MistUser                  string
 	MistPassword              string
 	MistPrometheus            string
+	MistMode                  string
 	MistPort                  int
 	MistConnectTimeout        time.Duration
 	MistStreamSource          string
@@ -108,6 +109,14 @@ func (cli *Cli) EncryptBytes() ([]byte, error) {
 // Should we enable mapic?
 func (cli *Cli) ShouldMapic() bool {
 	return cli.APIServer != ""
+}
+
+func (cli *Cli) IsRunWithMist() bool {
+	return cli.MistMode == "mist-only" || cli.MistMode == "embedded"
+}
+
+func (cli *Cli) IsAPI() bool {
+	return cli.MistMode == "api-only" || cli.MistMode == "embedded"
 }
 
 // Should we enable mist-cleanup script to run periodically and delete leaky shm?

@@ -83,6 +83,7 @@ func main() {
 	config.CommaSliceFlag(fs, &cli.BlockedJWTs, "gate-blocked-jwts", []string{}, "List of blocked JWTs for token gating")
 
 	// mist-api-connector parameters
+	fs.StringVar(&cli.MistMode, "mist-mode", "embedded", "Mode to run the application in. Options: embedded, mist-only, api-only")
 	fs.IntVar(&cli.MistPort, "mist-port", 4242, "Port to connect to Mist")
 	fs.StringVar(&cli.MistHost, "mist-host", "127.0.0.1", "Hostname of the Mist server")
 	fs.StringVar(&cli.MistUser, "mist-user", "", "username of MistServer")
