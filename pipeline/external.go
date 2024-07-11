@@ -3,6 +3,8 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/thumbnails"
 	"net/url"
 	"time"
 
@@ -53,10 +55,28 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	}
 	job.TranscodingDone = time.Now()
 
+	generateThumbs(job)
+
 	return &HandlerOutput{
 		Result: &UploadJobResult{
 			InputVideo: job.InputFileInfo,
 			Outputs:    outputVideos,
 		},
 	}, nil
+}
+
+func generateThumbs(job *JobInfo) {
+	manifestUrl, err := clients.GetFirstRenditionURL(job.RequestID, job.HlsTargetURL.JoinPath("index.m3u8"))
+	if err != nil {
+		log.LogError(job.RequestID, "failed to get rendition URL for mediaconvert thumbs", err)
+		return
+	}
+
+	log.Log(job.RequestID, "generating thumbs for mediaconvert", "manifest", manifestUrl.Redacted())
+	manifest := manifestUrl.String()
+	err = thumbnails.GenerateThumbsAndVTT(job.RequestID, manifest, job.ThumbnailsTargetURL)
+	if err != nil {
+		log.LogError(job.RequestID, "mediaconvert thumbs failed", err, "in", manifest, "out", job.ThumbnailsTargetURL)
+		return
+	}
 }
