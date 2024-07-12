@@ -176,106 +176,128 @@ func main() {
 		return
 	}
 
-	// TODO: I don't love the global variables for these
-	config.ImportIPFSGatewayURLs = cli.ImportIPFSGatewayURLs
-	config.ImportArweaveGatewayURLs = cli.ImportArweaveGatewayURLs
-	config.HTTPInternalAddress = cli.HTTPInternalAddress
-
 	var (
 		metricsDB *sql.DB
+		vodEngine *pipeline.Coordinator
+		mapic     mistapiconnector.IMac
+		bal       balancer.Balancer
+		broker    misttriggers.TriggerBroker
+		mist      clients.MistAPIClient
 	)
 
-	// Kick off the callback client, to send job update messages on a regular interval
-	headers := map[string]string{"Authorization": fmt.Sprintf("Bearer %s", cli.APIToken)}
-	statusClient := clients.NewPeriodicCallbackClient(15*time.Second, headers).Start()
+	// Initialize root context; cancelling this prompts all components to shut down cleanly
+	group, ctx := errgroup.WithContext(context.Background())
 
-	// Emit high-cardinality metrics to a Postrgres database if configured
-	if cli.MetricsDBConnectionString != "" {
-		metricsDB, err = sql.Open("postgres", cli.MetricsDBConnectionString)
-		if err != nil {
-			glog.Fatalf("Error creating postgres metrics connection: %v", err)
-		}
+	if cli.IsAPI() {
+		// TODO: I don't love the global variables for these
+		config.ImportIPFSGatewayURLs = cli.ImportIPFSGatewayURLs
+		config.ImportArweaveGatewayURLs = cli.ImportArweaveGatewayURLs
+		config.HTTPInternalAddress = cli.HTTPInternalAddress
 
-		// Without this, we've run into issues with exceeding our open connection limit
-		metricsDB.SetMaxOpenConns(2)
-		metricsDB.SetMaxIdleConns(2)
-		metricsDB.SetConnMaxLifetime(time.Hour)
-	} else {
-		glog.Info("Postgres metrics connection string was not set, postgres metrics are disabled.")
-	}
+		// Kick off the callback client, to send job update messages on a regular interval
+		headers := map[string]string{"Authorization": fmt.Sprintf("Bearer %s", cli.APIToken)}
+		statusClient := clients.NewPeriodicCallbackClient(15*time.Second, headers).Start()
 
-	var vodDecryptPrivateKey *rsa.PrivateKey
-
-	if cli.VodDecryptPrivateKey != "" && cli.VodDecryptPublicKey != "" {
-		vodDecryptPrivateKey, err = crypto.LoadPrivateKey(cli.VodDecryptPrivateKey)
-		if err != nil {
-			glog.Fatalf("Error loading vod decrypt private key: %v", err)
-		}
-		isValidKeyPair, err := crypto.ValidateKeyPair(cli.VodDecryptPublicKey, *vodDecryptPrivateKey)
-		if !isValidKeyPair || err != nil {
-			glog.Fatalf("Invalid vod decrypt key pair")
-		}
-	}
-
-	c2, err := createC2PA(&cli)
-	if err != nil {
-		// Log warning, but still start without C2PA signing
-		glog.Warning(err)
-	}
-	// Start the "co-ordinator" that determines whether to send jobs to the Catalyst transcoding pipeline
-	// or an external one
-	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB, vodDecryptPrivateKey, cli.BroadcasterURL, cli.SourcePlaybackHosts, c2)
-	if err != nil {
-		glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
-	}
-
-	// Start cron style apps to run periodically
-	if cli.ShouldMistCleanup() {
-		app := "mist-cleanup.sh"
-		// schedule mist-cleanup every 2hrs with a timeout of 15min
-		mistCleanup, err := middleware.NewShell(2*60*60*time.Second, 15*60*time.Second, app)
-		if err != nil {
-			glog.Info("Failed to shell out:", app, err)
-		}
-		mistCleanupTick := mistCleanup.RunBg()
-		defer mistCleanupTick.Stop()
-	}
-	if cli.ShouldLogSysUsage() {
-		app := "pod-mon.sh"
-		// schedule pod-mon every 5min with timeout of 5s
-		podMon, err := middleware.NewShell(300*time.Second, 5*time.Second, app)
-		if err != nil {
-			glog.Info("Failed to shell out:", app, err)
-		}
-		podMonTick := podMon.RunBg()
-		defer podMonTick.Stop()
-	}
-
-	broker := misttriggers.NewTriggerBroker()
-
-	var mist clients.MistAPIClient
-	if cli.MistEnabled {
-		ownURL := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
-		mist = clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort, ownURL)
-		if cli.MistTriggerSetup {
-			err := broker.SetupMistTriggers(mist)
+		// Emit high-cardinality metrics to a Postgres database if configured
+		if cli.MetricsDBConnectionString != "" {
+			metricsDB, err = sql.Open("postgres", cli.MetricsDBConnectionString)
 			if err != nil {
-				glog.Error("catalyst-api was unable to communicate with MistServer to set up its triggers.")
-				glog.Error("hint: are you trying to boot catalyst-api without Mist for development purposes? use the flag -no-mist")
-				glog.Fatalf("error setting up Mist triggers err=%s", err)
+				glog.Fatalf("Error creating postgres metrics connection: %v", err)
+			}
+
+			// Without this, we've run into issues with exceeding our open connection limit
+			metricsDB.SetMaxOpenConns(2)
+			metricsDB.SetMaxIdleConns(2)
+			metricsDB.SetConnMaxLifetime(time.Hour)
+		} else {
+			glog.Info("Postgres metrics connection string was not set, postgres metrics are disabled.")
+		}
+
+		var vodDecryptPrivateKey *rsa.PrivateKey
+
+		if cli.VodDecryptPrivateKey != "" && cli.VodDecryptPublicKey != "" {
+			vodDecryptPrivateKey, err = crypto.LoadPrivateKey(cli.VodDecryptPrivateKey)
+			if err != nil {
+				glog.Fatalf("Error loading vod decrypt private key: %v", err)
+			}
+			isValidKeyPair, err := crypto.ValidateKeyPair(cli.VodDecryptPublicKey, *vodDecryptPrivateKey)
+			if !isValidKeyPair || err != nil {
+				glog.Fatalf("Invalid vod decrypt key pair")
 			}
 		}
-	} else {
-		glog.Info("-no-mist flag detected, not initializing Mist stream triggers")
+
+		c2, err := createC2PA(&cli)
+		if err != nil {
+			// Log warning, but still start without C2PA signing
+			glog.Warning(err)
+		}
+		// Start the "co-ordinator" that determines whether to send jobs to the Catalyst transcoding pipeline
+		// or an external one
+		vodEngine, err = pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB, vodDecryptPrivateKey, cli.BroadcasterURL, cli.SourcePlaybackHosts, c2)
+		if err != nil {
+			glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
+		}
+
+		broker = misttriggers.NewTriggerBroker()
+
+		if cli.MistEnabled {
+			ownURL := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
+			mist = clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort, ownURL)
+			if cli.MistTriggerSetup {
+				err := broker.SetupMistTriggers(mist)
+				if err != nil {
+					glog.Error("catalyst-api was unable to communicate with MistServer to set up its triggers.")
+					glog.Error("hint: are you trying to boot catalyst-api without Mist for development purposes? use the flag -no-mist")
+					glog.Fatalf("error setting up Mist triggers err=%s", err)
+				}
+			}
+		} else {
+			glog.Info("-no-mist flag detected, not initializing Mist stream triggers")
+		}
+
+		if cli.ShouldMapic() {
+			mapic = mistapiconnector.NewMapic(&cli, broker, mist)
+			group.Go(func() error {
+				return mapic.Start(ctx)
+			})
+		}
 	}
 
-	var mapic mistapiconnector.IMac
-	if cli.ShouldMapic() {
-		mapic = mistapiconnector.NewMapic(&cli, broker, mist)
+	if cli.IsRunWithMist() {
+		// Start cron style apps to run periodically
+		if cli.ShouldMistCleanup() {
+			app := "mist-cleanup.sh"
+			// schedule mist-cleanup every 2hrs with a timeout of 15min
+			mistCleanup, err := middleware.NewShell(2*60*60*time.Second, 15*60*time.Second, app)
+			if err != nil {
+				glog.Info("Failed to shell out:", app, err)
+			}
+			mistCleanupTick := mistCleanup.RunBg()
+			defer mistCleanupTick.Stop()
+		}
+		if cli.ShouldLogSysUsage() {
+			app := "pod-mon.sh"
+			// schedule pod-mon every 5min with timeout of 5s
+			podMon, err := middleware.NewShell(300*time.Second, 5*time.Second, app)
+			if err != nil {
+				glog.Info("Failed to shell out:", app, err)
+			}
+			podMonTick := podMon.RunBg()
+			defer podMonTick.Stop()
+		}
+
+		group.Go(func() error {
+			return handleSignals(ctx)
+		})
 	}
 
+	// TODO: Move cluster
 	c := cluster.NewCluster(&cli)
+	group.Go(func() error {
+		return c.Start(ctx)
+	})
 
+	// TODO: Move balancer
 	// Start balancer
 	mistBalancer := mist_balancer.NewBalancer(&balancer.Config{
 		Args:                     cli.BalancerArgs,
@@ -288,7 +310,7 @@ func main() {
 		OwnRegionTagAdjust:       cli.OwnRegionTagAdjust,
 	})
 
-	bal := mistBalancer
+	bal = mistBalancer
 	if balancer.CombinedBalancerEnabled(cli.CataBalancer) {
 		cataBalancer := catabalancer.NewBalancer(cli.NodeName, cli.CataBalancerMetricTimeout, cli.CataBalancerIngestStreamTimeout)
 		// Temporary combined balancer to test cataBalancer logic alongside existing mist balancer
@@ -298,12 +320,12 @@ func main() {
 			events.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, c, mist)
 		}
 	}
-
-	// Initialize root context; cancelling this prompts all components to shut down cleanly
-	group, ctx := errgroup.WithContext(context.Background())
-
 	group.Go(func() error {
-		return handleSignals(ctx)
+		return bal.Start(ctx)
+	})
+	group.Go(func() error {
+		// TODO these errors cause the app to shut down?
+		return reconcileBalancer(ctx, bal, c)
 	})
 
 	group.Go(func() error {
@@ -312,25 +334,6 @@ func main() {
 
 	group.Go(func() error {
 		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker, metricsDB)
-	})
-
-	if cli.ShouldMapic() {
-		group.Go(func() error {
-			return mapic.Start(ctx)
-		})
-	}
-
-	group.Go(func() error {
-		return bal.Start(ctx)
-	})
-
-	group.Go(func() error {
-		return c.Start(ctx)
-	})
-
-	group.Go(func() error {
-		// TODO these errors cause the app to shut down?
-		return reconcileBalancer(ctx, bal, c)
 	})
 
 	group.Go(func() error {
