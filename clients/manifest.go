@@ -15,6 +15,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/grafov/m3u8"
+	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/video"
 )
 
@@ -223,6 +224,7 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnix
 	if err != nil {
 		return nil, fmt.Errorf("error clipping: failed to download original manifest: %w", err)
 	}
+	log.Log(requestID, "Downloaded manifest to clip", "segments", origManifest.Count())
 
 	// Generate the absolute path URLS for segmens from the manifest's relative path
 	// TODO: optimize later and only get absolute path URLs for the start/end segments

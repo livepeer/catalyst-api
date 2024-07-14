@@ -113,7 +113,7 @@ func ClipManifest(requestID string, manifest *m3u8.MediaPlaylist, startTime, end
 	// Find the segment index that correlates with the specified startTime
 	// but error out it exceeds the  manifest's duration.
 	if startTime > manifestDuration {
-		return nil, []ClipSegmentInfo{}, fmt.Errorf("error clipping: start time specified exceeds duration of manifest")
+		return nil, []ClipSegmentInfo{}, fmt.Errorf("error clipping: start time (%f) specified exceeds duration of manifest (%f)", startTime, manifestDuration)
 	} else {
 		clipStartSegmentInfo, err = getRelevantSegment(manifest.Segments, startTime, 0)
 		if err != nil {

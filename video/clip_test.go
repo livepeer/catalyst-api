@@ -150,7 +150,7 @@ func TestClippingSucceedsWhenValidManifestIsUsed(t *testing.T) {
 
 	// start exceeds the duration of playlist: ensure no segments are returned
 	segs, _, err = ClipManifest("1234", plB, 30, 20.78)
-	require.ErrorContains(t, err, "start time specified exceeds duration of manifest")
+	require.ErrorContains(t, err, "exceeds duration of manifest")
 	require.Equal(t, segs, []*m3u8.MediaSegment(nil))
 
 	// end exceeds the duration of playlist: ensure only 0.ts is returned
