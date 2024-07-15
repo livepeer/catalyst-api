@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rsa"
 	"database/sql"
@@ -8,9 +9,9 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -125,6 +126,7 @@ func main() {
 	fs.IntVar(&cli.SerfQueueSize, "serf-queue-size", 100000, "Size of internal serf queue before messages are dropped")
 	fs.IntVar(&cli.SerfEventBuffer, "serf-event-buffer", 100000, "Size of serf 'recent event' buffer, outside of which things are dropped")
 	fs.IntVar(&cli.SerfMaxQueueDepth, "serf-max-queue-depth", 100000, "Size of Serf queue, outside of which things are dropped")
+	fs.StringVar(&cli.SerfUserEventCallback, "serf-user-event-callback", "http://127.0.0.1:7979/api/serf/receiveUserEvent", "URL to send serf user events to")
 	fs.StringVar(&cli.EnableAnalytics, "analytics", "disabled", "Enables analytics API: enabled or disabled")
 	fs.StringVar(&cli.KafkaBootstrapServers, "kafka-bootstrap-servers", "", "URL of Kafka Bootstrap Servers")
 	fs.StringVar(&cli.KafkaUser, "kafka-user", "", "Kafka Username")
@@ -184,6 +186,7 @@ func main() {
 		bal       balancer.Balancer
 		broker    misttriggers.TriggerBroker
 		mist      clients.MistAPIClient
+		c         cluster.Cluster
 	)
 
 	// Initialize root context; cancelling this prompts all components to shut down cleanly
@@ -293,7 +296,7 @@ func main() {
 	}
 
 	// TODO: Move cluster
-	c := cluster.NewCluster(&cli)
+	c = cluster.NewCluster(&cli)
 	group.Go(func() error {
 		return c.Start(ctx)
 	})
@@ -321,13 +324,15 @@ func main() {
 			events.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, c, mist)
 		}
 	}
-	group.Go(func() error {
-		return bal.Start(ctx)
-	})
-	group.Go(func() error {
-		// TODO these errors cause the app to shut down?
-		return reconcileBalancer(ctx, bal, c)
-	})
+	if cli.IsRunWithMist() {
+		group.Go(func() error {
+			return bal.Start(ctx)
+		})
+		group.Go(func() error {
+			// TODO these errors cause the app to shut down?
+			return reconcileBalancer(ctx, bal, c)
+		})
+	}
 
 	group.Go(func() error {
 		return api.ListenAndServe(ctx, cli, vodEngine, bal, c, mapic)
@@ -337,9 +342,11 @@ func main() {
 		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker, metricsDB)
 	})
 
-	group.Go(func() error {
-		return handleClusterEvents(ctx, mapic, bal, c)
-	})
+	if cli.IsRunWithMist() {
+		group.Go(func() error {
+			return handleClusterEvents(ctx, cli.SerfUserEventCallback, c)
+		})
+	}
 
 	err = group.Wait()
 	glog.Infof("Shutdown complete. Reason for shutdown: %s", err)
@@ -361,52 +368,36 @@ func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Clu
 	}
 }
 
-func handleClusterEvents(ctx context.Context, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster) error {
+func handleClusterEvents(ctx context.Context, callbackEndpoint string, c cluster.Cluster) error {
 	eventCh := c.EventChan()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case e := <-eventCh:
-			processClusterEvent(mapic, bal, e)
+			processClusterEvent(callbackEndpoint, e)
 		}
 	}
 }
 
-func processClusterEvent(mapic mistapiconnector.IMac, bal balancer.Balancer, userEvent serf.UserEvent) {
-	go func() {
-		e, err := events.Unmarshal(userEvent.Payload)
-		if err != nil {
-			glog.Errorf("cannot unmarshal received serf event %v: %s", userEvent, err)
-			return
-		}
-		switch event := e.(type) {
-		case *events.StreamEvent:
-			glog.V(5).Infof("received serf StreamEvent: %v", event.PlaybackID)
-			mapic.RefreshStreamIfNeeded(event.PlaybackID)
-		case *events.NukeEvent:
-			glog.V(5).Infof("received serf NukeEvent: %v", event.PlaybackID)
-			mapic.NukeStream(event.PlaybackID)
-			return
-		case *events.StopSessionsEvent:
-			glog.V(5).Infof("received serf StopSessionsEvent: %v", event.PlaybackID)
-			mapic.StopSessions(event.PlaybackID)
-			return
-		case *events.NodeUpdateEvent:
-			if glog.V(5) {
-				glog.Infof("received serf NodeUpdateEvent. Node: %s. Length: %d bytes. Ingest Streams: %v. Non-Ingest Streams: %v", event.NodeID, len(userEvent.Payload), strings.Join(event.GetIngestStreams(), ","), strings.Join(event.GetStreams(), ","))
-			}
+func processClusterEvent(callbackEndpoint string, userEvent serf.UserEvent) {
+	client := &http.Client{}
+	glog.V(5).Infof("received serf user event, propagating to %s, event=%s", callbackEndpoint, userEvent.String())
 
-			bal.UpdateNodes(event.NodeID, event.NodeMetrics)
-			for _, stream := range event.GetStreams() {
-				bal.UpdateStreams(event.NodeID, stream, false)
-			}
-			for _, stream := range event.GetIngestStreams() {
-				bal.UpdateStreams(event.NodeID, stream, true)
-			}
-		default:
-			glog.Errorf("unsupported serf event: %v", e)
+	go func() {
+		req, err := http.NewRequest("POST", callbackEndpoint, bytes.NewBuffer(userEvent.Payload))
+		if err != nil {
+			glog.Errorf("error creating request: %v", err)
+			return
 		}
+		resp, err := client.Do(req)
+		if err != nil {
+			glog.Errorf("error sending request: %v", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		glog.V(5).Infof("propagated serf user event to %s, event=%s", callbackEndpoint, userEvent.String())
 	}()
 }
 

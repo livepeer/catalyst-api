@@ -73,7 +73,7 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	spkiPublicKey, _ := crypto.ConvertToSpki(cli.VodDecryptPublicKey)
 
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
-	eventsHandler := &handlers.EventsHandlersCollection{Cluster: c}
+	eventsHandler := handlers.NewEventsHandlersCollection(c, mapic, bal)
 	ffmpegSegmentingHandlers := &ffmpeg.HandlersCollection{VODEngine: vodEngine}
 	accessControlHandlers := accesscontrol.NewAccessControlHandlersCollection(cli, mapic)
 	analyticsHandlers := analytics.NewAnalyticsHandler(metricsDB)
@@ -111,6 +111,8 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 
 	// Public handler to propagate an event to all Catalyst nodes
 	router.POST("/api/events", withLogging(eventsHandler.Events()))
+	// Handlers to receive and pass serf events
+	router.POST("/api/serf/receiveUserEvent", withLogging(eventsHandler.ReceiveUserEvent()))
 
 	// Public GET handler to retrieve the public key for vod encryption
 	router.GET("/api/pubkey", withLogging(encryptionHandlers.PublicKeyHandler()))

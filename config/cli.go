@@ -88,6 +88,7 @@ type Cli struct {
 	SerfQueueSize                   int
 	SerfEventBuffer                 int
 	SerfMaxQueueDepth               int
+	SerfUserEventCallback           string
 }
 
 // Return our own URL for callback trigger purposes
