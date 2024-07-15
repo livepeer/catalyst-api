@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"net/url"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -23,9 +21,7 @@ import (
 type Cluster interface {
 	Start(ctx context.Context) error
 	MembersFiltered(filter map[string]string, status, name string) ([]Member, error)
-	Member(filter map[string]string, status, name string) (Member, error)
 	MemberChan() chan []Member
-	ResolveNodeURL(streamURL string) (string, error)
 	EventChan() <-chan serf.UserEvent
 	BroadcastEvent(serf.UserEvent) error
 }
@@ -214,61 +210,9 @@ func (c *ClusterImpl) MembersFiltered(filter map[string]string, status, name str
 	return nodes, nil
 }
 
-func (c *ClusterImpl) Member(filter map[string]string, status, name string) (Member, error) {
-	members, err := c.MembersFiltered(filter, "", name)
-	if err != nil {
-		return Member{}, err
-	}
-	if len(members) < 1 {
-		return Member{}, fmt.Errorf("could not find serf member name=%s", name)
-	}
-	if len(members) > 1 {
-		glog.Errorf("found multiple serf members with the same name! this shouldn't happen! name=%s count=%d", name, len(members))
-	}
-	if members[0].Status != status {
-		return Member{}, fmt.Errorf("found serf member name=%s but status=%s (wanted %s)", name, members[0].Status, status)
-	}
-
-	return members[0], nil
-}
-
 // Subscribe to changes in the member list. Please only call me once. I only have one channel internally.
 func (c *ClusterImpl) MemberChan() chan []Member {
 	return c.memberCh
-}
-
-// Given a dtsc:// or https:// url, resolve the proper address of the node via serf tags
-func (c *ClusterImpl) ResolveNodeURL(streamURL string) (string, error) {
-	return ResolveNodeURL(c, streamURL)
-}
-
-// Separated here to be more easily fed mocks for testing
-func ResolveNodeURL(c Cluster, streamURL string) (string, error) {
-	u, err := url.Parse(streamURL)
-	if err != nil {
-		return "", err
-	}
-	nodeName := u.Host
-	protocol := u.Scheme
-
-	member, err := c.Member(map[string]string{}, "alive", nodeName)
-	if err != nil {
-		return "", err
-	}
-	addr, has := member.Tags[protocol]
-	if !has {
-		glog.V(7).Infof("no tag found, not tag resolving protocol=%s nodeName=%s", protocol, nodeName)
-		return streamURL, nil
-	}
-	u2, err := url.Parse(addr)
-	if err != nil {
-		err = fmt.Errorf("node has unparsable tag!! nodeName=%s protocol=%s tag=%s", nodeName, protocol, addr)
-		glog.Error(err)
-		return "", err
-	}
-	u2.Path = filepath.Join(u2.Path, u.Path)
-	u2.RawQuery = u.RawQuery
-	return u2.String(), nil
 }
 
 // Subscribe to events broadcaster in the serf cluster. Please only call me once. I only have one channel internally.
