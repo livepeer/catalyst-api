@@ -267,6 +267,7 @@ func (b *MistBalancer) reconcileBalancerLoop(ctx context.Context, balancerArgs [
 // reconcileBalancer makes sure that MistUtilLoad is up and running.
 func (b *MistBalancer) reconcileBalancer(ctx context.Context, balancerArgs []string) {
 	if !b.isBalancerRunning(ctx) {
+		glog.Info("Starting MistUtilLoad")
 		err := b.execBalancer(ctx, balancerArgs)
 		if err != nil {
 			glog.Warningf("Error starting MistUtilLoad: %v", err)
