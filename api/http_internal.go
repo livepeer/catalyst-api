@@ -113,6 +113,8 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	router.POST("/api/events", withLogging(eventsHandler.Events()))
 	// Handlers to receive and pass serf events
 	router.POST("/api/serf/receiveUserEvent", withLogging(eventsHandler.ReceiveUserEvent()))
+	router.GET("/admin/members", withLogging(adminHandlers.MembersHandler()))
+	router.GET("/api/serf/members", withLogging(adminHandlers.MembersHandler()))
 
 	// Public GET handler to retrieve the public key for vod encryption
 	router.GET("/api/pubkey", withLogging(encryptionHandlers.PublicKeyHandler()))
@@ -131,9 +133,6 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 
 	// Endpoint to receive segments and manifests that ffmpeg produces
 	router.POST("/api/ffmpeg/:id/:filename", withLogging(ffmpegSegmentingHandlers.NewFile()))
-
-	// Temporary endpoint for admin queries
-	router.GET("/admin/members", withLogging(adminHandlers.MembersHandler()))
 
 	return router
 }
