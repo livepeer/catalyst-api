@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -189,7 +190,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 
 		rPath := fmt.Sprintf(pathTmpl, fullPlaybackID)
 		rURL := fmt.Sprintf("%s://%s%s?%s", protocol(r), bestNode, rPath, r.URL.RawQuery)
-		rURL, err = c.Cluster.ResolveNodeURL(rURL)
+		rURL, err = c.resolveNodeURL(rURL)
 		if err != nil {
 			glog.Errorf("failed to resolve node URL playbackID=%s err=%s", playbackID, err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -211,6 +212,53 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 		glog.Infof(string(jsonRedirectInfo))
 		http.Redirect(w, r, rURL, http.StatusTemporaryRedirect)
 	}
+}
+
+// Given a dtsc:// or https:// url, resolve the proper address of the node via serf tags
+func (c *GeolocationHandlersCollection) resolveNodeURL(streamURL string) (string, error) {
+	u, err := url.Parse(streamURL)
+	if err != nil {
+		return "", err
+	}
+	nodeName := u.Host
+	protocol := u.Scheme
+
+	member, err := c.clusterMember(map[string]string{}, "alive", nodeName)
+	if err != nil {
+		return "", err
+	}
+	addr, has := member.Tags[protocol]
+	if !has {
+		glog.V(7).Infof("no tag found, not tag resolving protocol=%s nodeName=%s", protocol, nodeName)
+		return streamURL, nil
+	}
+	u2, err := url.Parse(addr)
+	if err != nil {
+		err = fmt.Errorf("node has unparsable tag!! nodeName=%s protocol=%s tag=%s", nodeName, protocol, addr)
+		glog.Error(err)
+		return "", err
+	}
+	u2.Path = filepath.Join(u2.Path, u.Path)
+	u2.RawQuery = u.RawQuery
+	return u2.String(), nil
+}
+
+func (c *GeolocationHandlersCollection) clusterMember(filter map[string]string, status, name string) (cluster.Member, error) {
+	members, err := c.Cluster.MembersFiltered(filter, "", name)
+	if err != nil {
+		return cluster.Member{}, err
+	}
+	if len(members) < 1 {
+		return cluster.Member{}, fmt.Errorf("could not find serf member name=%s", name)
+	}
+	if len(members) > 1 {
+		glog.Errorf("found multiple serf members with the same name! this shouldn't happen! name=%s count=%d", name, len(members))
+	}
+	if members[0].Status != status {
+		return cluster.Member{}, fmt.Errorf("found serf member name=%s but status=%s (wanted %s)", name, members[0].Status, status)
+	}
+
+	return members[0], nil
 }
 
 // RedirectConstPathHandler redirects const path into the self catalyst node if it was not yet redirected.
@@ -283,7 +331,7 @@ func playbackIdFor(streamName string) string {
 }
 
 func (c *GeolocationHandlersCollection) resolveReplicatedStream(dtscURL string, streamName string) (string, error) {
-	outURL, err := c.Cluster.ResolveNodeURL(dtscURL)
+	outURL, err := c.resolveNodeURL(dtscURL)
 	if err != nil {
 		glog.Errorf("error finding STREAM_SOURCE: %s", err)
 		return "push://", nil

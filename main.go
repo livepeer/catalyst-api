@@ -176,11 +176,7 @@ func main() {
 		return
 	}
 
-	if cli.MistUser != "" || cli.MistPassword != "" {
-		glog.Warning("DEPRECATION NOTICE: mist-user and mist-password are no longer used and will be removed in a later version")
-	}
-
-	// TODO: I don't love the global variables for these. Me neither.
+	// TODO: I don't love the global variables for these
 	config.ImportIPFSGatewayURLs = cli.ImportIPFSGatewayURLs
 	config.ImportArweaveGatewayURLs = cli.ImportArweaveGatewayURLs
 	config.HTTPInternalAddress = cli.HTTPInternalAddress
