@@ -342,15 +342,25 @@ func main() {
 // Eventually this will be the main loop of the state machine, but we just have one variable right now.
 func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Cluster) error {
 	memberCh := c.MemberChan()
+	ticker := time.NewTicker(1 * time.Minute)
 	for {
+		var members []cluster.Member
+		var err error
 		select {
 		case <-ctx.Done():
 			return nil
-		case list := <-memberCh:
-			err := bal.UpdateMembers(ctx, list)
+		case <-ticker.C:
+			members, err = c.MembersFiltered(cluster.MediaFilter, "alive", "")
 			if err != nil {
-				return fmt.Errorf("failed to update load balancer from member list: %w", err)
+				glog.Errorf("Error getting serf members: %v", err)
+				continue
 			}
+		case members = <-memberCh:
+		}
+		err = bal.UpdateMembers(ctx, members)
+		if err != nil {
+			glog.Errorf("Failed to update load balancer from member list: %v", err)
+			continue
 		}
 	}
 }
