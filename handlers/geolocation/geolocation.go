@@ -67,7 +67,6 @@ func (l *streamPullRateLimit) mark(playbackID string) {
 
 type GeolocationHandlersCollection struct {
 	Balancer            balancer.Balancer
-	Cluster             cluster.Cluster
 	Config              config.Cli
 	Lapi                *api.Client
 	streamPullRateLimit *streamPullRateLimit
@@ -76,7 +75,6 @@ type GeolocationHandlersCollection struct {
 func NewGeolocationHandlersCollection(balancer balancer.Balancer, cluster cluster.Cluster, config config.Cli, lapi *api.Client) *GeolocationHandlersCollection {
 	return &GeolocationHandlersCollection{
 		Balancer:            balancer,
-		Cluster:             cluster,
 		Config:              config,
 		Lapi:                lapi,
 		streamPullRateLimit: newStreamPullRateLimit(streamSourceRetryInterval),
@@ -244,7 +242,7 @@ func (c *GeolocationHandlersCollection) resolveNodeURL(streamURL string) (string
 }
 
 func (c *GeolocationHandlersCollection) clusterMember(filter map[string]string, status, name string) (cluster.Member, error) {
-	members, err := c.Cluster.MembersFiltered(filter, "", name)
+	members, err := c.membersFiltered(filter, "", name)
 	if err != nil {
 		return cluster.Member{}, err
 	}
@@ -404,7 +402,7 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string, retryCo
 }
 
 func (c *GeolocationHandlersCollection) sendPlaybackRequestAsync(playbackID string, region string) {
-	members, err := c.Cluster.MembersFiltered(map[string]string{"region": region}, "", "")
+	members, err := c.membersFiltered(map[string]string{"region": region}, "", "")
 	if err != nil || len(members) == 0 {
 		glog.Errorf("Error fetching member list: %v", err)
 		return
@@ -420,6 +418,45 @@ func (c *GeolocationHandlersCollection) sendPlaybackRequestAsync(playbackID stri
 		}
 		resp.Body.Close()
 	}()
+}
+
+func (c *GeolocationHandlersCollection) membersFiltered(filter map[string]string, status, name string) ([]cluster.Member, error) {
+	membersEndpoint := fmt.Sprintf("http://%s:7979/api/serf/members", c.Config.MistHost)
+	resMembers := []cluster.Member{}
+
+	resp, err := http.Get(membersEndpoint)
+	if err != nil {
+		return resMembers, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return resMembers, fmt.Errorf("failed to get members: %s", resp.Status)
+	}
+	var members []cluster.Member
+	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
+		return resMembers, err
+	}
+	for _, member := range members {
+		if status != "" && status != member.Status {
+			continue
+		}
+		if name != "" && name != member.Name {
+			continue
+		}
+		matches := true
+		for k, v := range filter {
+			val, ok := member.Tags[k]
+			if !ok || val != v {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			members = append(members, member)
+		}
+
+	}
+	return members, nil
 }
 
 func parsePlus(plusString string) (string, string) {

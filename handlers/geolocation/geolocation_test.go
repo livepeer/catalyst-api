@@ -165,7 +165,6 @@ func mockHandlers(t *testing.T) *GeolocationHandlersCollection {
 
 	coll := GeolocationHandlersCollection{
 		Balancer: mb,
-		Cluster:  mc,
 		Config: config.Cli{
 			RedirectPrefixes: prefixes[:],
 		},
