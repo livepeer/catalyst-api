@@ -31,11 +31,13 @@ func (s *StepContext) AllOfTheSourceSegmentsAreWrittenToStorageWithinSeconds(num
 	session := osDriver.NewSession(filepath.Join(s.latestRequestID, "source"))
 
 	var latestNumSegments int
-	for x := 0; x < secs; x++ {
+	for x := 0; x < secs; x++ { // retry loop
+		if x > 0 {
+			time.Sleep(time.Second)
+		}
 		page, err := session.ListFiles(context.Background(), "", "")
 		if err != nil {
 			log.Println("failed to list files: ", err)
-			time.Sleep(time.Second)
 			continue
 		}
 
@@ -43,7 +45,6 @@ func (s *StepContext) AllOfTheSourceSegmentsAreWrittenToStorageWithinSeconds(num
 		if latestNumSegments == numSegments+1 {
 			return nil
 		}
-		time.Sleep(time.Second)
 	}
 	return fmt.Errorf("did not find the expected number of source segments in %s (wanted %d, got %d)", s.SourceOutputDir, numSegments, latestNumSegments)
 }
