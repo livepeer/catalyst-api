@@ -36,6 +36,7 @@ var fakeSerfMember = cluster.Member{
 		"https": fmt.Sprintf("https://%s", closestNodeAddr),
 		"dtsc":  fmt.Sprintf("dtsc://%s", closestNodeAddr),
 	},
+	Status: "alive",
 }
 
 var prefixes = [...]string{"video", "videorec", "stream", "playback", "vod"}
@@ -158,15 +159,10 @@ func mockHandlers(t *testing.T) *GeolocationHandlersCollection {
 		Return("", "", errors.New(""))
 
 	mc.EXPECT().
-		Member(map[string]string{}, "alive", closestNodeAddr).
+		MembersFiltered(map[string]string{}, gomock.Any(), closestNodeAddr).
 		AnyTimes().
-		Return(fakeSerfMember, nil)
+		Return([]cluster.Member{fakeSerfMember}, nil)
 
-	mc.EXPECT().
-		ResolveNodeURL(gomock.Any()).DoAndReturn(func(streamURL string) (string, error) {
-		return cluster.ResolveNodeURL(mc, streamURL)
-	}).
-		AnyTimes()
 	coll := GeolocationHandlersCollection{
 		Balancer: mb,
 		Cluster:  mc,
