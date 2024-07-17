@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	mist_balancer "github.com/livepeer/catalyst-api/balancer/mist"
 	"log"
 	"net/http"
 	"os"
@@ -21,7 +22,6 @@ import (
 	"github.com/livepeer/catalyst-api/api"
 	"github.com/livepeer/catalyst-api/balancer"
 	"github.com/livepeer/catalyst-api/balancer/catabalancer"
-	mist_balancer "github.com/livepeer/catalyst-api/balancer/mist"
 	"github.com/livepeer/catalyst-api/c2pa"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
@@ -183,17 +183,28 @@ func main() {
 	config.HTTPInternalAddress = cli.HTTPInternalAddress
 
 	var (
-		metricsDB *sql.DB
-		vodEngine *pipeline.Coordinator
-		mapic     mistapiconnector.IMac
-		bal       balancer.Balancer
-		broker    misttriggers.TriggerBroker
-		mist      clients.MistAPIClient
-		c         cluster.Cluster
+		metricsDB    *sql.DB
+		vodEngine    *pipeline.Coordinator
+		mapic        mistapiconnector.IMac
+		bal          balancer.Balancer
+		broker       misttriggers.TriggerBroker
+		mist         clients.MistAPIClient
+		c            cluster.Cluster
+		mistBalancer balancer.Balancer
 	)
 
 	// Initialize root context; cancelling this prompts all components to shut down cleanly
 	group, ctx := errgroup.WithContext(context.Background())
+	mistBalancerConfig := &balancer.Config{
+		Args:                     cli.BalancerArgs,
+		MistUtilLoadPort:         uint32(cli.MistLoadBalancerPort),
+		MistLoadBalancerTemplate: cli.MistLoadBalancerTemplate,
+		MistHost:                 cli.MistHost,
+		MistPort:                 cli.MistPort,
+		NodeName:                 cli.NodeName,
+		OwnRegion:                cli.OwnRegion,
+		OwnRegionTagAdjust:       cli.OwnRegionTagAdjust,
+	}
 
 	if cli.IsAPI() {
 		// TODO: I don't love the global variables for these
@@ -268,6 +279,8 @@ func main() {
 				return mapic.Start(ctx)
 			})
 		}
+
+		mistBalancer = mist_balancer.NewRemoteBalancer(mistBalancerConfig)
 	}
 
 	if cli.IsRunWithMist() {
@@ -296,26 +309,14 @@ func main() {
 		group.Go(func() error {
 			return handleSignals(ctx)
 		})
+
+		c = cluster.NewCluster(&cli)
+		group.Go(func() error {
+			return c.Start(ctx)
+		})
+
+		mistBalancer = mist_balancer.NewBalancer(mistBalancerConfig)
 	}
-
-	// TODO: Move cluster
-	c = cluster.NewCluster(&cli)
-	group.Go(func() error {
-		return c.Start(ctx)
-	})
-
-	// TODO: Move balancer
-	// Start balancer
-	mistBalancer := mist_balancer.NewBalancer(&balancer.Config{
-		Args:                     cli.BalancerArgs,
-		MistUtilLoadPort:         uint32(cli.MistLoadBalancerPort),
-		MistLoadBalancerTemplate: cli.MistLoadBalancerTemplate,
-		MistHost:                 cli.MistHost,
-		MistPort:                 cli.MistPort,
-		NodeName:                 cli.NodeName,
-		OwnRegion:                cli.OwnRegion,
-		OwnRegionTagAdjust:       cli.OwnRegionTagAdjust,
-	})
 
 	bal = mistBalancer
 	if balancer.CombinedBalancerEnabled(cli.CataBalancer) {

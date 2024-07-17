@@ -26,7 +26,6 @@ var mistUtilLoadLoopTimeout = 2 * time.Minute
 
 type MistBalancer struct {
 	config   *balancer.Config
-	cmd      *exec.Cmd
 	endpoint string
 	// Blocks until initial startup
 	startupOnce  sync.Once
@@ -42,8 +41,14 @@ func NewBalancer(config *balancer.Config) balancer.Balancer {
 	}
 	return &MistBalancer{
 		config:   config,
-		cmd:      nil,
 		endpoint: fmt.Sprintf("http://127.0.0.1:%d", config.MistUtilLoadPort),
+	}
+}
+
+func NewRemoteBalancer(config *balancer.Config) balancer.Balancer {
+	return &MistBalancer{
+		config:   config,
+		endpoint: fmt.Sprintf("http://%s:%d", config.MistHost, config.MistUtilLoadPort),
 	}
 }
 
@@ -288,17 +293,17 @@ func (b *MistBalancer) isBalancerRunning(ctx context.Context) bool {
 func (b *MistBalancer) execBalancer(ctx context.Context, balancerArgs []string) error {
 	args := append(balancerArgs, "-p", fmt.Sprintf("%d", b.config.MistUtilLoadPort), "-g", "4")
 	glog.Infof("Running MistUtilLoad with %v", args)
-	b.cmd = exec.CommandContext(ctx, "MistUtilLoad", args...)
+	cmd := exec.CommandContext(ctx, "MistUtilLoad", args...)
 
-	b.cmd.Stdout = os.Stdout
-	b.cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
-	err := b.cmd.Start()
+	err := cmd.Start()
 	if err != nil {
 		return err
 	}
 
-	err = b.cmd.Wait()
+	err = cmd.Wait()
 	if err != nil {
 		return err
 	}
