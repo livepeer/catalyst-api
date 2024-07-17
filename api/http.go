@@ -59,7 +59,7 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 		AccessToken: cli.APIToken,
 	})
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
-	geoHandlers := geolocation.NewGeolocationHandlersCollection(bal, c, cli, lapi)
+	geoHandlers := geolocation.NewGeolocationHandlersCollection(bal, cli, lapi)
 
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 	router.GET("/healthcheck", withLogging(catalystApiHandlers.Healthcheck()))

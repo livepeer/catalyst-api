@@ -72,7 +72,7 @@ type GeolocationHandlersCollection struct {
 	streamPullRateLimit *streamPullRateLimit
 }
 
-func NewGeolocationHandlersCollection(balancer balancer.Balancer, cluster cluster.Cluster, config config.Cli, lapi *api.Client) *GeolocationHandlersCollection {
+func NewGeolocationHandlersCollection(balancer balancer.Balancer, config config.Cli, lapi *api.Client) *GeolocationHandlersCollection {
 	return &GeolocationHandlersCollection{
 		Balancer:            balancer,
 		Config:              config,
@@ -422,41 +422,21 @@ func (c *GeolocationHandlersCollection) sendPlaybackRequestAsync(playbackID stri
 
 func (c *GeolocationHandlersCollection) membersFiltered(filter map[string]string, status, name string) ([]cluster.Member, error) {
 	membersEndpoint := fmt.Sprintf("http://%s:7979/api/serf/members", c.Config.MistHost)
-	resMembers := []cluster.Member{}
 
 	resp, err := http.Get(membersEndpoint)
 	if err != nil {
-		return resMembers, err
+		return []cluster.Member{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return resMembers, fmt.Errorf("failed to get members: %s", resp.Status)
+		return []cluster.Member{}, fmt.Errorf("failed to get members: %s", resp.Status)
 	}
 	var members []cluster.Member
 	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
-		return resMembers, err
+		return []cluster.Member{}, err
 	}
-	for _, member := range members {
-		if status != "" && status != member.Status {
-			continue
-		}
-		if name != "" && name != member.Name {
-			continue
-		}
-		matches := true
-		for k, v := range filter {
-			val, ok := member.Tags[k]
-			if !ok || val != v {
-				matches = false
-				break
-			}
-		}
-		if matches {
-			members = append(members, member)
-		}
 
-	}
-	return members, nil
+	return cluster.FilterMembers(members, filter, status, name)
 }
 
 func parsePlus(plusString string) (string, string) {
