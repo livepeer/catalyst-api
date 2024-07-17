@@ -50,6 +50,8 @@ func main() {
 
 	version := fs.Bool("version", false, "print application version")
 
+	fs.StringVar(&cli.Mode, "mode", "all", "Mode to run the application in. Options: all, cluster-only, api-only")
+
 	// listen addresses
 	config.AddrFlag(fs, &cli.HTTPAddress, "http-addr", "0.0.0.0:8989", "Address to bind for external-facing Catalyst HTTP handling")
 	config.AddrFlag(fs, &cli.HTTPInternalAddress, "http-internal-addr", "127.0.0.1:7979", "Address to bind for internal privileged HTTP commands")
@@ -82,8 +84,7 @@ func main() {
 	fs.DurationVar(&cli.CataBalancerIngestStreamTimeout, "catabalancer-ingest-stream-timeout", 20*time.Minute, "Catabalancer timeout for ingest stream metrics")
 	config.CommaSliceFlag(fs, &cli.BlockedJWTs, "gate-blocked-jwts", []string{}, "List of blocked JWTs for token gating")
 
-	// mist-api-connector parameters
-	fs.StringVar(&cli.MistMode, "mist-mode", "embedded", "Mode to run the application in. Options: embedded, mist-only, api-only")
+	// mist-api-connector parameters=
 	fs.IntVar(&cli.MistPort, "mist-port", 4242, "Port to connect to Mist")
 	fs.StringVar(&cli.MistHost, "mist-host", "127.0.0.1", "Hostname of the Mist server")
 	fs.StringVar(&cli.MistUser, "mist-user", "", "username of MistServer")
@@ -206,7 +207,7 @@ func main() {
 		OwnRegionTagAdjust:       cli.OwnRegionTagAdjust,
 	}
 
-	if cli.IsAPI() {
+	if cli.IsApiMode() {
 		// TODO: I don't love the global variables for these
 		config.ImportIPFSGatewayURLs = cli.ImportIPFSGatewayURLs
 		config.ImportArweaveGatewayURLs = cli.ImportArweaveGatewayURLs
@@ -283,7 +284,7 @@ func main() {
 		mistBalancer = mist_balancer.NewRemoteBalancer(mistBalancerConfig)
 	}
 
-	if cli.IsRunWithMist() {
+	if cli.IsClusterMode() {
 		// Start cron style apps to run periodically
 		if cli.ShouldMistCleanup() {
 			app := "mist-cleanup.sh"
@@ -328,7 +329,7 @@ func main() {
 			events.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, c, mist)
 		}
 	}
-	if cli.IsRunWithMist() {
+	if cli.IsClusterMode() {
 		group.Go(func() error {
 			return bal.Start(ctx)
 		})
@@ -346,7 +347,7 @@ func main() {
 		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker, metricsDB)
 	})
 
-	if cli.IsRunWithMist() {
+	if cli.IsClusterMode() {
 		group.Go(func() error {
 			return handleClusterEvents(ctx, cli.SerfUserEventCallback, c)
 		})

@@ -25,7 +25,7 @@ type Cli struct {
 	MistUser                  string
 	MistPassword              string
 	MistPrometheus            string
-	MistMode                  string
+	Mode                      string
 	MistPort                  int
 	MistConnectTimeout        time.Duration
 	MistStreamSource          string
@@ -116,12 +116,12 @@ func (cli *Cli) ShouldMapic() bool {
 	return cli.APIServer != ""
 }
 
-func (cli *Cli) IsRunWithMist() bool {
-	return cli.MistMode == "mist-only" || cli.MistMode == "embedded"
+func (cli *Cli) IsClusterMode() bool {
+	return cli.Mode == "cluster-only" || cli.Mode == "all"
 }
 
-func (cli *Cli) IsAPI() bool {
-	return cli.MistMode == "api-only" || cli.MistMode == "embedded"
+func (cli *Cli) IsApiMode() bool {
+	return cli.Mode == "api-only" || cli.Mode == "all"
 }
 
 // Should we enable mist-cleanup script to run periodically and delete leaky shm?
