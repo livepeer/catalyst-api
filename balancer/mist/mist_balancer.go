@@ -19,7 +19,6 @@ import (
 	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/balancer"
 	"github.com/livepeer/catalyst-api/cluster"
-	"golang.org/x/sync/errgroup"
 )
 
 var mistUtilLoadSingleRequestTimeout = 15 * time.Second
@@ -50,14 +49,12 @@ func NewBalancer(config *balancer.Config) balancer.Balancer {
 
 // start this load balancer instance, execing MistUtilLoad if necessary
 func (b *MistBalancer) Start(ctx context.Context) error {
-	group, ctx := errgroup.WithContext(ctx)
-	group.Go(func() error {
-		return b.execBalancer(ctx, b.config.Args)
-	})
-	group.Go(func() error {
-		return b.waitForStartup(ctx)
-	})
-	return group.Wait()
+	b.killPreviousBalancer(ctx)
+
+	go func() {
+		b.reconcileBalancerLoop(ctx, b.config.Args)
+	}()
+	return b.waitForStartup(ctx)
 }
 
 // wait for the mist LB to be available. can be called multiple times.
@@ -243,6 +240,49 @@ func (b *MistBalancer) getMistLoadBalancerServers(ctx context.Context) (map[stri
 // commonly this means catalyst-0.example.com --> https://catalyst-0.example.com:443
 func (b *MistBalancer) formatNodeAddress(server string) string {
 	return fmt.Sprintf(b.config.MistLoadBalancerTemplate, server)
+}
+
+// killPreviousBalancer cleans up the previous MistUtilLoad process if it exists.
+// It uses pkill to kill the process.
+func (b *MistBalancer) killPreviousBalancer(ctx context.Context) {
+	cmd := exec.CommandContext(ctx, "pkill", "-f", "MistUtilLoad")
+	err := cmd.Run()
+	if err != nil {
+		glog.V(6).Infof("Killing MistUtilLoad failed, most probably it was not running, err=%v", err)
+	}
+}
+
+// reconcileBalancerLoop makes sure that MistUtilLoad is up and running all the time.
+func (b *MistBalancer) reconcileBalancerLoop(ctx context.Context, balancerArgs []string) {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		b.reconcileBalancer(ctx, balancerArgs)
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// reconcileBalancer makes sure that MistUtilLoad is up and running.
+func (b *MistBalancer) reconcileBalancer(ctx context.Context, balancerArgs []string) {
+	if !b.isBalancerRunning(ctx) {
+		glog.Info("Starting MistUtilLoad")
+		err := b.execBalancer(ctx, balancerArgs)
+		if err != nil {
+			glog.Warningf("Error starting MistUtilLoad: %v", err)
+		}
+	}
+}
+
+// isBalancerRunning checks if MistUtilLoad is running.
+func (b *MistBalancer) isBalancerRunning(ctx context.Context) bool {
+	cmd := exec.CommandContext(ctx, "pgrep", "-f", "MistUtilLoad")
+	err := cmd.Run()
+	return err == nil
 }
 
 func (b *MistBalancer) execBalancer(ctx context.Context, balancerArgs []string) error {
