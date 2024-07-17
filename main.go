@@ -315,7 +315,7 @@ func main() {
 			return c.Start(ctx)
 		})
 
-		mistBalancer = mist_balancer.NewBalancer(mistBalancerConfig)
+		mistBalancer = mist_balancer.NewLocalBalancer(mistBalancerConfig)
 	}
 
 	bal = mistBalancer

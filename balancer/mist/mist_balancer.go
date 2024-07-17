@@ -33,7 +33,7 @@ type MistBalancer struct {
 }
 
 // create a new load balancer instance
-func NewBalancer(config *balancer.Config) balancer.Balancer {
+func NewLocalBalancer(config *balancer.Config) balancer.Balancer {
 	_, err := exec.LookPath("MistUtilLoad")
 	if err != nil {
 		glog.Warning("MistUtilLoad not found, not doing meaningful balancing")
