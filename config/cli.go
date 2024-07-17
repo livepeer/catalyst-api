@@ -37,6 +37,7 @@ type Cli struct {
 	MistCleanup               bool
 	LogSysUsage               bool
 	AMQPURL                   string
+	OwnHost                   string
 	OwnRegion                 string
 	OwnRegionTagAdjust        int
 	APIToken                  string
@@ -87,6 +88,7 @@ type Cli struct {
 	SerfQueueSize                   int
 	SerfEventBuffer                 int
 	SerfMaxQueueDepth               int
+	SerfUserEventCallback           string
 }
 
 // Return our own URL for callback trigger purposes
@@ -96,6 +98,9 @@ func (cli *Cli) OwnInternalURL() string {
 	ip := net.ParseIP(host)
 	if ip.IsUnspecified() {
 		host = "127.0.0.1"
+	}
+	if cli.OwnHost != "" {
+		host = cli.OwnHost
 	}
 	addr := net.JoinHostPort(host, port)
 	return fmt.Sprintf("http://%s", addr)
@@ -164,9 +169,13 @@ func (cli *Cli) ParseLegacyEnv() {
 func AddrFlag(fs *flag.FlagSet, dest *string, name, value, usage string) {
 	*dest = value
 	fs.Func(name, usage, func(s string) error {
-		_, _, err := net.SplitHostPort(s)
+		host, _, err := net.SplitHostPort(s)
 		if err != nil {
 			return err
+		}
+		ip := net.ParseIP(host)
+		if ip == nil {
+			return fmt.Errorf("invalid address: %s", s)
 		}
 		*dest = s
 		return nil

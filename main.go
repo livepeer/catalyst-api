@@ -54,7 +54,7 @@ func main() {
 
 	// listen addresses
 	config.AddrFlag(fs, &cli.HTTPAddress, "http-addr", "0.0.0.0:8989", "Address to bind for external-facing Catalyst HTTP handling")
-	config.AddrFlag(fs, &cli.HTTPInternalAddress, "http-internal-addr", "127.0.0.1:7979", "Address to bind for internal privileged HTTP commands or the address of catalyst-api service if run separately ('api-only' mode)")
+	config.AddrFlag(fs, &cli.HTTPInternalAddress, "http-internal-addr", "127.0.0.1:7979", "Address to bind for internal privileged HTTP commands")
 	config.AddrFlag(fs, &cli.ClusterAddress, "cluster-addr", "0.0.0.0:9935", "Address to bind Serf network listeners to. To use an IPv6 address, specify [::1] or [::1]:7946.")
 	fs.StringVar(&cli.ClusterAdvertiseAddress, "cluster-advertise-addr", "", "Address to advertise to the other cluster members")
 
@@ -97,6 +97,7 @@ func main() {
 	fs.StringVar(&cli.MistBaseStreamName, "mist-base-stream-name", "video", "Base stream name to be used in wildcard-based routing scheme")
 	fs.StringVar(&cli.APIServer, "api-server", "", "Livepeer API server to use")
 	fs.StringVar(&cli.AMQPURL, "amqp-url", "", "RabbitMQ url")
+	fs.StringVar(&cli.OwnHost, "own-host", "", "Own URL under which the given catalyst-api is accessible")
 	fs.StringVar(&cli.OwnRegion, "own-region", "", "Identifier of the region where the service is running, used for mapping external data back to current region")
 	fs.IntVar(&cli.OwnRegionTagAdjust, "own-region-tag-adjust", 1000, "Bonus weight for 'own-region' to minimise cross-region redirects done by mist load balancer (MistUtilLoad)")
 	fs.StringVar(&cli.StreamHealthHookURL, "stream-health-hook-url", "http://localhost:3004/api/stream/hook/health", "Address to POST stream health payloads to (response is ignored)")
@@ -125,6 +126,7 @@ func main() {
 	fs.IntVar(&cli.SerfQueueSize, "serf-queue-size", 100000, "Size of internal serf queue before messages are dropped")
 	fs.IntVar(&cli.SerfEventBuffer, "serf-event-buffer", 100000, "Size of serf 'recent event' buffer, outside of which things are dropped")
 	fs.IntVar(&cli.SerfMaxQueueDepth, "serf-max-queue-depth", 100000, "Size of Serf queue, outside of which things are dropped")
+	fs.StringVar(&cli.SerfUserEventCallback, "serf-user-event-callback", "http://127.0.0.1:7979/api/serf/receiveUserEvent", "URL to forward serf user events")
 	fs.StringVar(&cli.EnableAnalytics, "analytics", "disabled", "Enables analytics API: enabled or disabled")
 	fs.StringVar(&cli.KafkaBootstrapServers, "kafka-bootstrap-servers", "", "URL of Kafka Bootstrap Servers")
 	fs.StringVar(&cli.KafkaUser, "kafka-user", "", "Kafka Username")
@@ -258,6 +260,21 @@ func main() {
 
 		broker = misttriggers.NewTriggerBroker()
 
+		if cli.MistEnabled {
+			ownURL := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
+			mist = clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort, ownURL)
+			if cli.MistTriggerSetup {
+				err := broker.SetupMistTriggers(mist)
+				if err != nil {
+					glog.Error("catalyst-api was unable to communicate with MistServer to set up its triggers.")
+					glog.Error("hint: are you trying to boot catalyst-api without Mist for development purposes? use the flag -no-mist")
+					glog.Fatalf("error setting up Mist triggers err=%s", err)
+				}
+			}
+		} else {
+			glog.Info("-no-mist flag detected, not initializing Mist stream triggers")
+		}
+
 		if cli.ShouldMapic() {
 			mapic = mistapiconnector.NewMapic(&cli, broker, mist)
 			group.Go(func() error {
@@ -266,21 +283,6 @@ func main() {
 		}
 
 		mistBalancer = mist_balancer.NewRemoteBalancer(mistBalancerConfig)
-	}
-
-	if cli.MistEnabled {
-		mist = clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort)
-		if cli.IsClusterMode() && cli.MistTriggerSetup {
-			receiveMistTriggerURL := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
-			err := broker.SetupMistTriggers(mist, receiveMistTriggerURL)
-			if err != nil {
-				glog.Error("catalyst-api was unable to communicate with MistServer to set up its triggers.")
-				glog.Error("hint: are you trying to boot catalyst-api without Mist for development purposes? use the flag -no-mist")
-				glog.Fatalf("error setting up Mist triggers err=%s", err)
-			}
-		}
-	} else {
-		glog.Info("-no-mist flag detected, not initializing Mist stream triggers")
 	}
 
 	if cli.IsClusterMode() {
@@ -348,8 +350,7 @@ func main() {
 
 	if cli.IsClusterMode() {
 		group.Go(func() error {
-			serfUserEventCallbackEndpoint := fmt.Sprintf("http://%s/api/serf/receiveUserEvent", cli.OwnInternalURL())
-			return handleClusterEvents(ctx, serfUserEventCallbackEndpoint, c)
+			return handleClusterEvents(ctx, cli.SerfUserEventCallback, c)
 		})
 	}
 

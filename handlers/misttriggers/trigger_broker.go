@@ -29,7 +29,7 @@ import (
 //    handler for these sorts of triggers.
 
 type TriggerBroker interface {
-	SetupMistTriggers(clients.MistAPIClient, string) error
+	SetupMistTriggers(clients.MistAPIClient) error
 
 	OnStreamBuffer(func(context.Context, *StreamBufferPayload) error)
 	TriggerStreamBuffer(context.Context, *StreamBufferPayload)
@@ -87,9 +87,9 @@ var triggers = map[string]bool{
 	TRIGGER_STREAM_SOURCE:   true,
 }
 
-func (b *triggerBroker) SetupMistTriggers(mist clients.MistAPIClient, triggerCallback string) error {
+func (b *triggerBroker) SetupMistTriggers(mist clients.MistAPIClient) error {
 	for name, sync := range triggers {
-		err := mist.AddTrigger([]string{}, name, triggerCallback, sync)
+		err := mist.AddTrigger([]string{}, name, sync)
 		if err != nil {
 			return fmt.Errorf("error setting up mist trigger trigger=%s error=%w", name, err)
 		}
