@@ -187,6 +187,7 @@ func main() {
 		vodEngine    *pipeline.Coordinator
 		mapic        mistapiconnector.IMac
 		bal          balancer.Balancer
+		broker       misttriggers.TriggerBroker
 		mist         clients.MistAPIClient
 		c            cluster.Cluster
 		mistBalancer balancer.Balancer
@@ -204,7 +205,6 @@ func main() {
 		OwnRegion:                cli.OwnRegion,
 		OwnRegionTagAdjust:       cli.OwnRegionTagAdjust,
 	}
-	broker := misttriggers.NewTriggerBroker()
 
 	if cli.IsApiMode() {
 		// TODO: I don't love the global variables for these
@@ -255,6 +255,8 @@ func main() {
 		if err != nil {
 			glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 		}
+
+		broker = misttriggers.NewTriggerBroker()
 
 		if cli.ShouldMapic() {
 			mapic = mistapiconnector.NewMapic(&cli, broker, mist)
