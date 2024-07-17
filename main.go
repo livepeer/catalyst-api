@@ -251,31 +251,33 @@ func main() {
 			glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 		}
 
-		broker = misttriggers.NewTriggerBroker()
+		mistBalancer = mist_balancer.NewRemoteBalancer(mistBalancerConfig)
+	}
 
-		if cli.MistEnabled {
-			mist = clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort)
-			if cli.MistTriggerSetup && cli.IsClusterMode() {
-				ownURL := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
-				err := broker.SetupMistTriggers(mist, ownURL)
-				if err != nil {
-					glog.Error("catalyst-api was unable to communicate with MistServer to set up its triggers.")
-					glog.Error("hint: are you trying to boot catalyst-api without Mist for development purposes? use the flag -no-mist")
-					glog.Fatalf("error setting up Mist triggers err=%s", err)
-				}
+	broker = misttriggers.NewTriggerBroker()
+
+	if cli.MistEnabled {
+		mist = clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort)
+		if cli.MistTriggerSetup && cli.IsClusterMode() {
+			ownURL := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
+			err := broker.SetupMistTriggers(mist, ownURL)
+			if err != nil {
+				glog.Error("catalyst-api was unable to communicate with MistServer to set up its triggers.")
+				glog.Error("hint: are you trying to boot catalyst-api without Mist for development purposes? use the flag -no-mist")
+				glog.Fatalf("error setting up Mist triggers err=%s", err)
 			}
-		} else {
-			glog.Info("-no-mist flag detected, not initializing Mist stream triggers")
 		}
+	} else {
+		glog.Info("-no-mist flag detected, not initializing Mist stream triggers")
+	}
 
+	if cli.IsApiMode() {
 		if cli.ShouldMapic() {
 			mapic = mistapiconnector.NewMapic(&cli, broker, mist)
 			group.Go(func() error {
 				return mapic.Start(ctx)
 			})
 		}
-
-		mistBalancer = mist_balancer.NewRemoteBalancer(mistBalancerConfig)
 	}
 
 	if cli.IsClusterMode() {
@@ -333,13 +335,15 @@ func main() {
 		})
 	}
 
-	group.Go(func() error {
-		return api.ListenAndServe(ctx, cli, vodEngine, bal, c, mapic)
-	})
+	if cli.IsApiMode() {
+		group.Go(func() error {
+			return api.ListenAndServe(ctx, cli, vodEngine, bal, c, mapic)
+		})
 
-	group.Go(func() error {
-		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker, metricsDB)
-	})
+		group.Go(func() error {
+			return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker, metricsDB)
+		})
+	}
 
 	if cli.IsClusterMode() {
 		group.Go(func() error {
