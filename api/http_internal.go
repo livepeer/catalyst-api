@@ -111,7 +111,7 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 
 	// Public handler to propagate an event to all Catalyst nodes
 	router.POST("/api/events", withLogging(eventsHandler.Events()))
-	// Handlers to receive and pass serf events
+	// Handlers for remote serf interaction
 	router.POST("/api/serf/receiveUserEvent", withLogging(eventsHandler.ReceiveUserEvent()))
 	router.GET("/api/serf/members", withLogging(adminHandlers.MembersHandler()))
 
