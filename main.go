@@ -1,17 +1,15 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/rsa"
 	"database/sql"
 	"flag"
 	"fmt"
 	"log"
-	"math/rand"
-	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -84,7 +82,6 @@ func main() {
 	config.CommaSliceFlag(fs, &cli.BlockedJWTs, "gate-blocked-jwts", []string{}, "List of blocked JWTs for token gating")
 
 	// mist-api-connector parameters
-	fs.StringVar(&cli.MistMode, "mist-mode", "embedded", "Mode to run the application in. Options: embedded, mist-only, api-only")
 	fs.IntVar(&cli.MistPort, "mist-port", 4242, "Port to connect to Mist")
 	fs.StringVar(&cli.MistHost, "mist-host", "127.0.0.1", "Hostname of the Mist server")
 	fs.StringVar(&cli.MistUser, "mist-user", "", "username of MistServer")
@@ -97,8 +94,7 @@ func main() {
 	fs.StringVar(&cli.MistBaseStreamName, "mist-base-stream-name", "video", "Base stream name to be used in wildcard-based routing scheme")
 	fs.StringVar(&cli.APIServer, "api-server", "", "Livepeer API server to use")
 	fs.StringVar(&cli.AMQPURL, "amqp-url", "", "RabbitMQ url")
-	fs.StringVar(&cli.OwnHost, "own-host", "", "Own URL under which the given catalyst-api is accessible")
-	fs.StringVar(&cli.OwnRegion, "own-region", "localhost", "Identifier of the region where the service is running, used for mapping external data back to current region")
+	fs.StringVar(&cli.OwnRegion, "own-region", "", "Identifier of the region where the service is running, used for mapping external data back to current region")
 	fs.IntVar(&cli.OwnRegionTagAdjust, "own-region-tag-adjust", 1000, "Bonus weight for 'own-region' to minimise cross-region redirects done by mist load balancer (MistUtilLoad)")
 	fs.StringVar(&cli.StreamHealthHookURL, "stream-health-hook-url", "http://localhost:3004/api/stream/hook/health", "Address to POST stream health payloads to (response is ignored)")
 
@@ -126,7 +122,6 @@ func main() {
 	fs.IntVar(&cli.SerfQueueSize, "serf-queue-size", 100000, "Size of internal serf queue before messages are dropped")
 	fs.IntVar(&cli.SerfEventBuffer, "serf-event-buffer", 100000, "Size of serf 'recent event' buffer, outside of which things are dropped")
 	fs.IntVar(&cli.SerfMaxQueueDepth, "serf-max-queue-depth", 100000, "Size of Serf queue, outside of which things are dropped")
-	fs.StringVar(&cli.SerfUserEventCallback, "serf-user-event-callback", "http://127.0.0.1:7979/api/serf/receiveUserEvent", "URL to send serf user events to")
 	fs.StringVar(&cli.EnableAnalytics, "analytics", "disabled", "Enables analytics API: enabled or disabled")
 	fs.StringVar(&cli.KafkaBootstrapServers, "kafka-bootstrap-servers", "", "URL of Kafka Bootstrap Servers")
 	fs.StringVar(&cli.KafkaUser, "kafka-user", "", "Kafka Username")
@@ -179,129 +174,106 @@ func main() {
 		return
 	}
 
+	// TODO: I don't love the global variables for these
+	config.ImportIPFSGatewayURLs = cli.ImportIPFSGatewayURLs
+	config.ImportArweaveGatewayURLs = cli.ImportArweaveGatewayURLs
+	config.HTTPInternalAddress = cli.HTTPInternalAddress
+
 	var (
 		metricsDB *sql.DB
-		vodEngine *pipeline.Coordinator
-		mapic     mistapiconnector.IMac
-		bal       balancer.Balancer
-		broker    misttriggers.TriggerBroker
-		mist      clients.MistAPIClient
-		c         cluster.Cluster
 	)
 
-	// Initialize root context; cancelling this prompts all components to shut down cleanly
-	group, ctx := errgroup.WithContext(context.Background())
+	// Kick off the callback client, to send job update messages on a regular interval
+	headers := map[string]string{"Authorization": fmt.Sprintf("Bearer %s", cli.APIToken)}
+	statusClient := clients.NewPeriodicCallbackClient(15*time.Second, headers).Start()
 
-	if cli.IsAPI() {
-		// TODO: I don't love the global variables for these
-		config.ImportIPFSGatewayURLs = cli.ImportIPFSGatewayURLs
-		config.ImportArweaveGatewayURLs = cli.ImportArweaveGatewayURLs
-		config.HTTPInternalAddress = cli.HTTPInternalAddress
-
-		// Kick off the callback client, to send job update messages on a regular interval
-		headers := map[string]string{"Authorization": fmt.Sprintf("Bearer %s", cli.APIToken)}
-		statusClient := clients.NewPeriodicCallbackClient(15*time.Second, headers).Start()
-
-		// Emit high-cardinality metrics to a Postgres database if configured
-		if cli.MetricsDBConnectionString != "" {
-			metricsDB, err = sql.Open("postgres", cli.MetricsDBConnectionString)
-			if err != nil {
-				glog.Fatalf("Error creating postgres metrics connection: %v", err)
-			}
-
-			// Without this, we've run into issues with exceeding our open connection limit
-			metricsDB.SetMaxOpenConns(2)
-			metricsDB.SetMaxIdleConns(2)
-			metricsDB.SetConnMaxLifetime(time.Hour)
-		} else {
-			glog.Info("Postgres metrics connection string was not set, postgres metrics are disabled.")
-		}
-
-		var vodDecryptPrivateKey *rsa.PrivateKey
-
-		if cli.VodDecryptPrivateKey != "" && cli.VodDecryptPublicKey != "" {
-			vodDecryptPrivateKey, err = crypto.LoadPrivateKey(cli.VodDecryptPrivateKey)
-			if err != nil {
-				glog.Fatalf("Error loading vod decrypt private key: %v", err)
-			}
-			isValidKeyPair, err := crypto.ValidateKeyPair(cli.VodDecryptPublicKey, *vodDecryptPrivateKey)
-			if !isValidKeyPair || err != nil {
-				glog.Fatalf("Invalid vod decrypt key pair")
-			}
-		}
-
-		c2, err := createC2PA(&cli)
+	// Emit high-cardinality metrics to a Postrgres database if configured
+	if cli.MetricsDBConnectionString != "" {
+		metricsDB, err = sql.Open("postgres", cli.MetricsDBConnectionString)
 		if err != nil {
-			// Log warning, but still start without C2PA signing
-			glog.Warning(err)
+			glog.Fatalf("Error creating postgres metrics connection: %v", err)
 		}
-		// Start the "co-ordinator" that determines whether to send jobs to the Catalyst transcoding pipeline
-		// or an external one
-		vodEngine, err = pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB, vodDecryptPrivateKey, cli.BroadcasterURL, cli.SourcePlaybackHosts, c2)
+
+		// Without this, we've run into issues with exceeding our open connection limit
+		metricsDB.SetMaxOpenConns(2)
+		metricsDB.SetMaxIdleConns(2)
+		metricsDB.SetConnMaxLifetime(time.Hour)
+	} else {
+		glog.Info("Postgres metrics connection string was not set, postgres metrics are disabled.")
+	}
+
+	var vodDecryptPrivateKey *rsa.PrivateKey
+
+	if cli.VodDecryptPrivateKey != "" && cli.VodDecryptPublicKey != "" {
+		vodDecryptPrivateKey, err = crypto.LoadPrivateKey(cli.VodDecryptPrivateKey)
 		if err != nil {
-			glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
+			glog.Fatalf("Error loading vod decrypt private key: %v", err)
 		}
-
-		broker = misttriggers.NewTriggerBroker()
-
-		if cli.MistEnabled {
-			ownURL := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
-			mist = clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort, ownURL)
-			if cli.MistTriggerSetup {
-				err := broker.SetupMistTriggers(mist)
-				if err != nil {
-					glog.Error("catalyst-api was unable to communicate with MistServer to set up its triggers.")
-					glog.Error("hint: are you trying to boot catalyst-api without Mist for development purposes? use the flag -no-mist")
-					glog.Fatalf("error setting up Mist triggers err=%s", err)
-				}
-			}
-		} else {
-			glog.Info("-no-mist flag detected, not initializing Mist stream triggers")
-		}
-
-		if cli.ShouldMapic() {
-			mapic = mistapiconnector.NewMapic(&cli, broker, mist)
-			group.Go(func() error {
-				return mapic.Start(ctx)
-			})
+		isValidKeyPair, err := crypto.ValidateKeyPair(cli.VodDecryptPublicKey, *vodDecryptPrivateKey)
+		if !isValidKeyPair || err != nil {
+			glog.Fatalf("Invalid vod decrypt key pair")
 		}
 	}
 
-	if cli.IsRunWithMist() {
-		// Start cron style apps to run periodically
-		if cli.ShouldMistCleanup() {
-			app := "mist-cleanup.sh"
-			// schedule mist-cleanup every 2hrs with a timeout of 15min
-			mistCleanup, err := middleware.NewShell(2*60*60*time.Second, 15*60*time.Second, app)
-			if err != nil {
-				glog.Info("Failed to shell out:", app, err)
-			}
-			mistCleanupTick := mistCleanup.RunBg()
-			defer mistCleanupTick.Stop()
-		}
-		if cli.ShouldLogSysUsage() {
-			app := "pod-mon.sh"
-			// schedule pod-mon every 5min with timeout of 5s
-			podMon, err := middleware.NewShell(300*time.Second, 5*time.Second, app)
-			if err != nil {
-				glog.Info("Failed to shell out:", app, err)
-			}
-			podMonTick := podMon.RunBg()
-			defer podMonTick.Stop()
-		}
-
-		group.Go(func() error {
-			return handleSignals(ctx)
-		})
+	c2, err := createC2PA(&cli)
+	if err != nil {
+		// Log warning, but still start without C2PA signing
+		glog.Warning(err)
+	}
+	// Start the "co-ordinator" that determines whether to send jobs to the Catalyst transcoding pipeline
+	// or an external one
+	vodEngine, err := pipeline.NewCoordinator(pipeline.Strategy(cli.VodPipelineStrategy), cli.SourceOutput, cli.ExternalTranscoder, statusClient, metricsDB, vodDecryptPrivateKey, cli.BroadcasterURL, cli.SourcePlaybackHosts, c2)
+	if err != nil {
+		glog.Fatalf("Error creating VOD pipeline coordinator: %v", err)
 	}
 
-	// TODO: Move cluster
-	c = cluster.NewCluster(&cli)
-	group.Go(func() error {
-		return c.Start(ctx)
-	})
+	// Start cron style apps to run periodically
+	if cli.ShouldMistCleanup() {
+		app := "mist-cleanup.sh"
+		// schedule mist-cleanup every 2hrs with a timeout of 15min
+		mistCleanup, err := middleware.NewShell(2*60*60*time.Second, 15*60*time.Second, app)
+		if err != nil {
+			glog.Info("Failed to shell out:", app, err)
+		}
+		mistCleanupTick := mistCleanup.RunBg()
+		defer mistCleanupTick.Stop()
+	}
+	if cli.ShouldLogSysUsage() {
+		app := "pod-mon.sh"
+		// schedule pod-mon every 5min with timeout of 5s
+		podMon, err := middleware.NewShell(300*time.Second, 5*time.Second, app)
+		if err != nil {
+			glog.Info("Failed to shell out:", app, err)
+		}
+		podMonTick := podMon.RunBg()
+		defer podMonTick.Stop()
+	}
 
-	// TODO: Move balancer
+	broker := misttriggers.NewTriggerBroker()
+
+	var mist clients.MistAPIClient
+	if cli.MistEnabled {
+		ownURL := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
+		mist = clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort, ownURL)
+		if cli.MistTriggerSetup {
+			err := broker.SetupMistTriggers(mist)
+			if err != nil {
+				glog.Error("catalyst-api was unable to communicate with MistServer to set up its triggers.")
+				glog.Error("hint: are you trying to boot catalyst-api without Mist for development purposes? use the flag -no-mist")
+				glog.Fatalf("error setting up Mist triggers err=%s", err)
+			}
+		}
+	} else {
+		glog.Info("-no-mist flag detected, not initializing Mist stream triggers")
+	}
+
+	var mapic mistapiconnector.IMac
+	if cli.ShouldMapic() {
+		mapic = mistapiconnector.NewMapic(&cli, broker, mist)
+	}
+
+	c := cluster.NewCluster(&cli)
+
 	// Start balancer
 	mistBalancer := mist_balancer.NewBalancer(&balancer.Config{
 		Args:                     cli.BalancerArgs,
@@ -314,7 +286,7 @@ func main() {
 		OwnRegionTagAdjust:       cli.OwnRegionTagAdjust,
 	})
 
-	bal = mistBalancer
+	bal := mistBalancer
 	if balancer.CombinedBalancerEnabled(cli.CataBalancer) {
 		cataBalancer := catabalancer.NewBalancer(cli.NodeName, cli.CataBalancerMetricTimeout, cli.CataBalancerIngestStreamTimeout)
 		// Temporary combined balancer to test cataBalancer logic alongside existing mist balancer
@@ -324,15 +296,13 @@ func main() {
 			events.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, c, mist)
 		}
 	}
-	if cli.IsRunWithMist() {
-		group.Go(func() error {
-			return bal.Start(ctx)
-		})
-		group.Go(func() error {
-			// TODO these errors cause the app to shut down?
-			return reconcileBalancer(ctx, bal, c)
-		})
-	}
+
+	// Initialize root context; cancelling this prompts all components to shut down cleanly
+	group, ctx := errgroup.WithContext(context.Background())
+
+	group.Go(func() error {
+		return handleSignals(ctx)
+	})
 
 	group.Go(func() error {
 		return api.ListenAndServe(ctx, cli, vodEngine, bal, c, mapic)
@@ -342,11 +312,28 @@ func main() {
 		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker, metricsDB)
 	})
 
-	if cli.IsRunWithMist() {
+	if cli.ShouldMapic() {
 		group.Go(func() error {
-			return handleClusterEvents(ctx, cli.SerfUserEventCallback, c)
+			return mapic.Start(ctx)
 		})
 	}
+
+	group.Go(func() error {
+		return bal.Start(ctx)
+	})
+
+	group.Go(func() error {
+		return c.Start(ctx)
+	})
+
+	group.Go(func() error {
+		// TODO these errors cause the app to shut down?
+		return reconcileBalancer(ctx, bal, c)
+	})
+
+	group.Go(func() error {
+		return handleClusterEvents(ctx, mapic, bal, c)
+	})
 
 	err = group.Wait()
 	glog.Infof("Shutdown complete. Reason for shutdown: %s", err)
@@ -368,36 +355,52 @@ func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Clu
 	}
 }
 
-func handleClusterEvents(ctx context.Context, callbackEndpoint string, c cluster.Cluster) error {
+func handleClusterEvents(ctx context.Context, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster) error {
 	eventCh := c.EventChan()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case e := <-eventCh:
-			processClusterEvent(callbackEndpoint, e)
+			processClusterEvent(mapic, bal, e)
 		}
 	}
 }
 
-func processClusterEvent(callbackEndpoint string, userEvent serf.UserEvent) {
-	client := &http.Client{}
-	glog.V(5).Infof("received serf user event, propagating to %s, event=%s", callbackEndpoint, userEvent.String())
-
+func processClusterEvent(mapic mistapiconnector.IMac, bal balancer.Balancer, userEvent serf.UserEvent) {
 	go func() {
-		req, err := http.NewRequest("POST", callbackEndpoint, bytes.NewBuffer(userEvent.Payload))
+		e, err := events.Unmarshal(userEvent.Payload)
 		if err != nil {
-			glog.Errorf("error creating request: %v", err)
+			glog.Errorf("cannot unmarshal received serf event %v: %s", userEvent, err)
 			return
 		}
-		resp, err := client.Do(req)
-		if err != nil {
-			glog.Errorf("error sending request: %v", err)
+		switch event := e.(type) {
+		case *events.StreamEvent:
+			glog.V(5).Infof("received serf StreamEvent: %v", event.PlaybackID)
+			mapic.RefreshStreamIfNeeded(event.PlaybackID)
+		case *events.NukeEvent:
+			glog.V(5).Infof("received serf NukeEvent: %v", event.PlaybackID)
+			mapic.NukeStream(event.PlaybackID)
 			return
-		}
-		defer resp.Body.Close()
+		case *events.StopSessionsEvent:
+			glog.V(5).Infof("received serf StopSessionsEvent: %v", event.PlaybackID)
+			mapic.StopSessions(event.PlaybackID)
+			return
+		case *events.NodeUpdateEvent:
+			if glog.V(5) {
+				glog.Infof("received serf NodeUpdateEvent. Node: %s. Length: %d bytes. Ingest Streams: %v. Non-Ingest Streams: %v", event.NodeID, len(userEvent.Payload), strings.Join(event.GetIngestStreams(), ","), strings.Join(event.GetStreams(), ","))
+			}
 
-		glog.V(5).Infof("propagated serf user event to %s, event=%s", callbackEndpoint, userEvent.String())
+			bal.UpdateNodes(event.NodeID, event.NodeMetrics)
+			for _, stream := range event.GetStreams() {
+				bal.UpdateStreams(event.NodeID, stream, false)
+			}
+			for _, stream := range event.GetIngestStreams() {
+				bal.UpdateStreams(event.NodeID, stream, true)
+			}
+		default:
+			glog.Errorf("unsupported serf event: %v", e)
+		}
 	}()
 }
 
