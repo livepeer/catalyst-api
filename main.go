@@ -177,11 +177,6 @@ func main() {
 		return
 	}
 
-	// TODO: I don't love the global variables for these
-	config.ImportIPFSGatewayURLs = cli.ImportIPFSGatewayURLs
-	config.ImportArweaveGatewayURLs = cli.ImportArweaveGatewayURLs
-	config.HTTPInternalAddress = cli.HTTPInternalAddress
-
 	var (
 		metricsDB    *sql.DB
 		vodEngine    *pipeline.Coordinator
