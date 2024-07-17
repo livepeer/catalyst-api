@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
-	mist_balancer "github.com/livepeer/catalyst-api/balancer/mist"
 	"log"
 	"net/http"
 	"os"
@@ -22,6 +21,7 @@ import (
 	"github.com/livepeer/catalyst-api/api"
 	"github.com/livepeer/catalyst-api/balancer"
 	"github.com/livepeer/catalyst-api/balancer/catabalancer"
+	mist_balancer "github.com/livepeer/catalyst-api/balancer/mist"
 	"github.com/livepeer/catalyst-api/c2pa"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
@@ -84,7 +84,7 @@ func main() {
 	fs.DurationVar(&cli.CataBalancerIngestStreamTimeout, "catabalancer-ingest-stream-timeout", 20*time.Minute, "Catabalancer timeout for ingest stream metrics")
 	config.CommaSliceFlag(fs, &cli.BlockedJWTs, "gate-blocked-jwts", []string{}, "List of blocked JWTs for token gating")
 
-	// mist-api-connector parameters=
+	// mist-api-connector parameters
 	fs.IntVar(&cli.MistPort, "mist-port", 4242, "Port to connect to Mist")
 	fs.StringVar(&cli.MistHost, "mist-host", "127.0.0.1", "Hostname of the Mist server")
 	fs.StringVar(&cli.MistUser, "mist-user", "", "username of MistServer")
