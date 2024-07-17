@@ -260,9 +260,9 @@ func main() {
 
 		if cli.MistEnabled {
 			ownURL := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
-			mist = clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort, ownURL)
+			mist = clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort)
 			if cli.MistTriggerSetup {
-				err := broker.SetupMistTriggers(mist)
+				err := broker.SetupMistTriggers(mist, ownURL)
 				if err != nil {
 					glog.Error("catalyst-api was unable to communicate with MistServer to set up its triggers.")
 					glog.Error("hint: are you trying to boot catalyst-api without Mist for development purposes? use the flag -no-mist")
