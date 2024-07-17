@@ -15,7 +15,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 )
 
 type EventsHandlersCollection struct {
@@ -23,9 +22,6 @@ type EventsHandlersCollection struct {
 
 	mapic mistapiconnector.IMac
 	bal   balancer.Balancer
-
-	eventsCallbackEndpoint string
-	mu                     sync.RWMutex
 }
 
 type Event struct {
@@ -42,6 +38,7 @@ func NewEventsHandlersCollection(cluster cluster.Cluster, mapic mistapiconnector
 }
 
 // Events is a handler called by Studio API to send an event, e.g., to refresh a stream or nuke a stream.
+// This event is then propagated to all Serf nodes and then forwarded to catalyst-api and handled by ReceiveUserEvent().
 func (d *EventsHandlersCollection) Events() httprouter.Handle {
 	schema := inputSchemasCompiled["Event"]
 	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
@@ -78,6 +75,12 @@ func (d *EventsHandlersCollection) Events() httprouter.Handle {
 	}
 }
 
+// ReceiveUserEvent is a handler to receive Serf events from Catalyst.
+// The idea is that:
+// 1. Studio API sends an event to Catalyst (received by Events() handler)
+// 2. Events() handler propagates the event to all Serf nodes
+// 3. Each Serf node sends tne event to its corresponding catalyst-api instance (to the ReceiveUserEvent() handler)
+// 4. ReceiveUserEvent() handler processes the event
 func (c *EventsHandlersCollection) ReceiveUserEvent() httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		userEventPayload, err := io.ReadAll(r.Body)
