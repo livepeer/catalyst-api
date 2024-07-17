@@ -113,7 +113,6 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	router.POST("/api/events", withLogging(eventsHandler.Events()))
 	// Handlers to receive and pass serf events
 	router.POST("/api/serf/receiveUserEvent", withLogging(eventsHandler.ReceiveUserEvent()))
-	router.GET("/admin/members", withLogging(adminHandlers.MembersHandler()))
 	router.GET("/api/serf/members", withLogging(adminHandlers.MembersHandler()))
 
 	// Public GET handler to retrieve the public key for vod encryption
