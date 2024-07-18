@@ -31,7 +31,6 @@ func start(t *testing.T) (*MistBalancer, *mockMistUtilLoad) {
 			OwnRegion:          "fra",
 			OwnRegionTagAdjust: 1000,
 		},
-		cmd:      nil,
 		endpoint: mul.Server.URL,
 	}
 	// Mock startup loop
