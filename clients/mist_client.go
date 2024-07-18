@@ -37,29 +37,27 @@ type MistAPIClient interface {
 	DeleteStream(streamName string) error
 	NukeStream(streamName string) error
 	StopSessions(streamName string) error
-	AddTrigger(streamName []string, triggerName string, sync bool) error
+	AddTrigger(streamName []string, triggerName, triggerCallback string, sync bool) error
 	DeleteTrigger(streamName []string, triggerName string) error
 	GetStreamInfo(streamName string) (MistStreamInfo, error)
 	GetState() (MistState, error)
 }
 
 type MistClient struct {
-	ApiUrl          string
-	Username        string
-	Password        string
-	HttpReqUrl      string
-	TriggerCallback string
-	configMu        sync.Mutex
-	cache           *cache.Cache
+	ApiUrl     string
+	Username   string
+	Password   string
+	HttpReqUrl string
+	configMu   sync.Mutex
+	cache      *cache.Cache
 }
 
-func NewMistAPIClient(user, password, host string, port int, ownURL string) MistAPIClient {
+func NewMistAPIClient(user, password, host string, port int) MistAPIClient {
 	mist := &MistClient{
-		ApiUrl:          fmt.Sprintf("http://%s:%d", host, port),
-		Username:        user,
-		Password:        password,
-		TriggerCallback: ownURL,
-		cache:           cache.New(defaultCacheExpiration, cacheCleanupInterval),
+		ApiUrl:   fmt.Sprintf("http://%s:%d", host, port),
+		Username: user,
+		Password: password,
+		cache:    cache.New(defaultCacheExpiration, cacheCleanupInterval),
 	}
 	return mist
 }
@@ -310,7 +308,7 @@ func (mc *MistClient) StopSessions(streamName string) error {
 // 3. Add a new trigger (or update the existing one)
 // 4. Override the triggers
 // 5. Release the lock
-func (mc *MistClient) AddTrigger(streamNames []string, triggerName string, sync bool) error {
+func (mc *MistClient) AddTrigger(streamNames []string, triggerName, triggerCallback string, sync bool) error {
 	mc.configMu.Lock()
 	defer mc.configMu.Unlock()
 
@@ -318,7 +316,7 @@ func (mc *MistClient) AddTrigger(streamNames []string, triggerName string, sync 
 	if err != nil {
 		return err
 	}
-	c := commandAddTrigger(streamNames, triggerName, mc.TriggerCallback, triggers, sync)
+	c := commandAddTrigger(streamNames, triggerName, triggerCallback, triggers, sync)
 	resp, err := mc.sendCommand(c)
 	return validateAddTrigger(streamNames, triggerName, resp, err, sync)
 }
