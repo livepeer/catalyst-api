@@ -34,6 +34,15 @@ Feature: VOD Streaming
     Examples:
       | payload                                             |
       | an invalid upload vod request                       |
+
+  Scenario Outline: Submit a request to `/api/vod` when the object store does not have write permissions
+    And I submit to the internal "/api/vod" endpoint with "<payload>"
+    And receive a response within "3" seconds
+    Then I get an HTTP response with code "500"
+    And my "failed" vod request metrics get recorded
+
+    Examples:
+      | payload                                             |
       | a valid upload vod request with no write permission |
 
   Scenario Outline: Submit a video asset for ingestion with the FFMPEG / Livepeer pipeline

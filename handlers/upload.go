@@ -259,7 +259,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	}
 
 	if err = checkWritePermission(requestID, uploadVODRequest.ExternalID, hlsTargetURL, mp4TargetURL, fragMp4TargetURL, clipTargetURL, thumbsTargetURL); err != nil {
-		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+		return false, errors.WriteHTTPInternalServerError(w, "Internal error", err)
 	}
 
 	log.Log(requestID, "Received VOD Upload request", "pipeline_strategy", uploadVODRequest.PipelineStrategy, "num_profiles", len(uploadVODRequest.Profiles), "hlsTargetURL", hlsTargetURL)
@@ -335,7 +335,7 @@ func checkWritePermission(reqID, externalID string, urls ...*url.URL) error {
 		err := clients.UploadToOSURL(u.String(), "metadata.json", strings.NewReader(fmt.Sprintf(`{"external_id": "%s"}`, externalID)), time.Second)
 		if err != nil {
 			log.LogError(reqID, "failed write permission check", err, "url", log.RedactURL(urlString))
-			return fmt.Errorf("failed write permission check for %s", urlString)
+			return fmt.Errorf("failed write permission check")
 		}
 		alreadyChecked[urlString] = true
 	}
