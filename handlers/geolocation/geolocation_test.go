@@ -167,7 +167,7 @@ func mockHandlers(t *testing.T) *GeolocationHandlersCollection {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		w.Write(res)
+		w.Write(res) // nolint:errcheck
 	})
 	testServer := httptest.NewServer(router)
 
