@@ -250,7 +250,7 @@ func (b *MistBalancer) formatNodeAddress(server string) string {
 // killPreviousBalancer cleans up the previous MistUtilLoad process if it exists.
 // It uses pkill to kill the process.
 func (b *MistBalancer) killPreviousBalancer(ctx context.Context) {
-	cmd := exec.CommandContext(ctx, "pkill", "-f", "MistUtilLoad")
+	cmd := exec.CommandContext(ctx, "pkill", "-9", "-f", "MistUtilLoad")
 	err := cmd.Run()
 	if err != nil {
 		glog.V(6).Infof("Killing MistUtilLoad failed, most probably it was not running, err=%v", err)
