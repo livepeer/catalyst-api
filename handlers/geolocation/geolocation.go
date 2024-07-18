@@ -421,9 +421,7 @@ func (c *GeolocationHandlersCollection) sendPlaybackRequestAsync(playbackID stri
 }
 
 func (c *GeolocationHandlersCollection) membersFiltered(filter map[string]string, status, name string) ([]cluster.Member, error) {
-	membersEndpoint := fmt.Sprintf("http://%s:7979/api/serf/members", c.Config.MistHost)
-
-	resp, err := http.Get(membersEndpoint)
+	resp, err := http.Get(c.Config.SerfMembersEndpoint)
 	if err != nil {
 		return []cluster.Member{}, err
 	}

@@ -130,6 +130,7 @@ func main() {
 	fs.StringVar(&cli.KafkaUser, "kafka-user", "", "Kafka Username")
 	fs.StringVar(&cli.KafkaPassword, "kafka-password", "", "Kafka Password")
 	fs.StringVar(&cli.AnalyticsKafkaTopic, "analytics-kafka-topic", "", "Kafka Topic used to send analytics logs")
+	fs.StringVar(&cli.SerfMembersEndpoint, "serf-members-endpoint", "http://127.0.0.1:7979/api/serf/members", "Endpoint to get the current members in the cluster")
 	pprofPort := fs.Int("pprof-port", 6061, "Pprof listen port")
 
 	fs.String("send-audio", "", "[DEPRECATED] ignored, will be removed")
@@ -335,15 +336,13 @@ func main() {
 		})
 	}
 
-	if cli.IsApiMode() {
-		group.Go(func() error {
-			return api.ListenAndServe(ctx, cli, vodEngine, bal, c, mapic)
-		})
+	group.Go(func() error {
+		return api.ListenAndServe(ctx, cli, vodEngine, bal, mapic)
+	})
 
-		group.Go(func() error {
-			return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker, metricsDB)
-		})
-	}
+	group.Go(func() error {
+		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker, metricsDB)
+	})
 
 	if cli.IsClusterMode() {
 		group.Go(func() error {
