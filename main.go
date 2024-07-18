@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"os/signal"
 	"strings"
@@ -111,7 +110,7 @@ func main() {
 	fs.Float64Var(&cli.NodeLongitude, "node-longitude", 0, "Longitude of this Catalyst node. Used for load balancing.")
 	config.CommaSliceFlag(fs, &cli.RedirectPrefixes, "redirect-prefixes", []string{}, "Set of valid prefixes of playback id which are handled by mistserver")
 	config.CommaMapFlag(fs, &cli.Tags, "tags", map[string]string{"node": "media"}, "Serf tags for Catalyst nodes")
-	fs.IntVar(&cli.MistLoadBalancerPort, "mist-load-balancer-port", rand.Intn(10000)+40000, "MistUtilLoad port (default random)")
+	fs.IntVar(&cli.MistLoadBalancerPort, "mist-load-balancer-port", 40010, "MistUtilLoad port (default random)")
 	fs.StringVar(&cli.MistLoadBalancerTemplate, "mist-load-balancer-template", "http://%s:4242", "template for specifying the host that should be queried for Prometheus stat output for this node")
 	config.CommaSliceFlag(fs, &cli.RetryJoin, "retry-join", []string{}, "An agent to join with. This flag be specified multiple times. Does not exit on failure like -join, used to retry until success.")
 	fs.StringVar(&cli.EncryptKey, "encrypt", "", "Key for encrypting network traffic within Serf. Must be a base64-encoded 32-byte key.")
@@ -343,15 +342,25 @@ func main() {
 // Eventually this will be the main loop of the state machine, but we just have one variable right now.
 func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Cluster) error {
 	memberCh := c.MemberChan()
+	ticker := time.NewTicker(1 * time.Minute)
 	for {
+		var members []cluster.Member
+		var err error
 		select {
 		case <-ctx.Done():
 			return nil
-		case list := <-memberCh:
-			err := bal.UpdateMembers(ctx, list)
+		case <-ticker.C:
+			members, err = c.MembersFiltered(cluster.MediaFilter, "alive", "")
 			if err != nil {
-				return fmt.Errorf("failed to update load balancer from member list: %w", err)
+				glog.Errorf("Error getting serf members: %v", err)
+				continue
 			}
+		case members = <-memberCh:
+		}
+		err = bal.UpdateMembers(ctx, members)
+		if err != nil {
+			glog.Errorf("Failed to update load balancer from member list: %v", err)
+			continue
 		}
 	}
 }
