@@ -47,7 +47,7 @@ type Member struct {
 	Status string            `json:"status"`
 }
 
-var MediaFilter = map[string]string{"node": "media"}
+var mediaFilter = map[string]string{"node": "media"}
 
 // Create a connection to a new Cluster that will immediately connect
 func NewCluster(config *config.Cli) Cluster {
@@ -272,7 +272,7 @@ func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 			return nil
 		}
 
-		members, err := c.MembersFiltered(MediaFilter, "alive", "")
+		members, err := c.MembersFiltered(mediaFilter, "alive", "")
 
 		if err != nil {
 			glog.Errorf("Error getting serf, crashing: %v\n", err)
