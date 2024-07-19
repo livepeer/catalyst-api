@@ -29,18 +29,13 @@ LABEL	maintainer="Amritanshu Varshney <amritanshu+github@livepeer.org>"
 
 ARG	BUILD_TARGET
 
-RUN	apt update && apt install -yqq wget software-properties-common \
-	&& add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg7
+RUN	apt update && apt install -yqq wget software-properties-common
 
 RUN	apt update && apt install -yqq \
 	curl \
 	ca-certificates \
-	musl \
-	python3 \
 	procps \
 	vnstat \
-	ffmpeg \
-	gstreamer1.0-tools gstreamer1.0-plugins-good gstreamer1.0-plugins-base gstreamer1.0-plugins-bad \
 	&& rm -rf /var/lib/apt/lists/*
 
 COPY --from=gobuild		/src/build/catalyst-api /bin/catalyst-api
