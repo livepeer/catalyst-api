@@ -352,7 +352,7 @@ func main() {
 
 	if cli.IsClusterMode() {
 		group.Go(func() error {
-			serfUserEventCallbackEndpoint := fmt.Sprintf("http://%s/api/serf/receiveUserEvent", catalystApiURL)
+			serfUserEventCallbackEndpoint := fmt.Sprintf("%s/api/serf/receiveUserEvent", catalystApiURL)
 			return handleClusterEvents(ctx, serfUserEventCallbackEndpoint, c)
 		})
 	}
