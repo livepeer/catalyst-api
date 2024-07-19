@@ -131,6 +131,7 @@ func main() {
 	fs.StringVar(&cli.KafkaPassword, "kafka-password", "", "Kafka Password")
 	fs.StringVar(&cli.AnalyticsKafkaTopic, "analytics-kafka-topic", "", "Kafka Topic used to send analytics logs")
 	fs.StringVar(&cli.SerfMembersEndpoint, "serf-members-endpoint", "http://127.0.0.1:7979/api/serf/members", "Endpoint to get the current members in the cluster")
+	fs.StringVar(&cli.MistTriggerHandlerEndpoint, "mist-trigger-handler-endpoint", "", "Endpoint for handling Mist triggers instead of the local instance")
 	pprofPort := fs.Int("pprof-port", 6061, "Pprof listen port")
 
 	fs.String("send-audio", "", "[DEPRECATED] ignored, will be removed")
@@ -260,8 +261,11 @@ func main() {
 	if cli.MistEnabled {
 		mist = clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort)
 		if cli.MistTriggerSetup && cli.IsClusterMode() {
-			ownURL := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
-			err := broker.SetupMistTriggers(mist, ownURL)
+			mistTriggerHandlerEndpoint := cli.MistTriggerHandlerEndpoint
+			if mistTriggerHandlerEndpoint == "" {
+				mistTriggerHandlerEndpoint = fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
+			}
+			err := broker.SetupMistTriggers(mist, mistTriggerHandlerEndpoint)
 			if err != nil {
 				glog.Error("catalyst-api was unable to communicate with MistServer to set up its triggers.")
 				glog.Error("hint: are you trying to boot catalyst-api without Mist for development purposes? use the flag -no-mist")
