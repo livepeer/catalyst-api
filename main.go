@@ -131,7 +131,7 @@ func main() {
 	fs.StringVar(&cli.KafkaPassword, "kafka-password", "", "Kafka Password")
 	fs.StringVar(&cli.AnalyticsKafkaTopic, "analytics-kafka-topic", "", "Kafka Topic used to send analytics logs")
 	fs.StringVar(&cli.SerfMembersEndpoint, "serf-members-endpoint", "http://127.0.0.1:7979/api/serf/members", "Endpoint to get the current members in the cluster")
-	fs.StringVar(&cli.MistTriggerHandlerEndpoint, "mist-trigger-handler-endpoint", "", "Endpoint for handling Mist triggers instead of the local instance")
+	fs.StringVar(&cli.CatalystApiURL, "catalyst-api-url", "", "Endpoint for externally deployed catalyst-api, if not set using local catalyst-api")
 	pprofPort := fs.Int("pprof-port", 6061, "Pprof listen port")
 
 	fs.String("send-audio", "", "[DEPRECATED] ignored, will be removed")
@@ -258,13 +258,15 @@ func main() {
 
 	broker = misttriggers.NewTriggerBroker()
 
+	catalystApiURL := cli.CatalystApiURL
+	if catalystApiURL == "" {
+		catalystApiURL = cli.OwnInternalURL()
+	}
+
 	if cli.MistEnabled {
 		mist = clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort)
 		if cli.MistTriggerSetup && cli.IsClusterMode() {
-			mistTriggerHandlerEndpoint := cli.MistTriggerHandlerEndpoint
-			if mistTriggerHandlerEndpoint == "" {
-				mistTriggerHandlerEndpoint = fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
-			}
+			mistTriggerHandlerEndpoint := fmt.Sprintf("%s/api/mist/trigger", catalystApiURL)
 			err := broker.SetupMistTriggers(mist, mistTriggerHandlerEndpoint)
 			if err != nil {
 				glog.Error("catalyst-api was unable to communicate with MistServer to set up its triggers.")
@@ -350,7 +352,7 @@ func main() {
 
 	if cli.IsClusterMode() {
 		group.Go(func() error {
-			serfUserEventCallbackEndpoint := fmt.Sprintf("http://%s/api/serf/receiveUserEvent", cli.OwnInternalURL())
+			serfUserEventCallbackEndpoint := fmt.Sprintf("http://%s/api/serf/receiveUserEvent", catalystApiURL)
 			return handleClusterEvents(ctx, serfUserEventCallbackEndpoint, c)
 		})
 	}
