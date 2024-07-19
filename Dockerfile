@@ -1,7 +1,3 @@
-ARG	GIT_VERSION=unknown
-ARG	BUILD_TARGET
-ARG	FROM_LOCAL_PARENT
-
 FROM	golang:1-bullseye	as	gobuild
 
 ARG TARGETARCH
@@ -34,7 +30,7 @@ LABEL	maintainer="Amritanshu Varshney <amritanshu+github@livepeer.org>"
 ARG	BUILD_TARGET
 
 RUN	apt update && apt install -yqq wget software-properties-common \
-	&& add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg6
+	&& add-apt-repository -y ppa:ubuntuhandbook1/ffmpeg7
 
 RUN	apt update && apt install -yqq \
 	curl \
