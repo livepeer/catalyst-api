@@ -275,7 +275,7 @@ func main() {
 	c := cluster.NewCluster(&cli)
 
 	// Start balancer
-	mistBalancer := mist_balancer.NewBalancer(&balancer.Config{
+	mistBalancerConfig := &balancer.Config{
 		Args:                     cli.BalancerArgs,
 		MistUtilLoadPort:         uint32(cli.MistLoadBalancerPort),
 		MistLoadBalancerTemplate: cli.MistLoadBalancerTemplate,
@@ -284,7 +284,8 @@ func main() {
 		NodeName:                 cli.NodeName,
 		OwnRegion:                cli.OwnRegion,
 		OwnRegionTagAdjust:       cli.OwnRegionTagAdjust,
-	})
+	}
+	mistBalancer := mist_balancer.NewLocalBalancer(mistBalancerConfig)
 
 	bal := mistBalancer
 	if balancer.CombinedBalancerEnabled(cli.CataBalancer) {
