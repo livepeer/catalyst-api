@@ -105,7 +105,7 @@ var DefaultProfile720p = EncodedProfile{
 // DefaultTranscodeProfiles defines the default set of encoding profiles to use when none are specified
 var DefaultTranscodeProfiles = []EncodedProfile{DefaultProfile360p, DefaultProfile720p}
 
-func SetTranscodeProfiles(inputVideoStats InputVideo, transcodeProfiles []EncodedProfile, isClip bool) ([]EncodedProfile, error) {
+func SetTranscodeProfiles(inputVideoStats InputVideo, transcodeProfiles []EncodedProfile) ([]EncodedProfile, error) {
 	videoTrack, err := inputVideoStats.GetTrack(TrackTypeVideo)
 	if err != nil {
 		return nil, fmt.Errorf("no video track found in input video: %w", err)
@@ -118,9 +118,8 @@ func SetTranscodeProfiles(inputVideoStats InputVideo, transcodeProfiles []Encode
 			transcodeProfiles = GenerateSingleProfileWithTargetParams(videoTrack, transcodeProfiles[0])
 		}
 	}
-
-	// Always copy the source rendition for HLS input unless it's a clip, which needs PTS correction through transcode
-	copySource := inputVideoStats.Format == "hls" && !isClip
+	// Always copy the source video for HLS input
+	copySource := inputVideoStats.Format == "hls"
 	// If Profiles were not specified, use the default set. Notice that they can come
 	// as an empty array for no transcoding, which is why we check nil instead of len
 	if transcodeProfiles == nil {

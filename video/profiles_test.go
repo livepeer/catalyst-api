@@ -184,7 +184,6 @@ func TestSetTranscodeProfiles(t *testing.T) {
 	tests := []struct {
 		name              string
 		input             InputVideo
-		isClip            bool
 		transcodeProfiles []EncodedProfile
 		want              []EncodedProfile
 	}{
@@ -276,23 +275,6 @@ func TestSetTranscodeProfiles(t *testing.T) {
 			want:              []EncodedProfile{{Name: "720p0", Width: 1280, Height: 720, Bitrate: 3_000_001, Copy: true}},
 		},
 		{
-			name: "does not add copy profile if clip",
-			input: InputVideo{
-				Format: "hls",
-				Tracks: []InputTrack{{
-					Type:    "video",
-					Bitrate: 3_000_001,
-					VideoTrack: VideoTrack{
-						Width:  1280,
-						Height: 720,
-					},
-				}},
-			},
-			isClip:            true,
-			transcodeProfiles: []EncodedProfile{{Name: "360p0", Width: 640, Height: 360, Bitrate: 900_000, Quality: 5}},
-			want:              []EncodedProfile{{Name: "360p0", Width: 640, Height: 360, Bitrate: 900_000, Quality: 5}},
-		},
-		{
 			name: "includes copy profile in default profiles if hls input",
 			input: InputVideo{
 				Format: "hls",
@@ -311,30 +293,10 @@ func TestSetTranscodeProfiles(t *testing.T) {
 				{Name: "720p0", Width: 1280, Height: 720, Bitrate: 3_000_001, Copy: true},
 			},
 		},
-		{
-			name: "does not include copy profile in default profiles if clip",
-			input: InputVideo{
-				Format: "mp4",
-				Tracks: []InputTrack{{
-					Type:    "video",
-					Bitrate: 3_000_001,
-					VideoTrack: VideoTrack{
-						Width:  1280,
-						Height: 720,
-					},
-				}},
-			},
-			isClip:            true,
-			transcodeProfiles: nil,
-			want: []EncodedProfile{
-				{Name: "360p0", Width: 640, Height: 360, Bitrate: 900_000, Quality: DefaultQuality},
-				{Name: "720p0", Width: 1280, Height: 720, Bitrate: 3_600_001, Quality: DefaultQuality},
-			},
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := SetTranscodeProfiles(tt.input, tt.transcodeProfiles, tt.isClip)
+			got, err := SetTranscodeProfiles(tt.input, tt.transcodeProfiles)
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
 		})
