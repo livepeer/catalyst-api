@@ -109,12 +109,13 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 		),
 	)
 
-	// Public handler to propagate an event to all Catalyst nodes, execute from Studio API => Catalyst
-	router.POST("/api/events", withLogging(eventsHandler.Events()))
-	// Handler to forward the user event from Catalyst => Catalyst API
-	router.POST("/api/serf/receiveUserEvent", withLogging(eventsHandler.ReceiveUserEvent()))
 	// Handler to get members Catalyst API => Catalyst
 	router.GET("/api/serf/members", withLogging(adminHandlers.MembersHandler()))
+	// Public handler to propagate an event to all Catalyst nodes, execute from Studio API => Catalyst
+	router.POST("/api/events", withLogging(eventsHandler.Events()))
+
+	// Handler to forward the user event from Catalyst => Catalyst API
+	router.POST("/api/serf/receiveUserEvent", withLogging(eventsHandler.ReceiveUserEvent()))
 
 	// Public GET handler to retrieve the public key for vod encryption
 	router.GET("/api/pubkey", withLogging(encryptionHandlers.PublicKeyHandler()))
