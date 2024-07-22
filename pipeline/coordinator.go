@@ -390,7 +390,7 @@ func ShouldGenerateMP4(sourceURL, mp4TargetUrl *url.URL, fragMp4TargetUrl *url.U
 	}
 
 	if mp4TargetUrl != nil && (!mp4OnlyShort || durationSecs <= maxMP4OutDuration.Seconds()) {
-		return true, "input asset duration is too long"
+		return true, ""
 	}
 
 	if fragMp4TargetUrl == nil {
