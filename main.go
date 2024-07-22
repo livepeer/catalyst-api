@@ -335,7 +335,7 @@ func main() {
 	})
 
 	group.Go(func() error {
-		serfUserEventCallbackEndpoint := fmt.Sprintf("http://%s/api/serf/receiveUserEvent", cli.OwnInternalURL())
+		serfUserEventCallbackEndpoint := fmt.Sprintf("%s/api/serf/receiveUserEvent", cli.OwnInternalURL())
 		return handleClusterEvents(ctx, serfUserEventCallbackEndpoint, c)
 	})
 
