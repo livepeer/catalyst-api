@@ -255,10 +255,10 @@ func main() {
 
 	var mist clients.MistAPIClient
 	if cli.MistEnabled {
-		ownURL := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
-		mist = clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort, ownURL)
+		mist = clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort)
 		if cli.MistTriggerSetup {
-			err := broker.SetupMistTriggers(mist)
+			ownURL := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
+			err := broker.SetupMistTriggers(mist, ownURL)
 			if err != nil {
 				glog.Error("catalyst-api was unable to communicate with MistServer to set up its triggers.")
 				glog.Error("hint: are you trying to boot catalyst-api without Mist for development purposes? use the flag -no-mist")
@@ -277,7 +277,7 @@ func main() {
 	c := cluster.NewCluster(&cli)
 
 	// Start balancer
-	mistBalancer := mist_balancer.NewBalancer(&balancer.Config{
+	mistBalancerConfig := &balancer.Config{
 		Args:                     cli.BalancerArgs,
 		MistUtilLoadPort:         uint32(cli.MistLoadBalancerPort),
 		MistLoadBalancerTemplate: cli.MistLoadBalancerTemplate,
@@ -286,7 +286,8 @@ func main() {
 		NodeName:                 cli.NodeName,
 		OwnRegion:                cli.OwnRegion,
 		OwnRegionTagAdjust:       cli.OwnRegionTagAdjust,
-	})
+	}
+	mistBalancer := mist_balancer.NewLocalBalancer(mistBalancerConfig)
 
 	bal := mistBalancer
 	if balancer.CombinedBalancerEnabled(cli.CataBalancer) {

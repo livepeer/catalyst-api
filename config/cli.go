@@ -156,13 +156,9 @@ func (cli *Cli) ParseLegacyEnv() {
 func AddrFlag(fs *flag.FlagSet, dest *string, name, value, usage string) {
 	*dest = value
 	fs.Func(name, usage, func(s string) error {
-		host, _, err := net.SplitHostPort(s)
+		_, _, err := net.SplitHostPort(s)
 		if err != nil {
 			return err
-		}
-		ip := net.ParseIP(host)
-		if ip == nil {
-			return fmt.Errorf("invalid address: %s", s)
 		}
 		*dest = s
 		return nil
