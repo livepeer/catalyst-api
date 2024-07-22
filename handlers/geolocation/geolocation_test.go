@@ -2,6 +2,7 @@ package geolocation
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -17,7 +18,6 @@ import (
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/metrics"
 	mockbalancer "github.com/livepeer/catalyst-api/mocks/balancer"
-	mockcluster "github.com/livepeer/catalyst-api/mocks/cluster"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +30,7 @@ const (
 )
 
 var fakeSerfMember = cluster.Member{
-	Name: "fake-serf-member",
+	Name: "someurl.com",
 	Tags: map[string]string{
 		"http":  fmt.Sprintf("http://%s", closestNodeAddr),
 		"https": fmt.Sprintf("https://%s", closestNodeAddr),
@@ -142,7 +142,6 @@ func getHLSURLsWithSeg(proto, host, seg, query string) []string {
 func mockHandlers(t *testing.T) *GeolocationHandlersCollection {
 	ctrl := gomock.NewController(t)
 	mb := mockbalancer.NewMockBalancer(ctrl)
-	mc := mockcluster.NewMockCluster(ctrl)
 	mb.EXPECT().
 		GetBestNode(context.Background(), prefixes[:], playbackID, "", "", "", gomock.Any()).
 		AnyTimes().
@@ -158,16 +157,23 @@ func mockHandlers(t *testing.T) *GeolocationHandlersCollection {
 		AnyTimes().
 		Return("", "", errors.New(""))
 
-	mc.EXPECT().
-		MembersFiltered(map[string]string{}, gomock.Any(), closestNodeAddr).
-		AnyTimes().
-		Return([]cluster.Member{fakeSerfMember}, nil)
+	router := httprouter.New()
+	router.GET("/api/serf/members", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		w.Header().Set("Content-Type", "application/json")
+		res, err := json.Marshal([]cluster.Member{fakeSerfMember})
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Write(res) // nolint:errcheck
+	})
+	testServer := httptest.NewServer(router)
 
 	coll := GeolocationHandlersCollection{
 		Balancer: mb,
-		Cluster:  mc,
 		Config: config.Cli{
-			RedirectPrefixes: prefixes[:],
+			RedirectPrefixes:    prefixes[:],
+			SerfMembersEndpoint: fmt.Sprintf("%s/api/serf/members", testServer.URL),
 		},
 	}
 	return &coll
