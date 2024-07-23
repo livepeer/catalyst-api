@@ -1,8 +1,6 @@
 //nolint:all
 package mistapiconnector
 
-//go:generate mockgen -source=./mistapiconnector_app.go -destination=../mocks/mistapiconnector/mistapiconnector_app.go
-
 import (
 	"context"
 	"errors"

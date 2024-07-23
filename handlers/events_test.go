@@ -5,7 +5,6 @@ import (
 	"github.com/hashicorp/serf/serf"
 	"github.com/julienschmidt/httprouter"
 	mockcluster "github.com/livepeer/catalyst-api/mocks/cluster"
-	mock_mistapiconnector "github.com/livepeer/catalyst-api/mocks/mistapiconnector"
 	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
@@ -63,7 +62,7 @@ func TestEventHandler(t *testing.T) {
 		return nil
 	}).AnyTimes()
 
-	catalystApiHandlers := NewEventsHandlersCollection(mc, nil, nil)
+	catalystApiHandlers := EventsHandlersCollection{Cluster: mc}
 	router := httprouter.New()
 	router.POST("/events", catalystApiHandlers.Events())
 
@@ -73,67 +72,5 @@ func TestEventHandler(t *testing.T) {
 		router.ServeHTTP(rr, req)
 
 		require.Equal(rr.Result().StatusCode, tt.wantHttpCode)
-	}
-}
-
-func TestReceiveUserEventHandler(t *testing.T) {
-	require := require.New(t)
-	playbackId := "123456789"
-
-	tests := []struct {
-		name           string
-		requestBody    string
-		functionCalled string
-	}{
-		{
-			name: "Refresh Stream",
-			requestBody: `{
-				"resource": "stream",
-				"playback_id": "123456789"
-			}`,
-			functionCalled: "RefreshStreamIfNeeded",
-		},
-		{
-			name: "Nuke Stream",
-			requestBody: `{
-				"resource": "nuke",
-				"playback_id": "123456789"
-			}`,
-			functionCalled: "NukeStream",
-		},
-		{
-			name: "Stop Sessions",
-			requestBody: `{
-				"resource": "stopSessions",
-				"playback_id": "123456789"
-			}`,
-			functionCalled: "StopSessions",
-		},
-	}
-
-	ctrl := gomock.NewController(t)
-	mac := mock_mistapiconnector.NewMockIMac(ctrl)
-
-	catalystApiHandlers := NewEventsHandlersCollection(nil, mac, nil)
-	router := httprouter.New()
-	router.POST("/receiveUserEvent", catalystApiHandlers.ReceiveUserEvent())
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			switch tt.functionCalled {
-			case "RefreshStreamIfNeeded":
-				mac.EXPECT().RefreshStreamIfNeeded(playbackId).Times(1)
-			case "NukeStream":
-				mac.EXPECT().NukeStream(playbackId).Times(1)
-			case "StopSessions":
-				mac.EXPECT().StopSessions(playbackId).Times(1)
-			}
-
-			req, _ := http.NewRequest("POST", "/receiveUserEvent", strings.NewReader(tt.requestBody))
-			rr := httptest.NewRecorder()
-			router.ServeHTTP(rr, req)
-
-			require.Equal(rr.Result().StatusCode, 200)
-		})
 	}
 }

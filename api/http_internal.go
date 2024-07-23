@@ -68,12 +68,12 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 		Server:      cli.APIServer,
 		AccessToken: cli.APIToken,
 	})
-	geoHandlers := geolocation.NewGeolocationHandlersCollection(bal, cli, lapi)
+	geoHandlers := geolocation.NewGeolocationHandlersCollection(bal, c, cli, lapi)
 
 	spkiPublicKey, _ := crypto.ConvertToSpki(cli.VodDecryptPublicKey)
 
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
-	eventsHandler := handlers.NewEventsHandlersCollection(c, mapic, bal)
+	eventsHandler := &handlers.EventsHandlersCollection{Cluster: c}
 	ffmpegSegmentingHandlers := &ffmpeg.HandlersCollection{VODEngine: vodEngine}
 	accessControlHandlers := accesscontrol.NewAccessControlHandlersCollection(cli, mapic)
 	analyticsHandlers := analytics.NewAnalyticsHandler(metricsDB)
@@ -109,13 +109,8 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 		),
 	)
 
-	// Handler to get members Catalyst API => Catalyst
-	router.GET("/api/serf/members", withLogging(adminHandlers.MembersHandler()))
-	// Public handler to propagate an event to all Catalyst nodes, execute from Studio API => Catalyst
+	// Public handler to propagate an event to all Catalyst nodes
 	router.POST("/api/events", withLogging(eventsHandler.Events()))
-
-	// Handler to forward the user event from Catalyst => Catalyst API
-	router.POST("/api/serf/receiveUserEvent", withLogging(eventsHandler.ReceiveUserEvent()))
 
 	// Public GET handler to retrieve the public key for vod encryption
 	router.GET("/api/pubkey", withLogging(encryptionHandlers.PublicKeyHandler()))
@@ -134,6 +129,9 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 
 	// Endpoint to receive segments and manifests that ffmpeg produces
 	router.POST("/api/ffmpeg/:id/:filename", withLogging(ffmpegSegmentingHandlers.NewFile()))
+
+	// Temporary endpoint for admin queries
+	router.GET("/admin/members", withLogging(adminHandlers.MembersHandler()))
 
 	return router
 }
