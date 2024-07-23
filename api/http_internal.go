@@ -84,60 +84,56 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	// Simple endpoint for healthchecks
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 
-	if cli.IsClusterMode() {
-		// Handler to get members Catalyst API => Catalyst
-		router.GET("/api/serf/members", withLogging(adminHandlers.MembersHandler()))
-		// Public handler to propagate an event to all Catalyst nodes, execute from Studio API => Catalyst
-		router.POST("/api/events", withLogging(eventsHandler.Events()))
+	var metricsHandlers []http.Handler
+	if cli.ShouldMapic() {
+		metricsHandlers = append(metricsHandlers, mapic.MetricsHandler())
 	}
+	if cli.MistPrometheus != "" {
+		// Enable Mist metrics enrichment
+		metricsHandlers = append(metricsHandlers, mapic.MistMetricsHandler())
+	}
+	metricsHandlers = append(metricsHandlers, promhttp.Handler())
+	// Hacky combined metrics handler. To be refactored away with mapic.
+	router.GET("/metrics", concatHandlers(metricsHandlers...))
 
-	if cli.IsApiMode() {
-		var metricsHandlers []http.Handler
-		if cli.ShouldMapic() {
-			metricsHandlers = append(metricsHandlers, mapic.MetricsHandler())
-		}
-		if cli.MistPrometheus != "" {
-			// Enable Mist metrics enrichment
-			metricsHandlers = append(metricsHandlers, mapic.MistMetricsHandler())
-		}
-		metricsHandlers = append(metricsHandlers, promhttp.Handler())
-		// Hacky combined metrics handler. To be refactored away with mapic.
-		router.GET("/metrics", concatHandlers(metricsHandlers...))
-
-		// Public Catalyst API
-		router.POST("/api/vod",
-			withLogging(
-				withAuth(
-					cli.APIToken,
-					withCapacityChecking(
-						vodEngine,
-						catalystApiHandlers.UploadVOD(),
-					),
+	// Public Catalyst API
+	router.POST("/api/vod",
+		withLogging(
+			withAuth(
+				cli.APIToken,
+				withCapacityChecking(
+					vodEngine,
+					catalystApiHandlers.UploadVOD(),
 				),
 			),
-		)
+		),
+	)
 
-		// Handler to forward the user event from Catalyst => Catalyst API
-		router.POST("/api/serf/receiveUserEvent", withLogging(eventsHandler.ReceiveUserEvent()))
+	// Handler to get members Catalyst API => Catalyst
+	router.GET("/api/serf/members", withLogging(adminHandlers.MembersHandler()))
+	// Public handler to propagate an event to all Catalyst nodes, execute from Studio API => Catalyst
+	router.POST("/api/events", withLogging(eventsHandler.Events()))
 
-		// Public GET handler to retrieve the public key for vod encryption
-		router.GET("/api/pubkey", withLogging(encryptionHandlers.PublicKeyHandler()))
+	// Handler to forward the user event from Catalyst => Catalyst API
+	router.POST("/api/serf/receiveUserEvent", withLogging(eventsHandler.ReceiveUserEvent()))
 
-		// Endpoint to receive "Triggers" (callbacks) from Mist
-		router.POST("/api/mist/trigger", withLogging(mistCallbackHandlers.Trigger()))
+	// Public GET handler to retrieve the public key for vod encryption
+	router.GET("/api/pubkey", withLogging(encryptionHandlers.PublicKeyHandler()))
 
-		// Handler for STREAM_SOURCE triggers
-		broker.OnStreamSource(geoHandlers.HandleStreamSource)
+	// Endpoint to receive "Triggers" (callbacks) from Mist
+	router.POST("/api/mist/trigger", withLogging(mistCallbackHandlers.Trigger()))
 
-		// Handler for USER_NEW triggers
-		broker.OnUserNew(accessControlHandlers.HandleUserNew)
+	// Handler for STREAM_SOURCE triggers
+	broker.OnStreamSource(geoHandlers.HandleStreamSource)
 
-		// Handler for USER_END triggers.
-		broker.OnUserEnd(analyticsHandlers.HandleUserEnd)
+	// Handler for USER_NEW triggers
+	broker.OnUserNew(accessControlHandlers.HandleUserNew)
 
-		// Endpoint to receive segments and manifests that ffmpeg produces
-		router.POST("/api/ffmpeg/:id/:filename", withLogging(ffmpegSegmentingHandlers.NewFile()))
-	}
+	// Handler for USER_END triggers.
+	broker.OnUserEnd(analyticsHandlers.HandleUserEnd)
+
+	// Endpoint to receive segments and manifests that ffmpeg produces
+	router.POST("/api/ffmpeg/:id/:filename", withLogging(ffmpegSegmentingHandlers.NewFile()))
 
 	return router
 }
