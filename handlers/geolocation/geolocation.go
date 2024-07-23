@@ -23,6 +23,7 @@ import (
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
+	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/go-api-client"
 )
@@ -67,16 +68,20 @@ func (l *streamPullRateLimit) mark(playbackID string) {
 
 type GeolocationHandlersCollection struct {
 	Balancer            balancer.Balancer
+	Cluster             cluster.Cluster
 	Config              config.Cli
 	Lapi                *api.Client
+	LapiCached          *mistapiconnector.ApiClientCached
 	streamPullRateLimit *streamPullRateLimit
 }
 
-func NewGeolocationHandlersCollection(balancer balancer.Balancer, config config.Cli, lapi *api.Client) *GeolocationHandlersCollection {
+func NewGeolocationHandlersCollection(balancer balancer.Balancer, cluster cluster.Cluster, config config.Cli, lapi *api.Client) *GeolocationHandlersCollection {
 	return &GeolocationHandlersCollection{
 		Balancer:            balancer,
+		Cluster:             cluster,
 		Config:              config,
 		Lapi:                lapi,
+		LapiCached:          mistapiconnector.NewApiClientCached(lapi),
 		streamPullRateLimit: newStreamPullRateLimit(streamSourceRetryInterval),
 	}
 }
@@ -242,7 +247,7 @@ func (c *GeolocationHandlersCollection) resolveNodeURL(streamURL string) (string
 }
 
 func (c *GeolocationHandlersCollection) clusterMember(filter map[string]string, status, name string) (cluster.Member, error) {
-	members, err := c.membersFiltered(filter, "", name)
+	members, err := c.Cluster.MembersFiltered(filter, "", name)
 	if err != nil {
 		return cluster.Member{}, err
 	}
@@ -348,7 +353,7 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string, retryCo
 		return "", errRateLimit
 	}
 
-	stream, err := c.Lapi.GetStreamByPlaybackID(playbackID)
+	stream, err := c.LapiCached.GetStreamByPlaybackID(playbackID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get stream to check stream pull: %w", err)
 	}
@@ -402,7 +407,7 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string, retryCo
 }
 
 func (c *GeolocationHandlersCollection) sendPlaybackRequestAsync(playbackID string, region string) {
-	members, err := c.membersFiltered(map[string]string{"region": region}, "", "")
+	members, err := c.Cluster.MembersFiltered(map[string]string{"region": region}, "", "")
 	if err != nil || len(members) == 0 {
 		glog.Errorf("Error fetching member list: %v", err)
 		return
@@ -418,23 +423,6 @@ func (c *GeolocationHandlersCollection) sendPlaybackRequestAsync(playbackID stri
 		}
 		resp.Body.Close()
 	}()
-}
-
-func (c *GeolocationHandlersCollection) membersFiltered(filter map[string]string, status, name string) ([]cluster.Member, error) {
-	resp, err := http.Get(c.Config.SerfMembersEndpoint)
-	if err != nil {
-		return []cluster.Member{}, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return []cluster.Member{}, fmt.Errorf("failed to get members: %s", resp.Status)
-	}
-	var members []cluster.Member
-	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
-		return []cluster.Member{}, err
-	}
-
-	return cluster.FilterMembers(members, filter, status, name)
 }
 
 func parsePlus(plusString string) (string, string) {

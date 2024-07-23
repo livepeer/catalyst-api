@@ -182,25 +182,10 @@ func (c *ClusterImpl) retryJoin(ctx context.Context) {
 }
 
 func (c *ClusterImpl) MembersFiltered(filter map[string]string, status, name string) ([]Member, error) {
-	return FilterMembers(toClusterMembers(c.serf.Members()), filter, status, name)
-}
-
-func toClusterMembers(members []serf.Member) []Member {
-	var nodes []Member
-	for _, member := range members {
-		nodes = append(nodes, Member{
-			Name:   member.Name,
-			Tags:   member.Tags,
-			Status: member.Status.String(),
-		})
-	}
-	return nodes
-}
-
-func FilterMembers(all []Member, filter map[string]string, status string, name string) ([]Member, error) {
-	var nodes []Member
+	all := c.serf.Members()
+	nodes := []Member{}
 	for _, member := range all {
-		if status != "" && status != member.Status {
+		if status != "" && status != member.Status.String() {
 			continue
 		}
 		if name != "" && name != member.Name {
@@ -215,7 +200,11 @@ func FilterMembers(all []Member, filter map[string]string, status string, name s
 			}
 		}
 		if matches {
-			nodes = append(nodes, member)
+			nodes = append(nodes, Member{
+				Name:   member.Name,
+				Tags:   member.Tags,
+				Status: member.Status.String(),
+			})
 		}
 	}
 	return nodes, nil
