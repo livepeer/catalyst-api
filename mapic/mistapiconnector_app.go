@@ -93,6 +93,7 @@ type (
 		ctx                       context.Context
 		cancel                    context.CancelFunc
 		lapi                      *api.Client
+		lapiCached                *ApiClientCached
 		balancerHost              string
 		mu                        sync.RWMutex
 		mistHot                   string
@@ -131,6 +132,7 @@ func (mc *mac) Start(ctx context.Context) error {
 		AccessToken: mc.config.APIToken,
 	})
 	mc.lapi = lapi
+	mc.lapiCached = NewApiClientCached(lapi)
 
 	if mc.balancerHost != "" && !strings.Contains(mc.balancerHost, ":") {
 		mc.balancerHost = mc.balancerHost + ":8042" // must set default port for Mist's Load Balancer
@@ -781,7 +783,7 @@ func (mc *mac) getStreamInfo(playbackID string) (*streamInfo, error) {
 func (mc *mac) refreshStreamInfo(playbackID string) (*streamInfo, error) {
 	glog.Infof("Refreshing stream info for playbackID=%s", playbackID)
 
-	stream, err := mc.lapi.GetStreamByPlaybackID(playbackID)
+	stream, err := mc.lapiCached.GetStreamByPlaybackID(playbackID)
 	if err != nil {
 		return nil, fmt.Errorf("error getting stream by playback ID %s: %w", playbackID, err)
 	}

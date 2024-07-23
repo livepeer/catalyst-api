@@ -23,6 +23,7 @@ import (
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
+	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/go-api-client"
 )
@@ -70,6 +71,7 @@ type GeolocationHandlersCollection struct {
 	Cluster             cluster.Cluster
 	Config              config.Cli
 	Lapi                *api.Client
+	LapiCached          *mistapiconnector.ApiClientCached
 	streamPullRateLimit *streamPullRateLimit
 }
 
@@ -79,6 +81,7 @@ func NewGeolocationHandlersCollection(balancer balancer.Balancer, cluster cluste
 		Cluster:             cluster,
 		Config:              config,
 		Lapi:                lapi,
+		LapiCached:          mistapiconnector.NewApiClientCached(lapi),
 		streamPullRateLimit: newStreamPullRateLimit(streamSourceRetryInterval),
 	}
 }
@@ -350,7 +353,7 @@ func (c *GeolocationHandlersCollection) getStreamPull(playbackID string, retryCo
 		return "", errRateLimit
 	}
 
-	stream, err := c.Lapi.GetStreamByPlaybackID(playbackID)
+	stream, err := c.LapiCached.GetStreamByPlaybackID(playbackID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get stream to check stream pull: %w", err)
 	}
