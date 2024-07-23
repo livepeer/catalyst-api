@@ -108,6 +108,7 @@ func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		log, err := parseAnalyticsLog(r, schema)
 		if log == nil {
+			glog.Warningf("error parsing analytics log request payload, err=%v", err)
 			cerrors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 			return
 		}
@@ -127,6 +128,7 @@ func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 			case dataCh <- ad:
 				// process data async
 			default:
+				glog.Warningf("error processing analytics log, too many requests")
 				cerrors.WriteHTTPInternalServerError(w, "error processing analytics log, too many requests", nil)
 			}
 		}
