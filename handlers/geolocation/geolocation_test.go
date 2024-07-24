@@ -170,10 +170,10 @@ func mockHandlers(t *testing.T) *GeolocationHandlersCollection {
 	testServer := httptest.NewServer(router)
 
 	coll := GeolocationHandlersCollection{
-		Balancer: mb,
+		Balancer:            mb,
+		serfMembersEndpoint: fmt.Sprintf("%s/api/serf/members", testServer.URL),
 		Config: config.Cli{
-			RedirectPrefixes:    prefixes[:],
-			SerfMembersEndpoint: fmt.Sprintf("%s/api/serf/members", testServer.URL),
+			RedirectPrefixes: prefixes[:],
 		},
 	}
 	return &coll
