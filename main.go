@@ -1,15 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rsa"
 	"database/sql"
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -127,6 +128,7 @@ func main() {
 	fs.StringVar(&cli.KafkaUser, "kafka-user", "", "Kafka Username")
 	fs.StringVar(&cli.KafkaPassword, "kafka-password", "", "Kafka Password")
 	fs.StringVar(&cli.AnalyticsKafkaTopic, "analytics-kafka-topic", "", "Kafka Topic used to send analytics logs")
+	fs.StringVar(&cli.SerfMembersEndpoint, "serf-members-endpoint", "", "Endpoint to get the current members in the cluster")
 	pprofPort := fs.Int("pprof-port", 6061, "Pprof listen port")
 
 	fs.String("send-audio", "", "[DEPRECATED] ignored, will be removed")
@@ -305,12 +307,17 @@ func main() {
 		return handleSignals(ctx)
 	})
 
+	serfMembersEndpoint := cli.SerfMembersEndpoint
+	if serfMembersEndpoint == "" {
+		serfMembersEndpoint = cli.OwnInternalURL() + "/api/serf/members"
+	}
+
 	group.Go(func() error {
-		return api.ListenAndServe(ctx, cli, vodEngine, bal, c, mapic)
+		return api.ListenAndServe(ctx, cli, vodEngine, bal, mapic, serfMembersEndpoint)
 	})
 
 	group.Go(func() error {
-		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker, metricsDB)
+		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker, metricsDB, serfMembersEndpoint)
 	})
 
 	if cli.ShouldMapic() {
@@ -333,7 +340,8 @@ func main() {
 	})
 
 	group.Go(func() error {
-		return handleClusterEvents(ctx, mapic, bal, c)
+		serfUserEventCallbackEndpoint := fmt.Sprintf("%s/api/serf/receiveUserEvent", cli.OwnInternalURL())
+		return handleClusterEvents(ctx, serfUserEventCallbackEndpoint, c)
 	})
 
 	err = group.Wait()
@@ -366,52 +374,36 @@ func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Clu
 	}
 }
 
-func handleClusterEvents(ctx context.Context, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster) error {
+func handleClusterEvents(ctx context.Context, callbackEndpoint string, c cluster.Cluster) error {
 	eventCh := c.EventChan()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case e := <-eventCh:
-			processClusterEvent(mapic, bal, e)
+			processClusterEvent(callbackEndpoint, e)
 		}
 	}
 }
 
-func processClusterEvent(mapic mistapiconnector.IMac, bal balancer.Balancer, userEvent serf.UserEvent) {
-	go func() {
-		e, err := events.Unmarshal(userEvent.Payload)
-		if err != nil {
-			glog.Errorf("cannot unmarshal received serf event %v: %s", userEvent, err)
-			return
-		}
-		switch event := e.(type) {
-		case *events.StreamEvent:
-			glog.V(5).Infof("received serf StreamEvent: %v", event.PlaybackID)
-			mapic.RefreshStreamIfNeeded(event.PlaybackID)
-		case *events.NukeEvent:
-			glog.V(5).Infof("received serf NukeEvent: %v", event.PlaybackID)
-			mapic.NukeStream(event.PlaybackID)
-			return
-		case *events.StopSessionsEvent:
-			glog.V(5).Infof("received serf StopSessionsEvent: %v", event.PlaybackID)
-			mapic.StopSessions(event.PlaybackID)
-			return
-		case *events.NodeUpdateEvent:
-			if glog.V(5) {
-				glog.Infof("received serf NodeUpdateEvent. Node: %s. Length: %d bytes. Ingest Streams: %v. Non-Ingest Streams: %v", event.NodeID, len(userEvent.Payload), strings.Join(event.GetIngestStreams(), ","), strings.Join(event.GetStreams(), ","))
-			}
+func processClusterEvent(callbackEndpoint string, userEvent serf.UserEvent) {
+	client := &http.Client{}
+	glog.V(5).Infof("received serf user event, propagating to %s, event=%s", callbackEndpoint, userEvent.String())
 
-			bal.UpdateNodes(event.NodeID, event.NodeMetrics)
-			for _, stream := range event.GetStreams() {
-				bal.UpdateStreams(event.NodeID, stream, false)
-			}
-			for _, stream := range event.GetIngestStreams() {
-				bal.UpdateStreams(event.NodeID, stream, true)
-			}
-		default:
-			glog.Errorf("unsupported serf event: %v", e)
+	go func() {
+		req, err := http.NewRequest("POST", callbackEndpoint, bytes.NewBuffer(userEvent.Payload))
+		if err != nil {
+			glog.Errorf("error creating request: %v", err)
+			return
 		}
+		resp, err := client.Do(req)
+		if err != nil {
+			glog.Errorf("error sending request: %v", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		glog.V(5).Infof("propagated serf user event to %s, event=%s", callbackEndpoint, userEvent.String())
 	}()
 }
 
