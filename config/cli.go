@@ -25,6 +25,7 @@ type Cli struct {
 	MistUser                  string
 	MistPassword              string
 	MistPrometheus            string
+	Mode                      string
 	MistPort                  int
 	MistConnectTimeout        time.Duration
 	MistStreamSource          string
@@ -71,6 +72,8 @@ type Cli struct {
 	KafkaUser                 string
 	KafkaPassword             string
 	AnalyticsKafkaTopic       string
+	SerfMembersEndpoint       string
+	CatalystApiURL            string
 
 	// mapping playbackId to value between 0.0 to 100.0
 	CdnRedirectPlaybackPct             map[string]float64
@@ -108,6 +111,14 @@ func (cli *Cli) EncryptBytes() ([]byte, error) {
 // Should we enable mapic?
 func (cli *Cli) ShouldMapic() bool {
 	return cli.APIServer != ""
+}
+
+func (cli *Cli) IsClusterMode() bool {
+	return cli.Mode == "cluster-only" || cli.Mode == "all"
+}
+
+func (cli *Cli) IsApiMode() bool {
+	return cli.Mode == "api-only" || cli.Mode == "all"
 }
 
 // Should we enable mist-cleanup script to run periodically and delete leaky shm?
