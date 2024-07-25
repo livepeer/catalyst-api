@@ -104,13 +104,13 @@ func testGenerateThumbsRun(t *testing.T, outDir, input string) {
 
 	expectedVtt := `WEBVTT
 00:00:00.000 --> 00:00:10.000
-keyframes_0.jpg
+keyframes_0.png
 
 00:00:10.000 --> 00:00:20.000
-keyframes_1.jpg
+keyframes_1.png
 
 00:00:20.000 --> 00:00:30.000
-keyframes_2.jpg
+keyframes_2.png
 
 `
 
@@ -118,7 +118,7 @@ keyframes_2.jpg
 	require.NoError(t, err)
 	require.Equal(t, expectedVtt, string(vtt))
 
-	files, err := filepath.Glob(filepath.Join(outDir, "thumbnails", "*.jpg"))
+	files, err := filepath.Glob(filepath.Join(outDir, "thumbnails", "*.png"))
 	require.NoError(t, err)
 	require.Len(t, files, 3)
 
@@ -143,19 +143,19 @@ func Test_thumbFilename(t *testing.T) {
 			name:          "index",
 			segmentURI:    "index0.ts",
 			segmentOffset: 0,
-			want:          "keyframes_0.jpg",
+			want:          "keyframes_0.png",
 		},
 		{
 			name:          "clip",
 			segmentURI:    "clip_1.ts",
 			segmentOffset: 0,
-			want:          "keyframes_1.jpg",
+			want:          "keyframes_1.png",
 		},
 		{
 			name:          "clip",
 			segmentURI:    "clip_101.ts",
 			segmentOffset: 100,
-			want:          "keyframes_1.jpg",
+			want:          "keyframes_1.png",
 		},
 	}
 	for _, tt := range tests {
