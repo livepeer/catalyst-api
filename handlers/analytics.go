@@ -114,7 +114,7 @@ func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 		}
 		geo, err := parseAnalyticsGeo(r)
 		if err != nil {
-			glog.Warning("error parsing geo info from analytics log request header, err=%v", err)
+			glog.Warning("cannot parse geo info from analytics log request header, err=%v", err)
 		}
 		extData, err := c.extFetcher.Fetch(log.PlaybackID)
 		if err != nil {
