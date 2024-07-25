@@ -23,15 +23,16 @@ type ExternalData struct {
 type ExternalDataFetcher struct {
 	streamCache mistapiconnector.IStreamCache
 	lapi        *api.Client
-
-	cache map[string]ExternalData
-	mu    sync.RWMutex
+	lapiCached  *mistapiconnector.ApiClientCached
+	cache       map[string]ExternalData
+	mu          sync.RWMutex
 }
 
 func NewExternalDataFetcher(streamCache mistapiconnector.IStreamCache, lapi *api.Client) *ExternalDataFetcher {
 	return &ExternalDataFetcher{
 		streamCache: streamCache,
 		lapi:        lapi,
+		lapiCached:  mistapiconnector.NewApiClientCached(lapi),
 		cache:       make(map[string]ExternalData),
 	}
 }
@@ -62,7 +63,7 @@ func (e *ExternalDataFetcher) Fetch(playbackID string) (ExternalData, error) {
 	}
 
 	// Not found in any cache, try querying Studio API to get Stream
-	stream, streamErr := e.lapi.GetStreamByPlaybackID(playbackID)
+	stream, streamErr := e.lapiCached.GetStreamByPlaybackID(playbackID)
 	if streamErr == nil {
 		return e.extDataFromStream(playbackID, stream)
 	}
