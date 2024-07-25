@@ -4,6 +4,7 @@ import "testing"
 
 func TestGetStorageBackupURL(t *testing.T) {
 	StorageFallbackURLs = map[string]string{"https://storj.livepeer.com/catalyst-recordings-com/hls": "https://google.livepeer.com/catalyst-recordings-com/hls"}
+	defer func() { StorageFallbackURLs = nil }()
 	tests := []struct {
 		name   string
 		urlStr string

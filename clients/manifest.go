@@ -23,11 +23,12 @@ import (
 )
 
 const (
-	MasterManifestFilename = "index.m3u8"
-	DashManifestFilename   = "index.mpd"
-	ClipManifestFilename   = "clip.m3u8"
-	ManifestUploadTimeout  = 5 * time.Minute
-	Fmp4PostfixDir         = "fmp4"
+	MasterManifestFilename    = "index.m3u8"
+	DashManifestFilename      = "index.mpd"
+	ClipManifestFilename      = "clip.m3u8"
+	ManifestUploadTimeout     = 5 * time.Minute
+	Fmp4PostfixDir            = "fmp4"
+	manifestNotFoundTolerance = 10 * time.Second
 )
 
 func DownloadRetryBackoffLong() backoff.BackOff {
@@ -168,7 +169,7 @@ func downloadManifest(requestID, sourceManifestOSURL string) (playlist m3u8.Play
 	err = backoff.Retry(func() error {
 		rc, err := GetFile(context.Background(), requestID, sourceManifestOSURL, dStorage)
 		if err != nil {
-			if time.Since(start) > 10*time.Second && errors.IsObjectNotFound(err) {
+			if time.Since(start) > manifestNotFoundTolerance && errors.IsObjectNotFound(err) {
 				// bail out of the retries earlier for not found errors because it will be quite a common scenario
 				// where the backup manifest does not exist and we don't want to wait the whole 50s of retries for
 				// every recording job
