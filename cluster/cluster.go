@@ -47,7 +47,7 @@ type Member struct {
 	Status string            `json:"status"`
 }
 
-var mediaFilter = map[string]string{"node": "media"}
+var MediaFilter = map[string]string{"node": "media"}
 
 // Create a connection to a new Cluster that will immediately connect
 func NewCluster(config *config.Cli) Cluster {
@@ -182,10 +182,25 @@ func (c *ClusterImpl) retryJoin(ctx context.Context) {
 }
 
 func (c *ClusterImpl) MembersFiltered(filter map[string]string, status, name string) ([]Member, error) {
-	all := c.serf.Members()
-	nodes := []Member{}
+	return FilterMembers(toClusterMembers(c.serf.Members()), filter, status, name)
+}
+
+func toClusterMembers(members []serf.Member) []Member {
+	var nodes []Member
+	for _, member := range members {
+		nodes = append(nodes, Member{
+			Name:   member.Name,
+			Tags:   member.Tags,
+			Status: member.Status.String(),
+		})
+	}
+	return nodes
+}
+
+func FilterMembers(all []Member, filter map[string]string, status string, name string) ([]Member, error) {
+	var nodes []Member
 	for _, member := range all {
-		if status != "" && status != member.Status.String() {
+		if status != "" && status != member.Status {
 			continue
 		}
 		if name != "" && name != member.Name {
@@ -200,11 +215,7 @@ func (c *ClusterImpl) MembersFiltered(filter map[string]string, status, name str
 			}
 		}
 		if matches {
-			nodes = append(nodes, Member{
-				Name:   member.Name,
-				Tags:   member.Tags,
-				Status: member.Status.String(),
-			})
+			nodes = append(nodes, member)
 		}
 	}
 	return nodes, nil
@@ -272,7 +283,7 @@ func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 			return nil
 		}
 
-		members, err := c.MembersFiltered(mediaFilter, "alive", "")
+		members, err := c.MembersFiltered(MediaFilter, "alive", "")
 
 		if err != nil {
 			glog.Errorf("Error getting serf, crashing: %v\n", err)

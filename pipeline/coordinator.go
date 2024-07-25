@@ -329,18 +329,19 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		if p.C2PA {
 			si.C2PA = c.C2PA
 		}
-		si.SourceFile = osTransferURL.String()  // OS URL used by ffmpeg pipeline
-		si.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert pipeline
-		si.InputFileInfo = inputVideoProbe
-		si.GenerateMP4 = ShouldGenerateMP4(sourceURL, p.Mp4TargetURL, p.FragMp4TargetURL, p.Mp4OnlyShort, si.InputFileInfo.Duration)
-		si.DownloadDone = time.Now()
-
+		si.SourceFile = osTransferURL.String() // OS URL used by ffmpeg pipeline
 		log.AddContext(p.RequestID, "new_source_url", si.SourceFile)
+
+		si.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert
 		log.AddContext(p.RequestID, "signed_url", si.SignedSourceURL)
 
-		if si.GenerateMP4 {
-			log.Log(si.RequestID, "MP4s will be generated", "duration", si.InputFileInfo.Duration)
-		}
+		si.InputFileInfo = inputVideoProbe
+
+		shouldGenerateMP4, reason := ShouldGenerateMP4(sourceURL, p.Mp4TargetURL, p.FragMp4TargetURL, p.Mp4OnlyShort, si.InputFileInfo.Duration)
+		log.Log(si.RequestID, "Deciding whether to generate MP4s", "should_generate", shouldGenerateMP4, "duration", si.InputFileInfo.Duration, "reason", reason)
+		si.GenerateMP4 = shouldGenerateMP4
+
+		si.DownloadDone = time.Now()
 
 		c.startUploadJob(si)
 		return nil, nil
@@ -383,26 +384,26 @@ func checkClipResolution(p UploadJobPayload, inputVideoProbe *video.InputVideo, 
 	}
 }
 
-func ShouldGenerateMP4(sourceURL, mp4TargetUrl *url.URL, fragMp4TargetUrl *url.URL, mp4OnlyShort bool, durationSecs float64) bool {
+func ShouldGenerateMP4(sourceURL, mp4TargetUrl *url.URL, fragMp4TargetUrl *url.URL, mp4OnlyShort bool, durationSecs float64) (bool, string) {
 	// Skip mp4 generation if we weren't able to determine the duration of the input file for any reason
 	if durationSecs == 0.0 {
-		return false
+		return false, "duration is missing or zero"
 	}
 	// We're currently memory-bound for generating MP4s above a certain file size
 	// This has been hitting us for long recordings, so do a crude "is it longer than 12 hours?" check and skip the MP4 if it is
 	if clients.IsHLSInput(sourceURL) && durationSecs > maxRecordingMP4Duration.Seconds() {
-		return false
+		return false, "recording duration is too long"
 	}
 
 	if mp4TargetUrl != nil && (!mp4OnlyShort || durationSecs <= maxMP4OutDuration.Seconds()) {
-		return true
+		return true, ""
 	}
 
-	if fragMp4TargetUrl != nil {
-		return true
+	if fragMp4TargetUrl == nil {
+		return false, "missing MP4 target URL"
 	}
 
-	return false
+	return true, ""
 }
 
 func (c *Coordinator) startUploadJob(p *JobInfo) {

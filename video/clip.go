@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/grafov/m3u8"
-	"github.com/livepeer/catalyst-api/log"
+	"math"
 	"os/exec"
 	"time"
+
+	"github.com/grafov/m3u8"
+	"github.com/livepeer/catalyst-api/log"
 )
 
 type ClipStrategy struct {
@@ -59,8 +61,12 @@ func getRelevantSegment(allSegments []*m3u8.MediaSegment, playHeadTime float64, 
 		}
 		// Check if the playhead is within the current segment and skip to
 		// the next segment if it's not. Also update the play head by referencing
-		// the starting time of the next segment.
-		playHeadDiff = playHeadTime - segment.Duration
+		// the starting time of the next segment. Rounding ensures the -ss and -to
+		// parameters used by ffmpeg fit within 3 decimal places -- otherwise we
+		// run the risk of an end segment with a very small offset that will get
+		// rounded to 0 and cause the ffmpeg pipeline to fail since both -ss and
+		// -to will be set to 0.
+		playHeadDiff = math.Round((playHeadTime-segment.Duration)*1000) / 1000
 		if playHeadDiff > 0.0 {
 			playHeadTime = playHeadDiff
 			continue

@@ -19,45 +19,54 @@ import (
 	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/balancer"
 	"github.com/livepeer/catalyst-api/cluster"
-	"golang.org/x/sync/errgroup"
 )
 
 var mistUtilLoadSingleRequestTimeout = 15 * time.Second
 var mistUtilLoadLoopTimeout = 2 * time.Minute
 
 type MistBalancer struct {
+	isLocal  bool
 	config   *balancer.Config
-	cmd      *exec.Cmd
 	endpoint string
 	// Blocks until initial startup
 	startupOnce  sync.Once
 	startupError error
 }
 
-// create a new load balancer instance
-func NewBalancer(config *balancer.Config) balancer.Balancer {
+// NewLocalBalancer creates a new local MistUtilLoad instance
+func NewLocalBalancer(config *balancer.Config) balancer.Balancer {
 	_, err := exec.LookPath("MistUtilLoad")
 	if err != nil {
 		glog.Warning("MistUtilLoad not found, not doing meaningful balancing")
 		return &balancer.BalancerStub{}
 	}
 	return &MistBalancer{
+		isLocal:  true,
 		config:   config,
-		cmd:      nil,
 		endpoint: fmt.Sprintf("http://127.0.0.1:%d", config.MistUtilLoadPort),
+	}
+}
+
+// NewRemoteBalancer creates a new remote MistUtilLoad instance
+func NewRemoteBalancer(config *balancer.Config) balancer.Balancer {
+	return &MistBalancer{
+		config:   config,
+		endpoint: fmt.Sprintf("http://%s:%d", config.MistHost, config.MistUtilLoadPort),
 	}
 }
 
 // start this load balancer instance, execing MistUtilLoad if necessary
 func (b *MistBalancer) Start(ctx context.Context) error {
-	group, ctx := errgroup.WithContext(ctx)
-	group.Go(func() error {
-		return b.execBalancer(ctx, b.config.Args)
-	})
-	group.Go(func() error {
-		return b.waitForStartup(ctx)
-	})
-	return group.Wait()
+	if !b.isLocal {
+		// remote load balancer instance is not managed by catalyst-api
+		return nil
+	}
+	b.killPreviousBalancer(ctx)
+
+	go func() {
+		b.reconcileBalancerLoop(ctx, b.config.Args)
+	}()
+	return b.waitForStartup(ctx)
 }
 
 // wait for the mist LB to be available. can be called multiple times.
@@ -245,20 +254,63 @@ func (b *MistBalancer) formatNodeAddress(server string) string {
 	return fmt.Sprintf(b.config.MistLoadBalancerTemplate, server)
 }
 
+// killPreviousBalancer cleans up the previous MistUtilLoad process if it exists.
+// It uses pkill to kill the process.
+func (b *MistBalancer) killPreviousBalancer(ctx context.Context) {
+	cmd := exec.CommandContext(ctx, "pkill", "-9", "-f", "MistUtilLoad")
+	err := cmd.Run()
+	if err != nil {
+		glog.V(6).Infof("Killing MistUtilLoad failed, most probably it was not running, err=%v", err)
+	}
+}
+
+// reconcileBalancerLoop makes sure that MistUtilLoad is up and running all the time.
+func (b *MistBalancer) reconcileBalancerLoop(ctx context.Context, balancerArgs []string) {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		b.reconcileBalancer(ctx, balancerArgs)
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// reconcileBalancer makes sure that MistUtilLoad is up and running.
+func (b *MistBalancer) reconcileBalancer(ctx context.Context, balancerArgs []string) {
+	if !b.isBalancerRunning(ctx) {
+		glog.Info("Starting MistUtilLoad")
+		err := b.execBalancer(ctx, balancerArgs)
+		if err != nil {
+			glog.Warningf("Error starting MistUtilLoad: %v", err)
+		}
+	}
+}
+
+// isBalancerRunning checks if MistUtilLoad is running.
+func (b *MistBalancer) isBalancerRunning(ctx context.Context) bool {
+	cmd := exec.CommandContext(ctx, "pgrep", "-f", "MistUtilLoad")
+	err := cmd.Run()
+	return err == nil
+}
+
 func (b *MistBalancer) execBalancer(ctx context.Context, balancerArgs []string) error {
 	args := append(balancerArgs, "-p", fmt.Sprintf("%d", b.config.MistUtilLoadPort), "-g", "4")
 	glog.Infof("Running MistUtilLoad with %v", args)
-	b.cmd = exec.CommandContext(ctx, "MistUtilLoad", args...)
+	cmd := exec.CommandContext(ctx, "MistUtilLoad", args...)
 
-	b.cmd.Stdout = os.Stdout
-	b.cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
-	err := b.cmd.Start()
+	err := cmd.Start()
 	if err != nil {
 		return err
 	}
 
-	err = b.cmd.Wait()
+	err = cmd.Wait()
 	if err != nil {
 		return err
 	}

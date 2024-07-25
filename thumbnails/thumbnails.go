@@ -219,6 +219,8 @@ func processSegment(input string, thumbOut string) error {
 					"vframes": "1",
 					// video filter to resize
 					"vf": fmt.Sprintf("scale=%s:force_original_aspect_ratio=decrease", resolution),
+					// set quality
+					"q:v": "2",
 				},
 			).OverWriteOutput().WithErrorOutput(&ffmpegErr).Run()
 	}, clients.DownloadRetryBackoff())
