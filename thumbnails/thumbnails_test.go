@@ -125,7 +125,7 @@ keyframes_2.png
 	for _, file := range files {
 		data, err := ffprobe.ProbeURL(context.Background(), file)
 		require.NoError(t, err)
-		require.Equal(t, "image2", data.Format.FormatName)
+		require.Equal(t, "png_pipe", data.Format.FormatName)
 		require.NotNil(t, data.FirstVideoStream())
 		require.Equal(t, 853, data.FirstVideoStream().Width)
 		require.Equal(t, 480, data.FirstVideoStream().Height)
