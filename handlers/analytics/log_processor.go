@@ -182,11 +182,21 @@ func (p *LogProcessor) sendEvents() {
 	}
 	p.logs = []LogData{}
 
-	err := p.writer.WriteMessages(context.Background(), msgs...)
-	if err != nil {
-		metrics.Metrics.AnalyticsMetrics.LogProcessorWriteErrors.Inc()
-		glog.Errorf("error while sending analytics log to Kafka, err=%v", err)
+	// We retry sending messages to Kafka in case of a failure
+	// We don't use any backoff, because the number of events are filling up very quickly, so in case of a failure
+	// it's better to lose analytics logs than fill up the memory and crashing the whole catalyst-api
+	kafkaWriteRetries := 3
+	var err error
+	for i := 0; i < kafkaWriteRetries; i++ {
+		err = p.writer.WriteMessages(context.Background(), msgs...)
+		if err == nil {
+			return
+		} else {
+			glog.Warningf("error while sending analytics log to Kafka, retrying, try=%d, err=%v", i, err)
+		}
 	}
+	metrics.Metrics.AnalyticsMetrics.LogProcessorWriteErrors.Inc()
+	glog.Errorf("error while sending analytics log to Kafka, the analytics logs are lost, err=%d", err)
 }
 
 func (p *LogProcessor) logWriteMetrics() {
