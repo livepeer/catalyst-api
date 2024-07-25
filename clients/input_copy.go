@@ -287,6 +287,30 @@ func GetFile(ctx context.Context, requestID, url string, dStorage *DStorageDownl
 	}
 }
 
+func GetFileWithBackup(ctx context.Context, requestID, url string, dStorage *DStorageDownload) (io.ReadCloser, string, error) {
+	rc, err := GetFile(ctx, requestID, url, dStorage)
+	if err == nil {
+		return rc, url, nil
+	}
+
+	backupURL := config.GetStorageBackupURL(url)
+	if backupURL == "" {
+		return nil, url, err
+	}
+	rc, backupErr := GetFile(ctx, requestID, backupURL, dStorage)
+	if backupErr == nil {
+		return rc, backupURL, nil
+	}
+
+	// prioritize retriable errors in the response so we don't skip retries
+	if !catErrs.IsUnretriable(err) {
+		return nil, url, err
+	} else if !catErrs.IsUnretriable(backupErr) {
+		return nil, backupURL, backupErr
+	}
+	return nil, url, err
+}
+
 var retryableHttpClient = newRetryableHttpClient()
 
 func newRetryableHttpClient() *http.Client {

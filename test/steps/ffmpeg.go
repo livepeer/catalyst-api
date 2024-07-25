@@ -2,14 +2,17 @@ package steps
 
 import (
 	"bytes"
+	"context"
 	"fmt"
-	"os"
+	"io"
+	"log"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/grafov/m3u8"
+	"github.com/livepeer/go-tools/drivers"
 )
 
 // Confirm that we have an ffmpeg binary on the system the tests are running on
@@ -21,35 +24,46 @@ func (s *StepContext) CheckFfmpeg() error {
 }
 
 func (s *StepContext) AllOfTheSourceSegmentsAreWrittenToStorageWithinSeconds(numSegments, secs int) error {
-	// Comes in looking like file:/var/folders/qr/sr8gs8916zd2wjbx50d3c3yc0000gn/T/livepeer/source
-	// and we want /var/folders/qr/sr8gs8916zd2wjbx50d3c3yc0000gn/T/livepeer/source/aceaegdf/source/*.ts
-	segmentingDir := filepath.Join(strings.TrimPrefix(s.SourceOutputDir, "file:"), s.latestRequestID, "source/*.ts")
+	osDriver, err := drivers.ParseOSURL(s.SourceOutputDir, true)
+	if err != nil {
+		return fmt.Errorf("could not parse object store url: %w", err)
+	}
+	session := osDriver.NewSession(filepath.Join(s.latestRequestID, "source"))
 
 	var latestNumSegments int
-	for x := 0; x < secs; x++ {
-		files, err := filepath.Glob(segmentingDir)
-		if err != nil {
-			return err
+	for x := 0; x < secs; x++ { // retry loop
+		if x > 0 {
+			time.Sleep(time.Second)
 		}
-		latestNumSegments = len(files)
-		if latestNumSegments == numSegments {
+		page, err := session.ListFiles(context.Background(), "", "")
+		if err != nil {
+			log.Println("failed to list files: ", err)
+			continue
+		}
+
+		latestNumSegments = len(page.Files())
+		if latestNumSegments == numSegments+1 {
 			return nil
 		}
-		time.Sleep(time.Second)
 	}
-	return fmt.Errorf("did not find the expected number of source segments in %s (wanted %d, got %d)", segmentingDir, numSegments, latestNumSegments)
+	return fmt.Errorf("did not find the expected number of source segments in %s (wanted %d, got %d)", s.SourceOutputDir, numSegments, latestNumSegments)
 }
 
 func (s *StepContext) TheSourceManifestIsWrittenToStorageWithinSeconds(secs, numSegments int) error {
-	// Comes in looking like file:/var/folders/qr/sr8gs8916zd2wjbx50d3c3yc0000gn/T/livepeer/source
-	// and we want /var/folders/qr/sr8gs8916zd2wjbx50d3c3yc0000gn/T/livepeer/source/aceaegdf/source/index.m3u8
-	sourceManifest := filepath.Join(strings.TrimPrefix(s.SourceOutputDir, "file:"), s.latestRequestID, "source/index.m3u8")
+	osDriver, err := drivers.ParseOSURL(s.SourceOutputDir, true)
+	if err != nil {
+		return fmt.Errorf("could not parse object store url: %w", err)
+	}
+	session := osDriver.NewSession(filepath.Join(s.latestRequestID, "source/index.m3u8"))
 
-	var manifestBytes []byte
-	var err error
+	var (
+		manifestBytes  []byte
+		fileInfoReader *drivers.FileInfoReader
+	)
 	for x := 0; x < secs; x++ {
-		manifestBytes, err = os.ReadFile(sourceManifest)
+		fileInfoReader, err = session.ReadData(context.Background(), "")
 		if err == nil {
+			manifestBytes, err = io.ReadAll(fileInfoReader.Body)
 			// Only break if the full manifest has been written
 			if strings.HasSuffix(strings.TrimSpace(string(manifestBytes)), "#EXT-X-ENDLIST") {
 				break

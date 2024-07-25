@@ -7,6 +7,7 @@ Feature: VOD Streaming
     Given the VOD API is running
     And the Client app is authenticated
     And an object store is available
+#    And a fallback object
     And Studio API server is running at "localhost:13000"
     And a Broadcaster is running at "localhost:18935"
     And Mediaconvert is running at "localhost:11111"
@@ -86,29 +87,30 @@ Feature: VOD Streaming
     Then I get an HTTP response with code "200"
     And I receive a Request ID in the response body
     And my "successful" vod request metrics get recorded
-    And the Broadcaster receives "3" segments for transcoding within "10" seconds
-    And "3" transcoded segments and manifests have been written to disk for profiles "270p0,low-bitrate" within "30" seconds
+    And the Broadcaster receives "<segment_count>" segments for transcoding within "10" seconds
+    And "<segment_count>" transcoded segments and manifests have been written to disk for profiles "270p0,low-bitrate" within "30" seconds
     And a source copy has not been written to disk
     And I receive a "success" callback within "30" seconds
     And thumbnails are written to storage within "10" seconds
     And a row is written to the "vod_completed" database table containing the following values
-      | column                   | value           |
-      | in_fallback_mode         | false           |
-      | is_clip                  | false           |
-      | pipeline                 | catalyst_ffmpeg |
-      | profiles_count           | 2               |
-      | source_codec_audio       | aac             |
-      | source_codec_video       | h264            |
-      | source_duration          | 30000           |
-      | source_segment_count     | 3               |
-      | state                    | completed       |
-      | transcoded_segment_count | 3               |
+      | column                   | value             |
+      | in_fallback_mode         | false             |
+      | is_clip                  | false             |
+      | pipeline                 | catalyst_ffmpeg   |
+      | profiles_count           | 2                 |
+      | source_codec_audio       | aac               |
+      | source_codec_video       | h264              |
+      | source_duration          | <source_duration> |
+      | source_segment_count     | <segment_count>   |
+      | state                    | completed         |
+      | transcoded_segment_count | <segment_count>   |
 
     Examples:
-      | payload                                                                     |
-      | a valid ffmpeg upload vod request with a source manifest                    |
-      | a valid ffmpeg upload vod request with a source manifest and source copying |
-      | a valid ffmpeg upload vod request with a source manifest and thumbnails     |
+      | payload                                                                     | segment_count | source_duration |
+      | a valid ffmpeg upload vod request with a source manifest                    | 3             | 30000           |
+      | a valid ffmpeg upload vod request with a source manifest and source copying | 3             | 30000           |
+      | a valid ffmpeg upload vod request with a source manifest and thumbnails     | 3             | 30000           |
+      | a valid ffmpeg upload vod request with a source manifest from object store  | 4             | 40000           |
 
   Scenario Outline: Submit an audio-only asset for ingestion
     When I submit to the internal "/api/vod" endpoint with "<payload>"

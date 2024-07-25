@@ -59,6 +59,7 @@ type Cli struct {
 	EncryptKey                string
 	VodDecryptPublicKey       string
 	VodDecryptPrivateKey      string
+	StorageFallbackURLs       map[string]string
 	GateURL                   string
 	DataURL                   string
 	StreamHealthHookURL       string

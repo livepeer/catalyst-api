@@ -1,6 +1,8 @@
 package clients
 
 import (
+	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/grafov/m3u8"
+	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/video"
 	"github.com/stretchr/testify/require"
 )
@@ -39,7 +42,8 @@ func TestDownloadRenditionManifestFailsWhenItCantFindTheManifest(t *testing.T) {
 	defer func() { DownloadRetryBackoff = DownloadRetryBackoffLong }()
 	_, err := DownloadRenditionManifest("blah", "/tmp/something/x.m3u8")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "error downloading manifest")
+	require.Contains(t, err.Error(), "the specified file does not exist")
+	require.Contains(t, err.Error(), "ObjectNotFoundError")
 }
 
 func TestDownloadRenditionManifestFailsWhenItCantParseTheManifest(t *testing.T) {
@@ -332,4 +336,132 @@ func createDummyMediaSegments() []*m3u8.MediaSegment {
 			ProgramDateTime: currentTime.Add(15 * time.Second),
 		},
 	}
+}
+
+func TestDownloadRenditionManifestWithBackup(t *testing.T) {
+	completeManifest := `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-MEDIA-SEQUENCE:0
+#EXT-X-TARGETDURATION:10
+#EXTINF:10.000000,
+seg-0.ts
+#EXTINF:10.000000,
+seg-1.ts
+#EXTINF:10.000000,
+seg-2.ts
+#EXTINF:10.000000,
+seg-3.ts
+#EXT-X-ENDLIST
+`
+	inCompleteManifest := `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-MEDIA-SEQUENCE:0
+#EXT-X-TARGETDURATION:10
+#EXTINF:10.000000,
+seg-0.ts
+#EXTINF:10.000000,
+seg-1.ts
+#EXT-X-ENDLIST
+`
+
+	tests := []struct {
+		name            string
+		primaryManifest string
+		backupManifest  string
+		primarySegments []string
+		backupSegments  []string
+	}{
+		{
+			name:            "happy. all segments and manifest available on primary",
+			primaryManifest: completeManifest,
+			backupManifest:  "",
+			primarySegments: []string{"seg-0.ts", "seg-1.ts", "seg-2.ts", "seg-3.ts"},
+		},
+		{
+			name:            "all segments and manifest available on backup",
+			primaryManifest: inCompleteManifest,
+			backupManifest:  completeManifest,
+			backupSegments:  []string{"seg-0.ts", "seg-1.ts", "seg-2.ts", "seg-3.ts"},
+		},
+		{
+			name:            "all segments on backup and newest manifest on primary",
+			primaryManifest: completeManifest,
+			backupManifest:  inCompleteManifest,
+			backupSegments:  []string{"seg-0.ts", "seg-1.ts", "seg-2.ts", "seg-3.ts"},
+		},
+		{
+			name:            "all segments on primary and newest manifest on backup",
+			primaryManifest: inCompleteManifest,
+			backupManifest:  completeManifest,
+			primarySegments: []string{"seg-0.ts", "seg-1.ts", "seg-2.ts", "seg-3.ts"},
+		},
+		{
+			name:            "segments split between primary and backup, newest manifest on primary",
+			primaryManifest: completeManifest,
+			backupManifest:  inCompleteManifest,
+			primarySegments: []string{"seg-0.ts", "seg-2.ts"},
+			backupSegments:  []string{"seg-1.ts", "seg-3.ts"},
+		},
+		{
+			name:            "segments split between primary and backup, newest manifest on backup",
+			primaryManifest: inCompleteManifest,
+			backupManifest:  completeManifest,
+			primarySegments: []string{"seg-0.ts", "seg-2.ts"},
+			backupSegments:  []string{"seg-1.ts", "seg-3.ts"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir, err := os.MkdirTemp(os.TempDir(), "manifest-test-*")
+			require.NoError(t, err)
+			defer os.RemoveAll(dir)
+
+			err = os.Mkdir(filepath.Join(dir, "primary"), 0755)
+			require.NoError(t, err)
+			err = os.Mkdir(filepath.Join(dir, "backup"), 0755)
+			require.NoError(t, err)
+			config.StorageFallbackURLs = map[string]string{filepath.Join(dir, "primary"): filepath.Join(dir, "backup")}
+
+			err = os.WriteFile(filepath.Join(dir, "primary", "index.m3u8"), []byte(tt.primaryManifest), 0644)
+			require.NoError(t, err)
+			if tt.backupManifest != "" {
+				err = os.WriteFile(filepath.Join(dir, "backup", "index.m3u8"), []byte(tt.backupManifest), 0644)
+				require.NoError(t, err)
+			}
+
+			for _, segment := range tt.primarySegments {
+				err = os.WriteFile(filepath.Join(dir, "primary", segment), []byte{}, 0644)
+				require.NoError(t, err)
+			}
+			for _, segment := range tt.backupSegments {
+				err = os.WriteFile(filepath.Join(dir, "backup", segment), []byte{}, 0644)
+				require.NoError(t, err)
+			}
+
+			renditionUrl, err := RecordingBackupCheck("requestID", toUrl(t, filepath.Join(dir, "primary", "index.m3u8")), toUrl(t, filepath.Join(dir, "transfer")))
+			require.NoError(t, err)
+
+			file, err := os.Open(renditionUrl.String())
+			require.NoError(t, err)
+
+			// read resulting playlist
+			playlist, playlistType, err := m3u8.DecodeFrom(file, true)
+			require.NoError(t, err)
+			require.Equal(t, m3u8.MEDIA, playlistType)
+			mediaPlaylist, ok := playlist.(*m3u8.MediaPlaylist)
+			require.True(t, ok)
+
+			require.Len(t, mediaPlaylist.GetAllSegments(), 4)
+			for i, segment := range mediaPlaylist.GetAllSegments() {
+				require.True(t, filepath.IsAbs(segment.URI))
+				require.True(t, true, strings.HasSuffix(segment.URI, fmt.Sprintf("seg-%d.ts", i)))
+			}
+		})
+	}
+}
+
+func toUrl(t *testing.T, in string) *url.URL {
+	u, err := url.Parse(in)
+	require.NoError(t, err)
+	return u
 }

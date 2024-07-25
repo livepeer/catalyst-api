@@ -290,6 +290,12 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 
 		// Update osTransferURL if needed
 		if clients.IsHLSInput(sourceURL) {
+			// Handle falling back to backup bucket for manifest and segments
+			sourceURL, err = clients.RecordingBackupCheck(p.RequestID, sourceURL, osTransferURL.JoinPath(".."))
+			if err != nil {
+				return nil, err
+			}
+
 			// Currently we only clip an HLS source (e.g recordings or transcoded asset)
 			if p.ClipStrategy.Enabled {
 				err := backoff.Retry(func() error {
@@ -323,7 +329,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 		if p.C2PA {
 			si.C2PA = c.C2PA
 		}
-		si.SourceFile = osTransferURL.String() // OS URL used by mist
+		si.SourceFile = osTransferURL.String() // OS URL used by ffmpeg pipeline
 		log.AddContext(p.RequestID, "new_source_url", si.SourceFile)
 
 		si.SignedSourceURL = signedNewSourceURL // http(s) URL used by mediaconvert

@@ -52,4 +52,6 @@ var ImportIPFSGatewayURLs []*url.URL
 
 var ImportArweaveGatewayURLs []*url.URL
 
+var StorageFallbackURLs map[string]string
+
 var HTTPInternalAddress string

@@ -163,6 +163,10 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 	}
 	if strings.HasPrefix(payload, "a valid ffmpeg upload vod request with a source manifest") {
 		req.URL = "file://" + filepath.Join(sourceManifestDir, "tiny.m3u8")
+		if strings.Contains(payload, "from object store") {
+			req.URL = "http://" + minioAddress + "/rec-bucket/tiny.m3u8"
+		}
+
 		req.PipelineStrategy = "catalyst_ffmpeg"
 		req.OutputLocations = []OutputLocation{
 			{
@@ -211,7 +215,7 @@ func (s *StepContext) postRequest(baseURL, endpoint, payload string, headers map
 }
 
 func (s *StepContext) StartApp() error {
-	s.SourceOutputDir = fmt.Sprintf("file://%s/%s/", os.TempDir(), "livepeer/source")
+	s.SourceOutputDir = fmt.Sprintf("s3+http://%s:%s@%s/source", minioKey, minioKey, minioAddress)
 
 	App = exec.Command(
 		"./app",
@@ -220,12 +224,11 @@ func (s *StepContext) StartApp() error {
 		"-cluster-addr=127.0.0.1:19935",
 		"-broadcaster-url=http://127.0.0.1:18935",
 		`-metrics-db-connection-string=`+DB_CONNECTION_STRING,
-		"-private-bucket",
-		"fixtures/playback-bucket",
+		"-private-bucket=fixtures/playback-bucket",
 		"-gate-url=http://localhost:13000/api/access-control/gate",
 		"-external-transcoder=mediaconverthttp://examplekey:examplepass@127.0.0.1:11111?region=us-east-1&role=arn:aws:iam::exampleaccountid:examplerole&s3_aux_bucket=s3://example-bucket",
-		"-source-output",
-		s.SourceOutputDir,
+		fmt.Sprintf("-storage-fallback-urls=http://%s/rec-bucket=http://%s/rec-fallback-bucket", minioAddress, minioAddress),
+		fmt.Sprintf("-source-output=%s", s.SourceOutputDir),
 		"-no-mist",
 	)
 	outfile, err := os.Create("logs/app.log")

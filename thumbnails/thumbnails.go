@@ -31,35 +31,6 @@ func thumbWaitBackoff() backoff.BackOff {
 	return backoff.WithMaxRetries(backoff.NewConstantBackOff(30*time.Second), 10)
 }
 
-func getMediaManifest(requestID string, input string) (*m3u8.MediaPlaylist, error) {
-	var (
-		rc  io.ReadCloser
-		err error
-	)
-	err = backoff.Retry(func() error {
-		rc, err = clients.GetFile(context.Background(), requestID, input, nil)
-		return err
-	}, clients.DownloadRetryBackoff())
-	if err != nil {
-		return nil, fmt.Errorf("error downloading manifest: %w", err)
-	}
-	defer rc.Close()
-
-	manifest, playlistType, err := m3u8.DecodeFrom(rc, true)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode manifest: %w", err)
-	}
-
-	if playlistType != m3u8.MEDIA {
-		return nil, fmt.Errorf("received non-Media manifest, but currently only Media playlists are supported")
-	}
-	mediaPlaylist, ok := manifest.(*m3u8.MediaPlaylist)
-	if !ok || mediaPlaylist == nil {
-		return nil, fmt.Errorf("failed to parse playlist as MediaPlaylist")
-	}
-	return mediaPlaylist, nil
-}
-
 func getSegmentOffset(mediaPlaylist *m3u8.MediaPlaylist) (int64, error) {
 	segments := mediaPlaylist.GetAllSegments()
 	if len(segments) < 1 {
@@ -74,7 +45,7 @@ func getSegmentOffset(mediaPlaylist *m3u8.MediaPlaylist) (int64, error) {
 
 func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
 	// download and parse the manifest
-	mediaPlaylist, err := getMediaManifest(requestID, input)
+	mediaPlaylist, err := clients.DownloadRenditionManifest(requestID, input)
 	if err != nil {
 		return err
 	}
@@ -86,7 +57,7 @@ func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
 	if err != nil {
 		return err
 	}
-	segmentOffset, err := getSegmentOffset(mediaPlaylist)
+	segmentOffset, err := getSegmentOffset(&mediaPlaylist)
 	if err != nil {
 		return err
 	}
@@ -187,7 +158,7 @@ func GenerateThumbsAndVTT(requestID, input string, output *url.URL) error {
 
 func GenerateThumbsFromManifest(requestID, input string, output *url.URL) error {
 	// parse manifest and generate one thumbnail per segment
-	mediaPlaylist, err := getMediaManifest(requestID, input)
+	mediaPlaylist, err := clients.DownloadRenditionManifest(requestID, input)
 	if err != nil {
 		return err
 	}
@@ -195,7 +166,7 @@ func GenerateThumbsFromManifest(requestID, input string, output *url.URL) error 
 	if err != nil {
 		return err
 	}
-	segmentOffset, err := getSegmentOffset(mediaPlaylist)
+	segmentOffset, err := getSegmentOffset(&mediaPlaylist)
 	if err != nil {
 		return err
 	}
