@@ -32,7 +32,7 @@ type entry struct {
 func (a *ApiClientCached) GetStreamByPlaybackID(playbackId string) (*api.Stream, error) {
 	a.mu.RLock()
 	e, ok := a.streamCache[playbackId]
-	if ok && e.stream != nil && e.updateAt.Add(a.ttl).After(time.Now()) {
+	if ok && e.updateAt.Add(a.ttl).After(time.Now()) {
 		// Use cached value
 		a.mu.RUnlock()
 		return e.stream, e.err
@@ -44,7 +44,7 @@ func (a *ApiClientCached) GetStreamByPlaybackID(playbackId string) (*api.Stream,
 	defer a.mu.Unlock()
 	// Check again in case another goroutine has updated the cache in the meantime
 	e, ok = a.streamCache[playbackId]
-	if ok && e.stream != nil && e.updateAt.Add(a.ttl).After(time.Now()) {
+	if ok && e.updateAt.Add(a.ttl).After(time.Now()) {
 		return e.stream, e.err
 	}
 	// No value in the cache, fetch from Livepeer API and store the result in a cache
