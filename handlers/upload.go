@@ -109,9 +109,7 @@ func (r UploadVODRequest) IsProfileValid() bool {
 }
 
 func (r UploadVODRequest) IsClippingRequest() bool {
-	return r.hasTargetOutput(func(o UploadVODRequestOutputLocationOutputs) string {
-		return o.Clip
-	})
+	return r.ClipStrategy.PlaybackID != ""
 }
 
 func (r UploadVODRequest) ValidateClippingRequest() error {
@@ -164,15 +162,6 @@ func (r UploadVODRequest) getSourceCopyEnabled() bool {
 }
 
 type getOutput func(UploadVODRequestOutputLocationOutputs) string
-
-func (r UploadVODRequest) hasTargetOutput(getOutput getOutput) bool {
-	for _, o := range r.OutputLocations {
-		if getOutput(o.Outputs) == "enabled" {
-			return true
-		}
-	}
-	return false
-}
 
 func (r UploadVODRequest) getTargetOutput(getOutput getOutput) UploadVODRequestOutputLocation {
 	for _, o := range r.OutputLocations {

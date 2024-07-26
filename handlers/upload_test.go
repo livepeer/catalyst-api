@@ -200,31 +200,13 @@ func TestIsProfileValid(t *testing.T) {
 
 func TestWeCanDetermineIfItsAClippingRequest(t *testing.T) {
 	u := UploadVODRequest{
-		OutputLocations: []UploadVODRequestOutputLocation{
-			{
-				URL:  "some-url",
-				Type: "clip",
-				Outputs: UploadVODRequestOutputLocationOutputs{
-					Clip: "enabled",
-				},
-			},
+		ClipStrategy: video.ClipStrategy{
+			PlaybackID: "12345",
 		},
 	}
 	require.True(t, u.IsClippingRequest())
 
-	u = UploadVODRequest{
-		OutputLocations: []UploadVODRequestOutputLocation{
-			{
-				URL:  "some-url",
-				Type: "vod",
-				Outputs: UploadVODRequestOutputLocationOutputs{
-					HLS:        "enabled",
-					MP4:        "enabled",
-					Thumbnails: "enabled",
-				},
-			},
-		},
-	}
+	u = UploadVODRequest{}
 	require.False(t, u.IsClippingRequest())
 }
 
