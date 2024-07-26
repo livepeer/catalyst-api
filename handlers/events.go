@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/golang/glog"
@@ -22,6 +23,8 @@ type EventsHandlersCollection struct {
 
 	mapic mistapiconnector.IMac
 	bal   balancer.Balancer
+
+	eventsEndpoint string
 }
 
 type Event struct {
@@ -29,15 +32,17 @@ type Event struct {
 	PlaybackID string `json:"playback_id"`
 }
 
-func NewEventsHandlersCollection(cluster cluster.Cluster, mapic mistapiconnector.IMac, bal balancer.Balancer) *EventsHandlersCollection {
+func NewEventsHandlersCollection(cluster cluster.Cluster, mapic mistapiconnector.IMac, bal balancer.Balancer, eventsEndpoint string) *EventsHandlersCollection {
 	return &EventsHandlersCollection{
-		cluster: cluster,
-		mapic:   mapic,
-		bal:     bal,
+		cluster:        cluster,
+		mapic:          mapic,
+		bal:            bal,
+		eventsEndpoint: eventsEndpoint,
 	}
 }
 
-// Events is a handler called by Studio API to send an event, e.g., to refresh a stream or nuke a stream.
+// Events is a handler called by Catalyst API which forwards events from Studio API.
+// Used to, e.g., refresh a stream or nuke a stream.
 // This event is then propagated to all Serf nodes and then forwarded to catalyst-api and handled by ReceiveUserEvent().
 func (d *EventsHandlersCollection) Events() httprouter.Handle {
 	schema := inputSchemasCompiled["Event"]
@@ -72,6 +77,39 @@ func (d *EventsHandlersCollection) Events() httprouter.Handle {
 			errors.WriteHTTPInternalServerError(w, "Cannot process event", err)
 			return
 		}
+	}
+}
+
+// ProxyEvents is a handler of Catalyst API called by Studio API.
+// It proxies the requests to Catalyst.
+func (d *EventsHandlersCollection) ProxyEvents() httprouter.Handle {
+	// Proxy the request to d.eventsEndpoint
+	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+		// Read the request body
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			glog.Errorf("Cannot read request body: %s", err)
+			errors.WriteHTTPBadRequest(w, "Cannot read request body", err)
+			return
+		}
+
+		// Create a new request to the target endpoint
+		proxyReq, err := http.NewRequest(req.Method, d.eventsEndpoint, bytes.NewReader(body))
+		if err != nil {
+			glog.Errorf("Cannot create proxy request: %s", err)
+			errors.WriteHTTPInternalServerError(w, "Cannot create proxy request", err)
+			return
+		}
+
+		// Send the request to the target endpoint
+		client := &http.Client{}
+		resp, err := client.Do(proxyReq)
+		if err != nil {
+			glog.Errorf("Cannot send proxy request: %s", err)
+			errors.WriteHTTPInternalServerError(w, "Cannot send proxy request", err)
+			return
+		}
+		defer resp.Body.Close()
 	}
 }
 

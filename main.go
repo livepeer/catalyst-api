@@ -133,6 +133,7 @@ func main() {
 	fs.StringVar(&cli.KafkaPassword, "kafka-password", "", "Kafka Password")
 	fs.StringVar(&cli.AnalyticsKafkaTopic, "analytics-kafka-topic", "", "Kafka Topic used to send analytics logs")
 	fs.StringVar(&cli.SerfMembersEndpoint, "serf-members-endpoint", "", "Endpoint to get the current members in the cluster")
+	fs.StringVar(&cli.EventsEndpoint, "events-endpoint", "", "Endpoint to send proxied events from catalyst-api into catalyst")
 	fs.StringVar(&cli.CatalystApiURL, "catalyst-api-url", "", "Endpoint for externally deployed catalyst-api; if not set, use local catalyst-api")
 	pprofPort := fs.Int("pprof-port", 6061, "Pprof listen port")
 
@@ -350,7 +351,7 @@ func main() {
 	})
 
 	group.Go(func() error {
-		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker, metricsDB, serfMembersEndpoint)
+		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker, metricsDB, serfMembersEndpoint, cli.EventsEndpoint)
 	})
 
 	err = group.Wait()

@@ -29,8 +29,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker, metricsDB *sql.DB, serfMembersEndpoint string) error {
-	router := NewCatalystAPIRouterInternal(cli, vodEngine, mapic, bal, c, broker, metricsDB, serfMembersEndpoint)
+func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker, metricsDB *sql.DB, serfMembersEndpoint, eventsEndpoint string) error {
+	router := NewCatalystAPIRouterInternal(cli, vodEngine, mapic, bal, c, broker, metricsDB, serfMembersEndpoint, eventsEndpoint)
 	server := http.Server{Addr: cli.HTTPInternalAddress, Handler: router}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -56,7 +56,7 @@ func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipe
 	return server.Shutdown(ctx)
 }
 
-func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker, metricsDB *sql.DB, serfMembersEndpoint string) *httprouter.Router {
+func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker, metricsDB *sql.DB, serfMembersEndpoint, eventsEndpoint string) *httprouter.Router {
 	router := httprouter.New()
 	withLogging := middleware.LogRequest()
 	withAuth := middleware.IsAuthorized
@@ -73,7 +73,7 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	spkiPublicKey, _ := crypto.ConvertToSpki(cli.VodDecryptPublicKey)
 
 	catalystApiHandlers := &handlers.CatalystAPIHandlersCollection{VODEngine: vodEngine}
-	eventsHandler := handlers.NewEventsHandlersCollection(c, mapic, bal)
+	eventsHandler := handlers.NewEventsHandlersCollection(c, mapic, bal, eventsEndpoint)
 	ffmpegSegmentingHandlers := &ffmpeg.HandlersCollection{VODEngine: vodEngine}
 	accessControlHandlers := accesscontrol.NewAccessControlHandlersCollection(cli, mapic)
 	analyticsHandlers := analytics.NewAnalyticsHandler(metricsDB)
@@ -139,6 +139,8 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 		router.GET("/api/serf/members", withLogging(adminHandlers.MembersHandler()))
 		// Public handler to propagate an event to all Catalyst nodes, execute from Studio API => Catalyst
 		router.POST("/api/events", withLogging(eventsHandler.Events()))
+	} else {
+		router.POST("/api/events", withLogging(eventsHandler.ProxyEvents()))
 	}
 
 	return router
