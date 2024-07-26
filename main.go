@@ -209,6 +209,8 @@ func main() {
 	broker = misttriggers.NewTriggerBroker()
 
 	catalystApiURL := resolveCatalystApiURL(cli)
+	glog.Infof("Using Catalyst API URL: %s", catalystApiURL)
+
 	serfMembersEndpoint := cli.SerfMembersEndpoint
 	if serfMembersEndpoint == "" {
 		serfMembersEndpoint = cli.OwnInternalURL() + "/api/serf/members"
