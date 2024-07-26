@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -206,10 +207,7 @@ func main() {
 	}
 	broker = misttriggers.NewTriggerBroker()
 
-	catalystApiURL := cli.CatalystApiURL
-	if catalystApiURL == "" {
-		catalystApiURL = cli.OwnInternalURL()
-	}
+	catalystApiURL := resolveCatalystApiURL(cli)
 	serfMembersEndpoint := cli.SerfMembersEndpoint
 	if serfMembersEndpoint == "" {
 		serfMembersEndpoint = cli.OwnInternalURL() + "/api/serf/members"
@@ -357,6 +355,26 @@ func main() {
 
 	err = group.Wait()
 	glog.Infof("Shutdown complete. Reason for shutdown: %s", err)
+}
+
+func resolveCatalystApiURL(cli config.Cli) interface{} {
+	if cli.CatalystApiURL != "" {
+		return cli.CatalystApiURL
+	}
+
+	switch cli.Mode {
+	case "all":
+		return cli.OwnInternalURL()
+	case "cluster-only":
+		// Hack to reason about the corresponding stateless catalyst-api service
+		// Otherwise we would need to specify CATALYST_API_CATALYST_API_URL env variable, which requires restarting
+		// the whole catalyst node
+		hostname := os.Getenv("HOSTNAME")            // e.g. "staging-catalyst-0"
+		ecosystem := strings.Split(hostname, "-")[0] // e.g. "staging"
+		return fmt.Sprintf("%s-catalyst-api-%s", ecosystem, hostname)
+	}
+	// not used for other modes
+	return ""
 }
 
 // Eventually this will be the main loop of the state machine, but we just have one variable right now.
