@@ -197,3 +197,71 @@ func TestIsProfileValid(t *testing.T) {
 		})
 	}
 }
+
+func TestWeCanDetermineIfItsAClippingRequest(t *testing.T) {
+	u := UploadVODRequest{
+		OutputLocations: []UploadVODRequestOutputLocation{
+			{
+				URL:  "some-url",
+				Type: "clip",
+				Outputs: UploadVODRequestOutputLocationOutputs{
+					Clip: "enabled",
+				},
+			},
+		},
+	}
+	require.True(t, u.IsClippingRequest())
+
+	u = UploadVODRequest{
+		OutputLocations: []UploadVODRequestOutputLocation{
+			{
+				URL:  "some-url",
+				Type: "vod",
+				Outputs: UploadVODRequestOutputLocationOutputs{
+					HLS:        "enabled",
+					MP4:        "enabled",
+					Thumbnails: "enabled",
+				},
+			},
+		},
+	}
+	require.False(t, u.IsClippingRequest())
+}
+
+func TestWeRejectInvalidClippingRequests(t *testing.T) {
+	u := UploadVODRequest{
+		OutputLocations: []UploadVODRequestOutputLocation{
+			{
+				URL:  "some-url",
+				Type: "clip",
+				Outputs: UploadVODRequestOutputLocationOutputs{
+					Clip: "enabled",
+				},
+			},
+		},
+	}
+
+	u.ClipStrategy.StartTime = 0
+	u.ClipStrategy.EndTime = 0
+	require.EqualError(t, u.ValidateClippingRequest(), "clip start time and end time were both 0 but should be different")
+
+	u.ClipStrategy.StartTime = -1
+	u.ClipStrategy.EndTime = 0
+	require.EqualError(t, u.ValidateClippingRequest(), "clip start time -1 cannot be less than 0")
+
+	u.ClipStrategy.StartTime = 123123123123
+	u.ClipStrategy.EndTime = 1
+	require.EqualError(t, u.ValidateClippingRequest(), "clip start time 123123123123 should be after end time 1")
+
+	u.ClipStrategy.StartTime = 0
+	u.ClipStrategy.EndTime = -1
+	require.EqualError(t, u.ValidateClippingRequest(), "clip end time -1 cannot be less than 0")
+
+	u.ClipStrategy.StartTime = 1722005308
+	u.ClipStrategy.EndTime = 1722005309
+	require.EqualError(t, u.ValidateClippingRequest(), "clip start time 1722005308 is in unix seconds, but should be milliseconds")
+
+	u.ClipStrategy.StartTime = 1722005308000
+	u.ClipStrategy.EndTime = 1722005309
+	require.EqualError(t, u.ValidateClippingRequest(), "clip end time 1722005309 is in unix seconds, but should be milliseconds")
+}

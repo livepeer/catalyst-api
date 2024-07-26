@@ -108,13 +108,39 @@ func (r UploadVODRequest) IsProfileValid() bool {
 	return true
 }
 
-func (r UploadVODRequest) IsClipValid() bool {
+func (r UploadVODRequest) IsClippingRequest() bool {
+	return r.hasTargetOutput(func(o UploadVODRequestOutputLocationOutputs) string {
+		return o.Clip
+	})
+}
+
+func (r UploadVODRequest) ValidateClippingRequest() error {
 	startTime := r.ClipStrategy.StartTime
 	endTime := r.ClipStrategy.EndTime
-	if startTime < 0 || endTime <= 0 || startTime == endTime || startTime > endTime {
-		return false
+
+	if startTime < 0 {
+		return fmt.Errorf("clip start time %d cannot be less than 0", startTime)
 	}
-	return true
+	if endTime < 0 {
+		return fmt.Errorf("clip end time %d cannot be less than 0", endTime)
+	}
+
+	if startTime >= 1000000000 && startTime <= 9999999999 {
+		return fmt.Errorf("clip start time %d is in unix seconds, but should be milliseconds", startTime)
+	}
+	if endTime >= 1000000000 && endTime <= 9999999999 {
+		return fmt.Errorf("clip end time %d is in unix seconds, but should be milliseconds", endTime)
+	}
+
+	if startTime == endTime {
+		return fmt.Errorf("clip start time and end time were both %d but should be different", startTime)
+	}
+
+	if startTime > endTime {
+		return fmt.Errorf("clip start time %d should be after end time %d", startTime, endTime)
+	}
+
+	return nil
 }
 
 func (r UploadVODRequest) getTargetMp4Output() (UploadVODRequestOutputLocation, bool) {
@@ -138,6 +164,15 @@ func (r UploadVODRequest) getSourceCopyEnabled() bool {
 }
 
 type getOutput func(UploadVODRequestOutputLocationOutputs) string
+
+func (r UploadVODRequest) hasTargetOutput(getOutput getOutput) bool {
+	for _, o := range r.OutputLocations {
+		if getOutput(o.Outputs) == "enabled" {
+			return true
+		}
+	}
+	return false
+}
 
 func (r UploadVODRequest) getTargetOutput(getOutput getOutput) UploadVODRequestOutputLocation {
 	for _, o := range r.OutputLocations {
@@ -208,7 +243,11 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	// Check if this is a clipping request
 	var clipTargetURL *url.URL
 	var err error
-	if uploadVODRequest.IsClipValid() {
+	if uploadVODRequest.IsClippingRequest() {
+		if err := uploadVODRequest.ValidateClippingRequest(); err != nil {
+			return false, errors.WriteHTTPBadRequest(w, "Invalid Clipping Request", err)
+		}
+
 		clipTargetOutput := uploadVODRequest.getTargetOutput(func(o UploadVODRequestOutputLocationOutputs) string {
 			return o.Clip
 		})
