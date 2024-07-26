@@ -25,13 +25,14 @@ index_1.m3u8`
 const validMediaManifest = `#EXTM3U
 #EXT-X-VERSION:3
 #EXT-X-PLAYLIST-TYPE:VOD
-#EXT-X-TARGETDURATION:5
 #EXT-X-MEDIA-SEQUENCE:0
-#EXTINF:10.4160000000,
+#EXT-X-TARGETDURATION:11
+#EXTINF:10.416,
 0.ts
-#EXTINF:5.3340000000,
+#EXTINF:5.334,
 5000.ts
-#EXT-X-ENDLIST`
+#EXT-X-ENDLIST
+`
 
 func DownloadRetryBackoffFailInstantly() backoff.BackOff {
 	return backoff.WithMaxRetries(backoff.NewConstantBackOff(0*time.Second), 0)
@@ -51,6 +52,7 @@ func TestDownloadRenditionManifestFailsWhenItCantParseTheManifest(t *testing.T) 
 	defer func() { DownloadRetryBackoff = DownloadRetryBackoffLong }()
 	manifestFile, err := os.CreateTemp(os.TempDir(), "manifest-*.m3u8")
 	require.NoError(t, err)
+	defer os.Remove(manifestFile.Name())
 	_, err = manifestFile.WriteString("This isn't a manifest!")
 	require.NoError(t, err)
 
@@ -62,6 +64,7 @@ func TestDownloadRenditionManifestFailsWhenItCantParseTheManifest(t *testing.T) 
 func TestDownloadRenditionManifestFailsWhenItReceivesAMasterManifest(t *testing.T) {
 	manifestFile, err := os.CreateTemp(os.TempDir(), "manifest-*.m3u8")
 	require.NoError(t, err)
+	defer os.Remove(manifestFile.Name())
 	_, err = manifestFile.WriteString(validMasterManifest)
 	require.NoError(t, err)
 
@@ -73,11 +76,13 @@ func TestDownloadRenditionManifestFailsWhenItReceivesAMasterManifest(t *testing.
 func TestItCanDownloadAValidRenditionManifest(t *testing.T) {
 	manifestFile, err := os.CreateTemp(os.TempDir(), "manifest-*.m3u8")
 	require.NoError(t, err)
+	defer os.Remove(manifestFile.Name())
 	_, err = manifestFile.WriteString(validMediaManifest)
 	require.NoError(t, err)
 
-	_, err = DownloadRenditionManifest("blah", manifestFile.Name())
+	manifest, err := DownloadRenditionManifest("blah", manifestFile.Name())
 	require.NoError(t, err)
+	require.Equal(t, validMediaManifest, manifest.String())
 }
 
 func TestItCanConvertRelativeURLsToOSURLs(t *testing.T) {
