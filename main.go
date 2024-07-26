@@ -374,7 +374,7 @@ func resolveCatalystApiURL(cli config.Cli) interface{} {
 		// the whole catalyst node
 		hostname := os.Getenv("HOSTNAME")            // e.g. "staging-catalyst-0"
 		ecosystem := strings.Split(hostname, "-")[0] // e.g. "staging"
-		return fmt.Sprintf("%s-catalyst-api-%s", ecosystem, hostname)
+		return fmt.Sprintf("http://%s-catalyst-api-%s:7979", ecosystem, hostname)
 	}
 	// not used for other modes
 	return ""
