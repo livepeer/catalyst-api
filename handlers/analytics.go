@@ -123,13 +123,15 @@ func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 			cerrors.WriteHTTPBadRequest(w, "Invalid playback_id", nil)
 		}
 
-		for _, ad := range c.toAnalyticsData(log, geo, extData) {
+		data := c.toAnalyticsData(log, geo, extData)
+		for i, ad := range data {
 			select {
 			case dataCh <- ad:
 				// process data async
 			default:
-				glog.Warningf("error processing analytics log, too many requests")
+				glog.Warningf("error processing analytics log, too many requests. Failed to write %d lines", len(data)-i)
 				cerrors.WriteHTTPInternalServerError(w, "error processing analytics log, too many requests", nil)
+				return
 			}
 		}
 	}
