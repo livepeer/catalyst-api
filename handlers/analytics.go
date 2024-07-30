@@ -129,7 +129,12 @@ func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 			case dataCh <- ad:
 				// process data async
 			default:
-				glog.Warningf("error processing analytics log, too many requests. Failed to write %d lines", len(data)-i)
+				// Do some counting up of the different message types to give us a better picture of what's going on here
+				msgTypes := map[string]int{}
+				for _, msg := range data {
+					msgTypes[msg.EventType] += 1
+				}
+				glog.Warningf("error processing analytics log, too many requests. Failed to write %d lines. Message types: %v", len(data)-i, msgTypes)
 				cerrors.WriteHTTPInternalServerError(w, "error processing analytics log, too many requests", nil)
 				return
 			}
