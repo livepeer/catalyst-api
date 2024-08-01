@@ -22,7 +22,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const resolution = "854:480"
+const resolution = "640:360"
 const vttFilename = "thumbnails.vtt"
 const outputDir = "thumbnails"
 
