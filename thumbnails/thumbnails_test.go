@@ -127,8 +127,8 @@ keyframes_2.png
 		require.NoError(t, err)
 		require.Equal(t, "png_pipe", data.Format.FormatName)
 		require.NotNil(t, data.FirstVideoStream())
-		require.Equal(t, 853, data.FirstVideoStream().Width)
-		require.Equal(t, 480, data.FirstVideoStream().Height)
+		require.Equal(t, 640, data.FirstVideoStream().Width)
+		require.Equal(t, 360, data.FirstVideoStream().Height)
 	}
 }
 
