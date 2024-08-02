@@ -22,7 +22,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const resolution = "854:480"
+const resolution = "640:360"
 const vttFilename = "thumbnails.vtt"
 const outputDir = "thumbnails"
 
@@ -219,8 +219,6 @@ func processSegment(input string, thumbOut string) error {
 					"vframes": "1",
 					// video filter to resize
 					"vf": fmt.Sprintf("scale=%s:force_original_aspect_ratio=decrease", resolution),
-					// set quality
-					"q:v": "2",
 				},
 			).OverWriteOutput().WithErrorOutput(&ffmpegErr).Run()
 	}, clients.DownloadRetryBackoff())
@@ -254,5 +252,5 @@ func thumbFilename(segmentURI string, segmentOffset int64) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("keyframes_%d.jpg", i-segmentOffset), nil
+	return fmt.Sprintf("keyframes_%d.png", i-segmentOffset), nil
 }
