@@ -113,7 +113,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	lastSegment := sourceSegmentURLs[len(sourceSegmentURLs)-1]
 	lastSegmentURL, err := clients.SignURL(lastSegment.URL)
 	if err != nil {
-		return outputs, segmentsCount, fmt.Errorf("failed to create signed url for last segment %s: %w", lastSegment.URL, err)
+		return outputs, segmentsCount, fmt.Errorf("failed to create signed url for last segment %s: %w", lastSegment.URL.Redacted(), err)
 	}
 	// ignore the following probe errors when checking the last segment
 	var ignoreProbeErrs = []string{
@@ -397,13 +397,13 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 				var err error
 				probeURL, err = clients.SignURL(mp4TargetUrl)
 				if err != nil {
-					return outputs, segmentsCount, fmt.Errorf("failed to create signed url for %s: %w", mp4TargetUrl, err)
+					return outputs, segmentsCount, fmt.Errorf("failed to create signed url for %s: %w", mp4TargetUrl.Redacted(), err)
 				}
 			}
 			// Populate OutputVideo structs with results from probing step to send back in final response to Studio
 			mp4Out, err = video.PopulateOutput(transcodeRequest.RequestID, video.Probe{}, probeURL, mp4Out)
 			if err != nil {
-				return outputs, segmentsCount, fmt.Errorf("failed to populate output for %s: %w", probeURL, err)
+				return outputs, segmentsCount, fmt.Errorf("failed to populate output for %s: %w", log.RedactURL(probeURL), err)
 			}
 			mp4Outputs = append(mp4Outputs, mp4Out)
 		}
@@ -657,7 +657,7 @@ func processTranscodeResult(
 
 		targetRenditionURL, err := url.JoinPath(targetOSURL.String(), profile.Name)
 		if err != nil {
-			return fmt.Errorf("error building rendition segment URL %q: %s", targetRenditionURL, err)
+			return fmt.Errorf("error building rendition segment URL %q: %s", log.RedactURL(targetRenditionURL), err)
 		}
 
 		if transcodeRequest.GenerateMP4 {

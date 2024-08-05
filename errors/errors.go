@@ -5,11 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/livepeer/catalyst-api/log"
-	"github.com/xeipuuv/gojsonschema"
 )
 
 type APIError struct {
@@ -23,7 +21,12 @@ func writeHttpError(w http.ResponseWriter, msg string, status int, err error) AP
 
 	var errorDetail string
 	if err != nil {
-		errorDetail = err.Error()
+		switch status {
+		case http.StatusInternalServerError:
+			log.LogNoRequestID("returning HTTP 500", "http_error_msg", msg, "err", err)
+		default:
+			errorDetail = err.Error()
+		}
 	}
 
 	if err := json.NewEncoder(w).Encode(map[string]string{"error": msg, "error_detail": errorDetail}); err != nil {
@@ -51,18 +54,6 @@ func WriteHTTPNotFound(w http.ResponseWriter, msg string, err error) APIError {
 
 func WriteHTTPInternalServerError(w http.ResponseWriter, msg string, err error) APIError {
 	return writeHttpError(w, msg, http.StatusInternalServerError, err)
-}
-
-func WriteHTTPBadBodySchema(where string, w http.ResponseWriter, errors []gojsonschema.ResultError) APIError {
-	sb := strings.Builder{}
-	sb.WriteString("Body validation error in ")
-	sb.WriteString(where)
-	sb.WriteString(" ")
-	for i := 0; i < len(errors); i++ {
-		sb.WriteString(errors[i].String())
-		sb.WriteString(" ")
-	}
-	return writeHttpError(w, sb.String(), http.StatusBadRequest, nil)
 }
 
 type unretriableError struct{ error }
