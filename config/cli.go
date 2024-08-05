@@ -74,6 +74,7 @@ type Cli struct {
 	KafkaPassword             string
 	AnalyticsKafkaTopic       string
 	SerfMembersEndpoint       string
+	EventsEndpoint            string
 	CatalystApiURL            string
 
 	// mapping playbackId to value between 0.0 to 100.0

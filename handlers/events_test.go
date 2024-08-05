@@ -63,7 +63,7 @@ func TestEventHandler(t *testing.T) {
 		return nil
 	}).AnyTimes()
 
-	catalystApiHandlers := NewEventsHandlersCollection(mc, nil, nil)
+	catalystApiHandlers := NewEventsHandlersCollection(mc, nil, nil, "")
 	router := httprouter.New()
 	router.POST("/events", catalystApiHandlers.Events())
 
@@ -114,7 +114,7 @@ func TestReceiveUserEventHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mac := mock_mistapiconnector.NewMockIMac(ctrl)
 
-	catalystApiHandlers := NewEventsHandlersCollection(nil, mac, nil)
+	catalystApiHandlers := NewEventsHandlersCollection(nil, mac, nil, "")
 	router := httprouter.New()
 	router.POST("/receiveUserEvent", catalystApiHandlers.ReceiveUserEvent())
 
