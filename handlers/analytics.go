@@ -46,7 +46,7 @@ type AnalyticsLog struct {
 
 type AnalyticsLogEvent struct {
 	// Shared fields by all events
-	Id        *string `json:"id"`
+	ID        *string `json:"id"`
 	Type      string  `json:"type"`
 	Timestamp int64   `json:"timestamp"`
 
@@ -252,7 +252,7 @@ func (c *AnalyticsHandlersCollection) toAnalyticsData(log *AnalyticsLog, geo Ana
 			EventType:             e.Type,
 			EventTimestamp:        e.Timestamp,
 			EventData: analytics.LogDataEvent{
-				Id:                  e.Id,
+				ID:                  e.ID,
 				Errors:              e.Errors,
 				AutoplayStatus:      e.AutoplayStatus,
 				StalledCount:        e.StalledCount,

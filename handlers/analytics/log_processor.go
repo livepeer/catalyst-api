@@ -29,7 +29,7 @@ type LogProcessor struct {
 
 type LogDataEvent struct {
 	// Heartbeat event
-	Id                  *string `json:"id,omitempty"`
+	ID                  *string `json:"id,omitempty"`
 	Errors              *int    `json:"errors,omitempty"`
 	AutoplayStatus      *string `json:"autoplay_status,omitempty"`
 	StalledCount        *int    `json:"stalled_count,omitempty"`
