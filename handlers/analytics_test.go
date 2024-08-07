@@ -1,14 +1,15 @@
 package handlers
 
 import (
-	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/handlers/analytics"
-	"github.com/stretchr/testify/require"
-	"github.com/ua-parser/uap-go/uaparser"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/handlers/analytics"
+	"github.com/stretchr/testify/require"
+	"github.com/ua-parser/uap-go/uaparser"
 )
 
 const userID = "user-id"
@@ -55,6 +56,7 @@ func TestHandleLog(t *testing.T) {
 				"uid": "abcdef",
 				"events": [
 				   {
+						"id": "dcba4321",
 						"type": "heartbeat",
 						"timestamp": 1234567895,
 						"errors": 0,
@@ -83,6 +85,7 @@ func TestHandleLog(t *testing.T) {
 						"some_field": "some value"
 					},
 					{
+						"id": "abcde12345",
 						"type": "error",
 						"timestamp": 1234567895,
 						"error_message": "error message",
@@ -115,6 +118,7 @@ func TestHandleLog(t *testing.T) {
 					EventType:      "heartbeat",
 					EventTimestamp: 1234567895,
 					EventData: analytics.LogDataEvent{
+						Id:                  strPtr("dcba4321"),
 						Errors:              intPtr(0),
 						AutoplayStatus:      strPtr("autoplay"),
 						StalledCount:        intPtr(5),
@@ -157,6 +161,7 @@ func TestHandleLog(t *testing.T) {
 					EventType:      "error",
 					EventTimestamp: 1234567895,
 					EventData: analytics.LogDataEvent{
+						Id:           strPtr("abcde12345"),
 						ErrorMessage: strPtr("error message"),
 						Category:     strPtr("offline"),
 					},

@@ -4,13 +4,14 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"github.com/livepeer/catalyst-api/metrics"
-	"github.com/ua-parser/uap-go/uaparser"
 	"io"
 	"net"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/livepeer/catalyst-api/metrics"
+	"github.com/ua-parser/uap-go/uaparser"
 
 	"github.com/golang/glog"
 	"github.com/julienschmidt/httprouter"
@@ -45,8 +46,9 @@ type AnalyticsLog struct {
 
 type AnalyticsLogEvent struct {
 	// Shared fields by all events
-	Type      string `json:"type"`
-	Timestamp int64  `json:"timestamp"`
+	Id        *string `json:"id"`
+	Type      string  `json:"type"`
+	Timestamp int64   `json:"timestamp"`
 
 	// Heartbeat event
 	Errors              *int    `json:"errors"`
@@ -250,6 +252,7 @@ func (c *AnalyticsHandlersCollection) toAnalyticsData(log *AnalyticsLog, geo Ana
 			EventType:             e.Type,
 			EventTimestamp:        e.Timestamp,
 			EventData: analytics.LogDataEvent{
+				Id:                  e.Id,
 				Errors:              e.Errors,
 				AutoplayStatus:      e.AutoplayStatus,
 				StalledCount:        e.StalledCount,

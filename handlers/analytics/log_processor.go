@@ -4,11 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"time"
+
 	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl/plain"
-	"time"
 )
 
 const (
@@ -28,6 +29,7 @@ type LogProcessor struct {
 
 type LogDataEvent struct {
 	// Heartbeat event
+	Id                  *string `json:"id,omitempty"`
 	Errors              *int    `json:"errors,omitempty"`
 	AutoplayStatus      *string `json:"autoplay_status,omitempty"`
 	StalledCount        *int    `json:"stalled_count,omitempty"`
