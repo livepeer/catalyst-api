@@ -1,14 +1,15 @@
 package handlers
 
 import (
-	"github.com/julienschmidt/httprouter"
-	"github.com/livepeer/catalyst-api/handlers/analytics"
-	"github.com/stretchr/testify/require"
-	"github.com/ua-parser/uap-go/uaparser"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/julienschmidt/httprouter"
+	"github.com/livepeer/catalyst-api/handlers/analytics"
+	"github.com/stretchr/testify/require"
+	"github.com/ua-parser/uap-go/uaparser"
 )
 
 const userID = "user-id"
@@ -55,6 +56,7 @@ func TestHandleLog(t *testing.T) {
 				"uid": "abcdef",
 				"events": [
 				   {
+						"id": "dcba4321",
 						"type": "heartbeat",
 						"timestamp": 1234567895,
 						"errors": 0,
@@ -83,6 +85,7 @@ func TestHandleLog(t *testing.T) {
 						"some_field": "some value"
 					},
 					{
+						"id": "abcde12345",
 						"type": "error",
 						"timestamp": 1234567895,
 						"error_message": "error message",
@@ -115,6 +118,7 @@ func TestHandleLog(t *testing.T) {
 					EventType:      "heartbeat",
 					EventTimestamp: 1234567895,
 					EventData: analytics.LogDataEvent{
+						ID:                  strPtr("dcba4321"),
 						Errors:              intPtr(0),
 						AutoplayStatus:      strPtr("autoplay"),
 						StalledCount:        intPtr(5),
@@ -157,8 +161,96 @@ func TestHandleLog(t *testing.T) {
 					EventType:      "error",
 					EventTimestamp: 1234567895,
 					EventData: analytics.LogDataEvent{
+						ID:           strPtr("abcde12345"),
 						ErrorMessage: strPtr("error message"),
 						Category:     strPtr("offline"),
+					},
+				},
+			},
+		},
+		{
+			name: "event without ID",
+			requestBody: `{
+				"session_id": "ghijkl",
+				"playback_id": "789012",
+				"protocol": "video/mp4",
+				"domain": "www.fishtank.live",
+				"path": "/some-path",
+				"params": "b=2",
+				"source_url": "https://vod-cdn.lp-playback.studio/raw/jxf4iblf6wlsyor6526t4tcmtmqa/catalyst-vod-com/hls/362f9l7ekeoze518/1080p0.mp4?tkn=8b140ec6b404a",
+				"player": "video",
+				"version": "3.1.9",
+				"user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36",
+				"uid": "ghijkl",
+				"events": [
+					{
+						"type": "heartbeat",
+						"timestamp": 1234567896,
+						"errors": 0,
+						"autoplay_status": "autoplay",
+						"stalled_count": 2,
+						"waiting_count": 3,
+						"time_errored_ms": 5,
+						"time_stalled_ms": 10,
+						"time_playing_ms": 30,
+						"time_waiting_ms": 15,
+						"mount_to_play_ms": 50,
+						"mount_to_first_frame_ms": 70,
+						"play_to_first_frame_ms": 20,
+						"duration_ms": 35,
+						"offset_ms": 300,
+						"player_height_px": 456,
+						"player_width_px": 789,
+						"video_height_px": 1080,
+						"video_width_px": 1920,
+						"window_height_px": 900,
+						"window_width_px": 1600
+					}
+				]
+			}`,
+			wantHttpCode:             200,
+			wantExtFetchedPlaybackID: "789012",
+			wantProcessedLogs: []analytics.LogData{
+				{
+					SessionID:      "ghijkl",
+					PlaybackID:     "789012",
+					ViewerHash:     "ghijkl",
+					Protocol:       "video/mp4",
+					Domain:         "www.fishtank.live",
+					Path:           "/some-path",
+					Params:         "b=2",
+					SourceURL:      "https://vod-cdn.lp-playback.studio/raw/jxf4iblf6wlsyor6526t4tcmtmqa/catalyst-vod-com/hls/362f9l7ekeoze518/1080p0.mp4?tkn=8b140ec6b404a",
+					Player:         "video",
+					Version:        "3.1.9",
+					UserID:         userID,
+					Source:         "stream",
+					DeviceType:     "desktop",
+					DeviceModel:    "Mac",
+					DeviceBrand:    "Apple",
+					Browser:        "Chrome",
+					OS:             "macOS",
+					EventType:      "heartbeat",
+					EventTimestamp: 1234567896,
+					EventData: analytics.LogDataEvent{
+						Errors:              intPtr(0),
+						AutoplayStatus:      strPtr("autoplay"),
+						StalledCount:        intPtr(2),
+						WaitingCount:        intPtr(3),
+						TimeErroredMS:       intPtr(5),
+						TimeStalledMS:       intPtr(10),
+						TimePlayingMS:       intPtr(30),
+						TimeWaitingMS:       intPtr(15),
+						MountToPlayMS:       intPtr(50),
+						MountToFirstFrameMS: intPtr(70),
+						PlayToFirstFrameMS:  intPtr(20),
+						DurationMS:          intPtr(35),
+						OffsetMS:            intPtr(300),
+						PlayerHeightPX:      intPtr(456),
+						PlayerWidthPX:       intPtr(789),
+						VideoHeightPX:       intPtr(1080),
+						VideoWidthPX:        intPtr(1920),
+						WindowHeightPX:      intPtr(900),
+						WindowWidthPX:       intPtr(1600),
 					},
 				},
 			},
