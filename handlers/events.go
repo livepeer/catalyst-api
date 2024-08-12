@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/golang/glog"
@@ -85,16 +84,8 @@ func (d *EventsHandlersCollection) Events() httprouter.Handle {
 func (d *EventsHandlersCollection) ProxyEvents() httprouter.Handle {
 	// Proxy the request to d.eventsEndpoint
 	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-		// Read the request body
-		body, err := io.ReadAll(req.Body)
-		if err != nil {
-			glog.Errorf("Cannot read request body: %s", err)
-			errors.WriteHTTPBadRequest(w, "Cannot read request body", err)
-			return
-		}
-
 		// Create a new request to the target endpoint
-		proxyReq, err := http.NewRequest(req.Method, d.eventsEndpoint, bytes.NewReader(body))
+		proxyReq, err := http.NewRequest(req.Method, d.eventsEndpoint, req.Body)
 		if err != nil {
 			glog.Errorf("Cannot create proxy request: %s", err)
 			errors.WriteHTTPInternalServerError(w, "Cannot create proxy request", err)
