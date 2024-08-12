@@ -32,6 +32,10 @@ func thumbWaitBackoff() backoff.BackOff {
 }
 
 func getSegmentOffset(mediaPlaylist *m3u8.MediaPlaylist) (int64, error) {
+	if mediaPlaylist == nil {
+		return 0, fmt.Errorf("MediaPlaylist is nil")
+	}
+
 	segments := mediaPlaylist.GetAllSegments()
 	if len(segments) < 1 {
 		return 0, fmt.Errorf("no segments found for")
@@ -44,6 +48,10 @@ func getSegmentOffset(mediaPlaylist *m3u8.MediaPlaylist) (int64, error) {
 }
 
 func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
+	if output == nil {
+		return fmt.Errorf("output URL is nil")
+	}
+
 	// download and parse the manifest
 	mediaPlaylist, err := clients.DownloadRenditionManifest(requestID, input)
 	if err != nil {
@@ -102,6 +110,10 @@ func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
 }
 
 func GenerateThumb(segmentURI string, input []byte, output *url.URL, segmentOffset int64) error {
+	if output == nil {
+		return fmt.Errorf("output URL is nil")
+	}
+
 	tempDir, err := os.MkdirTemp(os.TempDir(), "thumbs-*")
 	if err != nil {
 		return fmt.Errorf("failed to make temp dir: %w", err)
@@ -157,6 +169,10 @@ func GenerateThumbsAndVTT(requestID, input string, output *url.URL) error {
 }
 
 func GenerateThumbsFromManifest(requestID, input string, output *url.URL) error {
+	if output == nil {
+		return fmt.Errorf("output URL is nil")
+	}
+
 	// parse manifest and generate one thumbnail per segment
 	mediaPlaylist, err := clients.DownloadRenditionManifest(requestID, input)
 	if err != nil {
