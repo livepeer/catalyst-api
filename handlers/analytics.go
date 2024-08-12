@@ -171,7 +171,8 @@ func parseAnalyticsGeo(r *http.Request) (AnalyticsGeo, error) {
 	res.Country, missingHeader = getOrAddMissing("X-City-Country-Name", r.Header, missingHeader)
 	res.CountryCode, missingHeader = getOrAddMissing("X-City-Country-Code", r.Header, missingHeader)
 	res.Continent = analytics.GetContinent(res.CountryCode)
-	res.Subdivision, missingHeader = getOrAddMissing("X-Region-Name", r.Header, missingHeader)
+	// X-Region-Name is optional, so we don't add it into missingHeader map if missing
+	res.Subdivision = r.Header.Get("X-Region-Name")
 	res.Timezone, missingHeader = getOrAddMissing("X-Time-Zone", r.Header, missingHeader)
 
 	lat, missingHeader := getOrAddMissing("X-Latitude", r.Header, missingHeader)
