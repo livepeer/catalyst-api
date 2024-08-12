@@ -176,12 +176,12 @@ func (pcc *PeriodicCallbackClient) doWithRetries(r *http.Request) error {
 
 	resp, err := metrics.MonitorRequest(metrics.Metrics.TranscodingStatusUpdate, pcc.httpClient, r)
 	if err != nil {
-		return fmt.Errorf("failed to send callback to %q. Error: %s", r.URL.String(), err)
+		return fmt.Errorf("failed to send callback to %q. Error: %s", r.URL.Redacted(), err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("failed to send callback to %q. HTTP Code: %d", r.URL.String(), resp.StatusCode)
+		return fmt.Errorf("failed to send callback to %q. HTTP Code: %d", r.URL.Redacted(), resp.StatusCode)
 	}
 
 	return nil
