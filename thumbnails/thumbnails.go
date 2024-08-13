@@ -193,7 +193,11 @@ func GenerateThumbsFromManifest(requestID, input string, output *url.URL) error 
 	for _, segment := range mediaPlaylist.GetAllSegments() {
 		segment := segment
 		uploadGroup.Go(func() error {
-			segURL := inputURL.JoinPath("..", segment.URI)
+			segURL, _ := url.Parse(segment.URI)
+			// if the URL is valid and absolute then we should just use it as is, otherwise append the path to inputURL
+			if segURL == nil || !segURL.IsAbs() {
+				segURL = inputURL.JoinPath("..", segment.URI)
+			}
 			var (
 				rc  io.ReadCloser
 				err error
@@ -204,7 +208,7 @@ func GenerateThumbsFromManifest(requestID, input string, output *url.URL) error 
 				return err
 			}, clients.DownloadRetryBackoff())
 			if err != nil {
-				return fmt.Errorf("error downloading manifest: %w", err)
+				return fmt.Errorf("error downloading segment %s: %w", segURL.Redacted(), err)
 			}
 			defer rc.Close()
 
