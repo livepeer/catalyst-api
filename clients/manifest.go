@@ -57,7 +57,7 @@ func RecordingBackupCheck(requestID string, primaryManifestURL, osTransferURL *u
 	if err != nil {
 		return nil, fmt.Errorf("error downloading manifest: %w", err)
 	}
-
+	// if we had to use the backup location for the manifest then we need to write a new playlist
 	newPlaylistRequired := playlistURL != primaryManifestURL.String()
 
 	mediaPlaylist, err := convertToMediaPlaylist(playlist, playlistType)
@@ -85,6 +85,8 @@ func RecordingBackupCheck(requestID string, primaryManifestURL, osTransferURL *u
 			return nil, fmt.Errorf("failed to find segment file %s: %w", segURL.Redacted(), err)
 		}
 		if actualSegURL != segURL.String() {
+			// if we had to use the backup location for any segment then we need a new manifest file with new segment URLs
+			// pointing to wherever they are found, primary or backup
 			newPlaylistRequired = true
 		}
 		segment.URI = actualSegURL
@@ -94,7 +96,7 @@ func RecordingBackupCheck(requestID string, primaryManifestURL, osTransferURL *u
 		return primaryManifestURL, nil
 	}
 
-	// write the manifest to storage and update the manifestURL variable
+	// write the updated manifest to storage and update the manifestURL variable
 	outputStorageURL := osTransferURL.JoinPath("input.m3u8")
 	err = backoff.Retry(func() error {
 		return UploadToOSURL(outputStorageURL.String(), "", strings.NewReader(mediaPlaylist.String()), ManifestUploadTimeout)
