@@ -67,6 +67,7 @@ jobs:
           push: true
           build-args: |
             GIT_VERSION=${{ github.ref_type == 'tag' && github.ref_name || github.event.pull_request.head.sha || github.sha }}
+            version=${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
