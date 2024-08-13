@@ -1,0 +1,6 @@
+.git/
+/docker/*
+.dockerignore
+*.mp4
+*.ts
+*Dockerfile*
