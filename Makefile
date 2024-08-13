@@ -1,6 +1,7 @@
 GO_BUILD_DIR?=build/
 
-ldflags := -X 'github.com/livepeer/catalyst-api/config.Version=$(shell git rev-parse HEAD)'
+GIT_VERSION?=$(shell git rev-parse HEAD)
+ldflags := -X 'github.com/livepeer/catalyst-api/config.Version=$(GIT_VERSION)'
 
 .PHONY: all
 all: build fmt test lint integration-test tidy
