@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"net/http"
 	"net/http/httptest"
 	"time"
@@ -26,7 +27,6 @@ import (
 	"github.com/livepeer/catalyst-api/middleware"
 	"github.com/livepeer/catalyst-api/pipeline"
 	"github.com/livepeer/go-api-client"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func ListenAndServeInternal(ctx context.Context, cli config.Cli, vodEngine *pipeline.Coordinator, mapic mistapiconnector.IMac, bal balancer.Balancer, c cluster.Cluster, broker misttriggers.TriggerBroker, metricsDB *sql.DB, serfMembersEndpoint, eventsEndpoint string) error {
@@ -84,8 +84,9 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	// Simple endpoint for healthchecks
 	router.GET("/ok", withLogging(catalystApiHandlers.Ok()))
 
+	var metricsHandlers []http.Handler
+
 	if cli.IsApiMode() {
-		var metricsHandlers []http.Handler
 		if cli.ShouldMapic() {
 			metricsHandlers = append(metricsHandlers, mapic.MetricsHandler())
 		}
@@ -93,9 +94,6 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 			// Enable Mist metrics enrichment
 			metricsHandlers = append(metricsHandlers, mapic.MistMetricsHandler())
 		}
-		metricsHandlers = append(metricsHandlers, promhttp.Handler())
-		// Hacky combined metrics handler. To be refactored away with mapic.
-		router.GET("/metrics", concatHandlers(metricsHandlers...))
 
 		// Public Catalyst API
 		router.POST("/api/vod",
@@ -131,6 +129,10 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 		// Handler to forward the user event from Catalyst => Catalyst API
 		router.POST("/api/serf/receiveUserEvent", withLogging(eventsHandler.ReceiveUserEvent()))
 	}
+
+	metricsHandlers = append(metricsHandlers, promhttp.Handler())
+	// Hacky combined metrics handler. To be refactored away with mapic.
+	router.GET("/metrics", concatHandlers(metricsHandlers...))
 
 	if cli.IsClusterMode() {
 		// Temporary endpoint for admin queries
