@@ -135,6 +135,9 @@ func main() {
 	fs.StringVar(&cli.SerfMembersEndpoint, "serf-members-endpoint", "", "Endpoint to get the current members in the cluster")
 	fs.StringVar(&cli.EventsEndpoint, "events-endpoint", "", "Endpoint to send proxied events from catalyst-api into catalyst")
 	fs.StringVar(&cli.CatalystApiURL, "catalyst-api-url", "", "Endpoint for externally deployed catalyst-api; if not set, use local catalyst-api")
+	fs.StringVar(&cli.LBReplaceHostMatch, "lb-replace-host-match", "", "What to match on the hostname for node replacement e.g. sto")
+	config.CommaSliceFlag(fs, &cli.LBReplaceHostList, "lb-replace-host-list", []string{}, "List of hostnames to replace with for node replacement")
+	fs.IntVar(&cli.LBReplaceHostPercent, "lb-replace-host-percent", 0, "Percentage of matching requests to replace host on")
 	pprofPort := fs.Int("pprof-port", 6061, "Pprof listen port")
 
 	fs.String("send-audio", "", "[DEPRECATED] ignored, will be removed")
@@ -205,6 +208,10 @@ func main() {
 		NodeName:                 cli.NodeName,
 		OwnRegion:                cli.OwnRegion,
 		OwnRegionTagAdjust:       cli.OwnRegionTagAdjust,
+
+		ReplaceHostMatch:   cli.LBReplaceHostMatch,
+		ReplaceHostPercent: cli.LBReplaceHostPercent,
+		ReplaceHostList:    cli.LBReplaceHostList,
 	}
 	broker = misttriggers.NewTriggerBroker()
 

@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -335,6 +337,8 @@ func (b *MistBalancer) queryMistForClosestNode(ctx context.Context, playbackID, 
 	return node, nil
 }
 
+var nodeHostRegex = regexp.MustCompile(`^.+?\.`) // matches the first part of the hostname before the first dot
+
 // return the best node available for a given stream. will return any node if nobody has the stream.
 func (b *MistBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq bool) (string, string, error) {
 	var nodeAddr, fullPlaybackID, fallbackAddr string
@@ -366,6 +370,12 @@ func (b *MistBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 
 	// good path: we found the stream and a good node to play it back, yay!
 	if nodeAddr != "" {
+		if b.config.ReplaceHostMatch != "" && len(b.config.ReplaceHostList) > 0 && rand.Intn(100) < b.config.ReplaceHostPercent {
+			if strings.Contains(nodeHostRegex.FindString(nodeAddr), b.config.ReplaceHostMatch) {
+				nodeAddr = nodeHostRegex.ReplaceAllString(nodeAddr, b.config.ReplaceHostList[rand.Intn(len(b.config.ReplaceHostList))])
+			}
+		}
+
 		return nodeAddr, fullPlaybackID, nil
 	}
 
