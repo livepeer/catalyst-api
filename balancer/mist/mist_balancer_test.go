@@ -202,6 +202,33 @@ func TestGetBestNode(t *testing.T) {
 	require.Contains(t, []string{"one.example.com", "two.example.com"}, node)
 }
 
+func TestGetBestNodeWithReplacement(t *testing.T) {
+	bal, mul := start(t)
+	defer mul.Close()
+
+	mul.BalancedHosts = map[string]string{
+		"http://one.example.com:4242": "Online",
+		"http://two.example.com:4242": "Online",
+	}
+	mul.StreamsLive = map[string][]string{"http://one.example.com:4242": {"prefix+fakeid"}}
+
+	// stream is live on host "one" but replace this with "two"
+	bal.config.ReplaceHostMatch = "one"
+	bal.config.ReplaceHostPercent = 100
+	bal.config.ReplaceHostList = []string{"two"}
+
+	node, streamName, err := bal.GetBestNode(context.Background(), []string{"prefix"}, "fakeid", "0", "0", "", false)
+	require.NoError(t, err)
+	require.Equal(t, streamName, "prefix+fakeid")
+	require.Contains(t, node, "two.example.com")
+
+	// set percent to zero, should not replace
+	bal.config.ReplaceHostPercent = 0
+	node, _, err = bal.GetBestNode(context.Background(), []string{"prefix"}, "fakeid", "0", "0", "", false)
+	require.NoError(t, err)
+	require.Contains(t, node, "one.example.com")
+}
+
 func TestGetBestNodeForWebRTC(t *testing.T) {
 	const webrtcStreamKey = "webr-tcst-ream-key1"
 	bal, mul := start(t)

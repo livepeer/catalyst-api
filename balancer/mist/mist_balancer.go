@@ -372,7 +372,7 @@ func (b *MistBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 	if nodeAddr != "" {
 		if b.config.ReplaceHostMatch != "" && len(b.config.ReplaceHostList) > 0 && rand.Intn(100) < b.config.ReplaceHostPercent {
 			if strings.Contains(nodeHostRegex.FindString(nodeAddr), b.config.ReplaceHostMatch) {
-				nodeAddr = nodeHostRegex.ReplaceAllString(nodeAddr, b.config.ReplaceHostList[rand.Intn(len(b.config.ReplaceHostList))])
+				nodeAddr = nodeHostRegex.ReplaceAllString(nodeAddr, b.config.ReplaceHostList[rand.Intn(len(b.config.ReplaceHostList))]+".")
 			}
 		}
 
