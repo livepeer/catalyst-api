@@ -27,7 +27,7 @@ func (d *CatalystAPIHandlersCollection) Healthcheck() httprouter.Handle {
 			b = []byte(`{"status": "marshalling status failed"}`)
 		}
 
-		if _, err := io.WriteString(w, string(b)); err != nil {
+		if _, err := io.Writer.Write(w, b); err != nil {
 			log.LogNoRequestID("Failed to write HTTP response for " + req.URL.RawPath)
 		}
 	}
