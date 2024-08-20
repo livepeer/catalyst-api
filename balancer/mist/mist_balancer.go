@@ -371,6 +371,7 @@ func (b *MistBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 	// good path: we found the stream and a good node to play it back, yay!
 	if nodeAddr != "" {
 		if b.config.ReplaceHostMatch != "" && len(b.config.ReplaceHostList) > 0 && rand.Intn(100) < b.config.ReplaceHostPercent {
+			// replace the host for a percentage of requests based on the configured replacement list, choosing a random host from that list
 			if strings.Contains(nodeHostRegex.FindString(nodeAddr), b.config.ReplaceHostMatch) {
 				nodeAddr = nodeHostRegex.ReplaceAllString(nodeAddr, b.config.ReplaceHostList[rand.Intn(len(b.config.ReplaceHostList))]+".")
 			}
