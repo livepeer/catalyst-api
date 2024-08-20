@@ -372,9 +372,9 @@ func resolveCatalystApiURL(cli config.Cli) interface{} {
 		// Hack to reason about the corresponding stateless catalyst-api service
 		// Otherwise we would need to specify CATALYST_API_CATALYST_API_URL env variable, which requires restarting
 		// the whole catalyst node
-		hostname := os.Getenv("HOSTNAME")            // e.g. "staging-catalyst-0"
-		ecosystem := strings.Split(hostname, "-")[0] // e.g. "staging"
-		return fmt.Sprintf("http://%s-catalyst-api-%s:7979", ecosystem, hostname)
+		hostname := os.Getenv("HOSTNAME")                                                                // e.g. "staging-catalyst-0"
+		correspondingCatalystApiHostname := strings.Replace(hostname, "-catalyst-", "-catalyst-api-", 1) // e.g. "staging-catalyst-api-0"
+		return fmt.Sprintf("http://%s:7979", correspondingCatalystApiHostname)
 	}
 	// not used for other modes
 	return ""
