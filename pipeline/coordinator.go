@@ -451,7 +451,7 @@ func checkLivepeerCompatible(requestID string, strategy Strategy, iv video.Input
 		// If the video codec is not compatible then override to external pipeline to avoid sending to Livepeer
 		// We always covert the audio to AAC before sending for transcoding, so don't need to check this
 		if track.Type == video.TrackTypeVideo {
-			if strings.ToLower(track.Codec) == "hevc" {
+			if strings.ToLower(track.Codec) == "hevc" && strategy != StrategyCatalystFfmpegDominance {
 				strategy = StrategyBackgroundFFMpeg
 			} else if strings.ToLower(track.Codec) != "h264" {
 				log.Log(requestID, "codec not supported by Livepeer pipeline", "trackType", track.Type, "codec", track.Codec)
@@ -518,10 +518,28 @@ func checkDisplayAspectRatio(track video.InputTrack, requestID string) bool {
 // set to true, error callbacks from this job will not be sent.
 func (c *Coordinator) startOneUploadJob(si *JobInfo, handler Handler, foreground, hasFallback bool) <-chan bool {
 	if !foreground {
-		si.RequestID = fmt.Sprintf("bg_%s", si.RequestID)
+		// TODO only do if output location is livepeer, i.e. don't do for transcode api jobs as we'd be writing unexpected files to customer storage
+
+		// replace si with a copy of itself to avoid interfering with the foreground job
+		requestID := fmt.Sprintf("bg_%s", si.RequestID)
+		si = &JobInfo{
+			UploadJobPayload: si.UploadJobPayload,
+			StreamName:       config.SegmentingStreamName(requestID),
+			statusClient:     c.statusClient,
+
+			numProfiles:           len(si.UploadJobPayload.Profiles),
+			targetSegmentSizeSecs: si.UploadJobPayload.TargetSegmentSizeSecs,
+			catalystRegion:        os.Getenv("MY_REGION"),
+
+			DownloadDone: time.Now(),
+		}
+		si.RequestID = requestID
+
 		if si.HlsTargetURL != nil {
 			si.HlsTargetURL = si.HlsTargetURL.JoinPath("..", handler.Name(), path.Base(si.HlsTargetURL.Path))
 		}
+		// TODO set other target URLs to nil for now
+
 		// this will prevent the callbacks for this job from actually being sent
 		si.CallbackURL = ""
 	}
