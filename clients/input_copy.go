@@ -64,14 +64,14 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 		}
 	}
 
-	log.Log(requestID, "starting probe", "source", inputFile.String(), "dest", osTransferURL.String())
+	log.Log(requestID, "starting probe", "source", inputFile.Redacted(), "dest", osTransferURL.Redacted())
 	inputFileProbe, err := s.Probe.ProbeFile(requestID, signedURL, "-analyzeduration", "15000000")
 	if err != nil {
-		log.Log(requestID, "probe failed", "err", err, "source", inputFile.String(), "dest", osTransferURL.String())
+		log.Log(requestID, "probe failed", "err", err, "source", inputFile.Redacted(), "dest", osTransferURL.Redacted())
 		return video.InputVideo{}, "", fmt.Errorf("error probing MP4 input file from S3: %w", err)
 	}
 
-	log.Log(requestID, "probe succeeded", "source", inputFile.String(), "dest", osTransferURL.String())
+	log.Log(requestID, "probe succeeded", "source", inputFile.Redacted(), "dest", osTransferURL.Redacted())
 	videoTrack, err := inputFileProbe.GetTrack(video.TrackTypeVideo)
 	hasVideoTrack := err == nil
 	// verify the duration of the video track and don't process if we can't determine duration
@@ -229,7 +229,7 @@ func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, dec
 		}
 		byteCount += size
 	}
-	log.Log(requestID, "Copied", "bytes", byteCount, "source", srcInputUrl.String(), "dest", dstOutputUrl.String())
+	log.Log(requestID, "Copied", "bytes", byteCount, "source", srcInputUrl.Redacted(), "dest", dstOutputUrl.Redacted())
 	return nil
 }
 

@@ -116,12 +116,12 @@ func (c *AnalyticsHandlersCollection) Log() httprouter.Handle {
 		}
 		geo, err := parseAnalyticsGeo(r)
 		if err != nil {
-			glog.Warning("cannot parse geo info from analytics log request header, err=%v", err)
+			glog.Warningf("cannot parse geo info from analytics log request header, %v", err)
 		}
 		extData, err := c.extFetcher.Fetch(log.PlaybackID)
 		if err != nil {
 			metrics.Metrics.AnalyticsMetrics.AnalyticsLogsErrors.Inc()
-			glog.Warning("error enriching analytics log with external data, err=%v", err)
+			glog.Warningf("error enriching analytics log with external data, err=%v", err)
 			cerrors.WriteHTTPBadRequest(w, "Invalid playback_id", nil)
 		}
 
@@ -171,7 +171,8 @@ func parseAnalyticsGeo(r *http.Request) (AnalyticsGeo, error) {
 	res.Country, missingHeader = getOrAddMissing("X-City-Country-Name", r.Header, missingHeader)
 	res.CountryCode, missingHeader = getOrAddMissing("X-City-Country-Code", r.Header, missingHeader)
 	res.Continent = analytics.GetContinent(res.CountryCode)
-	res.Subdivision, missingHeader = getOrAddMissing("X-Region-Name", r.Header, missingHeader)
+	// X-Region-Name is optional, so we don't add it into missingHeader map if missing
+	res.Subdivision = r.Header.Get("X-Region-Name")
 	res.Timezone, missingHeader = getOrAddMissing("X-Time-Zone", r.Header, missingHeader)
 
 	lat, missingHeader := getOrAddMissing("X-Latitude", r.Header, missingHeader)

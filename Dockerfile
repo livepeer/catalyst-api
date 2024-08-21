@@ -1,6 +1,6 @@
-FROM	golang:1-bullseye	as	gobuild
+FROM	golang:1-bullseye	AS	gobuild
 
-ARG TARGETARCH
+ARG	TARGETARCH
 
 WORKDIR	/src
 
@@ -8,10 +8,11 @@ ADD	go.mod go.sum	./
 RUN	go mod download
 
 ADD	.	.
-RUN make build
 
 ARG	GIT_VERSION
 ENV	GIT_VERSION="${GIT_VERSION}"
+
+RUN	make build GIT_VERSION="${GIT_VERSION}"
 
 FROM	ubuntu:22.04	AS	catalyst
 
@@ -30,6 +31,6 @@ RUN	apt update && apt install -yqq \
 	vnstat \
 	&& rm -rf /var/lib/apt/lists/*
 
-COPY --from=gobuild		/src/build/catalyst-api /bin/catalyst-api
+COPY --from=gobuild	/src/build/catalyst-api /bin/catalyst-api
 
 CMD ["/bin/catalyst-api"]

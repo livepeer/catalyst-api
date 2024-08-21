@@ -312,7 +312,7 @@ func (f *ffmpeg) probeSourceSegment(requestID string, seg *m3u8.MediaSegment, so
 	}
 	probeURL, err := clients.SignURL(u)
 	if err != nil {
-		return fmt.Errorf("failed to create signed url for %s: %w", u, err)
+		return fmt.Errorf("failed to create signed url for %s: %w", u.Redacted(), err)
 	}
 	if err := backoff.Retry(func() error {
 		_, err = f.probe.ProbeFile(requestID, probeURL)
@@ -351,7 +351,7 @@ func copyFileToLocalTmpAndSegment(job *JobInfo) (string, error) {
 		defer cancel()
 		_, err = clients.CopyFile(timeout, job.SignedSourceURL, localSourceFile.Name(), "", job.RequestID)
 		if err != nil {
-			return fmt.Errorf("failed to copy file (%s) locally for segmenting: %s", job.SignedSourceURL, err)
+			return fmt.Errorf("failed to copy file (%s) locally for segmenting: %s", log.RedactURL(job.SignedSourceURL), err)
 		}
 		return nil
 	}, retries(6)); err != nil {

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -132,7 +133,11 @@ func main() {
 	fs.StringVar(&cli.KafkaPassword, "kafka-password", "", "Kafka Password")
 	fs.StringVar(&cli.AnalyticsKafkaTopic, "analytics-kafka-topic", "", "Kafka Topic used to send analytics logs")
 	fs.StringVar(&cli.SerfMembersEndpoint, "serf-members-endpoint", "", "Endpoint to get the current members in the cluster")
+	fs.StringVar(&cli.EventsEndpoint, "events-endpoint", "", "Endpoint to send proxied events from catalyst-api into catalyst")
 	fs.StringVar(&cli.CatalystApiURL, "catalyst-api-url", "", "Endpoint for externally deployed catalyst-api; if not set, use local catalyst-api")
+	fs.StringVar(&cli.LBReplaceHostMatch, "lb-replace-host-match", "", "What to match on the hostname for node replacement e.g. sto")
+	config.CommaSliceFlag(fs, &cli.LBReplaceHostList, "lb-replace-host-list", []string{}, "List of hostnames to replace with for node replacement")
+	fs.IntVar(&cli.LBReplaceHostPercent, "lb-replace-host-percent", 0, "Percentage of matching requests to replace host on")
 	pprofPort := fs.Int("pprof-port", 6061, "Pprof listen port")
 
 	fs.String("send-audio", "", "[DEPRECATED] ignored, will be removed")
@@ -203,13 +208,16 @@ func main() {
 		NodeName:                 cli.NodeName,
 		OwnRegion:                cli.OwnRegion,
 		OwnRegionTagAdjust:       cli.OwnRegionTagAdjust,
+
+		ReplaceHostMatch:   cli.LBReplaceHostMatch,
+		ReplaceHostPercent: cli.LBReplaceHostPercent,
+		ReplaceHostList:    cli.LBReplaceHostList,
 	}
 	broker = misttriggers.NewTriggerBroker()
 
-	catalystApiURL := cli.CatalystApiURL
-	if catalystApiURL == "" {
-		catalystApiURL = cli.OwnInternalURL()
-	}
+	catalystApiURL := resolveCatalystApiURL(cli)
+	glog.Infof("Using Catalyst API URL: %s", catalystApiURL)
+
 	serfMembersEndpoint := cli.SerfMembersEndpoint
 	if serfMembersEndpoint == "" {
 		serfMembersEndpoint = cli.OwnInternalURL() + "/api/serf/members"
@@ -352,11 +360,31 @@ func main() {
 	})
 
 	group.Go(func() error {
-		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker, metricsDB, serfMembersEndpoint)
+		return api.ListenAndServeInternal(ctx, cli, vodEngine, mapic, bal, c, broker, metricsDB, serfMembersEndpoint, cli.EventsEndpoint)
 	})
 
 	err = group.Wait()
 	glog.Infof("Shutdown complete. Reason for shutdown: %s", err)
+}
+
+func resolveCatalystApiURL(cli config.Cli) interface{} {
+	if cli.CatalystApiURL != "" {
+		return cli.CatalystApiURL
+	}
+
+	switch cli.Mode {
+	case "all":
+		return cli.OwnInternalURL()
+	case "cluster-only":
+		// Hack to reason about the corresponding stateless catalyst-api service
+		// Otherwise we would need to specify CATALYST_API_CATALYST_API_URL env variable, which requires restarting
+		// the whole catalyst node
+		hostname := os.Getenv("HOSTNAME")                                                                // e.g. "staging-catalyst-0"
+		correspondingCatalystApiHostname := strings.Replace(hostname, "-catalyst-", "-catalyst-api-", 1) // e.g. "staging-catalyst-api-0"
+		return fmt.Sprintf("http://%s:7979", correspondingCatalystApiHostname)
+	}
+	// not used for other modes
+	return ""
 }
 
 // Eventually this will be the main loop of the state machine, but we just have one variable right now.

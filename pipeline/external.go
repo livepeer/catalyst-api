@@ -66,6 +66,10 @@ func (e *external) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 }
 
 func generateThumbs(job *JobInfo) {
+	if job.ThumbnailsTargetURL == nil {
+		return
+	}
+
 	manifestUrl, err := clients.GetFirstRenditionURL(job.RequestID, job.HlsTargetURL.JoinPath("index.m3u8"))
 	if err != nil {
 		log.LogError(job.RequestID, "failed to get rendition URL for mediaconvert thumbs", err)

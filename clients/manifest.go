@@ -53,10 +53,13 @@ func RecordingBackupCheck(requestID string, primaryManifestURL, osTransferURL *u
 		return primaryManifestURL, nil
 	}
 
-	playlist, playlistType, err := downloadManifestWithBackup(requestID, primaryManifestURL.String())
+	playlistURL, playlist, playlistType, err := downloadManifestWithBackup(requestID, primaryManifestURL.String())
 	if err != nil {
 		return nil, fmt.Errorf("error downloading manifest: %w", err)
 	}
+	// if we had to use the backup location for the manifest then we need to write a new playlist
+	newPlaylistRequired := playlistURL != primaryManifestURL.String()
+
 	mediaPlaylist, err := convertToMediaPlaylist(playlist, playlistType)
 	if err != nil {
 		return nil, err
@@ -81,10 +84,19 @@ func RecordingBackupCheck(requestID string, primaryManifestURL, osTransferURL *u
 		if err != nil {
 			return nil, fmt.Errorf("failed to find segment file %s: %w", segURL.Redacted(), err)
 		}
+		if actualSegURL != segURL.String() {
+			// if we had to use the backup location for any segment then we need a new manifest file with new segment URLs
+			// pointing to wherever they are found, primary or backup
+			newPlaylistRequired = true
+		}
 		segment.URI = actualSegURL
 	}
 
-	// write the manifest to storage and update the manifestURL variable
+	if !newPlaylistRequired {
+		return primaryManifestURL, nil
+	}
+
+	// write the updated manifest to storage and update the manifestURL variable
 	outputStorageURL := osTransferURL.JoinPath("input.m3u8")
 	err = backoff.Retry(func() error {
 		return UploadToOSURL(outputStorageURL.String(), "", strings.NewReader(mediaPlaylist.String()), ManifestUploadTimeout)
@@ -118,7 +130,7 @@ func convertToMediaPlaylist(playlist m3u8.Playlist, playlistType m3u8.ListType) 
 	return *mediaPlaylist, nil
 }
 
-func downloadManifestWithBackup(requestID, sourceManifestOSURL string) (m3u8.Playlist, m3u8.ListType, error) {
+func downloadManifestWithBackup(requestID, sourceManifestOSURL string) (string, m3u8.Playlist, m3u8.ListType, error) {
 	var playlist, playlistBackup m3u8.Playlist
 	var playlistType, playlistTypeBackup m3u8.ListType
 	var size, sizeBackup int
@@ -146,21 +158,21 @@ func downloadManifestWithBackup(requestID, sourceManifestOSURL string) (m3u8.Pla
 	// (only not found errors passthrough below)
 	primaryNotFound, backupNotFound := errors.IsObjectNotFound(errPrimary), errors.IsObjectNotFound(errBackup)
 	if primaryNotFound && backupNotFound {
-		return nil, 0, errPrimary
+		return "", nil, 0, errPrimary
 	}
 	if errPrimary != nil && !primaryNotFound {
-		return nil, 0, errPrimary
+		return "", nil, 0, errPrimary
 	}
 	if errBackup != nil && !backupNotFound {
-		return nil, 0, errBackup
+		return "", nil, 0, errBackup
 	}
 
 	// Return the largest manifest as the most recent version
 	hasBackup := backupManifestURL != "" && errBackup == nil
 	if hasBackup && (errPrimary != nil || sizeBackup > size) {
-		return playlistBackup, playlistTypeBackup, nil
+		return backupManifestURL, playlistBackup, playlistTypeBackup, nil
 	}
-	return playlist, playlistType, errPrimary
+	return sourceManifestOSURL, playlist, playlistType, errPrimary
 }
 
 func downloadManifest(requestID, sourceManifestOSURL string) (playlist m3u8.Playlist, playlistType m3u8.ListType, size int, err error) {

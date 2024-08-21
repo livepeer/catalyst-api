@@ -305,7 +305,7 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 					// Use new clipped manifest as the source URL
 					clipSourceURL, err := clients.ClipInputManifest(p.RequestID, sourceURL.String(), p.ClipTargetURL.String(), p.ClipStrategy.StartTime, p.ClipStrategy.EndTime)
 					if err != nil {
-						return fmt.Errorf("clipping failed: %s %w", sourceURL, err)
+						return fmt.Errorf("clipping failed: %s %w", sourceURL.Redacted(), err)
 					}
 					sourceURL = clipSourceURL
 					return nil

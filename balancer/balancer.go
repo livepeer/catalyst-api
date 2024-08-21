@@ -126,4 +126,8 @@ type Config struct {
 	MistHost                 string
 	OwnRegion                string
 	OwnRegionTagAdjust       int
+
+	ReplaceHostMatch   string
+	ReplaceHostList    []string
+	ReplaceHostPercent int
 }

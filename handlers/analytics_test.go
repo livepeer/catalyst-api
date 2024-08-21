@@ -394,7 +394,6 @@ func TestParseAnalyticsGeo(t *testing.T) {
 			},
 			wantErrorContains: []string{
 				"missing geo headers",
-				"X-Region-Name",
 				"X-Time-Zone",
 			},
 		},

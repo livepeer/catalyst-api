@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
@@ -27,7 +26,7 @@ func (d *CatalystAPIHandlersCollection) Healthcheck() httprouter.Handle {
 			b = []byte(`{"status": "marshalling status failed"}`)
 		}
 
-		if _, err := io.WriteString(w, string(b)); err != nil {
+		if _, err := w.Write(b); err != nil {
 			log.LogNoRequestID("Failed to write HTTP response for " + req.URL.RawPath)
 		}
 	}

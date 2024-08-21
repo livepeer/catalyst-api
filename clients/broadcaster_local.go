@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+
+	"github.com/livepeer/catalyst-api/log"
 )
 
 // Currently only implemented by LocalBroadcasterClient
@@ -20,7 +22,7 @@ type LocalBroadcasterClient struct {
 func NewLocalBroadcasterClient(broadcasterURL string) (BroadcasterClient, error) {
 	u, err := url.Parse(broadcasterURL)
 	if err != nil {
-		return &LocalBroadcasterClient{}, fmt.Errorf("error parsing local broadcaster URL %q: %s", broadcasterURL, err)
+		return &LocalBroadcasterClient{}, fmt.Errorf("error parsing local broadcaster URL %q: %s", log.RedactURL(broadcasterURL), err)
 	}
 	return &LocalBroadcasterClient{
 		broadcasterURL: *u,
