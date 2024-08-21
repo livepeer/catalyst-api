@@ -79,31 +79,6 @@ func (d *EventsHandlersCollection) Events() httprouter.Handle {
 	}
 }
 
-// ProxyEvents is a handler of Catalyst API called by Studio API.
-// It proxies the requests to Catalyst.
-func (d *EventsHandlersCollection) ProxyEvents() httprouter.Handle {
-	// Proxy the request to d.eventsEndpoint
-	return func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-		// Create a new request to the target endpoint
-		proxyReq, err := http.NewRequest(req.Method, d.eventsEndpoint, req.Body)
-		if err != nil {
-			glog.Errorf("Cannot create proxy request: %s", err)
-			errors.WriteHTTPInternalServerError(w, "Cannot create proxy request", err)
-			return
-		}
-
-		// Send the request to the target endpoint
-		client := &http.Client{}
-		resp, err := client.Do(proxyReq)
-		if err != nil {
-			glog.Errorf("Cannot send proxy request: %s", err)
-			errors.WriteHTTPInternalServerError(w, "Cannot send proxy request", err)
-			return
-		}
-		defer resp.Body.Close()
-	}
-}
-
 // ReceiveUserEvent is a handler to receive Serf events from Catalyst.
 // The idea is that:
 // 1. Studio API sends an event to Catalyst (received by Events() handler)
