@@ -421,7 +421,7 @@ func (b *MistBalancer) MistUtilLoadBalance(ctx context.Context, stream, lat, lon
 		return "", err
 	}
 	// Special case: rewrite our local node to our public node url
-	if str == b.config.MistHost {
+	if str == "127.0.0.1" {
 		str = b.config.NodeName
 	}
 	return str, nil
