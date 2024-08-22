@@ -3,10 +3,10 @@ package misttriggers
 import (
 	"context"
 	"fmt"
-	"github.com/livepeer/catalyst-api/clients"
 	"sync"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/catalyst-api/clients"
 	"golang.org/x/sync/errgroup"
 )
 

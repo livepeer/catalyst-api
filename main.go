@@ -319,7 +319,7 @@ func main() {
 	if cli.IsClusterMode() {
 		// Configure Mist Triggers
 		if cli.MistEnabled && cli.MistTriggerSetup {
-			mistTriggerHandlerEndpoint := fmt.Sprintf("%s/api/mist/trigger", catalystApiURL)
+			mistTriggerHandlerEndpoint := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
 			err := broker.SetupMistTriggers(mist, mistTriggerHandlerEndpoint)
 			if err != nil {
 				glog.Error("catalyst-api was unable to communicate with MistServer to set up its triggers.")
