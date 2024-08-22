@@ -26,7 +26,7 @@ func start(t *testing.T) (*MistBalancer, *mockMistUtilLoad) {
 
 	b := &MistBalancer{
 		config: &balancer.Config{
-			MistHost:           u.Hostname(),
+			MistHost:           "127.0.0.1",
 			MistPort:           port,
 			OwnRegion:          "fra",
 			OwnRegionTagAdjust: 1000,
