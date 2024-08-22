@@ -317,6 +317,17 @@ func main() {
 	}
 
 	if cli.IsClusterMode() {
+		// Configure Mist Triggers
+		if cli.MistEnabled && cli.MistTriggerSetup {
+			mistTriggerHandlerEndpoint := fmt.Sprintf("%s/api/mist/trigger", cli.OwnInternalURL())
+			err := broker.SetupMistTriggers(mist, mistTriggerHandlerEndpoint)
+			if err != nil {
+				glog.Error("catalyst-api was unable to communicate with MistServer to set up its triggers.")
+				glog.Error("hint: are you trying to boot catalyst-api without Mist for development purposes? use the flag -no-mist")
+				glog.Fatalf("error setting up Mist triggers err=%s", err)
+			}
+		}
+
 		// Start cron style apps to run periodically
 		if cli.ShouldMistCleanup() {
 			app := "mist-cleanup.sh"
