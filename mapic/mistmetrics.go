@@ -1,18 +1,25 @@
 package mistapiconnector
 
 import (
+	"context"
 	"fmt"
 	"github.com/golang/glog"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
+
+const mistMetricsCallTimeeout = 10 * time.Second
 
 func (mc *mac) MistMetricsHandler() http.Handler {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, req *http.Request) {
-			mistMetrics, err := mc.queryMistMetrics()
+			ctx, cancel := context.WithTimeout(req.Context(), mistMetricsCallTimeeout)
+			defer cancel()
+			mistMetrics, err := mc.queryMistMetrics(ctx)
 			if err != nil {
+				glog.Warningf("error fetching Mist prometheus metrics: %s", err)
 				http.Error(w, fmt.Sprintf("error fetching Mist prometheus metrics: %s", err), http.StatusInternalServerError)
 				return
 			}
@@ -26,9 +33,13 @@ func (mc *mac) MistMetricsHandler() http.Handler {
 		})
 }
 
-func (mc *mac) queryMistMetrics() (string, error) {
+func (mc *mac) queryMistMetrics(ctx context.Context) (string, error) {
 	mistMetricsURL := fmt.Sprintf("http://%s:%d/%s", mc.config.MistHost, mc.config.MistPort, mc.config.MistPrometheus)
-	resp, err := http.Get(mistMetricsURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, mistMetricsURL, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", err
 	}
