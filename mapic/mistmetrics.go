@@ -75,7 +75,7 @@ func (mc *mac) parsePlaybackID(line string) (string, bool) {
 
 func (mc *mac) enrichLabels(playbackID string) string {
 	res := mc.streamLabel(playbackID)
-	res += ",catalyst=true"
+	res += `,catalyst="true"`
 	si, err := mc.getStreamInfo(playbackID)
 	if err != nil {
 		glog.Warning("could not enrich Mist metrics for stream=%s err=%v", playbackID, err)
