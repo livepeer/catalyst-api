@@ -55,7 +55,7 @@ func NewCluster(config *config.Cli) Cluster {
 		config:   config,
 		serfCh:   make(chan serf.Event, config.SerfQueueSize),
 		memberCh: make(chan []Member),
-		eventCh:  make(chan serf.UserEvent, config.SerfQueueSize),
+		eventCh:  make(chan serf.UserEvent, 10),
 	}
 	return &c
 }
