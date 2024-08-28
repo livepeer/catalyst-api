@@ -26,7 +26,7 @@ import (
 
 const (
 	GeoHashPrecision     = 3
-	LogChannelBufferSize = 25000
+	LogChannelBufferSize = 200000
 )
 
 type AnalyticsLog struct {
