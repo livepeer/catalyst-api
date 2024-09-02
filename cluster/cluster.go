@@ -285,12 +285,7 @@ func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 			return nil
 		}
 
-		members, err := c.MembersFiltered(MediaFilter, "alive", "")
-
-		if err != nil {
-			glog.Errorf("Error getting serf, crashing: %v\n", err)
-			return err
-		}
+		members := c.MembersFiltered(MediaFilter, "alive", "")
 
 		c.memberCh <- members
 	}
