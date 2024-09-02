@@ -440,8 +440,8 @@ func (c *GeolocationHandlersCollection) membersFiltered(filter map[string]string
 		return []cluster.Member{}, err
 	}
 
-	res := cluster.FilterMembers(members, filter, status, name)
-	return res, nil
+	res, err := cluster.FilterMembers(members, filter, status, name)
+	return res, err
 }
 
 func parsePlus(plusString string) (string, string) {

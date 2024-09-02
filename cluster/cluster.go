@@ -22,7 +22,7 @@ const serfClusterInternalEventBuffer = 100000
 
 type Cluster interface {
 	Start(ctx context.Context) error
-	MembersFiltered(filter map[string]string, status, name string) []Member
+	MembersFiltered(filter map[string]string, status, name string) ([]Member, error)
 	MemberChan() chan []Member
 	EventChan() <-chan serf.UserEvent
 	BroadcastEvent(serf.UserEvent) error
@@ -183,7 +183,7 @@ func (c *ClusterImpl) retryJoin(ctx context.Context) {
 	}
 }
 
-func (c *ClusterImpl) MembersFiltered(filter map[string]string, status, name string) []Member {
+func (c *ClusterImpl) MembersFiltered(filter map[string]string, status, name string) ([]Member, error) {
 	return FilterMembers(toClusterMembers(c.serf.Members()), filter, status, name)
 }
 
@@ -199,7 +199,7 @@ func toClusterMembers(members []serf.Member) []Member {
 	return nodes
 }
 
-func FilterMembers(all []Member, filter map[string]string, status string, name string) []Member {
+func FilterMembers(all []Member, filter map[string]string, status string, name string) ([]Member, error) {
 	var nodes []Member
 	for _, member := range all {
 		if status != "" && status != member.Status {
@@ -220,7 +220,7 @@ func FilterMembers(all []Member, filter map[string]string, status string, name s
 			nodes = append(nodes, member)
 		}
 	}
-	return nodes
+	return nodes, nil
 }
 
 // Subscribe to changes in the member list. Please only call me once. I only have one channel internally.
@@ -285,7 +285,12 @@ func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 			return nil
 		}
 
-		members := c.MembersFiltered(MediaFilter, "alive", "")
+		members, err := c.MembersFiltered(MediaFilter, "alive", "")
+
+		if err != nil {
+			glog.Errorf("Error getting serf, crashing: %v\n", err)
+			return err
+		}
 
 		c.memberCh <- members
 	}
