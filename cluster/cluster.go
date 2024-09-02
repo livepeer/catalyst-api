@@ -184,6 +184,9 @@ func (c *ClusterImpl) retryJoin(ctx context.Context) {
 }
 
 func (c *ClusterImpl) MembersFiltered(filter map[string]string, status, name string) ([]Member, error) {
+	if c.serf == nil {
+		return nil, fmt.Errorf("serf not initialized")
+	}
 	return FilterMembers(toClusterMembers(c.serf.Members()), filter, status, name)
 }
 
