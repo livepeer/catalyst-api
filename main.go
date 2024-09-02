@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"github.com/cenkalti/backoff/v4"
 	"log"
 	"net/http"
 	"os"
@@ -392,14 +393,27 @@ func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Clu
 	memberCh := c.MemberChan()
 	ticker := time.NewTicker(1 * time.Minute)
 
-	updateMembers(ctx, bal, getMembers(c))
+	err := backoff.Retry(func() error {
+		members, err := getMembers(c)
+		if err != nil {
+			return err
+		}
+		updateMembers(ctx, bal, members)
+		return nil
+	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 4))
+	if err != nil {
+		glog.Errorf("failed to get cluster members on startup: %v", err)
+	}
 	for {
 		var members []cluster.Member
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			members = getMembers(c)
+			members, err = getMembers(c)
+			if err != nil {
+				continue
+			}
 		case members = <-memberCh:
 		}
 		updateMembers(ctx, bal, members)
@@ -413,8 +427,12 @@ func updateMembers(ctx context.Context, bal balancer.Balancer, members []cluster
 	}
 }
 
-func getMembers(c cluster.Cluster) []cluster.Member {
-	return c.MembersFiltered(cluster.MediaFilter, "alive", "")
+func getMembers(c cluster.Cluster) ([]cluster.Member, error) {
+	members, err := c.MembersFiltered(cluster.MediaFilter, "alive", "")
+	if err != nil {
+		glog.Errorf("Error getting serf members: %v", err)
+	}
+	return members, err
 }
 
 func handleClusterEvents(ctx context.Context, callbackEndpoint string, c cluster.Cluster) error {

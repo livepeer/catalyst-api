@@ -22,7 +22,7 @@ const serfClusterInternalEventBuffer = 100000
 
 type Cluster interface {
 	Start(ctx context.Context) error
-	MembersFiltered(filter map[string]string, status, name string) []Member
+	MembersFiltered(filter map[string]string, status, name string) ([]Member, error)
 	MemberChan() chan []Member
 	EventChan() <-chan serf.UserEvent
 	BroadcastEvent(serf.UserEvent) error
@@ -183,8 +183,11 @@ func (c *ClusterImpl) retryJoin(ctx context.Context) {
 	}
 }
 
-func (c *ClusterImpl) MembersFiltered(filter map[string]string, status, name string) []Member {
-	return FilterMembers(toClusterMembers(c.serf.Members()), filter, status, name)
+func (c *ClusterImpl) MembersFiltered(filter map[string]string, status, name string) ([]Member, error) {
+	if c.serf == nil {
+		return nil, fmt.Errorf("serf not initialized")
+	}
+	return FilterMembers(toClusterMembers(c.serf.Members()), filter, status, name), nil
 }
 
 func toClusterMembers(members []serf.Member) []Member {
@@ -285,7 +288,11 @@ func (c *ClusterImpl) handleEvents(ctx context.Context) error {
 			return nil
 		}
 
-		members := c.MembersFiltered(MediaFilter, "alive", "")
+		members, err := c.MembersFiltered(MediaFilter, "alive", "")
+		if err != nil {
+			glog.Errorf("Error getting serf, crashing: %v\n", err)
+			return err
+		}
 
 		c.memberCh <- members
 	}

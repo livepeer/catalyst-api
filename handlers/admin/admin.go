@@ -16,7 +16,11 @@ type AdminHandlersCollection struct {
 
 func (c *AdminHandlersCollection) MembersHandler() httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		members := c.Cluster.MembersFiltered(map[string]string{}, "", "")
+		members, err := c.Cluster.MembersFiltered(map[string]string{}, "", "")
+		if err != nil {
+			errors.WriteHTTPInternalServerError(w, "Could not get list of cluster members", err)
+			return
+		}
 		b, err := json.Marshal(members)
 		if err != nil {
 			errors.WriteHTTPInternalServerError(w, "Could not marshal list of members", err)
