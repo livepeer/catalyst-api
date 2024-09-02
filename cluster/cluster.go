@@ -18,6 +18,8 @@ import (
 	"github.com/livepeer/catalyst-api/metrics"
 )
 
+const serfClusterInternalEventBuffer = 10000
+
 type Cluster interface {
 	Start(ctx context.Context) error
 	MembersFiltered(filter map[string]string, status, name string) ([]Member, error)
@@ -53,9 +55,9 @@ var MediaFilter = map[string]string{"node": "media"}
 func NewCluster(config *config.Cli) Cluster {
 	c := ClusterImpl{
 		config:   config,
-		serfCh:   make(chan serf.Event, config.SerfQueueSize),
+		serfCh:   make(chan serf.Event, serfClusterInternalEventBuffer),
 		memberCh: make(chan []Member),
-		eventCh:  make(chan serf.UserEvent, 10),
+		eventCh:  make(chan serf.UserEvent, config.SerfQueueSize),
 	}
 	return &c
 }
