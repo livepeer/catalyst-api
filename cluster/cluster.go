@@ -18,7 +18,7 @@ import (
 	"github.com/livepeer/catalyst-api/metrics"
 )
 
-const serfClusterInternalEventBuffer = 10000
+const serfClusterInternalEventBuffer = 100000
 
 type Cluster interface {
 	Start(ctx context.Context) error
