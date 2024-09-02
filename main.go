@@ -124,7 +124,7 @@ func main() {
 	fs.StringVar(&cli.GateURL, "gate-url", "http://localhost:3004/api/access-control/gate", "Address to contact playback gating API for access control verification")
 	fs.StringVar(&cli.DataURL, "data-url", "http://localhost:3004/api/data", "Address of the Livepeer Data Endpoint")
 	config.InvertedBoolFlag(fs, &cli.MistTriggerSetup, "mist-trigger-setup", true, "Overwrite Mist triggers with the ones built into catalyst-api")
-	fs.IntVar(&cli.SerfQueueSize, "serf-queue-size", 10, "Size of internal serf queue before user events are dropped")
+	fs.IntVar(&cli.SerfQueueSize, "serf-queue-size", 20, "Size of internal serf queue before user events are dropped")
 	fs.IntVar(&cli.SerfEventBuffer, "serf-event-buffer", 100000, "Size of serf 'recent event' buffer, outside of which things are dropped")
 	fs.IntVar(&cli.SerfMaxQueueDepth, "serf-max-queue-depth", 100000, "Size of Serf queue, outside of which things are dropped")
 	fs.StringVar(&cli.EnableAnalytics, "analytics", "disabled", "Enables analytics API: enabled or disabled")
