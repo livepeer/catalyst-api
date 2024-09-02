@@ -155,7 +155,7 @@ func (c *ClusterImpl) retryJoin(ctx context.Context) {
 	backoff := time.Second
 
 	for {
-		n, err := c.serf.Join(c.config.RetryJoin, false)
+		n, err := c.serf.Join(c.config.RetryJoin, true)
 		if n > 0 {
 			glog.Infof("Serf successfully joined %d-node cluster", n)
 			return
