@@ -391,26 +391,30 @@ func resolveCatalystApiURL(cli config.Cli) string {
 func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Cluster) error {
 	memberCh := c.MemberChan()
 	ticker := time.NewTicker(1 * time.Minute)
+
+	updateMembers(ctx, bal, getMembers(c))
 	for {
 		var members []cluster.Member
-		var err error
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			members, err = c.MembersFiltered(cluster.MediaFilter, "alive", "")
-			if err != nil {
-				glog.Errorf("Error getting serf members: %v", err)
-				continue
-			}
+			members = getMembers(c)
 		case members = <-memberCh:
 		}
-		err = bal.UpdateMembers(ctx, members)
-		if err != nil {
-			glog.Errorf("Failed to update load balancer from member list: %v", err)
-			continue
-		}
+		updateMembers(ctx, bal, members)
 	}
+}
+
+func updateMembers(ctx context.Context, bal balancer.Balancer, members []cluster.Member) {
+	err := bal.UpdateMembers(ctx, members)
+	if err != nil {
+		glog.Errorf("Failed to update load balancer from member list: %v", err)
+	}
+}
+
+func getMembers(c cluster.Cluster) []cluster.Member {
+	return c.MembersFiltered(cluster.MediaFilter, "alive", "")
 }
 
 func handleClusterEvents(ctx context.Context, callbackEndpoint string, c cluster.Cluster) error {
