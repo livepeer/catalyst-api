@@ -433,21 +433,19 @@ func processClusterEvent(callbackEndpoint string, userEvent serf.UserEvent) {
 	client := &http.Client{}
 	glog.V(5).Infof("received serf user event, propagating to %s, event=%s", callbackEndpoint, userEvent.String())
 
-	go func() {
-		req, err := http.NewRequest("POST", callbackEndpoint, bytes.NewBuffer(userEvent.Payload))
-		if err != nil {
-			glog.Errorf("error creating request: %v", err)
-			return
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			glog.Errorf("error sending request: %v", err)
-			return
-		}
-		defer resp.Body.Close()
+	req, err := http.NewRequest("POST", callbackEndpoint, bytes.NewBuffer(userEvent.Payload))
+	if err != nil {
+		glog.Errorf("error creating request: %v", err)
+		return
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		glog.Errorf("error sending request: %v", err)
+		return
+	}
+	defer resp.Body.Close()
 
-		glog.V(5).Infof("propagated serf user event to %s, event=%s", callbackEndpoint, userEvent.String())
-	}()
+	glog.V(5).Infof("propagated serf user event to %s, event=%s", callbackEndpoint, userEvent.String())
 }
 
 func handleSignals(ctx context.Context) error {
