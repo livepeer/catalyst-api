@@ -390,7 +390,8 @@ func resolveCatalystApiURL(cli config.Cli) string {
 // Eventually this will be the main loop of the state machine, but we just have one variable right now.
 func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Cluster) error {
 	memberCh := c.MemberChan()
-	ticker := time.NewTicker(1 * time.Minute)
+	// Start from retrying every 4s, but after the first successful update (Serf cluster formed), retry every 1 min
+	ticker := time.NewTicker(4 * time.Second)
 	for {
 		var members []cluster.Member
 		var err error
@@ -403,6 +404,7 @@ func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Clu
 				glog.Errorf("Error getting serf members: %v", err)
 				continue
 			}
+			ticker.Reset(1 * time.Minute)
 		case members = <-memberCh:
 		}
 		err = bal.UpdateMembers(ctx, members)
