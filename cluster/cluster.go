@@ -18,6 +18,8 @@ import (
 	"github.com/livepeer/catalyst-api/metrics"
 )
 
+const serfClusterInternalEventBuffer = 100000
+
 type Cluster interface {
 	Start(ctx context.Context) error
 	MembersFiltered(filter map[string]string, status, name string) ([]Member, error)
@@ -53,7 +55,7 @@ var MediaFilter = map[string]string{"node": "media"}
 func NewCluster(config *config.Cli) Cluster {
 	c := ClusterImpl{
 		config:   config,
-		serfCh:   make(chan serf.Event, config.SerfQueueSize),
+		serfCh:   make(chan serf.Event, serfClusterInternalEventBuffer),
 		memberCh: make(chan []Member),
 		eventCh:  make(chan serf.UserEvent, config.SerfQueueSize),
 	}
@@ -155,7 +157,7 @@ func (c *ClusterImpl) retryJoin(ctx context.Context) {
 	backoff := time.Second
 
 	for {
-		n, err := c.serf.Join(c.config.RetryJoin, false)
+		n, err := c.serf.Join(c.config.RetryJoin, true)
 		if n > 0 {
 			glog.Infof("Serf successfully joined %d-node cluster", n)
 			return

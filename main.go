@@ -124,7 +124,7 @@ func main() {
 	fs.StringVar(&cli.GateURL, "gate-url", "http://localhost:3004/api/access-control/gate", "Address to contact playback gating API for access control verification")
 	fs.StringVar(&cli.DataURL, "data-url", "http://localhost:3004/api/data", "Address of the Livepeer Data Endpoint")
 	config.InvertedBoolFlag(fs, &cli.MistTriggerSetup, "mist-trigger-setup", true, "Overwrite Mist triggers with the ones built into catalyst-api")
-	fs.IntVar(&cli.SerfQueueSize, "serf-queue-size", 100000, "Size of internal serf queue before messages are dropped")
+	fs.IntVar(&cli.SerfQueueSize, "serf-queue-size", 50, "Size of internal serf queue before user events are dropped")
 	fs.IntVar(&cli.SerfEventBuffer, "serf-event-buffer", 100000, "Size of serf 'recent event' buffer, outside of which things are dropped")
 	fs.IntVar(&cli.SerfMaxQueueDepth, "serf-max-queue-depth", 100000, "Size of Serf queue, outside of which things are dropped")
 	fs.StringVar(&cli.EnableAnalytics, "analytics", "disabled", "Enables analytics API: enabled or disabled")
@@ -390,7 +390,8 @@ func resolveCatalystApiURL(cli config.Cli) string {
 // Eventually this will be the main loop of the state machine, but we just have one variable right now.
 func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Cluster) error {
 	memberCh := c.MemberChan()
-	ticker := time.NewTicker(1 * time.Minute)
+	// Start from retrying every 4s, but after the first successful update (Serf cluster formed), retry every 1 min
+	ticker := time.NewTicker(4 * time.Second)
 	for {
 		var members []cluster.Member
 		var err error
@@ -403,6 +404,7 @@ func reconcileBalancer(ctx context.Context, bal balancer.Balancer, c cluster.Clu
 				glog.Errorf("Error getting serf members: %v", err)
 				continue
 			}
+			ticker.Reset(1 * time.Minute)
 		case members = <-memberCh:
 		}
 		err = bal.UpdateMembers(ctx, members)
@@ -429,21 +431,19 @@ func processClusterEvent(callbackEndpoint string, userEvent serf.UserEvent) {
 	client := &http.Client{}
 	glog.V(5).Infof("received serf user event, propagating to %s, event=%s", callbackEndpoint, userEvent.String())
 
-	go func() {
-		req, err := http.NewRequest("POST", callbackEndpoint, bytes.NewBuffer(userEvent.Payload))
-		if err != nil {
-			glog.Errorf("error creating request: %v", err)
-			return
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			glog.Errorf("error sending request: %v", err)
-			return
-		}
-		defer resp.Body.Close()
+	req, err := http.NewRequest("POST", callbackEndpoint, bytes.NewBuffer(userEvent.Payload))
+	if err != nil {
+		glog.Errorf("error creating request: %v", err)
+		return
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		glog.Errorf("error sending request: %v", err)
+		return
+	}
+	defer resp.Body.Close()
 
-		glog.V(5).Infof("propagated serf user event to %s, event=%s", callbackEndpoint, userEvent.String())
-	}()
+	glog.V(5).Infof("propagated serf user event to %s, event=%s", callbackEndpoint, userEvent.String())
 }
 
 func handleSignals(ctx context.Context) error {
