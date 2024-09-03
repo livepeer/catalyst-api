@@ -267,6 +267,7 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 			return false, err
 		}
 		cacheKey = "accessKey_" + hashCacheKey
+		glog.Infof("Produced cacheKey from accessKey: %s", cacheKey)
 	} else if jwt != "" {
 		for _, blocked := range ac.blockedJWTs {
 			if jwt == blocked {
@@ -288,6 +289,7 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 			return false, err
 		}
 		cacheKey = "jwtPubKey_" + hashCacheKey
+		glog.Infof("Produced cacheKey from JWT: %s", cacheKey)
 	}
 
 	body, err := json.Marshal(acReq)
@@ -377,6 +379,7 @@ func (ac *AccessControlHandlersCollection) refreshConcurrentViewerCache(playback
 }
 
 func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(ctx context.Context, playbackID, cacheKey string, requestBody []byte) (bool, error) {
+	glog.Infof("GetPlaybackAccessControlInfo playbackID=%s, cacheKey=%s, requestBody=%v", playbackID, cacheKey, requestBody)
 	ac.mutex.RLock()
 	entry := ac.cache[playbackID][cacheKey]
 	ac.mutex.RUnlock()
@@ -384,22 +387,27 @@ func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(ctx cont
 	if isExpired(entry) {
 		log.V(7).LogCtx(ctx, "Cache expired",
 			"cache_key", cacheKey)
+		glog.Infof("Cache expired, calling cachePlaybackAccessControlInfo")
 		err := ac.cachePlaybackAccessControlInfo(playbackID, cacheKey, requestBody)
 		if err != nil {
 			return false, err
 		}
+		glog.Infof("Cache expired, cached new playback access control info")
 	} else if isStale(entry) {
 		log.V(7).LogCtx(ctx, "Cache stale",
 			"cache_key", cacheKey)
+		glog.Infof("Cache stale")
 		go func() {
 			ac.mutex.RLock()
 			stillStale := isStale(ac.cache[playbackID][cacheKey])
 			ac.mutex.RUnlock()
 			if stillStale {
+				glog.Infof("Cache still stale, calling cachePlaybackAccessControlInfo")
 				err := ac.cachePlaybackAccessControlInfo(playbackID, cacheKey, requestBody)
 				if err != nil {
 					log.LogCtx(ctx, "Error caching playback access control info", "err", err)
 				}
+				glog.Infof("Cache still stale, cached new playback access control info")
 			}
 		}()
 	}
@@ -433,6 +441,7 @@ func isStale(entry *PlaybackAccessControlEntry) bool {
 }
 
 func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playbackID, cacheKey string, requestBody []byte) error {
+	glog.Infof("cachePlaybackAccessControlInfo, playbackID=%s, cacheKey=%s, requestBody=%v", playbackID, cacheKey, requestBody)
 	allow, gateConfig, err := ac.gateClient.QueryGate(requestBody)
 
 	refreshInterval := gateConfig.RefreshInterval
