@@ -308,6 +308,7 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 
 // checkViewerLimit is used to limit viewers per user globally (as configured with Gate API)
 func (ac *AccessControlHandlersCollection) checkViewerLimit(playbackID string) bool {
+	glog.Infof("checkViewerLimit playbackID=%s", playbackID)
 	viewerLimitCache.mux.RLock()
 	defer viewerLimitCache.mux.RUnlock()
 
@@ -338,6 +339,7 @@ func (ac *AccessControlHandlersCollection) checkViewerLimit(playbackID string) b
 }
 
 func (ac *AccessControlHandlersCollection) refreshConcurrentViewerCache(playbackID string) {
+	glog.Infof("refreshConcurrentViewerCache playbackID=%s", playbackID)
 	viewerLimitCache.mux.RLock()
 	viewerLimit, ok := viewerLimitCache.data[playbackID]
 	viewerLimitCache.mux.RUnlock()
