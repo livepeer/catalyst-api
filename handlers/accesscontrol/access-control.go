@@ -170,6 +170,7 @@ func NewAccessControlHandlersCollection(cli config.Cli, mapic mistapiconnector.I
 }
 
 func (ac *AccessControlHandlersCollection) HandleUserNew(ctx context.Context, payload *misttriggers.UserNewPayload) (bool, error) {
+	glog.Infof("Handling USER_NEW trigger payload=%v", payload)
 	playbackID := payload.StreamName[strings.Index(payload.StreamName, "+")+1:]
 	ctx = log.WithLogValues(ctx, "playback_id", playbackID)
 
@@ -189,6 +190,7 @@ func (ac *AccessControlHandlersCollection) HandleUserNew(ctx context.Context, pa
 
 func (ac *AccessControlHandlersCollection) IsAuthorized(ctx context.Context, playbackID string, payload *misttriggers.UserNewPayload) (allowed bool, err error) {
 
+	glog.Infof("Handling IsAuthorized trigger playbackID=%s, payload=%v", playbackID, payload)
 	if payload.Origin == "null" && payload.Referer == "" {
 		// Allow redirects without caching
 		match, _ := regexp.MatchString(`(?:prod|staging)-.*catalyst-\d+`, payload.Host)
@@ -216,10 +218,12 @@ func (ac *AccessControlHandlersCollection) IsAuthorized(ctx context.Context, pla
 			Inc()
 	}()
 	allowed, err = ac.isAuthorized(ctx, playbackID, payload)
+	glog.Infof("isAuthorized handled playbackID=%s, allowed=%v, err=%v", playbackID, allowed, err)
 	return
 }
 
 func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, playbackID string, payload *misttriggers.UserNewPayload) (bool, error) {
+	glog.Infof("Handling AccessControlHandlersCollection.isAuthorized() trigger payload=%v", payload)
 	webhookHeaders := make(map[string]string)
 
 	webhookHeaders["User-Agent"] = payload.UserAgent
