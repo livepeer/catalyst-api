@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"fmt"
+	"github.com/golang/glog"
 	"net/http"
 	"time"
 
@@ -20,11 +21,14 @@ func MonitorRequest(clientMetrics ClientMetrics, client *http.Client, r *http.Re
 	req := r.WithContext(ctx)
 
 	start := time.Now()
+	glog.Infof("client.Do(req)")
 	res, err := client.Do(req)
+	glog.Infof("Done client.Do(req), err=%v", err)
 	duration := time.Since(start)
 
 	retries := ctx.Value(RetriesKey).(*Retries)
 	if retries.lastStatusCode >= 400 {
+		glog.Infof("retries.lastStatusCode >= 400")
 		clientMetrics.FailureCount.WithLabelValues(req.URL.Host, fmt.Sprint(retries.lastStatusCode)).Inc()
 		return res, err
 	}
@@ -32,6 +36,7 @@ func MonitorRequest(clientMetrics ClientMetrics, client *http.Client, r *http.Re
 	clientMetrics.RequestDuration.WithLabelValues(req.URL.Host).Observe(duration.Seconds())
 	clientMetrics.RetryCount.WithLabelValues(req.URL.Host).Set(float64(retries.count))
 
+	glog.Infof("return res, err")
 	return res, err
 }
 
