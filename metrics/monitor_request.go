@@ -41,6 +41,7 @@ func MonitorRequest(clientMetrics ClientMetrics, client *http.Client, r *http.Re
 }
 
 func HttpRetryHook(ctx context.Context, res *http.Response, err error) (bool, error) {
+	glog.Infof("HttpRetryHook")
 	retries := ctx.Value(RetriesKey).(*Retries)
 	if res == nil {
 		// TODO: have a better way to represent closed/refused connections and timeouts
@@ -52,5 +53,6 @@ func HttpRetryHook(ctx context.Context, res *http.Response, err error) (bool, er
 	}
 	retries.count++
 
+	glog.Infof("Done HttpRetryHook")
 	return retryablehttp.DefaultRetryPolicy(ctx, res, err)
 }
