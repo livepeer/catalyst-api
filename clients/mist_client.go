@@ -404,15 +404,18 @@ func (mc *MistClient) sendCommandToMist(command interface{}) (string, error) {
 		return "", err
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	glog.Infof("Prepared command to send, sedning")
 	resp, err := metrics.MonitorRequest(metrics.Metrics.MistClient, mistRetryableClient, req)
 	if err != nil {
 		return "", err
 	}
+	glog.Infof("Done Sending command to Mist")
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
+	glog.Infof("Sending command to Mist 2")
 	return string(body), err
 }
 
