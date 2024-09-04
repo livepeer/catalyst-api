@@ -393,6 +393,7 @@ func (mc *MistClient) authorize(unauthResp string) error {
 }
 
 func (mc *MistClient) sendCommandToMist(command interface{}) (string, error) {
+	glog.Infof("Sending command to Mist")
 	c, err := commandToString(command)
 	if err != nil {
 		return "", err

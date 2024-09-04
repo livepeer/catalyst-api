@@ -388,6 +388,7 @@ func (ac *AccessControlHandlersCollection) refreshConcurrentViewerCache(playback
 func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(ctx context.Context, playbackID, cacheKey string, requestBody []byte) (bool, error) {
 	glog.Infof("GetPlaybackAccessControlInfo playbackID=%s, cacheKey=%s, requestBody=%v", playbackID, cacheKey, requestBody)
 	ac.mutex.RLock()
+	glog.Infof("ac.mutex.RLock()")
 	entry := ac.cache[playbackID][cacheKey]
 	ac.mutex.RUnlock()
 
@@ -420,6 +421,7 @@ func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(ctx cont
 	}
 
 	ac.mutex.RLock()
+	glog.Infof("ac.mutex.RLock() 2")
 	entry = ac.cache[playbackID][cacheKey]
 	ac.mutex.RUnlock()
 
@@ -440,10 +442,12 @@ func (ac *AccessControlHandlersCollection) ProduceHashCacheKey(cachePayload Play
 }
 
 func isExpired(entry *PlaybackAccessControlEntry) bool {
+	glog.Infof("isExpired")
 	return entry == nil || time.Now().After(entry.Stale)
 }
 
 func isStale(entry *PlaybackAccessControlEntry) bool {
+	glog.Infof("isStale")
 	return entry != nil && time.Now().After(entry.MaxAge) && !isExpired(entry)
 }
 

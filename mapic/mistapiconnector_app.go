@@ -224,7 +224,9 @@ func (mc *mac) StopSessions(playbackID string) {
 }
 
 func (mc *mac) InvalidateAllSessions(playbackID string) {
+	glog.Infof("Invalidating Mist Sessions")
 	mc.invalidateAllSessions(playbackID)
+	glog.Infof("Done Invalidating Mist Sessions")
 }
 
 func (mc *mac) handleStreamBuffer(ctx context.Context, payload *misttriggers.StreamBufferPayload) error {
