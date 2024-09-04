@@ -138,9 +138,11 @@ func (ac *AccessControlHandlersCollection) periodicRefreshIntervalCache(mapic mi
 			refreshIntervalCache.mux.Unlock()
 			ac.mutex.Unlock()
 
-			for _, key := range keysToInvalidate {
-				mapic.InvalidateAllSessions(key)
-			}
+			go func() {
+				for _, key := range keysToInvalidate {
+					mapic.InvalidateAllSessions(key)
+				}
+			}()
 		}
 	}()
 }

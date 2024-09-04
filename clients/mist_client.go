@@ -238,7 +238,9 @@ type MistPushStats struct {
 	Tracks        []int `json:"tracks"`
 }
 
-var mistRetryableClient = newRetryableClient(nil)
+const MIST_CLIENT_TIMEOUT = 1 * time.Minute
+
+var mistRetryableClient = newRetryableClient(&http.Client{Timeout: MIST_CLIENT_TIMEOUT})
 
 func (mc *MistClient) AddStream(streamName, sourceUrl string) error {
 	c := commandAddStream(streamName, sourceUrl)
