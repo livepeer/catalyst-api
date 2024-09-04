@@ -124,18 +124,23 @@ func (ac *AccessControlHandlersCollection) periodicRefreshIntervalCache(mapic mi
 			time.Sleep(5 * time.Second)
 			ac.mutex.Lock()
 			refreshIntervalCache.mux.Lock()
+			var keysToInvalidate []string
 			for key := range refreshIntervalCache.data {
 				if time.Since(refreshIntervalCache.data[key].LastRefresh) > time.Duration(refreshIntervalCache.data[key].RefreshInterval)*time.Second {
 					refreshIntervalCache.data[key].LastRefresh = time.Now()
-					mapic.InvalidateAllSessions(key)
+					keysToInvalidate = append(keysToInvalidate, key)
 					for cachedAccessKey := range ac.cache[key] {
 						delete(ac.cache[key], cachedAccessKey)
 					}
 					break
 				}
 			}
-			ac.mutex.Unlock()
 			refreshIntervalCache.mux.Unlock()
+			ac.mutex.Unlock()
+
+			for _, key := range keysToInvalidate {
+				mapic.InvalidateAllSessions(key)
+			}
 		}
 	}()
 }
@@ -170,6 +175,7 @@ func NewAccessControlHandlersCollection(cli config.Cli, mapic mistapiconnector.I
 }
 
 func (ac *AccessControlHandlersCollection) HandleUserNew(ctx context.Context, payload *misttriggers.UserNewPayload) (bool, error) {
+	glog.Infof("Handling USER_NEW trigger payload=%v", payload)
 	playbackID := payload.StreamName[strings.Index(payload.StreamName, "+")+1:]
 	ctx = log.WithLogValues(ctx, "playback_id", playbackID)
 
@@ -189,6 +195,7 @@ func (ac *AccessControlHandlersCollection) HandleUserNew(ctx context.Context, pa
 
 func (ac *AccessControlHandlersCollection) IsAuthorized(ctx context.Context, playbackID string, payload *misttriggers.UserNewPayload) (allowed bool, err error) {
 
+	glog.Infof("Handling IsAuthorized trigger playbackID=%s, payload=%v", playbackID, payload)
 	if payload.Origin == "null" && payload.Referer == "" {
 		// Allow redirects without caching
 		match, _ := regexp.MatchString(`(?:prod|staging)-.*catalyst-\d+`, payload.Host)
@@ -216,10 +223,12 @@ func (ac *AccessControlHandlersCollection) IsAuthorized(ctx context.Context, pla
 			Inc()
 	}()
 	allowed, err = ac.isAuthorized(ctx, playbackID, payload)
+	glog.Infof("isAuthorized handled playbackID=%s, allowed=%v, err=%v", playbackID, allowed, err)
 	return
 }
 
 func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, playbackID string, payload *misttriggers.UserNewPayload) (bool, error) {
+	glog.Infof("Handling AccessControlHandlersCollection.isAuthorized() trigger payload=%v", payload)
 	webhookHeaders := make(map[string]string)
 
 	webhookHeaders["User-Agent"] = payload.UserAgent
@@ -263,6 +272,7 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 			return false, err
 		}
 		cacheKey = "accessKey_" + hashCacheKey
+		glog.Infof("Produced cacheKey from accessKey: %s", cacheKey)
 	} else if jwt != "" {
 		for _, blocked := range ac.blockedJWTs {
 			if jwt == blocked {
@@ -284,6 +294,7 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 			return false, err
 		}
 		cacheKey = "jwtPubKey_" + hashCacheKey
+		glog.Infof("Produced cacheKey from JWT: %s", cacheKey)
 	}
 
 	body, err := json.Marshal(acReq)
@@ -302,6 +313,7 @@ func (ac *AccessControlHandlersCollection) isAuthorized(ctx context.Context, pla
 
 // checkViewerLimit is used to limit viewers per user globally (as configured with Gate API)
 func (ac *AccessControlHandlersCollection) checkViewerLimit(playbackID string) bool {
+	glog.Infof("checkViewerLimit playbackID=%s", playbackID)
 	viewerLimitCache.mux.RLock()
 	defer viewerLimitCache.mux.RUnlock()
 
@@ -332,6 +344,7 @@ func (ac *AccessControlHandlersCollection) checkViewerLimit(playbackID string) b
 }
 
 func (ac *AccessControlHandlersCollection) refreshConcurrentViewerCache(playbackID string) {
+	glog.Infof("refreshConcurrentViewerCache playbackID=%s", playbackID)
 	viewerLimitCache.mux.RLock()
 	viewerLimit, ok := viewerLimitCache.data[playbackID]
 	viewerLimitCache.mux.RUnlock()
@@ -373,34 +386,42 @@ func (ac *AccessControlHandlersCollection) refreshConcurrentViewerCache(playback
 }
 
 func (ac *AccessControlHandlersCollection) GetPlaybackAccessControlInfo(ctx context.Context, playbackID, cacheKey string, requestBody []byte) (bool, error) {
+	glog.Infof("GetPlaybackAccessControlInfo playbackID=%s, cacheKey=%s, requestBody=%v", playbackID, cacheKey, requestBody)
 	ac.mutex.RLock()
+	glog.Infof("ac.mutex.RLock()")
 	entry := ac.cache[playbackID][cacheKey]
 	ac.mutex.RUnlock()
 
 	if isExpired(entry) {
 		log.V(7).LogCtx(ctx, "Cache expired",
 			"cache_key", cacheKey)
+		glog.Infof("Cache expired, calling cachePlaybackAccessControlInfo")
 		err := ac.cachePlaybackAccessControlInfo(playbackID, cacheKey, requestBody)
 		if err != nil {
 			return false, err
 		}
+		glog.Infof("Cache expired, cached new playback access control info")
 	} else if isStale(entry) {
 		log.V(7).LogCtx(ctx, "Cache stale",
 			"cache_key", cacheKey)
+		glog.Infof("Cache stale")
 		go func() {
 			ac.mutex.RLock()
 			stillStale := isStale(ac.cache[playbackID][cacheKey])
 			ac.mutex.RUnlock()
 			if stillStale {
+				glog.Infof("Cache still stale, calling cachePlaybackAccessControlInfo")
 				err := ac.cachePlaybackAccessControlInfo(playbackID, cacheKey, requestBody)
 				if err != nil {
 					log.LogCtx(ctx, "Error caching playback access control info", "err", err)
 				}
+				glog.Infof("Cache still stale, cached new playback access control info")
 			}
 		}()
 	}
 
 	ac.mutex.RLock()
+	glog.Infof("ac.mutex.RLock() 2")
 	entry = ac.cache[playbackID][cacheKey]
 	ac.mutex.RUnlock()
 
@@ -421,14 +442,17 @@ func (ac *AccessControlHandlersCollection) ProduceHashCacheKey(cachePayload Play
 }
 
 func isExpired(entry *PlaybackAccessControlEntry) bool {
+	glog.Infof("isExpired")
 	return entry == nil || time.Now().After(entry.Stale)
 }
 
 func isStale(entry *PlaybackAccessControlEntry) bool {
+	glog.Infof("isStale")
 	return entry != nil && time.Now().After(entry.MaxAge) && !isExpired(entry)
 }
 
 func (ac *AccessControlHandlersCollection) cachePlaybackAccessControlInfo(playbackID, cacheKey string, requestBody []byte) error {
+	glog.Infof("cachePlaybackAccessControlInfo, playbackID=%s, cacheKey=%s, requestBody=%v", playbackID, cacheKey, requestBody)
 	allow, gateConfig, err := ac.gateClient.QueryGate(requestBody)
 
 	refreshInterval := gateConfig.RefreshInterval

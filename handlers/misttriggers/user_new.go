@@ -64,6 +64,8 @@ func (d *MistCallbackHandlersCollection) TriggerUserNew(ctx context.Context, w h
 	payload, err := ParseUserNewPayload(body)
 	cookies := req.Cookies()
 
+	glog.Infof("Got USER_NEW trigger sessionId=%q payload=%v", payload.SessionID, body)
+
 	var accessKey, jwt string
 	for _, cookie := range cookies {
 		switch cookie.Name {
