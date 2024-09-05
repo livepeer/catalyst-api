@@ -138,12 +138,11 @@ func (ac *AccessControlHandlersCollection) periodicRefreshIntervalCache(mapic mi
 			refreshIntervalCache.mux.Unlock()
 			ac.mutex.Unlock()
 
-			go func() {
-				glog.Infof("Invalidating sessions, count=%d", len(keysToInvalidate))
-				for _, key := range keysToInvalidate {
-					mapic.InvalidateAllSessions(key)
-				}
-			}()
+			glog.Infof("Invalidating sessions, count=%d", len(keysToInvalidate))
+			for _, key := range keysToInvalidate {
+				mapic.InvalidateAllSessions(key)
+			}
+			glog.Infof("Completed sessions invalidation, count=%d", len(keysToInvalidate))
 		}
 	}()
 }
