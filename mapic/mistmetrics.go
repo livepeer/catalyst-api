@@ -57,16 +57,7 @@ func (mc *mac) enrichMistMetrics(metrics string) string {
 	res := strings.Builder{}
 	lines := strings.Split(metrics, "\n")
 	for i, line := range lines {
-		playbackID, ok := mc.parsePlaybackID(line)
-		if ok {
-			// Enrich labels for the lines that contains playbackID
-			oldStr := mc.streamLabel(playbackID)
-			newStr := mc.enrichLabels(playbackID)
-			res.WriteString(strings.Replace(line, oldStr, newStr, -1))
-		} else {
-			// Do not enrich labels for lines that do not contain playbackID
-			res.WriteString(line)
-		}
+		res.WriteString(mc.enrichLine(line))
 
 		// Skip last end of line to preserve the same number of lines as Mist
 		if i < len(lines)-1 {
@@ -74,6 +65,42 @@ func (mc *mac) enrichMistMetrics(metrics string) string {
 		}
 	}
 	return res.String()
+}
+
+func (mc *mac) enrichLine(line string) string {
+	res := mc.enrichPlaybackSpecificLabels(line)
+	return mc.enrichConstLabels(res)
+}
+
+func (mc *mac) enrichPlaybackSpecificLabels(line string) string {
+	playbackID, ok := mc.parsePlaybackID(line)
+	if ok {
+		// Enrich labels for the lines that contains playbackID
+		oldStr := mc.streamLabel(playbackID)
+		newStr := mc.enrichLabels(playbackID)
+		return strings.Replace(line, oldStr, newStr, 1)
+	}
+	return line
+}
+
+func (mc *mac) enrichConstLabels(line string) string {
+	constLabels := fmt.Sprintf(`catalyst="true",catalyst_node="%s"`, mc.nodeID)
+	if len(line) == 0 || strings.HasPrefix(line, "#") {
+		// empty lines or comments
+		return line
+	}
+	if strings.Contains(line, "}") {
+		// metrics with labels
+		return strings.Replace(line, "}", fmt.Sprintf(",%s}", constLabels), 1)
+	}
+	// metrics without labels
+	lineSplit := strings.Split(line, " ")
+	if len(lineSplit) < 2 {
+		// invalid metric, do not enrich
+		return line
+	}
+	metricName := lineSplit[0]
+	return strings.Replace(line, metricName, fmt.Sprintf("%s{%s}", metricName, constLabels), 1)
 }
 
 func (mc *mac) parsePlaybackID(line string) (string, bool) {
@@ -86,7 +113,6 @@ func (mc *mac) parsePlaybackID(line string) (string, bool) {
 
 func (mc *mac) enrichLabels(playbackID string) string {
 	res := mc.streamLabel(playbackID)
-	res += `,catalyst="true"`
 	si, err := mc.getStreamInfo(playbackID)
 	if err != nil {
 		glog.Warning("could not enrich Mist metrics for stream=%s err=%v", playbackID, err)
