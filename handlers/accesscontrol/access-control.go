@@ -143,7 +143,6 @@ func (ac *AccessControlHandlersCollection) periodicRefreshIntervalCache(mapic mi
 				for _, key := range keysToInvalidate {
 					mapic.InvalidateAllSessions(key)
 				}
-				glog.Infof("Completed sessions invalidation, count=%d", len(keysToInvalidate))
 			}
 		}
 	}()
