@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -89,7 +88,7 @@ func UploadToOSURLFields(osURL, filename string, data io.Reader, timeout time.Du
 
 	if err != nil {
 		metrics.Metrics.ObjectStoreClient.FailureCount.WithLabelValues(host, "write", bucket).Inc()
-		return fmt.Errorf("failed to write to OS URL %q: %s", log.RedactURL(filepath.Join(osURL, filename)), err)
+		return fmt.Errorf("failed to write to OS URL %q: %s", log.RedactURL(osURL+"/"+filename), err)
 	}
 
 	duration := time.Since(start)

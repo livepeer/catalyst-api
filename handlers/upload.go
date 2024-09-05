@@ -360,7 +360,7 @@ func checkWritePermission(reqID, externalID string, urls ...*url.URL) error {
 
 		urlString := u.String()
 		// check write permission by uploading a file
-		err := clients.UploadToOSURL(u.String(), "metadata.json", strings.NewReader(fmt.Sprintf(`{"external_id": "%s"}`, externalID)), time.Second)
+		err := clients.UploadToOSURL(u.String(), "metadata.json", strings.NewReader(fmt.Sprintf(`{"external_id": "%s"}`, externalID)), 30*time.Second)
 		if err != nil {
 			log.LogError(reqID, "failed write permission check", err, "url", log.RedactURL(urlString))
 			return fmt.Errorf("failed write permission check for %s", log.RedactURL(urlString))
