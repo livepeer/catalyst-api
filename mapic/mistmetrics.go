@@ -70,7 +70,6 @@ func (mc *mac) enrichMistMetrics(metrics string) string {
 func (mc *mac) enrichLine(line string) string {
 	res := mc.enrichPlaybackSpecificLabels(line)
 	return mc.enrichConstLabels(res)
-	return res
 }
 
 func (mc *mac) enrichPlaybackSpecificLabels(line string) string {
