@@ -61,7 +61,7 @@ func GenerateThumbsVTT(requestID string, input string, output *url.URL) error {
 	const layout = "15:04:05.000"
 	outputLocation := output.JoinPath(outputDir)
 	builder := &bytes.Buffer{}
-	_, err = builder.WriteString("WEBVTT\n")
+	_, err = builder.WriteString("WEBVTT\n\n")
 	if err != nil {
 		return err
 	}
