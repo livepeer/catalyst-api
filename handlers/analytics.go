@@ -73,8 +73,8 @@ type AnalyticsLogEvent struct {
 	WindowWidthPX       *int    `json:"window_width_px"`
 
 	// Error event
-	ErrorMessage *string `json:"error_message"`
-	Category     *string `json:"category"`
+	Message  *string `json:"message"`
+	Category *string `json:"category"`
 }
 
 type AnalyticsGeo struct {
@@ -275,8 +275,8 @@ func (c *AnalyticsHandlersCollection) toAnalyticsData(log *AnalyticsLog, geo Ana
 				WindowHeightPX:      e.WindowHeightPX,
 				WindowWidthPX:       e.WindowWidthPX,
 
-				ErrorMessage: e.ErrorMessage,
-				Category:     e.Category,
+				Message:  e.Message,
+				Category: e.Category,
 			},
 		})
 	}

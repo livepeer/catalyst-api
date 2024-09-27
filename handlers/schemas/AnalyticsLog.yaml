@@ -45,7 +45,7 @@ properties:
             type: "integer"
           autoplay_status:
             type: "string"
-          error_message:
+          message:
             type: "string"
         required:
           - type

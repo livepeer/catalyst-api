@@ -88,7 +88,7 @@ func TestHandleLog(t *testing.T) {
 						"id": "abcde12345",
 						"type": "error",
 						"timestamp": 1234567895,
-						"error_message": "error message",
+						"message": "error message",
 						"category": "offline"
 					}
 				]
@@ -161,9 +161,9 @@ func TestHandleLog(t *testing.T) {
 					EventType:      "error",
 					EventTimestamp: 1234567895,
 					EventData: analytics.LogDataEvent{
-						ID:           strPtr("abcde12345"),
-						ErrorMessage: strPtr("error message"),
-						Category:     strPtr("offline"),
+						ID:       strPtr("abcde12345"),
+						Message:  strPtr("error message"),
+						Category: strPtr("offline"),
 					},
 				},
 			},
