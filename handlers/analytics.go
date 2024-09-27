@@ -284,7 +284,7 @@ func (c *AnalyticsHandlersCollection) toAnalyticsData(log *AnalyticsLog, geo Ana
 }
 
 func isSupportedEvent(eventType string) bool {
-	if eventType == "heartbeat" || eventType == "error" {
+	if eventType == "heartbeat" || eventType == "error" || eventType == "warning" {
 		return true
 	}
 	return false
