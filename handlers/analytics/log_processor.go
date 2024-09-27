@@ -52,8 +52,8 @@ type LogDataEvent struct {
 	WindowWidthPX       *int    `json:"window_width_px,omitempty"`
 
 	// Error event
-	ErrorMessage *string `json:"error_message,omitempty"`
-	Category     *string `json:"category,omitempty"`
+	Message  *string `json:"message,omitempty"`
+	Category *string `json:"category,omitempty"`
 }
 
 type LogData struct {
