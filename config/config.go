@@ -28,7 +28,7 @@ const MaxSegmentSizeSecs = 20
 // VOD jobs. The limits are somewhat arbitrary and will need to be tweaked based on
 // requirements.
 var MaxInFlightJobs int = 8
-var MaxInFlightClipJobs int = 20
+var MaxInFlightClipJobs int = 50
 
 // How long to try writing a single segment to storage for before giving up
 const SEGMENT_WRITE_TIMEOUT = 5 * time.Minute
