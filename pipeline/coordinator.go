@@ -290,17 +290,19 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 
 		// Update osTransferURL if needed
 		if clients.IsHLSInput(sourceURL) {
-			// Handle falling back to backup bucket for manifest and segments
-			log.Log(p.RequestID, "Starting recording backup check")
-			sourceURL, err = clients.RecordingBackupCheck(p.RequestID, sourceURL, osTransferURL.JoinPath(".."))
-			if err != nil {
-				return nil, err
+			// Interim Fix: Don't try and use the backup for clipping - this causes a big slowness where we
+			// hang for a long time inside this method. Root cause needs to be established, but current thinking is that
+			// it happens when there's a very large input manifest
+			if !p.ClipStrategy.Enabled {
+				// Handle falling back to backup bucket for manifest and segments
+				sourceURL, err = clients.RecordingBackupCheck(p.RequestID, sourceURL, osTransferURL.JoinPath(".."))
+				if err != nil {
+					return nil, err
+				}
 			}
-			log.Log(p.RequestID, "Completed recording backup check")
 
 			// Currently we only clip an HLS source (e.g recordings or transcoded asset)
 			if p.ClipStrategy.Enabled {
-				log.Log(p.RequestID, "Clipping enabled")
 				err := backoff.Retry(func() error {
 					log.Log(p.RequestID, "clippity clipping the input", "Playback-ID", p.ClipStrategy.PlaybackID)
 					// Use new clipped manifest as the source URL
@@ -314,8 +316,6 @@ func (c *Coordinator) StartUploadJob(p UploadJobPayload) {
 				if err != nil {
 					return nil, err
 				}
-			} else {
-				log.Log(p.RequestID, "Clipping not enabled")
 			}
 			// Use the source URL location as the transfer directory to hold the clipped outputs
 			osTransferURL = sourceURL
