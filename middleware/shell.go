@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"sync"
 	"time"
+
+	"github.com/golang/glog"
 )
 
 type Shell struct {
@@ -39,8 +41,8 @@ func (s *Shell) RunBg() *time.Ticker {
 		for range ticker.C {
 			err := s.Run()
 			if err != nil {
-				log.Println("cmd: failed to start", s.Cmd)
-				break
+				glog.Errorf("cmd: failed to start %s", err)
+				continue
 			}
 		}
 	}()
@@ -61,6 +63,5 @@ func (s *Shell) Run() error {
 		return fmt.Errorf("cmd: failed to Run(): %s\n", err)
 	}
 	log.Printf("cmd: output: %s\n", out)
-
-	return err
+	return nil
 }
