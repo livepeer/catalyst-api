@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/golang/glog"
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/balancer"
 	"github.com/livepeer/catalyst-api/config"
@@ -64,17 +63,14 @@ func NewCatalystAPIRouter(cli config.Cli, vodEngine *pipeline.Coordinator, bal b
 	router.GET("/healthcheck", withLogging(catalystApiHandlers.Healthcheck()))
 
 	if cli.EnableAnalytics == "true" || cli.EnableAnalytics == "enabled" {
-		logProcessor, err := analytics.NewLogProcessor(cli.KafkaBootstrapServers, cli.KafkaUser, cli.KafkaPassword, cli.AnalyticsKafkaTopic)
-		if err != nil {
-			glog.Fatalf("failed to configure analytics log processor, err=%v", err)
-		} else {
-			analyticsApiHandlers := handlers.NewAnalyticsHandlersCollection(mapic, lapi, logProcessor)
-			router.POST("/analytics/log", withCORS(analyticsApiHandlers.Log()))
-			// Redirect GET /analytics/log to the specific catalyst node, e.g. "mdw-staging-staging-catalyst-0.livepeer.monster"
-			// This is useful for the player, because then it can stick to one node while sending analytics logs
-			router.GET("/analytics/log", withLogging(withCORS(geoHandlers.RedirectConstPathHandler())))
-			router.HEAD("/analytics/log", withLogging(withCORS(geoHandlers.RedirectConstPathHandler())))
-		}
+		logProcessor := analytics.NewLogProcessor(cli.KafkaBootstrapServers, cli.KafkaUser, cli.KafkaPassword, cli.AnalyticsKafkaTopic)
+
+		analyticsApiHandlers := handlers.NewAnalyticsHandlersCollection(mapic, lapi, logProcessor)
+		router.POST("/analytics/log", withCORS(analyticsApiHandlers.Log()))
+		// Redirect GET /analytics/log to the specific catalyst node, e.g. "mdw-staging-staging-catalyst-0.livepeer.monster"
+		// This is useful for the player, because then it can stick to one node while sending analytics logs
+		router.GET("/analytics/log", withLogging(withCORS(geoHandlers.RedirectConstPathHandler())))
+		router.HEAD("/analytics/log", withLogging(withCORS(geoHandlers.RedirectConstPathHandler())))
 	}
 
 	// Playback endpoint

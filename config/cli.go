@@ -73,6 +73,7 @@ type Cli struct {
 	KafkaUser                 string
 	KafkaPassword             string
 	AnalyticsKafkaTopic       string
+	UserEndKafkaTopic         string
 	SerfMembersEndpoint       string
 	EventsEndpoint            string
 	CatalystApiURL            string
