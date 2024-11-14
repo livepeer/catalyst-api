@@ -27,7 +27,19 @@ type AnalyticsHandler struct {
 }
 
 type userEndData struct {
-	payload *misttriggers.UserEndPayload
+	UUID            string `json:"uuid"`
+	TimestampMs     int64  `json:"timestamp_ms"`
+	ConnectionToken string `json:"connection_token"`
+	DownloadedBytes string `json:"downloaded_bytes"`
+	UploadedBytes   string `json:"uploaded_bytes"`
+	SessionDuration string `json:"session_duration_s"`
+	StreamID        string `json:"stream_id"`
+	StreamIDCount   int    `json:"stream_id_count"`
+	Protocol        string `json:"protocol"`
+	ProtocolCount   int    `json:"protocol_count"`
+	IPAddress       string `json:"ip_address"`
+	IPAddressCount  int    `json:"ip_address_count"`
+	Tags            string `json:"tags"`
 }
 
 func NewAnalyticsHandler(cli config.Cli, db *sql.DB) AnalyticsHandler {
@@ -56,7 +68,7 @@ func (a *AnalyticsHandler) HandleUserEnd(ctx context.Context, payload *misttrigg
 	if a.writer != nil {
 		// Using Kafka
 		select {
-		case a.dataCh <- userEndData{payload: payload}:
+		case a.dataCh <- toUserEndData(payload):
 			// process data async
 		default:
 			glog.Warningf("error processing USER_END trigger event, too many triggers in the buffer")
@@ -144,14 +156,14 @@ func (a *AnalyticsHandler) sendEvents() {
 
 	var msgs []kafka.Message
 	for _, d := range a.events {
-		key, err := json.Marshal(KafkaKey{SessionID: d.payload.SessionID})
+		key, err := json.Marshal(KafkaKey{SessionID: d.UUID})
 		if err != nil {
-			glog.Errorf("invalid USER_END event, cannot create Kafka key, sessionID=%s, err=%v", d.payload.SessionID, err)
+			glog.Errorf("invalid USER_END event, cannot create Kafka key, UUID=%s, err=%v", d.UUID, err)
 			continue
 		}
 		value, err := json.Marshal(d)
 		if err != nil {
-			glog.Errorf("invalid USER_END event, cannot create Kafka value, sessionID=%s, err=%v", d.payload.SessionID, err)
+			glog.Errorf("invalid USER_END event, cannot create Kafka value, UUID=%s, err=%v", d.UUID, err)
 			continue
 		}
 		msgs = append(msgs, kafka.Message{Key: key, Value: value})
@@ -159,4 +171,22 @@ func (a *AnalyticsHandler) sendEvents() {
 	a.events = []userEndData{}
 
 	sendWithRetries(a.writer, msgs)
+}
+
+func toUserEndData(payload *misttriggers.UserEndPayload) userEndData {
+	return userEndData{
+		UUID:            payload.TriggerID,
+		TimestampMs:     time.Now().UnixMilli(),
+		ConnectionToken: payload.ConnectionToken,
+		DownloadedBytes: payload.DownloadedBytes,
+		UploadedBytes:   payload.UploadedBytes,
+		SessionDuration: payload.TimeActiveSecs,
+		StreamID:        payload.StreamNames[len(payload.StreamNames)-1],
+		StreamIDCount:   len(payload.StreamNames),
+		Protocol:        payload.Protocols[len(payload.Protocols)-1],
+		ProtocolCount:   len(payload.Protocols),
+		IPAddress:       payload.IPs[len(payload.IPs)-1],
+		IPAddressCount:  len(payload.IPs),
+		Tags:            strings.Join(payload.Tags, ","),
+	}
 }
