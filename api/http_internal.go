@@ -77,7 +77,7 @@ func NewCatalystAPIRouterInternal(cli config.Cli, vodEngine *pipeline.Coordinato
 	eventsHandler := handlers.NewEventsHandlersCollection(c, mapic, bal, eventsEndpoint)
 	ffmpegSegmentingHandlers := &ffmpeg.HandlersCollection{VODEngine: vodEngine}
 	accessControlHandlers := accesscontrol.NewAccessControlHandlersCollection(cli, mapic)
-	analyticsHandlers := analytics.NewAnalyticsHandler(metricsDB)
+	analyticsHandlers := analytics.NewAnalyticsHandler(cli, metricsDB)
 	encryptionHandlers := accesscontrol.NewEncryptionHandlersCollection(cli, spkiPublicKey)
 	adminHandlers := &admin.AdminHandlersCollection{Cluster: c}
 	mistCallbackHandlers := misttriggers.NewMistCallbackHandlersCollection(cli, broker)

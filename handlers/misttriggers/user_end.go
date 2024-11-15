@@ -11,18 +11,18 @@ import (
 
 // We only pass these on to the analytics pipeline, so leave as strings for now
 type UserEndPayload struct {
-	TriggerID       string
-	ConnectionToken string
-	StreamNames     []string
-	IPs             []string
-	TimeActiveSecs  string
-	UploadedBytes   string
-	DownloadedBytes string
-	Tags            []string
-	PerIPSecs       []string
-	PerProtocolSecs []string
-	PerStreamSecs   []string
-	SessionID       string
+	TriggerID       string   `json:"trigger_id"`
+	ConnectionToken string   `json:"connection_token"`
+	StreamNames     []string `json:"stream_names"`
+	IPs             []string `json:"ips"`
+	TimeActiveSecs  string   `json:"time_active_secs"`
+	UploadedBytes   string   `json:"uploaded_bytes"`
+	DownloadedBytes string   `json:"downloaded_bytes"`
+	Tags            []string `json:"tags"`
+	PerIPSecs       []string `json:"per_ip_secs"`
+	PerProtocolSecs []string `json:"per_protocol_secs"`
+	PerStreamSecs   []string `json:"per_stream_secs"`
+	SessionID       string   `json:"session_id"`
 
 	/*
 		Protocols is a list of the protocols in use for the "user" session. Values can be (not exhaustive):
