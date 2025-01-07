@@ -1,16 +1,17 @@
 package events
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/hashicorp/serf/serf"
 	"github.com/livepeer/catalyst-api/balancer/catabalancer"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/redis/go-redis/v9"
 )
 
 const streamEventResource = "stream"
@@ -107,6 +108,17 @@ func Unmarshal(payload []byte) (Event, error) {
 }
 
 func StartMetricSending(nodeName string, latitude float64, longitude float64, c cluster.Cluster, mist clients.MistAPIClient) {
+	clusterAddrs := []string{
+		"10.128.0.2:6379",
+	}
+
+	// Initialize the Redis Cluster client
+	rdb := redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs: clusterAddrs,
+	})
+
+	defer rdb.Close()
+
 	ticker := time.NewTicker(catabalancer.UpdateNodeStatsEvery)
 	go func() {
 		for range ticker.C {
@@ -151,10 +163,7 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 				continue
 			}
 
-			err = c.BroadcastEvent(serf.UserEvent{
-				Name:    "node-update",
-				Payload: payload,
-			})
+			err = rdb.Set(context.Background(), nodeName, payload, 0).Err()
 			if err != nil {
 				log.LogNoRequestID("catabalancer failed to send node update", "err", err)
 				continue

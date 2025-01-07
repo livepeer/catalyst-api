@@ -3,9 +3,8 @@ package video
 import (
 	"bytes"
 	"fmt"
-	"strings"
-
 	ffmpeg "github.com/u2takey/ffmpeg-go"
+	"strings"
 )
 
 // Segment splits a source video URL into segments

@@ -246,16 +246,18 @@ func main() {
 		group.Go(func() error {
 			return reconcileBalancer(ctx, bal, c)
 		})
+
+		if balancer.CombinedBalancerEnabled(cli.CataBalancer) {
+			if cli.Tags["node"] == "media" { // don't announce load balancing availability for testing nodes
+				events.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, c, mist)
+			}
+		}
 	} else {
 		bal = mist_balancer.NewRemoteBalancer(mistBalancerConfig)
 		if balancer.CombinedBalancerEnabled(cli.CataBalancer) {
 			cataBalancer := catabalancer.NewBalancer(cli.NodeName, cli.CataBalancerMetricTimeout, cli.CataBalancerIngestStreamTimeout)
 			// Temporary combined balancer to test cataBalancer logic alongside existing mist balancer
 			bal = balancer.NewCombinedBalancer(cataBalancer, bal, cli.CataBalancer)
-
-			if cli.Tags["node"] == "media" { // don't announce load balancing availability for testing nodes
-				events.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, c, mist)
-			}
 		}
 	}
 
