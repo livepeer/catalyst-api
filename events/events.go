@@ -1,7 +1,7 @@
 package events
 
 import (
-	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -9,9 +9,7 @@ import (
 
 	"github.com/livepeer/catalyst-api/balancer/catabalancer"
 	"github.com/livepeer/catalyst-api/clients"
-	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/log"
-	"github.com/redis/go-redis/v9"
 )
 
 const streamEventResource = "stream"
@@ -107,17 +105,22 @@ func Unmarshal(payload []byte) (Event, error) {
 	return nil, fmt.Errorf("unable to unmarshal event, unknown resource '%s'", generic.Resource)
 }
 
-func StartMetricSending(nodeName string, latitude float64, longitude float64, c cluster.Cluster, mist clients.MistAPIClient) {
-	clusterAddrs := []string{
-		"10.128.0.2:6379",
+func StartMetricSending(nodeName string, latitude float64, longitude float64, mist clients.MistAPIClient, connectionString string) {
+	if connectionString == "" {
+		log.LogNoRequestID("Connection string is empty for node stats db")
+		return
 	}
 
-	// Initialize the Redis Cluster client
-	rdb := redis.NewClusterClient(&redis.ClusterOptions{
-		Addrs: clusterAddrs,
-	})
+	metricsDB, err := sql.Open("postgres", connectionString)
+	if err != nil {
+		log.LogNoRequestID("Error creating postgres node stats connection: %v", "err", err)
+		return
+	}
 
-	defer rdb.Close()
+	// TODO copied from vod metrics db. Without this, we've run into issues with exceeding our open connection limit
+	metricsDB.SetMaxOpenConns(2)
+	metricsDB.SetMaxIdleConns(2)
+	metricsDB.SetConnMaxLifetime(time.Hour)
 
 	ticker := time.NewTicker(catabalancer.UpdateNodeStatsEvery)
 	go func() {
@@ -125,12 +128,6 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 			sysusage, err := catabalancer.GetSystemUsage()
 			if err != nil {
 				log.LogNoRequestID("catabalancer failed to get sys usage", "err", err)
-				continue
-			}
-
-			mistState, err := mist.GetState()
-			if err != nil {
-				log.LogNoRequestID("catabalancer failed to get mist state", "err", err)
 				continue
 			}
 
@@ -144,18 +141,27 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 					LoadAvg:                  sysusage.LoadAvg.Load5Min,
 					GeoLatitude:              latitude,
 					GeoLongitude:             longitude,
+					Timestamp:                time.Now(),
 				},
 			}
 
-			var nonIngestStreams, ingestStreams []string
-			for streamID := range mistState.ActiveStreams {
-				if mistState.IsIngestStream(streamID) {
-					ingestStreams = append(ingestStreams, streamID)
-				} else {
-					nonIngestStreams = append(nonIngestStreams, streamID)
+			if mist != nil {
+				mistState, err := mist.GetState()
+				if err != nil {
+					log.LogNoRequestID("catabalancer failed to get mist state", "err", err)
+					continue
 				}
+
+				var nonIngestStreams, ingestStreams []string
+				for streamID := range mistState.ActiveStreams {
+					if mistState.IsIngestStream(streamID) {
+						ingestStreams = append(ingestStreams, streamID)
+					} else {
+						nonIngestStreams = append(nonIngestStreams, streamID)
+					}
+				}
+				event.SetStreams(nonIngestStreams, ingestStreams)
 			}
-			event.SetStreams(nonIngestStreams, ingestStreams)
 
 			payload, err := json.Marshal(event)
 			if err != nil {
@@ -163,9 +169,19 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, c 
 				continue
 			}
 
-			err = rdb.Set(context.Background(), nodeName, payload, 0).Err()
+			insertStatement := `insert into "node_stats"(
+                            "node_id",
+                            "stats"
+                            ) values($1, $2)
+							ON CONFLICT (node_id)
+							DO UPDATE SET stats = EXCLUDED.stats;`
+			_, err = metricsDB.Exec(
+				insertStatement,
+				nodeName,
+				payload,
+			)
 			if err != nil {
-				log.LogNoRequestID("catabalancer failed to send node update", "err", err)
+				log.LogNoRequestID("error writing postgres node stats", "err", err)
 				continue
 			}
 		}
