@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/livepeer/catalyst-api/balancer/catabalancer"
@@ -38,34 +37,6 @@ type StopSessionsEvent struct {
 	PlaybackID string `json:"playback_id"`
 }
 
-// JSON representation is deliberately truncated to keep the message size small
-type NodeUpdateEvent struct {
-	Resource    string                   `json:"resource,omitempty"`
-	NodeID      string                   `json:"n,omitempty"`
-	NodeMetrics catabalancer.NodeMetrics `json:"nm,omitempty"`
-	Streams     string                   `json:"s,omitempty"`
-}
-
-func (n *NodeUpdateEvent) SetStreams(streamIDs []string, ingestStreamIDs []string) {
-	n.Streams = strings.Join(streamIDs, "|") + "~" + strings.Join(ingestStreamIDs, "|")
-}
-
-func (n *NodeUpdateEvent) GetStreams() []string {
-	before, _, _ := strings.Cut(n.Streams, "~")
-	if len(before) > 0 {
-		return strings.Split(before, "|")
-	}
-	return []string{}
-}
-
-func (n *NodeUpdateEvent) GetIngestStreams() []string {
-	_, after, _ := strings.Cut(n.Streams, "~")
-	if len(after) > 0 {
-		return strings.Split(after, "|")
-	}
-	return []string{}
-}
-
 func Unmarshal(payload []byte) (Event, error) {
 	var generic GenericEvent
 	err := json.Unmarshal(payload, &generic)
@@ -95,7 +66,7 @@ func Unmarshal(payload []byte) (Event, error) {
 		}
 		return event, nil
 	case nodeUpdateEventResource:
-		event := &NodeUpdateEvent{}
+		event := &catabalancer.NodeUpdateEvent{}
 		err := json.Unmarshal(payload, event)
 		if err != nil {
 			return nil, err
@@ -105,23 +76,7 @@ func Unmarshal(payload []byte) (Event, error) {
 	return nil, fmt.Errorf("unable to unmarshal event, unknown resource '%s'", generic.Resource)
 }
 
-func StartMetricSending(nodeName string, latitude float64, longitude float64, mist clients.MistAPIClient, connectionString string) {
-	if connectionString == "" {
-		log.LogNoRequestID("Connection string is empty for node stats db")
-		return
-	}
-
-	metricsDB, err := sql.Open("postgres", connectionString)
-	if err != nil {
-		log.LogNoRequestID("Error creating postgres node stats connection: %v", "err", err)
-		return
-	}
-
-	// TODO copied from vod metrics db. Without this, we've run into issues with exceeding our open connection limit
-	metricsDB.SetMaxOpenConns(2)
-	metricsDB.SetMaxIdleConns(2)
-	metricsDB.SetConnMaxLifetime(time.Hour)
-
+func StartMetricSending(nodeName string, latitude float64, longitude float64, mist clients.MistAPIClient, nodeStatsDB *sql.DB) {
 	ticker := time.NewTicker(catabalancer.UpdateNodeStatsEvery)
 	go func() {
 		for range ticker.C {
@@ -131,7 +86,7 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, mi
 				continue
 			}
 
-			event := NodeUpdateEvent{
+			event := catabalancer.NodeUpdateEvent{
 				Resource: nodeUpdateEventResource,
 				NodeID:   nodeName,
 				NodeMetrics: catabalancer.NodeMetrics{
@@ -175,7 +130,7 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, mi
                             ) values($1, $2)
 							ON CONFLICT (node_id)
 							DO UPDATE SET stats = EXCLUDED.stats;`
-			_, err = metricsDB.Exec(
+			_, err = nodeStatsDB.Exec(
 				insertStatement,
 				nodeName,
 				payload,
