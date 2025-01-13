@@ -16,8 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/livepeer/catalyst-api/balancer/catabalancer"
-
 	"github.com/golang/glog"
 	"github.com/livepeer/catalyst-api/balancer"
 	"github.com/livepeer/catalyst-api/cluster"
@@ -495,12 +493,4 @@ func (b *MistBalancer) mistUtilLoadRequest(ctx context.Context, route, stream, l
 
 func (b *MistBalancer) mistAddr() string {
 	return fmt.Sprintf("http://%s:%d", b.config.MistHost, b.config.MistPort)
-}
-
-func (b *MistBalancer) UpdateNodes(id string, nodeMetrics catabalancer.NodeMetrics) {
-	//noop
-}
-
-func (b *MistBalancer) UpdateStreams(id string, stream string, isIngest bool) {
-	//noop
 }

@@ -7,7 +7,6 @@ import (
 	"github.com/hashicorp/serf/serf"
 	"github.com/julienschmidt/httprouter"
 	"github.com/livepeer/catalyst-api/balancer"
-	"github.com/livepeer/catalyst-api/balancer/catabalancer"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/events"
@@ -15,7 +14,6 @@ import (
 	"github.com/xeipuuv/gojsonschema"
 	"io"
 	"net/http"
-	"strings"
 )
 
 type EventsHandlersCollection struct {
@@ -110,18 +108,6 @@ func (c *EventsHandlersCollection) ReceiveUserEvent() httprouter.Handle {
 			glog.V(5).Infof("received serf StopSessionsEvent: %v", event.PlaybackID)
 			c.mapic.StopSessions(event.PlaybackID)
 			return
-		case *catabalancer.NodeUpdateEvent:
-			if glog.V(5) {
-				glog.Infof("received serf NodeUpdateEvent. Node: %s. Length: %d bytes. Ingest Streams: %v. Non-Ingest Streams: %v", event.NodeID, len(userEventPayload), strings.Join(event.GetIngestStreams(), ","), strings.Join(event.GetStreams(), ","))
-			}
-
-			c.bal.UpdateNodes(event.NodeID, event.NodeMetrics)
-			for _, stream := range event.GetStreams() {
-				c.bal.UpdateStreams(event.NodeID, stream, false)
-			}
-			for _, stream := range event.GetIngestStreams() {
-				c.bal.UpdateStreams(event.NodeID, stream, true)
-			}
 		default:
 			glog.Errorf("unsupported serf event: %v", e)
 		}
