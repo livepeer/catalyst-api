@@ -19,7 +19,7 @@ import (
 type CataBalancer struct {
 	NodeName  string // Node name of this instance
 	Nodes     map[string]*Node
-	nodesLock sync.Mutex
+	nodesLock sync.RWMutex
 
 	metricTimeout       time.Duration
 	ingestStreamTimeout time.Duration
@@ -128,8 +128,8 @@ func (c *CataBalancer) Start(ctx context.Context) error {
 	return nil
 }
 
-// TODO not called anywhere but tests?
 func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Member) error {
+	log.LogNoRequestID("catabalancer UpdateMembers")
 	c.nodesLock.Lock()
 	defer c.nodesLock.Unlock()
 
@@ -191,8 +191,8 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 }
 
 func (c *CataBalancer) createScoredNodes(s stats) []ScoredNode {
-	c.nodesLock.Lock()
-	defer c.nodesLock.Unlock()
+	c.nodesLock.RLock()
+	defer c.nodesLock.RUnlock()
 	var nodesList []ScoredNode
 	for nodeName, node := range c.Nodes {
 		metrics, ok := s.NodeMetrics[nodeName]
@@ -342,7 +342,6 @@ func (c *CataBalancer) RefreshNodes() (stats, error) {
 			return s, fmt.Errorf("failed to unmarshal node update event: %w", err)
 		}
 
-		// TODO skip if node doesn't exist in c.Nodes too?
 		if isStale(event.NodeMetrics.Timestamp, c.metricTimeout) {
 			log.LogNoRequestID("catabalancer skipping stale data while refreshing", "nodeID", event.NodeID, "timestamp", event.NodeMetrics.Timestamp)
 			continue
@@ -358,6 +357,7 @@ func (c *CataBalancer) RefreshNodes() (stats, error) {
 		}
 		for _, stream := range event.GetIngestStreams() {
 			playbackID := getPlaybackID(stream)
+			s.Streams[event.NodeID][playbackID] = Stream{ID: stream, PlaybackID: playbackID, Timestamp: time.Now()}
 			s.IngestStreams[event.NodeID][stream] = Stream{ID: stream, PlaybackID: playbackID, Timestamp: time.Now()}
 		}
 	}
@@ -384,8 +384,8 @@ func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, streamID, lat, lo
 		return "", fmt.Errorf("error refreshing nodes: %w", err)
 	}
 
-	c.nodesLock.Lock()
-	defer c.nodesLock.Unlock()
+	c.nodesLock.RLock()
+	defer c.nodesLock.RUnlock()
 	for nodeName := range c.Nodes {
 		if stream, ok := s.IngestStreams[nodeName][streamID]; ok {
 			if isStale(stream.Timestamp, c.ingestStreamTimeout) {
@@ -403,12 +403,4 @@ var UpdateNodeStatsEvery = 5 * time.Second
 
 func isStale(timestamp time.Time, stale time.Duration) bool {
 	return time.Since(timestamp) >= stale
-}
-
-func removeOldStreams(streams Streams, stale time.Duration) {
-	for s, stream := range streams {
-		if isStale(stream.Timestamp, stale) {
-			delete(streams, s)
-		}
-	}
 }

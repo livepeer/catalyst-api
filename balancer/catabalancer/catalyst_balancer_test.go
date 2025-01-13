@@ -373,122 +373,45 @@ func TestMistUtilLoadSource(t *testing.T) {
 	require.Empty(t, source)
 }
 
-//func TestStreamTimeout(t *testing.T) {
-//	db, mock, err := sqlmock.New()
-//	require.NoError(t, err)
-//	c := NewBalancer("", time.Second, time.Second, db)
-//	err = c.UpdateMembers(context.Background(), []cluster.Member{{
-//		Name: "node",
-//		Tags: mediaTags,
-//	}})
-//	require.NoError(t, err)
-//
-//	c.metricTimeout = 5 * time.Second
-//	c.ingestStreamTimeout = 5 * time.Second
-//	nodeStats := NodeUpdateEvent{NodeID: "node", NodeMetrics: NodeMetrics{Timestamp: time.Now()}}
-//	nodeStats.SetStreams([]string{"video+stream"}, []string{"video+ingest"})
-//	setNodeMetrics(t, mock, []NodeUpdateEvent{nodeStats})
-//
-//	// Source load balance call should work
-//	source, err := c.MistUtilLoadSource(context.Background(), "video+ingest", "", "")
-//	require.NoError(t, err)
-//	require.Equal(t, "dtsc://node", source)
-//	// Playback load balance calls should work
-//	nodes := selectTopNodes(c.createScoredNodes(), "stream", 0, 0, 1)
-//	require.Equal(t, int64(2), nodes[0].StreamScore)
-//	nodes = selectTopNodes(c.createScoredNodes(), "ingest", 0, 0, 1)
-//	require.Equal(t, int64(2), nodes[0].StreamScore)
-//
-//	// test that a new ingest node will overwrite the previous data
-//	c.UpdateStreams("node2", "video+ingest", true)
-//	source, err = c.MistUtilLoadSource(context.Background(), "video+ingest", "", "")
-//	require.NoError(t, err)
-//	require.Equal(t, "dtsc://node2", source)
-//
-//	c.metricTimeout = -5 * time.Second
-//	c.ingestStreamTimeout = -5 * time.Second
-//	// Re-run the same load balance calls as above, now no results should be returned due to expiry
-//	source, err = c.MistUtilLoadSource(context.Background(), "video+ingest", "", "")
-//	require.EqualError(t, err, "catabalancer no node found for ingest stream: video+ingest stale: true")
-//	require.Empty(t, source)
-//
-//	nodes = selectTopNodes(c.createScoredNodes(), "stream", 0, 0, 1)
-//	require.Empty(t, nodes)
-//	nodes = selectTopNodes(c.createScoredNodes(), "ingest", 0, 0, 1)
-//	require.Empty(t, nodes)
-//}
+func TestStreamTimeout(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	c := NewBalancer("", time.Second, time.Second, db)
+	err = c.UpdateMembers(context.Background(), []cluster.Member{{
+		Name: "node",
+		Tags: mediaTags,
+	}})
+	require.NoError(t, err)
 
-// needs to be run with go test -race
-//func TestConcurrentUpdates(t *testing.T) {
-//	c := NewBalancer("", time.Second, time.Second, mockDB(t))
-//
-//	err := c.UpdateMembers(context.Background(), []cluster.Member{{Name: "node"}})
-//	require.NoError(t, err)
-//
-//	errGroup := errgroup.Group{}
-//	for i := 0; i < 100; i++ {
-//		i := i
-//		errGroup.Go(func() error {
-//			c.UpdateNodes("node", NodeMetrics{CPUUsagePercentage: float64(i)})
-//			return nil
-//		})
-//		errGroup.Go(func() error {
-//			c.UpdateStreams("node", strconv.Itoa(i), false)
-//			return nil
-//		})
-//	}
-//	// simulate some member updates at the same time
-//	for i := 0; i < 100; i++ {
-//		err = c.UpdateMembers(context.Background(), []cluster.Member{{Name: "node"}})
-//		require.NoError(t, err)
-//	}
-//	require.NoError(t, errGroup.Wait())
-//}
+	c.metricTimeout = 5 * time.Second
+	c.ingestStreamTimeout = 5 * time.Second
+	nodeStats := NodeUpdateEvent{NodeID: "node", NodeMetrics: NodeMetrics{Timestamp: time.Now()}}
+	nodeStats.SetStreams([]string{"video+stream"}, []string{"video+ingest"})
+	setNodeMetrics(t, mock, []NodeUpdateEvent{nodeStats})
+	s, err := c.RefreshNodes()
+	require.NoError(t, err)
+	setNodeMetrics(t, mock, []NodeUpdateEvent{nodeStats})
 
-//func TestSimulate(t *testing.T) {
-//	// update these values to test the lock contention with higher numbers of nodes etc
-//	nodeCount := 1
-//	streamsPerNode := 2
-//	expectedResponseTime := 100 * time.Millisecond
-//	loadBalanceCallCount := 5
-//
-//	updateEvery := 5 * time.Second
-//
-//	c := NewBalancer("node0", time.Second, time.Second, mockDB(t))
-//	var nodes []cluster.Member
-//	for i := 0; i < nodeCount; i++ {
-//		nodes = append(nodes, cluster.Member{Name: fmt.Sprintf("node%d", i)})
-//	}
-//	err := c.UpdateMembers(context.Background(), nodes)
-//	require.NoError(t, err)
-//
-//	for i := 0; i < nodeCount; i++ {
-//		i := i
-//		go (func() {
-//			duration := time.Duration(rand.Int63n(updateEvery.Milliseconds())) * time.Millisecond
-//			time.Sleep(duration)
-//			for {
-//				start := time.Now()
-//				c.UpdateNodes(fmt.Sprintf("node%d", i), NodeMetrics{CPUUsagePercentage: 10})
-//				require.LessOrEqual(t, time.Since(start), expectedResponseTime)
-//				for k := 0; k < streamsPerNode; k++ {
-//					start := time.Now()
-//					c.UpdateStreams(fmt.Sprintf("node%d", i), strconv.Itoa(k), false)
-//					require.LessOrEqual(t, time.Since(start), expectedResponseTime)
-//				}
-//
-//				time.Sleep(updateEvery)
-//			}
-//		})()
-//	}
-//
-//	// TODO add in updatemembers calls and source load balance calls
-//
-//	for j := 0; j < loadBalanceCallCount; j++ {
-//		start := time.Now()
-//		_, _, err = c.GetBestNode(context.Background(), nil, "playbackID", "0", "0", "", false)
-//		require.NoError(t, err)
-//		require.LessOrEqual(t, time.Since(start), expectedResponseTime)
-//		time.Sleep(100 * time.Millisecond)
-//	}
-//}
+	// Source load balance call should work
+	source, err := c.MistUtilLoadSource(context.Background(), "video+ingest", "", "")
+	require.NoError(t, err)
+	require.Equal(t, "dtsc://node", source)
+	// Playback load balance calls should work
+	nodes := selectTopNodes(c.createScoredNodes(s), "stream", 0, 0, 1)
+	require.Equal(t, int64(2), nodes[0].StreamScore)
+	nodes = selectTopNodes(c.createScoredNodes(s), "ingest", 0, 0, 1)
+	require.Equal(t, int64(2), nodes[0].StreamScore)
+
+	setNodeMetrics(t, mock, []NodeUpdateEvent{nodeStats})
+	c.ingestStreamTimeout = -5 * time.Second
+	// Re-run the same load balance calls as above, now no results should be returned due to expiry
+	source, err = c.MistUtilLoadSource(context.Background(), "video+ingest", "", "")
+	require.EqualError(t, err, "catabalancer no node found for ingest stream: video+ingest stale: true")
+	require.Empty(t, source)
+
+	c.metricTimeout = -5 * time.Second
+	nodes = selectTopNodes(c.createScoredNodes(s), "stream", 0, 0, 1)
+	require.Empty(t, nodes)
+	nodes = selectTopNodes(c.createScoredNodes(s), "ingest", 0, 0, 1)
+	require.Empty(t, nodes)
+}
