@@ -25,7 +25,7 @@ type CataBalancer struct {
 	NodeMetrics         map[string]NodeMetrics // Node name -> NodeMetrics
 	metricTimeout       time.Duration
 	ingestStreamTimeout time.Duration
-	MetricsDB           *sql.DB
+	NodeStatsDB         *sql.DB
 }
 
 type Streams map[string]Stream // Stream ID -> Stream
@@ -119,7 +119,7 @@ func NewBalancer(nodeName string, metricTimeout time.Duration, ingestStreamTimeo
 		NodeMetrics:         make(map[string]NodeMetrics),
 		metricTimeout:       metricTimeout,
 		ingestStreamTimeout: ingestStreamTimeout,
-		MetricsDB:           nodeStatsDB,
+		NodeStatsDB:         nodeStatsDB,
 	}
 }
 
@@ -329,12 +329,12 @@ func truncateReturned(scoredNodes []ScoredNode, numNodes int) []ScoredNode {
 
 func (c *CataBalancer) RefreshNodes() error {
 	log.LogNoRequestID("catabalancer refreshing nodes")
-	if c.MetricsDB == nil {
+	if c.NodeStatsDB == nil {
 		return fmt.Errorf("node stats DB was nil")
 	}
 
 	query := "SELECT stats FROM node_stats"
-	rows, err := c.MetricsDB.Query(query)
+	rows, err := c.NodeStatsDB.Query(query)
 	if err != nil {
 		return fmt.Errorf("failed to query node stats: %w", err)
 	}
