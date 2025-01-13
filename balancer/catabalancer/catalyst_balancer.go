@@ -17,15 +17,19 @@ import (
 )
 
 type CataBalancer struct {
-	NodeName            string // Node name of this instance
-	Nodes               map[string]*Node
-	nodesLock           sync.Mutex
-	Streams             map[string]Streams     // Node name -> Streams
-	IngestStreams       map[string]Streams     // Node name -> Streams
-	NodeMetrics         map[string]NodeMetrics // Node name -> NodeMetrics
+	NodeName  string // Node name of this instance
+	Nodes     map[string]*Node
+	nodesLock sync.Mutex
+
 	metricTimeout       time.Duration
 	ingestStreamTimeout time.Duration
 	NodeStatsDB         *sql.DB
+}
+
+type stats struct {
+	Streams       map[string]Streams     // Node name -> Streams
+	IngestStreams map[string]Streams     // Node name -> Streams
+	NodeMetrics   map[string]NodeMetrics // Node name -> NodeMetrics
 }
 
 type Streams map[string]Stream // Stream ID -> Stream
@@ -114,9 +118,6 @@ func NewBalancer(nodeName string, metricTimeout time.Duration, ingestStreamTimeo
 	return &CataBalancer{
 		NodeName:            nodeName,
 		Nodes:               make(map[string]*Node),
-		Streams:             make(map[string]Streams),
-		IngestStreams:       make(map[string]Streams),
-		NodeMetrics:         make(map[string]NodeMetrics),
 		metricTimeout:       metricTimeout,
 		ingestStreamTimeout: ingestStreamTimeout,
 		NodeStatsDB:         nodeStatsDB,
@@ -127,6 +128,7 @@ func (c *CataBalancer) Start(ctx context.Context) error {
 	return nil
 }
 
+// TODO not called anywhere but tests?
 func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Member) error {
 	c.nodesLock.Lock()
 	defer c.nodesLock.Unlock()
@@ -142,35 +144,16 @@ func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Memb
 		}
 	}
 
-	// remove stream data for nodes no longer present
-	for nodeName := range c.Streams {
-		if _, ok := latestNodes[nodeName]; !ok {
-			delete(c.Streams, nodeName)
-		}
-	}
-	for nodeName := range c.IngestStreams {
-		if _, ok := latestNodes[nodeName]; !ok {
-			delete(c.IngestStreams, nodeName)
-		}
-	}
-
-	// remove metric data for nodes no longer present
-	for nodeName := range c.NodeMetrics {
-		if _, ok := latestNodes[nodeName]; !ok {
-			delete(c.NodeMetrics, nodeName)
-		}
-	}
-
 	c.Nodes = latestNodes
 	return nil
 }
 
 func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq bool) (string, string, error) {
-	if err := c.RefreshNodes(); err != nil {
+	s, err := c.RefreshNodes()
+	if err != nil {
 		return "", "", fmt.Errorf("error refreshing nodes: %w", err)
 	}
 
-	var err error
 	latf := 0.0
 	if lat != "" {
 		latf, err = strconv.ParseFloat(lat, 64)
@@ -189,7 +172,7 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 	// default to ourself if there are no other nodes
 	nodeName := c.NodeName
 
-	scoredNodes := c.createScoredNodes()
+	scoredNodes := c.createScoredNodes(s)
 	if len(scoredNodes) > 0 {
 		node, err := SelectNode(scoredNodes, playbackID, latf, lonf)
 		if err != nil {
@@ -207,12 +190,12 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 	return nodeName, fmt.Sprintf("%s+%s", prefix, playbackID), nil
 }
 
-func (c *CataBalancer) createScoredNodes() []ScoredNode {
+func (c *CataBalancer) createScoredNodes(s stats) []ScoredNode {
 	c.nodesLock.Lock()
 	defer c.nodesLock.Unlock()
 	var nodesList []ScoredNode
 	for nodeName, node := range c.Nodes {
-		metrics, ok := c.NodeMetrics[nodeName]
+		metrics, ok := s.NodeMetrics[nodeName]
 		if !ok {
 			continue
 		}
@@ -222,7 +205,7 @@ func (c *CataBalancer) createScoredNodes() []ScoredNode {
 		}
 		// make a copy of the streams map so that we can release the nodesLock (UpdateStreams will be making changes in the background)
 		streams := make(Streams)
-		for streamID, stream := range c.Streams[nodeName] {
+		for streamID, stream := range s.Streams[nodeName] {
 			if isStale(stream.Timestamp, c.metricTimeout) {
 				log.LogNoRequestID("catabalancer ignoring stale stream info", "nodeName", nodeName, "streamID", streamID, "timestamp", stream.Timestamp)
 				continue
@@ -232,7 +215,7 @@ func (c *CataBalancer) createScoredNodes() []ScoredNode {
 		nodesList = append(nodesList, ScoredNode{
 			Node:        *node,
 			Streams:     streams,
-			NodeMetrics: c.NodeMetrics[nodeName],
+			NodeMetrics: s.NodeMetrics[nodeName],
 		})
 	}
 	return nodesList
@@ -327,16 +310,22 @@ func truncateReturned(scoredNodes []ScoredNode, numNodes int) []ScoredNode {
 	return scoredNodes[:numNodes]
 }
 
-func (c *CataBalancer) RefreshNodes() error {
+func (c *CataBalancer) RefreshNodes() (stats, error) {
+	s := stats{
+		Streams:       make(map[string]Streams),
+		IngestStreams: make(map[string]Streams),
+		NodeMetrics:   make(map[string]NodeMetrics),
+	}
+
 	log.LogNoRequestID("catabalancer refreshing nodes")
 	if c.NodeStatsDB == nil {
-		return fmt.Errorf("node stats DB was nil")
+		return s, fmt.Errorf("node stats DB was nil")
 	}
 
 	query := "SELECT stats FROM node_stats"
 	rows, err := c.NodeStatsDB.Query(query)
 	if err != nil {
-		return fmt.Errorf("failed to query node stats: %w", err)
+		return s, fmt.Errorf("failed to query node stats: %w", err)
 	}
 	defer rows.Close()
 
@@ -344,46 +333,62 @@ func (c *CataBalancer) RefreshNodes() error {
 	for rows.Next() {
 		var statsBytes []byte
 		if err := rows.Scan(&statsBytes); err != nil {
-			return fmt.Errorf("failed to scan node stats row: %w", err)
+			return s, fmt.Errorf("failed to scan node stats row: %w", err)
 		}
 
 		var event NodeUpdateEvent
 		err = json.Unmarshal(statsBytes, &event)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal node update event: %w", err)
+			return s, fmt.Errorf("failed to unmarshal node update event: %w", err)
 		}
 
+		// TODO skip if node doesn't exist in c.Nodes too?
 		if isStale(event.NodeMetrics.Timestamp, c.metricTimeout) {
 			log.LogNoRequestID("catabalancer skipping stale data while refreshing", "nodeID", event.NodeID, "timestamp", event.NodeMetrics.Timestamp)
 			continue
 		}
 
-		c.UpdateNodes(event.NodeID, event.NodeMetrics)
+		s.NodeMetrics[event.NodeID] = event.NodeMetrics
+		s.Streams[event.NodeID] = make(Streams)
+		s.IngestStreams[event.NodeID] = make(Streams)
+
 		for _, stream := range event.GetStreams() {
-			c.UpdateStreams(event.NodeID, stream, false)
+			playbackID := getPlaybackID(stream)
+			s.Streams[event.NodeID][playbackID] = Stream{ID: stream, PlaybackID: playbackID, Timestamp: time.Now()}
 		}
 		for _, stream := range event.GetIngestStreams() {
-			c.UpdateStreams(event.NodeID, stream, true)
+			playbackID := getPlaybackID(stream)
+			s.IngestStreams[event.NodeID][stream] = Stream{ID: stream, PlaybackID: playbackID, Timestamp: time.Now()}
 		}
 	}
 
 	// Check for errors after iterating through rows
 	if err := rows.Err(); err != nil {
-		return err
+		return s, err
 	}
-	return nil
+	return s, nil
+}
+
+func getPlaybackID(streamID string) string {
+	playbackID := streamID
+	parts := strings.Split(streamID, "+")
+	if len(parts) == 2 {
+		playbackID = parts[1] // take the playbackID after the prefix e.g. 'video+'
+	}
+	return playbackID
 }
 
 func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, streamID, lat, lon string) (string, error) {
-	if err := c.RefreshNodes(); err != nil {
+	s, err := c.RefreshNodes()
+	if err != nil {
 		return "", fmt.Errorf("error refreshing nodes: %w", err)
 	}
 
 	c.nodesLock.Lock()
 	defer c.nodesLock.Unlock()
 	for nodeName := range c.Nodes {
-		if s, ok := c.IngestStreams[nodeName][streamID]; ok {
-			if isStale(s.Timestamp, c.ingestStreamTimeout) {
+		if stream, ok := s.IngestStreams[nodeName][streamID]; ok {
+			if isStale(stream.Timestamp, c.ingestStreamTimeout) {
 				return "", fmt.Errorf("catabalancer no node found for ingest stream: %s stale: true", streamID)
 			}
 			dtsc := "dtsc://" + nodeName
@@ -394,58 +399,7 @@ func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, streamID, lat, lo
 	return "", fmt.Errorf("catabalancer no node found for ingest stream: %s stale: false", streamID)
 }
 
-func (c *CataBalancer) checkAndCreateNode(nodeName string) {
-	if strings.HasPrefix(nodeName, "bgw") { // hack to ensure we ignore bgw nodes
-		return
-	}
-	if _, ok := c.Nodes[nodeName]; !ok {
-		c.Nodes[nodeName] = &Node{
-			Name: nodeName,
-		}
-	}
-}
-
-func (c *CataBalancer) UpdateNodes(nodeName string, nodeMetrics NodeMetrics) {
-	c.nodesLock.Lock()
-	defer c.nodesLock.Unlock()
-
-	c.checkAndCreateNode(nodeName)
-	nodeMetrics.Timestamp = time.Now()
-	c.NodeMetrics[nodeName] = nodeMetrics
-}
-
 var UpdateNodeStatsEvery = 5 * time.Second
-
-func (c *CataBalancer) UpdateStreams(nodeName string, streamID string, isIngest bool) {
-	c.nodesLock.Lock()
-	defer c.nodesLock.Unlock()
-
-	c.checkAndCreateNode(nodeName)
-	// remove old streams
-	removeOldStreams(c.Streams[nodeName], c.metricTimeout)
-	removeOldStreams(c.IngestStreams[nodeName], c.ingestStreamTimeout)
-
-	playbackID := streamID
-	parts := strings.Split(streamID, "+")
-	if len(parts) == 2 {
-		playbackID = parts[1] // take the playbackID after the prefix e.g. 'video+'
-	}
-
-	if isIngest {
-		if c.IngestStreams[nodeName] == nil {
-			c.IngestStreams[nodeName] = make(Streams)
-		}
-		// if a previous node had the stream, remove that entry
-		for name := range c.Nodes {
-			delete(c.IngestStreams[name], streamID)
-		}
-		c.IngestStreams[nodeName][streamID] = Stream{ID: streamID, PlaybackID: playbackID, Timestamp: time.Now()}
-	}
-	if c.Streams[nodeName] == nil {
-		c.Streams[nodeName] = make(Streams)
-	}
-	c.Streams[nodeName][playbackID] = Stream{ID: streamID, PlaybackID: playbackID, Timestamp: time.Now()}
-}
 
 func isStale(timestamp time.Time, stale time.Duration) bool {
 	return time.Since(timestamp) >= stale
