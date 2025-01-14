@@ -4,6 +4,7 @@ package balancer
 
 import (
 	"context"
+	"time"
 
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/log"
@@ -67,40 +68,48 @@ func (c CombinedBalancer) UpdateMembers(ctx context.Context, members []cluster.M
 }
 
 func (c CombinedBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq bool) (string, string, error) {
-	cataBestNode, cataFullPlaybackID, cataErr := c.Catabalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix, isStudioReq)
 	if c.CatabalancerPlaybackEnabled {
-		return cataBestNode, cataFullPlaybackID, cataErr
+		return c.Catabalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix, isStudioReq)
 	}
 
 	bestNode, fullPlaybackID, err := c.MistBalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix, isStudioReq)
-	log.LogNoRequestID("catabalancer GetBestNode",
-		"bestNode", bestNode,
-		"fullPlaybackID", fullPlaybackID,
-		"cataBestNode", cataBestNode,
-		"cataFullPlaybackID", cataFullPlaybackID,
-		"cataErr", cataErr,
-		"nodeMatch", cataBestNode == bestNode,
-		"playbackIDMatch", cataFullPlaybackID == fullPlaybackID,
-		"playbackID", playbackID,
-		"isStudioReq", isStudioReq,
-	)
+	go func() {
+		start := time.Now()
+		cataBestNode, cataFullPlaybackID, cataErr := c.Catabalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix, isStudioReq)
+		log.LogNoRequestID("catabalancer GetBestNode",
+			"bestNode", bestNode,
+			"fullPlaybackID", fullPlaybackID,
+			"cataBestNode", cataBestNode,
+			"cataFullPlaybackID", cataFullPlaybackID,
+			"cataErr", cataErr,
+			"nodeMatch", cataBestNode == bestNode,
+			"playbackIDMatch", cataFullPlaybackID == fullPlaybackID,
+			"playbackID", playbackID,
+			"isStudioReq", isStudioReq,
+			"duration", time.Since(start),
+		)
+	}()
 	return bestNode, fullPlaybackID, err
 }
 
 func (c CombinedBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, lon string) (string, error) {
-	cataDtscURL, cataErr := c.Catabalancer.MistUtilLoadSource(ctx, stream, lat, lon)
 	if c.CatabalancerIngestEnabled {
-		return cataDtscURL, cataErr
+		return c.Catabalancer.MistUtilLoadSource(ctx, stream, lat, lon)
 	}
 
 	dtscURL, err := c.MistBalancer.MistUtilLoadSource(ctx, stream, lat, lon)
-	log.LogNoRequestID("catabalancer MistUtilLoadSource",
-		"dtscURL", dtscURL,
-		"cataDtscURL", cataDtscURL,
-		"cataErr", cataErr,
-		"urlMatch", dtscURL == cataDtscURL,
-		"stream", stream,
-	)
+	go func() {
+		start := time.Now()
+		cataDtscURL, cataErr := c.Catabalancer.MistUtilLoadSource(ctx, stream, lat, lon)
+		log.LogNoRequestID("catabalancer MistUtilLoadSource",
+			"dtscURL", dtscURL,
+			"cataDtscURL", cataDtscURL,
+			"cataErr", cataErr,
+			"urlMatch", dtscURL == cataDtscURL,
+			"stream", stream,
+			"duration", time.Since(start),
+		)
+	}()
 	return dtscURL, err
 }
 
