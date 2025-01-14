@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/livepeer/catalyst-api/cluster"
@@ -17,9 +16,7 @@ import (
 )
 
 type CataBalancer struct {
-	NodeName  string // Node name of this instance
-	Nodes     map[string]*Node
-	nodesLock sync.RWMutex
+	NodeName string // Node name of this instance
 
 	metricTimeout       time.Duration
 	ingestStreamTimeout time.Duration
@@ -117,7 +114,6 @@ func (n *NodeUpdateEvent) GetIngestStreams() []string {
 func NewBalancer(nodeName string, metricTimeout time.Duration, ingestStreamTimeout time.Duration, nodeStatsDB *sql.DB) *CataBalancer {
 	return &CataBalancer{
 		NodeName:            nodeName,
-		Nodes:               make(map[string]*Node),
 		metricTimeout:       metricTimeout,
 		ingestStreamTimeout: ingestStreamTimeout,
 		NodeStatsDB:         nodeStatsDB,
@@ -129,22 +125,6 @@ func (c *CataBalancer) Start(ctx context.Context) error {
 }
 
 func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Member) error {
-	log.LogNoRequestID("catabalancer UpdateMembers")
-	c.nodesLock.Lock()
-	defer c.nodesLock.Unlock()
-
-	latestNodes := make(map[string]*Node)
-	for _, member := range members {
-		if member.Tags["node"] != "media" { // ignore testing nodes from load balancing
-			continue
-		}
-		latestNodes[member.Name] = &Node{
-			Name: member.Name,
-			DTSC: member.Tags["dtsc"],
-		}
-	}
-
-	c.Nodes = latestNodes
 	return nil
 }
 
@@ -191,14 +171,8 @@ func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []strin
 }
 
 func (c *CataBalancer) createScoredNodes(s stats) []ScoredNode {
-	c.nodesLock.RLock()
-	defer c.nodesLock.RUnlock()
 	var nodesList []ScoredNode
-	for nodeName, node := range c.Nodes {
-		metrics, ok := s.NodeMetrics[nodeName]
-		if !ok {
-			continue
-		}
+	for nodeName, metrics := range s.NodeMetrics {
 		if isStale(metrics.Timestamp, c.metricTimeout) {
 			log.LogNoRequestID("catabalancer ignoring node with stale metrics", "nodeName", nodeName, "timestamp", metrics.Timestamp)
 			continue
@@ -213,7 +187,7 @@ func (c *CataBalancer) createScoredNodes(s stats) []ScoredNode {
 			streams[streamID] = stream
 		}
 		nodesList = append(nodesList, ScoredNode{
-			Node:        *node,
+			Node:        Node{Name: nodeName},
 			Streams:     streams,
 			NodeMetrics: s.NodeMetrics[nodeName],
 		})
@@ -383,9 +357,7 @@ func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, streamID, lat, lo
 		return "", fmt.Errorf("error refreshing nodes: %w", err)
 	}
 
-	c.nodesLock.RLock()
-	defer c.nodesLock.RUnlock()
-	for nodeName := range c.Nodes {
+	for nodeName := range s.NodeMetrics {
 		if stream, ok := s.IngestStreams[nodeName][streamID]; ok {
 			if isStale(stream.Timestamp, c.ingestStreamTimeout) {
 				return "", fmt.Errorf("catabalancer no node found for ingest stream: %s stale: true", streamID)

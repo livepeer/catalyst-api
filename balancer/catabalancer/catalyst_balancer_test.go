@@ -368,7 +368,7 @@ func TestMistUtilLoadSource(t *testing.T) {
 
 	err = c.UpdateMembers(context.Background(), []cluster.Member{})
 	require.NoError(t, err)
-	setNodeMetrics(t, mock, []NodeUpdateEvent{nodeStats})
+	setNodeMetrics(t, mock, []NodeUpdateEvent{})
 	source, err = c.MistUtilLoadSource(context.Background(), "ingest", "", "")
 	require.EqualError(t, err, "catabalancer no node found for ingest stream: ingest stale: false")
 	require.Empty(t, source)
