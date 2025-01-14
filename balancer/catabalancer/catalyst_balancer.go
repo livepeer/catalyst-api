@@ -317,7 +317,6 @@ func (c *CataBalancer) RefreshNodes() (stats, error) {
 		NodeMetrics:   make(map[string]NodeMetrics),
 	}
 
-	log.LogNoRequestID("catabalancer refreshing nodes")
 	if c.NodeStatsDB == nil {
 		return s, fmt.Errorf("node stats DB was nil")
 	}
