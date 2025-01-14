@@ -238,8 +238,8 @@ func main() {
 		}
 
 		// Without this, we've run into issues with exceeding our open connection limit
-		nodeStatsDB.SetMaxOpenConns(50)
-		nodeStatsDB.SetMaxIdleConns(50)
+		nodeStatsDB.SetMaxOpenConns(2)
+		nodeStatsDB.SetMaxIdleConns(2)
 		nodeStatsDB.SetConnMaxLifetime(time.Hour)
 	} else if catabalancerEnabled {
 		glog.Infof("Catabalancer failed to start, NodeStatsConnectionString was not set")
