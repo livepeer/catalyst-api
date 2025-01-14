@@ -5,7 +5,6 @@ package balancer
 import (
 	"context"
 
-	"github.com/livepeer/catalyst-api/balancer/catabalancer"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/log"
 )
@@ -15,8 +14,6 @@ type Balancer interface {
 	UpdateMembers(ctx context.Context, members []cluster.Member) error
 	GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq bool) (string, string, error)
 	MistUtilLoadSource(ctx context.Context, streamID, lat, lon string) (string, error)
-	UpdateNodes(id string, nodeMetrics catabalancer.NodeMetrics)
-	UpdateStreams(id string, stream string, isIngest bool)
 }
 
 // CombinedBalancerEnabled checks if catabalancer is enabled in any way
@@ -105,16 +102,6 @@ func (c CombinedBalancer) MistUtilLoadSource(ctx context.Context, stream, lat, l
 		"stream", stream,
 	)
 	return dtscURL, err
-}
-
-func (c CombinedBalancer) UpdateNodes(id string, nodeMetrics catabalancer.NodeMetrics) {
-	c.Catabalancer.UpdateNodes(id, nodeMetrics)
-	c.MistBalancer.UpdateNodes(id, nodeMetrics)
-}
-
-func (c CombinedBalancer) UpdateStreams(id string, stream string, isIngest bool) {
-	c.Catabalancer.UpdateStreams(id, stream, isIngest)
-	c.MistBalancer.UpdateStreams(id, stream, isIngest)
 }
 
 type Config struct {
