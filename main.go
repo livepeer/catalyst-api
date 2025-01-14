@@ -231,7 +231,7 @@ func main() {
 
 	var nodeStatsDB *sql.DB
 	if cli.NodeStatsConnectionString != "" {
-		nodeStatsDB, err := sql.Open("postgres", cli.NodeStatsConnectionString)
+		nodeStatsDB, err = sql.Open("postgres", cli.NodeStatsConnectionString)
 		if err != nil {
 			glog.Fatalf("Error creating postgres node stats connection: %s", err)
 		}
@@ -261,14 +261,14 @@ func main() {
 			return reconcileBalancer(ctx, bal, c)
 		})
 
-		if balancer.CombinedBalancerEnabled(cli.CataBalancer) {
+		if balancer.CombinedBalancerEnabled(cli.CataBalancer) && nodeStatsDB != nil {
 			if cli.Tags["node"] == "media" { // don't announce load balancing availability for testing nodes
 				events.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, mist, nodeStatsDB)
 			}
 		}
 	} else {
 		bal = mist_balancer.NewRemoteBalancer(mistBalancerConfig)
-		if balancer.CombinedBalancerEnabled(cli.CataBalancer) {
+		if balancer.CombinedBalancerEnabled(cli.CataBalancer) && nodeStatsDB != nil {
 			cataBalancer := catabalancer.NewBalancer(cli.NodeName, cli.CataBalancerMetricTimeout, cli.CataBalancerIngestStreamTimeout, nodeStatsDB)
 			// Temporary combined balancer to test cataBalancer logic alongside existing mist balancer
 			bal = balancer.NewCombinedBalancer(cataBalancer, bal, cli.CataBalancer)
