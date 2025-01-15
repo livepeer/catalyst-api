@@ -15,8 +15,8 @@ jobs:
         platform:
           - name: linux
             os: ubuntu-20.04
-#          - name: darwin
-#            os: macos-latest
+          - name: darwin
+            os: macos-latest
         arch:
           - arm64
           - amd64
