@@ -84,6 +84,7 @@ func main() {
 	fs.StringVar(&cli.CataBalancer, "catabalancer", "", "Enable catabalancer load balancer")
 	fs.DurationVar(&cli.CataBalancerMetricTimeout, "catabalancer-metric-timeout", 20*time.Second, "Catabalancer timeout for node metrics")
 	fs.DurationVar(&cli.CataBalancerIngestStreamTimeout, "catabalancer-ingest-stream-timeout", 20*time.Minute, "Catabalancer timeout for ingest stream metrics")
+	fs.DurationVar(&cli.CataBalancerCacheExpiry, "catabalancer-cache-expiry", 500*time.Millisecond, "Catabalancer expiry for node stats cache")
 	config.CommaSliceFlag(fs, &cli.BlockedJWTs, "gate-blocked-jwts", []string{}, "List of blocked JWTs for token gating")
 
 	// mist-api-connector parameters
@@ -272,7 +273,7 @@ func main() {
 	} else {
 		bal = mist_balancer.NewRemoteBalancer(mistBalancerConfig)
 		if catabalancerEnabled && nodeStatsDB != nil {
-			cataBalancer := catabalancer.NewBalancer(cli.NodeName, cli.CataBalancerMetricTimeout, cli.CataBalancerIngestStreamTimeout, nodeStatsDB)
+			cataBalancer := catabalancer.NewBalancer(cli.NodeName, cli.CataBalancerMetricTimeout, cli.CataBalancerIngestStreamTimeout, nodeStatsDB, cli.CataBalancerCacheExpiry)
 			// Temporary combined balancer to test cataBalancer logic alongside existing mist balancer
 			bal = balancer.NewCombinedBalancer(cataBalancer, bal, cli.CataBalancer)
 		}

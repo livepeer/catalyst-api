@@ -90,6 +90,7 @@ type Cli struct {
 	CataBalancer                    string
 	CataBalancerMetricTimeout       time.Duration
 	CataBalancerIngestStreamTimeout time.Duration
+	CataBalancerCacheExpiry         time.Duration
 	SerfQueueSize                   int
 	SerfEventBuffer                 int
 	SerfMaxQueueDepth               int
