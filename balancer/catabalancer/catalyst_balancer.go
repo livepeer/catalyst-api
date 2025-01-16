@@ -13,6 +13,11 @@ import (
 
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/patrickmn/go-cache"
+)
+
+const (
+	stateCacheKey = "stateCacheKey"
 )
 
 type CataBalancer struct {
@@ -20,7 +25,8 @@ type CataBalancer struct {
 
 	metricTimeout       time.Duration
 	ingestStreamTimeout time.Duration
-	NodeStatsDB         *sql.DB
+	nodeStatsDB         *sql.DB
+	nodeStatsCache      *cache.Cache
 }
 
 type stats struct {
@@ -116,7 +122,8 @@ func NewBalancer(nodeName string, metricTimeout time.Duration, ingestStreamTimeo
 		NodeName:            nodeName,
 		metricTimeout:       metricTimeout,
 		ingestStreamTimeout: ingestStreamTimeout,
-		NodeStatsDB:         nodeStatsDB,
+		nodeStatsDB:         nodeStatsDB,
+		nodeStatsCache:      cache.New(500*time.Millisecond, 10*time.Minute),
 	}
 }
 
@@ -129,7 +136,7 @@ func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Memb
 }
 
 func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq bool) (string, string, error) {
-	s, err := c.RefreshNodes()
+	s, err := c.refreshNodes()
 	if err != nil {
 		return "", "", fmt.Errorf("error refreshing nodes: %w", err)
 	}
@@ -284,19 +291,24 @@ func truncateReturned(scoredNodes []ScoredNode, numNodes int) []ScoredNode {
 	return scoredNodes[:numNodes]
 }
 
-func (c *CataBalancer) RefreshNodes() (stats, error) {
+func (c *CataBalancer) refreshNodes() (stats, error) {
+	cachedState, found := c.nodeStatsCache.Get(stateCacheKey)
+	if found {
+		return *cachedState.(*stats), nil
+	}
+
 	s := stats{
 		Streams:       make(map[string]Streams),
 		IngestStreams: make(map[string]Streams),
 		NodeMetrics:   make(map[string]NodeMetrics),
 	}
 
-	if c.NodeStatsDB == nil {
+	if c.nodeStatsDB == nil {
 		return s, fmt.Errorf("node stats DB was nil")
 	}
 
 	query := "SELECT stats FROM node_stats"
-	rows, err := c.NodeStatsDB.Query(query)
+	rows, err := c.nodeStatsDB.Query(query)
 	if err != nil {
 		return s, fmt.Errorf("failed to query node stats: %w", err)
 	}
@@ -339,6 +351,8 @@ func (c *CataBalancer) RefreshNodes() (stats, error) {
 	if err := rows.Err(); err != nil {
 		return s, err
 	}
+
+	c.nodeStatsCache.SetDefault(stateCacheKey, &s)
 	return s, nil
 }
 
@@ -352,7 +366,7 @@ func getPlaybackID(streamID string) string {
 }
 
 func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, streamID, lat, lon string) (string, error) {
-	s, err := c.RefreshNodes()
+	s, err := c.refreshNodes()
 	if err != nil {
 		return "", fmt.Errorf("error refreshing nodes: %w", err)
 	}

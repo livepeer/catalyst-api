@@ -10,6 +10,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/livepeer/catalyst-api/cluster"
+	"github.com/patrickmn/go-cache"
 	"github.com/stretchr/testify/require"
 )
 
@@ -76,6 +77,7 @@ func TestStaleNodes(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	c := NewBalancer("me", time.Second, time.Second, db)
+	c.nodeStatsCache = cache.New(1*time.Millisecond, time.Minute)
 	err = c.UpdateMembers(context.Background(), []cluster.Member{{Name: "node1", Tags: mediaTags}})
 	require.NoError(t, err)
 
@@ -88,6 +90,7 @@ func TestStaleNodes(t *testing.T) {
 	require.Equal(t, "video+playbackID", prefix)
 
 	// node is fresh, recent timestamp
+	time.Sleep(2 * time.Millisecond)
 	setNodeMetrics(t, mock, []NodeUpdateEvent{{NodeID: "node1", NodeMetrics: NodeMetrics{Timestamp: time.Now()}}})
 	c.metricTimeout = 5 * time.Second
 	nodeName, prefix, err = c.GetBestNode(context.Background(), nil, "playbackID", "", "", "", false)
@@ -352,6 +355,7 @@ func TestMistUtilLoadSource(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	c := NewBalancer("", time.Second, time.Second, db)
+	c.nodeStatsCache = cache.New(1*time.Millisecond, time.Minute)
 	err = c.UpdateMembers(context.Background(), []cluster.Member{{
 		Name: "node",
 		Tags: mediaTags,
@@ -366,6 +370,7 @@ func TestMistUtilLoadSource(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "dtsc://node", source)
 
+	time.Sleep(2 * time.Millisecond)
 	err = c.UpdateMembers(context.Background(), []cluster.Member{})
 	require.NoError(t, err)
 	setNodeMetrics(t, mock, []NodeUpdateEvent{})
@@ -389,7 +394,7 @@ func TestStreamTimeout(t *testing.T) {
 	nodeStats := NodeUpdateEvent{NodeID: "node", NodeMetrics: NodeMetrics{Timestamp: time.Now()}}
 	nodeStats.SetStreams([]string{"video+stream"}, []string{"video+ingest"})
 	setNodeMetrics(t, mock, []NodeUpdateEvent{nodeStats})
-	s, err := c.RefreshNodes()
+	s, err := c.refreshNodes()
 	require.NoError(t, err)
 	setNodeMetrics(t, mock, []NodeUpdateEvent{nodeStats})
 
