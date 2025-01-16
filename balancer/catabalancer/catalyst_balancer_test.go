@@ -10,7 +10,6 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/livepeer/catalyst-api/cluster"
-	"github.com/patrickmn/go-cache"
 	"github.com/stretchr/testify/require"
 )
 
@@ -66,7 +65,7 @@ func setNodeMetrics(t *testing.T, mock sqlmock.Sqlmock, nodeStats []NodeUpdateEv
 }
 
 func TestItReturnsItselfWhenNoOtherNodesPresent(t *testing.T) {
-	c := NewBalancer("me", time.Second, time.Second, mockDB(t))
+	c := NewBalancer("me", time.Second, time.Second, mockDB(t), 0)
 	nodeName, prefix, err := c.GetBestNode(context.Background(), nil, "playbackID", "", "", "", false)
 	require.NoError(t, err)
 	require.Equal(t, "me", nodeName)
@@ -76,8 +75,7 @@ func TestItReturnsItselfWhenNoOtherNodesPresent(t *testing.T) {
 func TestStaleNodes(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	c := NewBalancer("me", time.Second, time.Second, db)
-	c.nodeStatsCache = cache.New(1*time.Millisecond, time.Minute)
+	c := NewBalancer("me", time.Second, time.Second, db, 1*time.Millisecond)
 	err = c.UpdateMembers(context.Background(), []cluster.Member{{Name: "node1", Tags: mediaTags}})
 	require.NoError(t, err)
 
@@ -312,7 +310,7 @@ func TestSetMetrics(t *testing.T) {
 	// simple check that node metrics make it through to the load balancing algo
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	c := NewBalancer("", time.Second, time.Second, db)
+	c := NewBalancer("", time.Second, time.Second, db, 0)
 	err = c.UpdateMembers(context.Background(), []cluster.Member{{Name: "node1", Tags: mediaTags}, {Name: "node2", Tags: mediaTags}})
 	require.NoError(t, err)
 
@@ -330,7 +328,7 @@ func TestSetMetrics(t *testing.T) {
 func TestNoIngestStream(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	c := NewBalancer("", time.Second, time.Second, db)
+	c := NewBalancer("", time.Second, time.Second, db, 0)
 	// first test no nodes available
 	nodeStats := NodeUpdateEvent{NodeID: "id", NodeMetrics: NodeMetrics{Timestamp: time.Now()}}
 	nodeStats.SetStreams([]string{"stream"}, nil)
@@ -354,8 +352,7 @@ func TestNoIngestStream(t *testing.T) {
 func TestMistUtilLoadSource(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	c := NewBalancer("", time.Second, time.Second, db)
-	c.nodeStatsCache = cache.New(1*time.Millisecond, time.Minute)
+	c := NewBalancer("", time.Second, time.Second, db, 1*time.Millisecond)
 	err = c.UpdateMembers(context.Background(), []cluster.Member{{
 		Name: "node",
 		Tags: mediaTags,
@@ -382,7 +379,7 @@ func TestMistUtilLoadSource(t *testing.T) {
 func TestStreamTimeout(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	c := NewBalancer("", time.Second, time.Second, db)
+	c := NewBalancer("", time.Second, time.Second, db, 0)
 	err = c.UpdateMembers(context.Background(), []cluster.Member{{
 		Name: "node",
 		Tags: mediaTags,
@@ -431,7 +428,7 @@ func TestSimulate(t *testing.T) {
 
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	c := NewBalancer("node0", time.Second, time.Second, db)
+	c := NewBalancer("node0", time.Second, time.Second, db, 0)
 	var nodes []cluster.Member
 	for i := 0; i < nodeCount; i++ {
 		nodes = append(nodes, cluster.Member{Name: fmt.Sprintf("node%d", i)})

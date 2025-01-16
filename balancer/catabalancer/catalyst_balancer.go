@@ -117,13 +117,13 @@ func (n *NodeUpdateEvent) GetIngestStreams() []string {
 	return []string{}
 }
 
-func NewBalancer(nodeName string, metricTimeout time.Duration, ingestStreamTimeout time.Duration, nodeStatsDB *sql.DB) *CataBalancer {
+func NewBalancer(nodeName string, metricTimeout time.Duration, ingestStreamTimeout time.Duration, nodeStatsDB *sql.DB, cacheExpiry time.Duration) *CataBalancer {
 	return &CataBalancer{
 		NodeName:            nodeName,
 		metricTimeout:       metricTimeout,
 		ingestStreamTimeout: ingestStreamTimeout,
 		nodeStatsDB:         nodeStatsDB,
-		nodeStatsCache:      cache.New(500*time.Millisecond, 10*time.Minute),
+		nodeStatsCache:      cache.New(cacheExpiry, 10*time.Minute),
 	}
 }
 
