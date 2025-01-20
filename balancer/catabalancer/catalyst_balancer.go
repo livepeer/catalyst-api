@@ -13,6 +13,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/patrickmn/go-cache"
@@ -413,4 +414,71 @@ var UpdateNodeStatsEvery = 5 * time.Second
 
 func isStale(timestamp time.Time, stale time.Duration) bool {
 	return time.Since(timestamp) >= stale
+}
+
+func StartMetricSending(nodeName string, latitude float64, longitude float64, mist clients.MistAPIClient, nodeStatsDB *sql.DB) {
+	ticker := time.NewTicker(UpdateNodeStatsEvery)
+	go func() {
+		for range ticker.C {
+			sysusage, err := GetSystemUsage()
+			if err != nil {
+				log.LogNoRequestID("catabalancer failed to get sys usage", "err", err)
+				continue
+			}
+
+			event := NodeUpdateEvent{
+				Resource: "nodeUpdate",
+				NodeID:   nodeName,
+				NodeMetrics: NodeMetrics{
+					CPUUsagePercentage:       sysusage.CPUUsagePercentage,
+					RAMUsagePercentage:       sysusage.RAMUsagePercentage,
+					BandwidthUsagePercentage: sysusage.BWUsagePercentage,
+					LoadAvg:                  sysusage.LoadAvg.Load5Min,
+					GeoLatitude:              latitude,
+					GeoLongitude:             longitude,
+					Timestamp:                time.Now(),
+				},
+			}
+
+			if mist != nil {
+				mistState, err := mist.GetState()
+				if err != nil {
+					log.LogNoRequestID("catabalancer failed to get mist state", "err", err)
+					continue
+				}
+
+				var nonIngestStreams, ingestStreams []string
+				for streamID := range mistState.ActiveStreams {
+					if mistState.IsIngestStream(streamID) {
+						ingestStreams = append(ingestStreams, streamID)
+					} else {
+						nonIngestStreams = append(nonIngestStreams, streamID)
+					}
+				}
+				event.SetStreams(nonIngestStreams, ingestStreams)
+			}
+
+			payload, err := json.Marshal(event)
+			if err != nil {
+				log.LogNoRequestID("catabalancer failed to marhsal node update", "err", err)
+				continue
+			}
+
+			insertStatement := `insert into "node_stats"(
+                            "node_id",
+                            "stats"
+                            ) values($1, $2)
+							ON CONFLICT (node_id)
+							DO UPDATE SET stats = EXCLUDED.stats;`
+			_, err = nodeStatsDB.Exec(
+				insertStatement,
+				nodeName,
+				payload,
+			)
+			if err != nil {
+				log.LogNoRequestID("error writing postgres node stats", "err", err)
+				continue
+			}
+		}
+	}()
 }

@@ -458,3 +458,42 @@ func TestSimulate(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+func TestItCanMarshalAndUnMarshalStreamIDs(t *testing.T) {
+	n := NodeUpdateEvent{}
+	n.SetStreams([]string{"noningest1", "noningest2"}, []string{"ingest1", "ingest2"})
+	jsonBytes, err := json.Marshal(n)
+	require.NoError(t, err)
+
+	var n2 NodeUpdateEvent
+	require.NoError(t, json.Unmarshal(jsonBytes, &n2))
+
+	require.Equal(t, []string{"noningest1", "noningest2"}, n2.GetStreams())
+	require.Equal(t, []string{"ingest1", "ingest2"}, n2.GetIngestStreams())
+}
+
+func TestItCanMarshalAndUnMarshalStreamIDsWithNoIngestStreams(t *testing.T) {
+	n := NodeUpdateEvent{}
+	n.SetStreams([]string{"noningest1", "noningest2"}, []string{})
+	jsonBytes, err := json.Marshal(n)
+	require.NoError(t, err)
+
+	var n2 NodeUpdateEvent
+	require.NoError(t, json.Unmarshal(jsonBytes, &n2))
+
+	require.Equal(t, []string{"noningest1", "noningest2"}, n2.GetStreams())
+	require.Equal(t, []string{}, n2.GetIngestStreams())
+}
+
+func TestItCanMarshalAndUnMarshalStreamIDsWithNoNonIngestStreams(t *testing.T) {
+	n := NodeUpdateEvent{}
+	n.SetStreams([]string{}, []string{"ingest1", "ingest2"})
+	jsonBytes, err := json.Marshal(n)
+	require.NoError(t, err)
+
+	var n2 NodeUpdateEvent
+	require.NoError(t, json.Unmarshal(jsonBytes, &n2))
+
+	require.Equal(t, []string{}, n2.GetStreams())
+	require.Equal(t, []string{"ingest1", "ingest2"}, n2.GetIngestStreams())
+}
