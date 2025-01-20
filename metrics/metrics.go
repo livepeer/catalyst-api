@@ -46,6 +46,7 @@ type CatalystAPIMetrics struct {
 	SerfEventBufferSize             prometheus.Gauge
 	AccessControlRequestCount       *prometheus.CounterVec
 	AccessControlRequestDurationSec *prometheus.SummaryVec
+	CatabalancerRequestDurationSec  *prometheus.HistogramVec
 
 	JobsInFlight         prometheus.Gauge
 	HTTPRequestsInFlight prometheus.Gauge
@@ -126,6 +127,11 @@ func NewMetrics() *CatalystAPIMetrics {
 			Name: "access_control_request_duration_seconds",
 			Help: "The latency of the access control requests",
 		}, []string{"allowed", "playbackID"}),
+		CatabalancerRequestDurationSec: promauto.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "catabalancer_request_duration",
+			Help:    "Time taken for catabalancer load balancing requests",
+			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
+		}, []string{"success", "request_type", "mist_match", "background"}),
 
 		// Clients metrics
 		TranscodingStatusUpdate: ClientMetrics{
