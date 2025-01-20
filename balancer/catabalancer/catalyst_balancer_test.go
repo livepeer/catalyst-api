@@ -2,7 +2,6 @@ package catabalancer
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -11,6 +10,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 var CPUOverloadedNode = ScoredNode{
@@ -42,17 +42,6 @@ var BandwidthOverloadedNode = ScoredNode{
 
 var mediaTags = map[string]string{"node": "media", "dtsc": "dtsc://nodedtsc"}
 
-func mockDB(t *testing.T) *sql.DB {
-	db, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	for i := 0; i < 10; i++ {
-		mock.ExpectQuery("SELECT stats FROM node_stats").
-			WillReturnRows(sqlmock.NewRows([]string{"stats"}).AddRow("{}"))
-
-	}
-	return db
-}
-
 func setNodeMetrics(t *testing.T, mock sqlmock.Sqlmock, nodeStats []NodeUpdateEvent) {
 	rows := sqlmock.NewRows([]string{"stats"})
 	for _, s := range nodeStats {
@@ -65,7 +54,11 @@ func setNodeMetrics(t *testing.T, mock sqlmock.Sqlmock, nodeStats []NodeUpdateEv
 }
 
 func TestItReturnsItselfWhenNoOtherNodesPresent(t *testing.T) {
-	c := NewBalancer("me", time.Second, time.Second, mockDB(t), 0)
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	mock.ExpectQuery("SELECT stats FROM node_stats").
+		WillReturnRows(sqlmock.NewRows([]string{"stats"}).AddRow("{}"))
+	c := NewBalancer("me", time.Second, time.Second, db, 0)
 	nodeName, prefix, err := c.GetBestNode(context.Background(), nil, "playbackID", "", "", "", false)
 	require.NoError(t, err)
 	require.Equal(t, "me", nodeName)
@@ -363,15 +356,24 @@ func TestMistUtilLoadSource(t *testing.T) {
 	nodeStats.SetStreams([]string{"stream"}, []string{"ingest"})
 	setNodeMetrics(t, mock, []NodeUpdateEvent{nodeStats})
 
-	source, err := c.MistUtilLoadSource(context.Background(), "ingest", "", "")
+	// simulate two calls in parallel, due to caching and request coalescing there will still only be one
+	// db call set up above with setNodeMetrics()
+	eg := errgroup.Group{}
+	eg.Go(func() error {
+		source, err := c.MistUtilLoadSource(context.Background(), "ingest", "", "")
+		require.NoError(t, err)
+		require.Equal(t, "dtsc://node", source)
+		return nil
+	})
+	_, err = c.MistUtilLoadSource(context.Background(), "ingest", "", "")
 	require.NoError(t, err)
-	require.Equal(t, "dtsc://node", source)
+	require.NoError(t, eg.Wait())
 
 	time.Sleep(2 * time.Millisecond)
 	err = c.UpdateMembers(context.Background(), []cluster.Member{})
 	require.NoError(t, err)
 	setNodeMetrics(t, mock, []NodeUpdateEvent{})
-	source, err = c.MistUtilLoadSource(context.Background(), "ingest", "", "")
+	source, err := c.MistUtilLoadSource(context.Background(), "ingest", "", "")
 	require.EqualError(t, err, "catabalancer no node found for ingest stream: ingest stale: false")
 	require.Empty(t, source)
 }
@@ -391,7 +393,7 @@ func TestStreamTimeout(t *testing.T) {
 	nodeStats := NodeUpdateEvent{NodeID: "node", NodeMetrics: NodeMetrics{Timestamp: time.Now()}}
 	nodeStats.SetStreams([]string{"video+stream"}, []string{"video+ingest"})
 	setNodeMetrics(t, mock, []NodeUpdateEvent{nodeStats})
-	s, err := c.refreshNodes()
+	s, err := c.refreshNodes(context.Background())
 	require.NoError(t, err)
 	setNodeMetrics(t, mock, []NodeUpdateEvent{nodeStats})
 
@@ -455,4 +457,43 @@ func TestSimulate(t *testing.T) {
 		require.LessOrEqual(t, time.Since(start), expectedResponseTime)
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+func TestItCanMarshalAndUnMarshalStreamIDs(t *testing.T) {
+	n := NodeUpdateEvent{}
+	n.SetStreams([]string{"noningest1", "noningest2"}, []string{"ingest1", "ingest2"})
+	jsonBytes, err := json.Marshal(n)
+	require.NoError(t, err)
+
+	var n2 NodeUpdateEvent
+	require.NoError(t, json.Unmarshal(jsonBytes, &n2))
+
+	require.Equal(t, []string{"noningest1", "noningest2"}, n2.GetStreams())
+	require.Equal(t, []string{"ingest1", "ingest2"}, n2.GetIngestStreams())
+}
+
+func TestItCanMarshalAndUnMarshalStreamIDsWithNoIngestStreams(t *testing.T) {
+	n := NodeUpdateEvent{}
+	n.SetStreams([]string{"noningest1", "noningest2"}, []string{})
+	jsonBytes, err := json.Marshal(n)
+	require.NoError(t, err)
+
+	var n2 NodeUpdateEvent
+	require.NoError(t, json.Unmarshal(jsonBytes, &n2))
+
+	require.Equal(t, []string{"noningest1", "noningest2"}, n2.GetStreams())
+	require.Equal(t, []string{}, n2.GetIngestStreams())
+}
+
+func TestItCanMarshalAndUnMarshalStreamIDsWithNoNonIngestStreams(t *testing.T) {
+	n := NodeUpdateEvent{}
+	n.SetStreams([]string{}, []string{"ingest1", "ingest2"})
+	jsonBytes, err := json.Marshal(n)
+	require.NoError(t, err)
+
+	var n2 NodeUpdateEvent
+	require.NoError(t, json.Unmarshal(jsonBytes, &n2))
+
+	require.Equal(t, []string{}, n2.GetStreams())
+	require.Equal(t, []string{"ingest1", "ingest2"}, n2.GetIngestStreams())
 }

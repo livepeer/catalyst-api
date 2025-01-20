@@ -28,7 +28,6 @@ import (
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/config"
 	"github.com/livepeer/catalyst-api/crypto"
-	"github.com/livepeer/catalyst-api/events"
 	"github.com/livepeer/catalyst-api/handlers/misttriggers"
 	mistapiconnector "github.com/livepeer/catalyst-api/mapic"
 	"github.com/livepeer/catalyst-api/middleware"
@@ -267,7 +266,7 @@ func main() {
 
 		if catabalancerEnabled && nodeStatsDB != nil {
 			if cli.Tags["node"] == "media" { // don't announce load balancing availability for testing nodes
-				events.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, mist, nodeStatsDB)
+				catabalancer.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, mist, nodeStatsDB)
 			}
 		}
 	} else {

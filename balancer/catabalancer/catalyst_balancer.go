@@ -9,15 +9,19 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	_ "github.com/lib/pq"
+	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/patrickmn/go-cache"
 )
 
 const (
-	stateCacheKey = "stateCacheKey"
+	stateCacheKey  = "stateCacheKey"
+	dbQueryTimeout = 10 * time.Second
 )
 
 type CataBalancer struct {
@@ -27,6 +31,7 @@ type CataBalancer struct {
 	ingestStreamTimeout time.Duration
 	nodeStatsDB         *sql.DB
 	nodeStatsCache      *cache.Cache
+	cacheMutex          sync.Mutex
 }
 
 type stats struct {
@@ -136,7 +141,7 @@ func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Memb
 }
 
 func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq bool) (string, string, error) {
-	s, err := c.refreshNodes()
+	s, err := c.refreshNodes(ctx)
 	if err != nil {
 		return "", "", fmt.Errorf("error refreshing nodes: %w", err)
 	}
@@ -291,10 +296,28 @@ func truncateReturned(scoredNodes []ScoredNode, numNodes int) []ScoredNode {
 	return scoredNodes[:numNodes]
 }
 
-func (c *CataBalancer) refreshNodes() (stats, error) {
+func (c *CataBalancer) getCachedStats() (stats, bool) {
 	cachedState, found := c.nodeStatsCache.Get(stateCacheKey)
 	if found {
-		return *cachedState.(*stats), nil
+		return *cachedState.(*stats), true
+	}
+	return stats{}, false
+}
+
+func (c *CataBalancer) refreshNodes(ctx context.Context) (stats, error) {
+	cachedState, found := c.getCachedStats()
+	if found {
+		return cachedState, nil
+	}
+
+	c.cacheMutex.Lock()
+	defer c.cacheMutex.Unlock()
+
+	// check cache again since multiple requests can get an initial cache miss, the first one will populate
+	// the cache while the requests waiting behind it (with the cacheMutex) can use the new cached data
+	cachedState, found = c.getCachedStats()
+	if found {
+		return cachedState, nil
 	}
 
 	s := stats{
@@ -307,8 +330,11 @@ func (c *CataBalancer) refreshNodes() (stats, error) {
 		return s, fmt.Errorf("node stats DB was nil")
 	}
 
+	queryContext, cancel := context.WithTimeout(ctx, dbQueryTimeout)
+	defer cancel()
+
 	query := "SELECT stats FROM node_stats"
-	rows, err := c.nodeStatsDB.Query(query)
+	rows, err := c.nodeStatsDB.QueryContext(queryContext, query)
 	if err != nil {
 		return s, fmt.Errorf("failed to query node stats: %w", err)
 	}
@@ -366,7 +392,7 @@ func getPlaybackID(streamID string) string {
 }
 
 func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, streamID, lat, lon string) (string, error) {
-	s, err := c.refreshNodes()
+	s, err := c.refreshNodes(ctx)
 	if err != nil {
 		return "", fmt.Errorf("error refreshing nodes: %w", err)
 	}
@@ -388,4 +414,71 @@ var UpdateNodeStatsEvery = 5 * time.Second
 
 func isStale(timestamp time.Time, stale time.Duration) bool {
 	return time.Since(timestamp) >= stale
+}
+
+func StartMetricSending(nodeName string, latitude float64, longitude float64, mist clients.MistAPIClient, nodeStatsDB *sql.DB) {
+	ticker := time.NewTicker(UpdateNodeStatsEvery)
+	go func() {
+		for range ticker.C {
+			sysusage, err := GetSystemUsage()
+			if err != nil {
+				log.LogNoRequestID("catabalancer failed to get sys usage", "err", err)
+				continue
+			}
+
+			event := NodeUpdateEvent{
+				Resource: "nodeUpdate",
+				NodeID:   nodeName,
+				NodeMetrics: NodeMetrics{
+					CPUUsagePercentage:       sysusage.CPUUsagePercentage,
+					RAMUsagePercentage:       sysusage.RAMUsagePercentage,
+					BandwidthUsagePercentage: sysusage.BWUsagePercentage,
+					LoadAvg:                  sysusage.LoadAvg.Load5Min,
+					GeoLatitude:              latitude,
+					GeoLongitude:             longitude,
+					Timestamp:                time.Now(),
+				},
+			}
+
+			if mist != nil {
+				mistState, err := mist.GetState()
+				if err != nil {
+					log.LogNoRequestID("catabalancer failed to get mist state", "err", err)
+					continue
+				}
+
+				var nonIngestStreams, ingestStreams []string
+				for streamID := range mistState.ActiveStreams {
+					if mistState.IsIngestStream(streamID) {
+						ingestStreams = append(ingestStreams, streamID)
+					} else {
+						nonIngestStreams = append(nonIngestStreams, streamID)
+					}
+				}
+				event.SetStreams(nonIngestStreams, ingestStreams)
+			}
+
+			payload, err := json.Marshal(event)
+			if err != nil {
+				log.LogNoRequestID("catabalancer failed to marhsal node update", "err", err)
+				continue
+			}
+
+			insertStatement := `insert into "node_stats"(
+                            "node_id",
+                            "stats"
+                            ) values($1, $2)
+							ON CONFLICT (node_id)
+							DO UPDATE SET stats = EXCLUDED.stats;`
+			_, err = nodeStatsDB.Exec(
+				insertStatement,
+				nodeName,
+				payload,
+			)
+			if err != nil {
+				log.LogNoRequestID("error writing postgres node stats", "err", err)
+				continue
+			}
+		}
+	}()
 }
