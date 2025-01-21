@@ -47,6 +47,7 @@ type Cli struct {
 	VodPipelineStrategy       string
 	MetricsDBConnectionString string
 	NodeStatsConnectionString string
+	NodeStatsMaxConnections   int
 	ImportIPFSGatewayURLs     []*url.URL
 	ImportArweaveGatewayURLs  []*url.URL
 	NodeName                  string

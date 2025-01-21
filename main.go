@@ -66,6 +66,7 @@ func main() {
 	fs.StringVar(&cli.VodPipelineStrategy, "vod-pipeline-strategy", string(pipeline.StrategyCatalystFfmpegDominance), "Which strategy to use for the VOD pipeline")
 	fs.StringVar(&cli.MetricsDBConnectionString, "metrics-db-connection-string", "", "Connection string to use for the metrics Postgres DB. Takes the form: host=X port=X user=X password=X dbname=X")
 	fs.StringVar(&cli.NodeStatsConnectionString, "node-stats-connection-string", "", "Connection string to use for the node stats DB. Takes the form: host=X port=X user=X password=X dbname=X")
+	fs.IntVar(&cli.NodeStatsMaxConnections, "node-stats-max-connections", 2, "Maximum number of connections to the node stats DB.")
 	config.URLSliceVarFlag(fs, &cli.ImportIPFSGatewayURLs, "import-ipfs-gateway-urls", "https://vod-import-gtw.mypinata.cloud/ipfs/?pinataGatewayToken={{secrets.LP_PINATA_GATEWAY_TOKEN}},https://w3s.link/ipfs/,https://ipfs.io/ipfs/,https://cloudflare-ipfs.com/ipfs/", "Comma delimited ordered list of IPFS gateways (includes /ipfs/ suffix) to import assets from")
 	config.URLSliceVarFlag(fs, &cli.ImportArweaveGatewayURLs, "import-arweave-gateway-urls", "https://arweave.net/", "Comma delimited ordered list of arweave gateways")
 	fs.BoolVar(&cli.MistCleanup, "run-mist-cleanup", true, "Run mist-cleanup.sh to cleanup shm")
@@ -238,8 +239,8 @@ func main() {
 		}
 
 		// Without this, we've run into issues with exceeding our open connection limit
-		nodeStatsDB.SetMaxOpenConns(2)
-		nodeStatsDB.SetMaxIdleConns(2)
+		nodeStatsDB.SetMaxOpenConns(cli.NodeStatsMaxConnections)
+		nodeStatsDB.SetMaxIdleConns(cli.NodeStatsMaxConnections)
 		nodeStatsDB.SetConnMaxLifetime(time.Hour)
 	} else if catabalancerEnabled {
 		glog.Infof("Catabalancer failed to start, NodeStatsConnectionString was not set")
