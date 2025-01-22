@@ -70,8 +70,8 @@ func (c CombinedBalancer) UpdateMembers(ctx context.Context, members []cluster.M
 }
 
 func (c CombinedBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq bool) (string, string, error) {
-	start := time.Now()
 	if c.CatabalancerPlaybackEnabled {
+		start := time.Now()
 		node, fullPlaybackID, err := c.Catabalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix, isStudioReq)
 		metrics.Metrics.CatabalancerRequestDurationSec.
 			WithLabelValues(strconv.FormatBool(err == nil), "playback", "", "false").
@@ -81,6 +81,7 @@ func (c CombinedBalancer) GetBestNode(ctx context.Context, redirectPrefixes []st
 
 	bestNode, fullPlaybackID, err := c.MistBalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix, isStudioReq)
 	go func() {
+		start := time.Now()
 		cataBestNode, cataFullPlaybackID, cataErr := c.Catabalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix, isStudioReq)
 		log.LogNoRequestID("catabalancer GetBestNode",
 			"bestNode", bestNode,
