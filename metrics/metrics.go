@@ -34,19 +34,21 @@ type AnalyticsMetrics struct {
 }
 
 type CatalystAPIMetrics struct {
-	Version                         *prometheus.CounterVec
-	UploadVODRequestCount           prometheus.Counter
-	UploadVODRequestDurationSec     *prometheus.SummaryVec
-	TranscodeSegmentDurationSec     prometheus.Histogram
-	PlaybackRequestDurationSec      *prometheus.SummaryVec
-	CDNRedirectCount                *prometheus.CounterVec
-	CDNRedirectWebRTC406            *prometheus.CounterVec
-	UserEventBufferSize             prometheus.Gauge
-	MemberEventBufferSize           prometheus.Gauge
-	SerfEventBufferSize             prometheus.Gauge
-	AccessControlRequestCount       *prometheus.CounterVec
-	AccessControlRequestDurationSec *prometheus.SummaryVec
-	CatabalancerRequestDurationSec  *prometheus.HistogramVec
+	Version                           *prometheus.CounterVec
+	UploadVODRequestCount             prometheus.Counter
+	UploadVODRequestDurationSec       *prometheus.SummaryVec
+	TranscodeSegmentDurationSec       prometheus.Histogram
+	PlaybackRequestDurationSec        *prometheus.SummaryVec
+	CDNRedirectCount                  *prometheus.CounterVec
+	CDNRedirectWebRTC406              *prometheus.CounterVec
+	UserEventBufferSize               prometheus.Gauge
+	MemberEventBufferSize             prometheus.Gauge
+	SerfEventBufferSize               prometheus.Gauge
+	AccessControlRequestCount         *prometheus.CounterVec
+	AccessControlRequestDurationSec   *prometheus.SummaryVec
+	CatabalancerRequestDurationSec    *prometheus.HistogramVec
+	CatabalancerSendMetricDurationSec prometheus.Histogram
+	CatabalancerSendDBDurationSec     *prometheus.HistogramVec
 
 	JobsInFlight         prometheus.Gauge
 	HTTPRequestsInFlight prometheus.Gauge
@@ -132,6 +134,16 @@ func NewMetrics() *CatalystAPIMetrics {
 			Help:    "Time taken for catabalancer load balancing requests",
 			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
 		}, []string{"success", "request_type", "mist_match", "background"}),
+		CatabalancerSendMetricDurationSec: promauto.NewHistogram(prometheus.HistogramOpts{
+			Name:    "catabalancer_send_metric_duration",
+			Help:    "Total time taken to compile and send catabalancer node metrics",
+			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
+		}),
+		CatabalancerSendDBDurationSec: promauto.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "catabalancer_send_db_duration",
+			Help:    "Time taken to send catabalancer node metrics to the DB",
+			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
+		}, []string{"success"}),
 
 		// Clients metrics
 		TranscodingStatusUpdate: ClientMetrics{

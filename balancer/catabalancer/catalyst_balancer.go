@@ -16,6 +16,7 @@ import (
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/cluster"
 	"github.com/livepeer/catalyst-api/log"
+	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/patrickmn/go-cache"
 )
 
@@ -410,16 +411,17 @@ func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, streamID, lat, lo
 	return "", fmt.Errorf("catabalancer no node found for ingest stream: %s stale: false", streamID)
 }
 
-var UpdateNodeStatsEvery = 5 * time.Second
+var updateNodeStatsEvery = 5 * time.Second
 
 func isStale(timestamp time.Time, stale time.Duration) bool {
 	return time.Since(timestamp) >= stale
 }
 
 func StartMetricSending(nodeName string, latitude float64, longitude float64, mist clients.MistAPIClient, nodeStatsDB *sql.DB) {
-	ticker := time.NewTicker(UpdateNodeStatsEvery)
+	ticker := time.NewTicker(updateNodeStatsEvery)
 	go func() {
 		for range ticker.C {
+			start := time.Now()
 			sysusage, err := GetSystemUsage()
 			if err != nil {
 				log.LogNoRequestID("catabalancer failed to get sys usage", "err", err)
@@ -463,22 +465,33 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, mi
 				log.LogNoRequestID("catabalancer failed to marhsal node update", "err", err)
 				continue
 			}
+			sendMetrics(nodeStatsDB, nodeName, payload)
 
-			insertStatement := `insert into "node_stats"(
+			metrics.Metrics.CatabalancerSendMetricDurationSec.Observe(time.Since(start).Seconds())
+		}
+	}()
+}
+
+func sendMetrics(nodeStatsDB *sql.DB, nodeName string, payload []byte) {
+	start := time.Now()
+	queryContext, cancel := context.WithTimeout(context.Background(), updateNodeStatsEvery)
+	defer cancel()
+	insertStatement := `insert into "node_stats"(
                             "node_id",
                             "stats"
                             ) values($1, $2)
 							ON CONFLICT (node_id)
 							DO UPDATE SET stats = EXCLUDED.stats;`
-			_, err = nodeStatsDB.Exec(
-				insertStatement,
-				nodeName,
-				payload,
-			)
-			if err != nil {
-				log.LogNoRequestID("error writing postgres node stats", "err", err)
-				continue
-			}
-		}
-	}()
+	_, err := nodeStatsDB.ExecContext(
+		queryContext,
+		insertStatement,
+		nodeName,
+		payload,
+	)
+	if err != nil {
+		log.LogNoRequestID("catabalancer error writing postgres node stats", "err", err)
+	}
+	metrics.Metrics.CatabalancerSendDBDurationSec.
+		WithLabelValues(strconv.FormatBool(err == nil)).
+		Observe(time.Since(start).Seconds())
 }
