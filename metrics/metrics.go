@@ -136,12 +136,12 @@ func NewMetrics() *CatalystAPIMetrics {
 		}, []string{"success", "request_type", "mist_match", "background"}),
 		CatabalancerSendMetricDurationSec: promauto.NewHistogram(prometheus.HistogramOpts{
 			Name:    "catabalancer_send_metric_duration",
-			Help:    "Time taken to send catabalancer node metric updates",
+			Help:    "Total time taken to compile and send catabalancer node metrics",
 			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
 		}),
 		CatabalancerSendDBDurationSec: promauto.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "catabalancer_send_db_duration",
-			Help:    "Time taken to send catabalancer node metric updates to DB",
+			Help:    "Time taken to send catabalancer node metrics to the DB",
 			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
 		}, []string{"success"}),
 
