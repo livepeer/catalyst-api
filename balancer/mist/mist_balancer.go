@@ -338,7 +338,7 @@ func (b *MistBalancer) queryMistForClosestNode(ctx context.Context, playbackID, 
 var nodeHostRegex = regexp.MustCompile(`^.+?\.`) // matches the first part of the hostname before the first dot
 
 // return the best node available for a given stream. will return any node if nobody has the stream.
-func (b *MistBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq bool) (string, string, error) {
+func (b *MistBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq, isIngestPlayback bool) (string, string, error) {
 	var nodeAddr, fullPlaybackID, fallbackAddr string
 	var mu sync.Mutex
 	var err error

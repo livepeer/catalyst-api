@@ -28,7 +28,7 @@ func (b *BalancerStub) UpdateMembers(ctx context.Context, members []cluster.Memb
 }
 
 // always returns local node
-func (b *BalancerStub) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq bool) (string, string, error) {
+func (b *BalancerStub) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq, isIngestPlayback bool) (string, string, error) {
 	return "localhost", playbackID, nil
 }
 
