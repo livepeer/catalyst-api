@@ -129,7 +129,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 					return
 				}
 
-				bestNode, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix, isStudioReq)
+				bestNode, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix, isStudioReq, false)
 				if err != nil {
 					glog.Errorf("failed to find either origin or fallback server for playbackID=%s err=%s", playbackID, err)
 					w.WriteHeader(http.StatusBadGateway)
@@ -183,7 +183,8 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			return
 		}
 
-		bestNode, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix, isStudioReq)
+		isIngestPlayback := r.URL.Query().Get("ingestpb") == "true" // route playback directly to ingest node
+		bestNode, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix, isStudioReq, isIngestPlayback)
 
 		if err != nil {
 			glog.Errorf("failed to find either origin or fallback server for playbackID=%s err=%s", playbackID, err)
