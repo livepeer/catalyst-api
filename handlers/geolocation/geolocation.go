@@ -183,7 +183,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			return
 		}
 
-		isIngestPlayback := r.URL.Query().Get("ingestpb") == "true" // route playback directly to ingest node
+		isIngestPlayback := query.Get("ingestpb") == "true" // route playback directly to ingest node
 		bestNode, fullPlaybackID, err := c.Balancer.GetBestNode(context.Background(), redirectPrefixes, playbackID, lat, lon, prefix, isStudioReq, isIngestPlayback)
 
 		if err != nil {
