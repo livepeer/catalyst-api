@@ -72,7 +72,8 @@ func (c CombinedBalancer) UpdateMembers(ctx context.Context, members []cluster.M
 
 func (c CombinedBalancer) ingestPlayback(ctx context.Context, playbackID, lat, lon string) (string, string, error) {
 	stream := "video+" + playbackID
-	dtscURL, err := c.MistBalancer.MistUtilLoadSource(ctx, stream, lat, lon)
+
+	dtscURL, err := c.loadBalanceSource(ctx, stream, lat, lon)
 	if err != nil {
 		return "", "", err
 	}
@@ -81,6 +82,17 @@ func (c CombinedBalancer) ingestPlayback(ctx context.Context, playbackID, lat, l
 		return "", "", err
 	}
 	return u.Host, stream, err
+}
+
+func (c CombinedBalancer) loadBalanceSource(ctx context.Context, stream, lat, lon string) (string, error) {
+	dtscURL, err := c.Catabalancer.MistUtilLoadSource(ctx, stream, lat, lon)
+	if err != nil {
+		log.LogNoRequestID("catabalancer ingest playback failed, using mist", "err", err)
+	} else {
+		return dtscURL, err
+	}
+
+	return c.MistBalancer.MistUtilLoadSource(ctx, stream, lat, lon)
 }
 
 func (c CombinedBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq, isIngestPlayback bool) (string, string, error) {
