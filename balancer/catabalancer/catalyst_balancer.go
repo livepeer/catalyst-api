@@ -411,39 +411,19 @@ func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, streamID, lat, lo
 	return "", fmt.Errorf("catabalancer no node found for ingest stream: %s stale: false", streamID)
 }
 
-var updateNodeStatsEvery = 5 * time.Second
+var StatsUpdateInterval = 5 * time.Second
 
 func isStale(timestamp time.Time, stale time.Duration) bool {
 	return time.Since(timestamp) >= stale
 }
 
 func StartMetricSending(nodeName string, latitude float64, longitude float64, mist clients.MistAPIClient, nodeStatsDB *sql.DB) {
-	ticker := time.NewTicker(updateNodeStatsEvery)
+	ticker := time.NewTicker(StatsUpdateInterval)
 	go func() {
 		for range ticker.C {
-			sendWithTimeout(nodeName, latitude, longitude, mist, nodeStatsDB)
+			sendMetrics(nodeName, latitude, longitude, mist, nodeStatsDB)
 		}
 	}()
-}
-
-func sendWithTimeout(nodeName string, latitude float64, longitude float64, mist clients.MistAPIClient, nodeStatsDB *sql.DB) {
-	ctx, cancel := context.WithTimeout(context.Background(), updateNodeStatsEvery)
-	defer cancel()
-
-	done := make(chan struct{})
-
-	go func() {
-		sendMetrics(nodeName, latitude, longitude, mist, nodeStatsDB)
-		close(done) // Signal completion
-	}()
-
-	// Wait for either the function to complete or timeout
-	select {
-	case <-done:
-		return
-	case <-ctx.Done():
-		log.LogNoRequestID("catabalancer send metrics timed out")
-	}
 }
 
 func sendMetrics(nodeName string, latitude float64, longitude float64, mist clients.MistAPIClient, nodeStatsDB *sql.DB) {
@@ -498,7 +478,7 @@ func sendMetrics(nodeName string, latitude float64, longitude float64, mist clie
 
 func sendMetricsToDB(nodeStatsDB *sql.DB, nodeName string, payload []byte) {
 	start := time.Now()
-	queryContext, cancel := context.WithTimeout(context.Background(), updateNodeStatsEvery)
+	queryContext, cancel := context.WithTimeout(context.Background(), StatsUpdateInterval)
 	defer cancel()
 	insertStatement := `insert into "node_stats"(
                             "node_id",
