@@ -143,17 +143,17 @@ func mockHandlers(t *testing.T) *GeolocationHandlersCollection {
 	ctrl := gomock.NewController(t)
 	mb := mockbalancer.NewMockBalancer(ctrl)
 	mb.EXPECT().
-		GetBestNode(context.Background(), prefixes[:], playbackID, "", "", "", gomock.Any()).
+		GetBestNode(context.Background(), prefixes[:], playbackID, "", "", "", gomock.Any(), gomock.Any()).
 		AnyTimes().
 		Return(closestNodeAddr, fmt.Sprintf("%s+%s", prefixes[0], playbackID), nil)
 
 	mb.EXPECT().
-		GetBestNode(context.Background(), prefixes[:], CdnRedirectedPlaybackID, "", "", "", gomock.Any()).
+		GetBestNode(context.Background(), prefixes[:], CdnRedirectedPlaybackID, "", "", "", gomock.Any(), gomock.Any()).
 		AnyTimes().
 		Return(closestNodeAddr, fmt.Sprintf("%s+%s", prefixes[0], CdnRedirectedPlaybackID), nil)
 
 	mb.EXPECT().
-		GetBestNode(context.Background(), prefixes[:], UnknownPlaybackID, "", "", "", gomock.Any()).
+		GetBestNode(context.Background(), prefixes[:], UnknownPlaybackID, "", "", "", gomock.Any(), gomock.Any()).
 		AnyTimes().
 		Return("", "", errors.New(""))
 
@@ -200,7 +200,7 @@ func TestRedirectHandler_LatLonHeaders(t *testing.T) {
 	n := mockHandlers(t)
 
 	n.Balancer.(*mockbalancer.MockBalancer).EXPECT().
-		GetBestNode(context.Background(), prefixes[:], playbackID, coordinates[0].lat, coordinates[0].lon, "", gomock.Any()).
+		GetBestNode(context.Background(), prefixes[:], playbackID, coordinates[0].lat, coordinates[0].lon, "", gomock.Any(), gomock.Any()).
 		Return(closestNodeAddr, fmt.Sprintf("%s+%s", prefixes[0], playbackID), nil)
 
 	pathHLS := fmt.Sprintf("/hls/%s/index.m3u8", playbackID)
@@ -217,7 +217,7 @@ func TestRedirectHandler_LatLonQueryOverride(t *testing.T) {
 	n := mockHandlers(t)
 
 	n.Balancer.(*mockbalancer.MockBalancer).EXPECT().
-		GetBestNode(context.Background(), prefixes[:], playbackID, coordinates[1].lat, coordinates[1].lon, "", gomock.Any()).
+		GetBestNode(context.Background(), prefixes[:], playbackID, coordinates[1].lat, coordinates[1].lon, "", gomock.Any(), gomock.Any()).
 		Return(closestNodeAddr, fmt.Sprintf("%s+%s", prefixes[0], playbackID), nil)
 
 	query := fmt.Sprintf("?lat=%s&lon=%s", coordinates[1].lat, coordinates[1].lon)
@@ -236,7 +236,7 @@ func TestRedirectHandler_IncompleteLatLonQuery(t *testing.T) {
 
 	// Make sure values are not overridden if either lat or lon are missing
 	n.Balancer.(*mockbalancer.MockBalancer).EXPECT().
-		GetBestNode(context.Background(), prefixes[:], playbackID, coordinates[0].lat, coordinates[0].lon, "", gomock.Any()).
+		GetBestNode(context.Background(), prefixes[:], playbackID, coordinates[0].lat, coordinates[0].lon, "", gomock.Any(), gomock.Any()).
 		Return(closestNodeAddr, fmt.Sprintf("%s+%s", prefixes[0], playbackID), nil)
 
 	query := fmt.Sprintf("?lat=&lon=%s", coordinates[1].lon)
@@ -294,7 +294,7 @@ func TestRedirectHandlerHLSVOD_Correct(t *testing.T) {
 	n := mockHandlers(t)
 
 	n.Balancer.(*mockbalancer.MockBalancer).EXPECT().
-		GetBestNode(context.Background(), prefixes[:], playbackID, "", "", "vod", gomock.Any()).
+		GetBestNode(context.Background(), prefixes[:], playbackID, "", "", "vod", gomock.Any(), gomock.Any()).
 		AnyTimes().
 		Return(closestNodeAddr, fmt.Sprintf("%s+%s", "vod", playbackID), nil)
 

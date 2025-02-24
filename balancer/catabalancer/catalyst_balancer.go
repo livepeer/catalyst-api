@@ -141,7 +141,7 @@ func (c *CataBalancer) UpdateMembers(ctx context.Context, members []cluster.Memb
 	return nil
 }
 
-func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq bool) (string, string, error) {
+func (c *CataBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq, isIngestPlayback bool) (string, string, error) {
 	s, err := c.refreshNodes(ctx)
 	if err != nil {
 		return "", "", fmt.Errorf("error refreshing nodes: %w", err)

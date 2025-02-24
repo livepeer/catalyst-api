@@ -4,6 +4,7 @@ package balancer
 
 import (
 	"context"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 type Balancer interface {
 	Start(ctx context.Context) error
 	UpdateMembers(ctx context.Context, members []cluster.Member) error
-	GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq bool) (string, string, error)
+	GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq, isIngestPlayback bool) (string, string, error)
 	MistUtilLoadSource(ctx context.Context, streamID, lat, lon string) (string, error)
 }
 
@@ -69,20 +70,54 @@ func (c CombinedBalancer) UpdateMembers(ctx context.Context, members []cluster.M
 	return c.MistBalancer.UpdateMembers(ctx, members)
 }
 
-func (c CombinedBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq bool) (string, string, error) {
+func (c CombinedBalancer) ingestPlayback(ctx context.Context, playbackID, lat, lon string) (string, string, error) {
+	stream := "video+" + playbackID
+
+	dtscURL, err := c.loadBalanceSource(ctx, stream, lat, lon)
+	if err != nil {
+		return "", "", err
+	}
+	u, err := url.Parse(dtscURL)
+	if err != nil {
+		return "", "", err
+	}
+	return u.Host, stream, err
+}
+
+func (c CombinedBalancer) loadBalanceSource(ctx context.Context, stream, lat, lon string) (string, error) {
+	dtscURL, err := c.Catabalancer.MistUtilLoadSource(ctx, stream, lat, lon)
+	if err != nil {
+		log.LogNoRequestID("catabalancer ingest playback failed, using mist", "err", err)
+	} else {
+		return dtscURL, err
+	}
+
+	return c.MistBalancer.MistUtilLoadSource(ctx, stream, lat, lon)
+}
+
+func (c CombinedBalancer) GetBestNode(ctx context.Context, redirectPrefixes []string, playbackID, lat, lon, fallbackPrefix string, isStudioReq, isIngestPlayback bool) (string, string, error) {
+	if isIngestPlayback {
+		node, fullPlaybackID, err := c.ingestPlayback(ctx, playbackID, lat, lon)
+		if err == nil {
+			return node, fullPlaybackID, err
+		} else {
+			log.LogNoRequestID("ingest playback failed", "playbackID", playbackID, "err", err)
+		}
+	}
+
 	if c.CatabalancerPlaybackEnabled {
 		start := time.Now()
-		node, fullPlaybackID, err := c.Catabalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix, isStudioReq)
+		node, fullPlaybackID, err := c.Catabalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix, isStudioReq, false)
 		metrics.Metrics.CatabalancerRequestDurationSec.
 			WithLabelValues(strconv.FormatBool(err == nil), "playback", "", "false").
 			Observe(time.Since(start).Seconds())
 		return node, fullPlaybackID, err
 	}
 
-	bestNode, fullPlaybackID, err := c.MistBalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix, isStudioReq)
+	bestNode, fullPlaybackID, err := c.MistBalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix, isStudioReq, false)
 	go func() {
 		start := time.Now()
-		cataBestNode, cataFullPlaybackID, cataErr := c.Catabalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix, isStudioReq)
+		cataBestNode, cataFullPlaybackID, cataErr := c.Catabalancer.GetBestNode(ctx, redirectPrefixes, playbackID, lat, lon, fallbackPrefix, isStudioReq, false)
 		log.LogNoRequestID("catabalancer GetBestNode",
 			"bestNode", bestNode,
 			"fullPlaybackID", fullPlaybackID,

@@ -59,7 +59,7 @@ func TestItReturnsItselfWhenNoOtherNodesPresent(t *testing.T) {
 	mock.ExpectQuery("SELECT stats FROM node_stats").
 		WillReturnRows(sqlmock.NewRows([]string{"stats"}).AddRow("{}"))
 	c := NewBalancer("me", time.Second, time.Second, db, 0)
-	nodeName, prefix, err := c.GetBestNode(context.Background(), nil, "playbackID", "", "", "", false)
+	nodeName, prefix, err := c.GetBestNode(context.Background(), nil, "playbackID", "", "", "", false, false)
 	require.NoError(t, err)
 	require.Equal(t, "me", nodeName)
 	require.Equal(t, "video+playbackID", prefix)
@@ -75,7 +75,7 @@ func TestStaleNodes(t *testing.T) {
 	// node is stale, old timestamp
 	setNodeMetrics(t, mock, []NodeUpdateEvent{{NodeID: "node1", NodeMetrics: NodeMetrics{}}})
 	c.metricTimeout = -5 * time.Second
-	nodeName, prefix, err := c.GetBestNode(context.Background(), nil, "playbackID", "", "", "", false)
+	nodeName, prefix, err := c.GetBestNode(context.Background(), nil, "playbackID", "", "", "", false, false)
 	require.NoError(t, err)
 	require.Equal(t, "me", nodeName) // we expect node1 to be ignored
 	require.Equal(t, "video+playbackID", prefix)
@@ -84,7 +84,7 @@ func TestStaleNodes(t *testing.T) {
 	time.Sleep(2 * time.Millisecond)
 	setNodeMetrics(t, mock, []NodeUpdateEvent{{NodeID: "node1", NodeMetrics: NodeMetrics{Timestamp: time.Now()}}})
 	c.metricTimeout = 5 * time.Second
-	nodeName, prefix, err = c.GetBestNode(context.Background(), nil, "playbackID", "", "", "", false)
+	nodeName, prefix, err = c.GetBestNode(context.Background(), nil, "playbackID", "", "", "", false, false)
 	require.NoError(t, err)
 	require.Equal(t, "node1", nodeName) // we expect node1 this time
 	require.Equal(t, "video+playbackID", prefix)
@@ -312,7 +312,7 @@ func TestSetMetrics(t *testing.T) {
 		{NodeID: "node2", NodeMetrics: NodeMetrics{CPUUsagePercentage: 0, Timestamp: time.Now()}},
 	})
 
-	node, fullPlaybackID, err := c.GetBestNode(context.Background(), nil, "1234", "", "", "", false)
+	node, fullPlaybackID, err := c.GetBestNode(context.Background(), nil, "1234", "", "", "", false, false)
 	require.NoError(t, err)
 	require.Equal(t, "node2", node)
 	require.Equal(t, "video+1234", fullPlaybackID)
@@ -452,7 +452,7 @@ func TestSimulate(t *testing.T) {
 	for j := 0; j < loadBalanceCallCount; j++ {
 		setNodeMetrics(t, mock, s)
 		start := time.Now()
-		_, _, err = c.GetBestNode(context.Background(), nil, "playbackID", "0", "0", "", false)
+		_, _, err = c.GetBestNode(context.Background(), nil, "playbackID", "0", "0", "", false, false)
 		require.NoError(t, err)
 		require.LessOrEqual(t, time.Since(start), expectedResponseTime)
 		time.Sleep(10 * time.Millisecond)
