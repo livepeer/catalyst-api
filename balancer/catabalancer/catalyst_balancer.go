@@ -421,23 +421,29 @@ func StartMetricSending(nodeName string, latitude float64, longitude float64, mi
 	ticker := time.NewTicker(updateNodeStatsEvery)
 	go func() {
 		for range ticker.C {
-			done := make(chan bool)
-
-			// use a separate goroutine to implement a timeout for the sendMetrics func
-			go func() {
-				sendMetrics(nodeName, latitude, longitude, mist, nodeStatsDB)
-				done <- true
-			}()
-
-			select {
-			case <-done:
-				continue
-			case <-time.After(updateNodeStatsEvery):
-				log.LogNoRequestID("catabalancer send metrics timed out")
-				continue
-			}
+			sendWithTimeout(nodeName, latitude, longitude, mist, nodeStatsDB)
 		}
 	}()
+}
+
+func sendWithTimeout(nodeName string, latitude float64, longitude float64, mist clients.MistAPIClient, nodeStatsDB *sql.DB) {
+	ctx, cancel := context.WithTimeout(context.Background(), updateNodeStatsEvery)
+	defer cancel()
+
+	done := make(chan struct{})
+
+	go func() {
+		sendMetrics(nodeName, latitude, longitude, mist, nodeStatsDB)
+		close(done) // Signal completion
+	}()
+
+	// Wait for either the function to complete or timeout
+	select {
+	case <-done:
+		return
+	case <-ctx.Done():
+		log.LogNoRequestID("catabalancer send metrics timed out")
+	}
 }
 
 func sendMetrics(nodeName string, latitude float64, longitude float64, mist clients.MistAPIClient, nodeStatsDB *sql.DB) {
