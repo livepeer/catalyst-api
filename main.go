@@ -267,7 +267,7 @@ func main() {
 
 		if catabalancerEnabled && nodeStatsDB != nil {
 			if cli.Tags["node"] == "media" { // don't announce load balancing availability for testing nodes
-				mist := clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort, catabalancer.StatsUpdateInterval-time.Second)
+				mist := clients.NewMistAPIClient(cli.MistUser, cli.MistPassword, cli.MistHost, cli.MistPort, catabalancer.StatsUpdateTimeout)
 				catabalancer.StartMetricSending(cli.NodeName, cli.NodeLatitude, cli.NodeLongitude, mist, nodeStatsDB)
 			}
 		}

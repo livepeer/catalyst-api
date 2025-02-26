@@ -412,6 +412,7 @@ func (c *CataBalancer) MistUtilLoadSource(ctx context.Context, streamID, lat, lo
 }
 
 var StatsUpdateInterval = 5 * time.Second
+var StatsUpdateTimeout = StatsUpdateInterval - 500*time.Millisecond // have the timeout sit within the update interval so we don't miss sending updates
 
 func isStale(timestamp time.Time, stale time.Duration) bool {
 	return time.Since(timestamp) >= stale
@@ -478,7 +479,7 @@ func sendMetrics(nodeName string, latitude float64, longitude float64, mist clie
 
 func sendMetricsToDB(nodeStatsDB *sql.DB, nodeName string, payload []byte) {
 	start := time.Now()
-	queryContext, cancel := context.WithTimeout(context.Background(), StatsUpdateInterval)
+	queryContext, cancel := context.WithTimeout(context.Background(), StatsUpdateTimeout)
 	defer cancel()
 	insertStatement := `insert into "node_stats"(
                             "node_id",
