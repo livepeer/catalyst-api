@@ -193,13 +193,15 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 		}
 
 		rPath := fmt.Sprintf(pathTmpl, fullPlaybackID)
-		rURL := fmt.Sprintf("%s://%s%s?%s", protocol(r), bestNode, rPath, r.URL.RawQuery)
-		rURL, err = c.resolveNodeURL(rURL)
+		rURL, err := c.resolveNodeURL(fmt.Sprintf("%s://%s%s?%s", protocol(r), bestNode, rPath, r.URL.RawQuery))
 		if err != nil {
 			glog.Errorf("failed to resolve node URL playbackID=%s err=%s", playbackID, err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+
+		alternativeNodeDomain(r, rURL)
+
 		var redirectType = "playback"
 		if isStudioReq {
 			redirectType = "ingest"
@@ -214,37 +216,54 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			"lon":              lon,
 		})
 		glog.Infof(string(jsonRedirectInfo))
-		http.Redirect(w, r, rURL, http.StatusTemporaryRedirect)
+		http.Redirect(w, r, rURL.String(), http.StatusTemporaryRedirect)
 	}
 }
 
+// alternativeNodeDomain switches the domain if certain conditions are matched
+func alternativeNodeDomain(req *http.Request, redirectUrl *url.URL) {
+	if req == nil || req.URL == nil || redirectUrl == nil {
+		return
+	}
+
+	switchDomain := strings.Contains(req.Header.Get("Referer"), "trovo.live") ||
+		req.URL.Query().Get("trovoFlv") == "1"
+	glog.V(7).Infof("resolving node header=%+v query=%+v switchdomain=%v", req.Header, req.URL.Query(), switchDomain)
+
+	if switchDomain {
+		redirectUrl.Host = strings.Replace(redirectUrl.Host, "livepeer.monster", "lp-playback.fun", 1)
+	}
+	glog.V(7).Infof("resolving node host=%+v", redirectUrl.Host)
+}
+
 // Given a dtsc:// or https:// url, resolve the proper address of the node via serf tags
-func (c *GeolocationHandlersCollection) resolveNodeURL(streamURL string) (string, error) {
+func (c *GeolocationHandlersCollection) resolveNodeURL(streamURL string) (*url.URL, error) {
 	u, err := url.Parse(streamURL)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	nodeName := u.Host
 	protocol := u.Scheme
 
 	member, err := c.clusterMember(map[string]string{}, "alive", nodeName)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	addr, has := member.Tags[protocol]
 	if !has {
 		glog.V(7).Infof("no tag found, not tag resolving protocol=%s nodeName=%s", protocol, nodeName)
-		return streamURL, nil
+		return u, nil
 	}
 	u2, err := url.Parse(addr)
 	if err != nil {
 		err = fmt.Errorf("node has unparsable tag!! nodeName=%s protocol=%s tag=%s", nodeName, protocol, addr)
 		glog.Error(err)
-		return "", err
+		return nil, err
 	}
 	u2.Path = filepath.Join(u2.Path, u.Path)
 	u2.RawQuery = u.RawQuery
-	return u2.String(), nil
+
+	return u2, nil
 }
 
 func (c *GeolocationHandlersCollection) clusterMember(filter map[string]string, status, name string) (cluster.Member, error) {
@@ -341,7 +360,7 @@ func (c *GeolocationHandlersCollection) resolveReplicatedStream(dtscURL string, 
 		return "push://", nil
 	}
 	glog.V(7).Infof("replying to Mist STREAM_SOURCE request=%s response=%s", streamName, outURL)
-	return outURL, nil
+	return outURL.String(), nil
 }
 
 func (c *GeolocationHandlersCollection) getStreamPull(playbackID string, retryCount int) (string, error) {
