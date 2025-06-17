@@ -241,14 +241,12 @@ func (c *GeolocationHandlersCollection) alternativeNodeDomain(req *http.Request,
 			}
 		}
 	}
-	glog.V(7).Infof("resolving node header=%+v query=%+v switchdomain=%v", req.Header, req.URL.Query(), switchDomain)
 
 	if switchDomain {
 		for old, replace := range c.Config.LBReplaceDomains {
 			redirectUrl.Host = strings.Replace(redirectUrl.Host, old, replace, 1)
 		}
 	}
-	glog.V(7).Infof("resolving node host=%+v", redirectUrl.Host)
 }
 
 // Given a dtsc:// or https:// url, resolve the proper address of the node via serf tags
