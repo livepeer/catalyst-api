@@ -96,9 +96,12 @@ type Cli struct {
 	SerfEventBuffer                 int
 	SerfMaxQueueDepth               int
 
-	LBReplaceHostMatch   string
-	LBReplaceHostPercent int
-	LBReplaceHostList    []string
+	LBReplaceHostMatch         string
+	LBReplaceHostPercent       int
+	LBReplaceHostList          []string
+	LBReplaceDomains           map[string]string
+	LBReplaceDomainReferers    []string
+	LBReplaceDomainQueryParams map[string]string
 }
 
 // Return our own URL for callback trigger purposes

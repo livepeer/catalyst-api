@@ -141,6 +141,9 @@ func main() {
 	fs.StringVar(&cli.LBReplaceHostMatch, "lb-replace-host-match", "", "What to match on the hostname for node replacement e.g. sto")
 	config.CommaSliceFlag(fs, &cli.LBReplaceHostList, "lb-replace-host-list", []string{}, "List of hostnames to replace with for node replacement")
 	fs.IntVar(&cli.LBReplaceHostPercent, "lb-replace-host-percent", 0, "Percentage of matching requests to replace host on")
+	config.CommaMapFlag(fs, &cli.LBReplaceDomains, "lb-replace-domains", map[string]string{}, "Comma-separated map of domains to replace in load balancing. e.g. domain1.com=domain2.com")
+	config.CommaSliceFlag(fs, &cli.LBReplaceDomainReferers, "lb-replace-domain-referers", []string{}, "List of referer headers to match for load balancing domain replacement")
+	config.CommaMapFlag(fs, &cli.LBReplaceDomainQueryParams, "lb-replace-domain-queryparams", map[string]string{}, "Comma-separated map of queryparams to match for load balancing domain replacement. e.g. queryparamName=queryparamValue")
 	pprofPort := fs.Int("pprof-port", 6061, "Pprof listen port")
 
 	fs.String("send-audio", "", "[DEPRECATED] ignored, will be removed")

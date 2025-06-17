@@ -91,7 +91,6 @@ func NewGeolocationHandlersCollection(balancer balancer.Balancer, config config.
 // Redirect an incoming user to: CDN (only for /hls), closest node (geolocate)
 // or another service (like mist HLS) on the current host for playback.
 func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
-
 	return func(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
 		host := r.Host
 		pathType, prefix, playbackID, pathTmpl := parsePlaybackID(r.URL.Path)
@@ -200,7 +199,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			return
 		}
 
-		alternativeNodeDomain(r, rURL)
+		c.alternativeNodeDomain(r, rURL)
 
 		var redirectType = "playback"
 		if isStudioReq {
@@ -221,17 +220,33 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 }
 
 // alternativeNodeDomain switches the domain if certain conditions are matched
-func alternativeNodeDomain(req *http.Request, redirectUrl *url.URL) {
-	if req == nil || req.URL == nil || redirectUrl == nil {
+func (c *GeolocationHandlersCollection) alternativeNodeDomain(req *http.Request, redirectUrl *url.URL) {
+	if len(c.Config.LBReplaceDomains) < 1 || req == nil || req.URL == nil || redirectUrl == nil {
 		return
 	}
 
-	switchDomain := strings.Contains(req.Header.Get("Referer"), "trovo.live") ||
-		req.URL.Query().Get("trovoFlv") == "1"
+	switchDomain := false
+	for _, referer := range c.Config.LBReplaceDomainReferers {
+		switchDomain = strings.Contains(req.Header.Get("Referer"), referer)
+		if switchDomain {
+			break
+		}
+	}
+
+	if !switchDomain {
+		for k, v := range c.Config.LBReplaceDomainQueryParams {
+			switchDomain = req.URL.Query().Get(k) == v
+			if switchDomain {
+				break
+			}
+		}
+	}
 	glog.V(7).Infof("resolving node header=%+v query=%+v switchdomain=%v", req.Header, req.URL.Query(), switchDomain)
 
 	if switchDomain {
-		redirectUrl.Host = strings.Replace(redirectUrl.Host, "livepeer.monster", "lp-playback.fun", 1)
+		for old, replace := range c.Config.LBReplaceDomains {
+			redirectUrl.Host = strings.Replace(redirectUrl.Host, old, replace, 1)
+		}
 	}
 	glog.V(7).Infof("resolving node host=%+v", redirectUrl.Host)
 }
