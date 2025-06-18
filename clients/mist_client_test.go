@@ -234,6 +234,7 @@ func TestItCanParseAMistStreamStatus(t *testing.T) {
 
 	mc := &MistClient{
 		HttpReqUrl: svr.URL,
+		httpClient: newRetryableClient(&http.Client{Timeout: MistClientTimeout}),
 	}
 
 	msi, err := mc.GetStreamInfo("some-stream-name")
@@ -258,6 +259,7 @@ func TestItCanParseAMistStreamErrorStatus(t *testing.T) {
 
 	mc := &MistClient{
 		HttpReqUrl: svr.URL,
+		httpClient: newRetryableClient(&http.Client{Timeout: MistClientTimeout}),
 	}
 
 	_, err := mc.GetStreamInfo("some-stream-name")
@@ -286,6 +288,7 @@ func TestItRetriesFailingRequests(t *testing.T) {
 
 	mc := &MistClient{
 		HttpReqUrl: svr.URL,
+		httpClient: newRetryableClient(&http.Client{Timeout: MistClientTimeout}),
 	}
 
 	_, err := mc.GetStreamInfo("some-stream-name")
@@ -307,6 +310,7 @@ func TestItFailsWhenMaxRetriesReached(t *testing.T) {
 
 	mc := &MistClient{
 		HttpReqUrl: svr.URL,
+		httpClient: newRetryableClient(&http.Client{Timeout: MistClientTimeout}),
 	}
 
 	_, err := mc.GetStreamInfo("some-stream-name")
@@ -385,8 +389,9 @@ func TestItCanGetStreamStats(t *testing.T) {
 	defer svr.Close()
 
 	mc := &MistClient{
-		ApiUrl: svr.URL,
-		cache:  cache.New(200*time.Millisecond, time.Minute),
+		ApiUrl:     svr.URL,
+		cache:      cache.New(200*time.Millisecond, time.Minute),
+		httpClient: newRetryableClient(&http.Client{Timeout: MistClientTimeout}),
 	}
 
 	status, err := mc.GetState()
