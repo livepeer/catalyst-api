@@ -176,7 +176,7 @@ func (b *MistBalancer) changeLoadBalancerServers(ctx context.Context, server, ac
 		glog.Errorf("Error making request: %v", err)
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() // nolint:errcheck
 
 	bytes, err := io.ReadAll(resp.Body)
 
@@ -212,7 +212,7 @@ func (b *MistBalancer) getMistLoadBalancerServers(ctx context.Context) (map[stri
 		glog.Errorf("Error making request: %v", err)
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() // nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
@@ -473,7 +473,7 @@ func (b *MistBalancer) mistUtilLoadRequest(ctx context.Context, route, stream, l
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() // nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("GET request '%s' failed with http status code %d", murl, resp.StatusCode)

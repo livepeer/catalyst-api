@@ -614,3 +614,78 @@ func TestStreamPullRateLimit(t *testing.T) {
 	time.Sleep(2 * time.Second)
 	require.False(rateLimit.shouldLimit(playbackID1))
 }
+
+func TestGeolocationHandlersCollection_alternativeNodeDomain(t *testing.T) {
+	conf := config.Cli{
+		LBReplaceDomains:           map[string]string{"domain1.net": "domain2.net"},
+		LBReplaceDomainReferers:    []string{"abc"},
+		LBReplaceDomainQueryParams: map[string]string{"qpkey": "qpvalue"},
+	}
+	type args struct {
+		req         *http.Request
+		redirectUrl *url.URL
+	}
+	tests := []struct {
+		name         string
+		args         args
+		expectedHost string
+	}{
+		{
+			name: "no replacement",
+			args: args{
+				req:         &http.Request{URL: &url.URL{}},
+				redirectUrl: &url.URL{Host: "foo"},
+			},
+			expectedHost: "foo",
+		},
+		{
+			name: "referer match",
+			args: args{
+				req:         &http.Request{URL: &url.URL{}, Header: map[string][]string{"Referer": {"abc"}}},
+				redirectUrl: &url.URL{Host: "foo.domain1.net"},
+			},
+			expectedHost: "foo.domain2.net",
+		},
+		{
+			name: "queryparam match",
+			args: args{
+				req:         &http.Request{URL: &url.URL{RawQuery: "qpkey=qpvalue"}},
+				redirectUrl: &url.URL{Host: "foo.domain1.net"},
+			},
+			expectedHost: "foo.domain2.net",
+		},
+		{
+			name: "no replacement - empty queryparam",
+			args: args{
+				req:         &http.Request{URL: &url.URL{RawQuery: "qpkey="}},
+				redirectUrl: &url.URL{Host: "foo.domain1.net"},
+			},
+			expectedHost: "foo.domain1.net",
+		},
+		{
+			name: "partial referer match",
+			args: args{
+				req:         &http.Request{URL: &url.URL{}, Header: map[string][]string{"Referer": {"abcd"}}},
+				redirectUrl: &url.URL{Host: "foo.domain1.net"},
+			},
+			expectedHost: "foo.domain2.net",
+		},
+		{
+			name: "partial domain match",
+			args: args{
+				req:         &http.Request{URL: &url.URL{}, Header: map[string][]string{"Referer": {"abc"}}},
+				redirectUrl: &url.URL{Host: "foo.domain1.nets"},
+			},
+			expectedHost: "foo.domain2.nets",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &GeolocationHandlersCollection{
+				Config: conf,
+			}
+			c.alternativeNodeDomain(tt.args.req, tt.args.redirectUrl)
+			require.Equal(t, tt.expectedHost, tt.args.redirectUrl.Host)
+		})
+	}
+}

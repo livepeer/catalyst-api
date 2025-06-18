@@ -339,7 +339,7 @@ func (c *CataBalancer) refreshNodes(ctx context.Context) (stats, error) {
 	if err != nil {
 		return s, fmt.Errorf("failed to query node stats: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() // nolint:errcheck
 
 	// Process the result set
 	for rows.Next() {

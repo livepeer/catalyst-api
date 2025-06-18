@@ -77,7 +77,7 @@ func RecordingBackupCheck(requestID string, primaryManifestURL, osTransferURL *u
 			var rc io.ReadCloser
 			rc, actualSegURL, err = GetFileWithBackup(context.Background(), requestID, segURL.String(), dStorage)
 			if rc != nil {
-				rc.Close()
+				rc.Close() // nolint:errcheck
 			}
 			return err
 		}, DownloadRetryBackoff())
@@ -189,7 +189,7 @@ func downloadManifest(requestID, sourceManifestOSURL string) (playlist m3u8.Play
 			}
 			return err
 		}
-		defer rc.Close()
+		defer rc.Close() // nolint:errcheck
 
 		data := new(bytes.Buffer)
 		_, err = data.ReadFrom(rc)
@@ -390,7 +390,7 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnix
 	if err != nil {
 		return nil, fmt.Errorf("error clipping: failed to create temp clipping storage dir: %w", err)
 	}
-	defer os.RemoveAll(clipStorageDir)
+	defer os.RemoveAll(clipStorageDir) // nolint:errcheck
 
 	// Download start/end segments and clip
 	for i, v := range segsToClip {
@@ -451,7 +451,7 @@ func ClipInputManifest(requestID, sourceURL, clipTargetUrl string, startTimeUnix
 		if err != nil {
 			return nil, fmt.Errorf("error clipping: failed to open clipped segment %d: %w", v.SeqId, err)
 		}
-		defer clippedSegmentFile.Close()
+		defer clippedSegmentFile.Close() // nolint:errcheck
 
 		clippedSegmentOSFilename := "clip_" + strconv.FormatUint(v.SeqId, 10) + ".ts"
 		err = UploadToOSURL(clipTargetUrl, clippedSegmentOSFilename, clippedSegmentFile, MaxCopyFileDuration)
@@ -553,7 +553,7 @@ func GetFirstRenditionURL(requestID string, masterManifestURL *url.URL) (*url.UR
 		if err != nil {
 			return fmt.Errorf("error downloading manifest %s: %w", masterManifestURL.Redacted(), err)
 		}
-		defer rc.Close()
+		defer rc.Close() // nolint:errcheck
 
 		playlist, playlistType, err = m3u8.DecodeFrom(rc, true)
 		if err != nil {

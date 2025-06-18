@@ -19,7 +19,7 @@ func TestSign(t *testing.T) {
 
 	outFile := "test/tiny_output_signed.mp4"
 	c := NewC2PA("es256", "test/es256_private.key", "test/es256_certs.pem")
-	defer os.Remove(outFile)
+	defer os.Remove(outFile) // nolint:errcheck
 
 	err = c.SignFile("test/tiny.mp4", outFile, "Tiny", "")
 
@@ -38,7 +38,7 @@ func TestSignWithParent(t *testing.T) {
 
 	outFile := "test/tiny_cut_output_signed.mp4"
 	c := NewC2PA("es256", "test/es256_private.key", "test/es256_certs.pem")
-	defer os.Remove(outFile)
+	defer os.Remove(outFile) // nolint:errcheck
 
 	err = c.SignFile("test/tiny_cut.mp4", outFile, "Tiny", "test/tiny_signed.mp4")
 
