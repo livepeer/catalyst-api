@@ -209,6 +209,7 @@ func (c *GeolocationHandlersCollection) RedirectHandler() httprouter.Handle {
 			"redirectType":     redirectType,
 			"playbackID":       playbackID,
 			"from":             r.URL.String(),
+			"to":               rURL.String(),
 			"dnsChosenRegion":  c.Config.OwnRegion,
 			"mistChosenRegion": bestNode,
 			"lat":              lat,
@@ -224,6 +225,26 @@ func (c *GeolocationHandlersCollection) alternativeNodeDomain(req *http.Request,
 	if len(c.Config.LBReplaceDomains) < 1 || req == nil || req.URL == nil || redirectUrl == nil {
 		return
 	}
+	debugIds := []string{
+		"c361lgm5kq0w849z",
+		"69e0el6b58iqh39y",
+		"453cqchdr4foj84j",
+		"8462059yn5ek7rw6",
+		"fbbdud4v4admc4js",
+		"0c0d8hvh6iad0pqe",
+		"4b70o3qyrmz63hpk",
+		"75353kud5g4q9dsg",
+		"a23fcrxpw4qavfkh",
+		"6d4cyfcgae37vfcn",
+		"1fa6edgcmzqjtyyk",
+		"7fbbbzlcnnqhswee",
+	}
+	for _, debugId := range debugIds {
+		if strings.Contains(redirectUrl.String(), debugId) {
+			glog.Infof("alternativeNodeDomain. queryparams=%v referer=%s", req.URL.Query(), req.Header.Get("Referer"))
+			break
+		}
+	}
 
 	switchDomain := false
 	for _, referer := range c.Config.LBReplaceDomainReferers {
@@ -235,7 +256,7 @@ func (c *GeolocationHandlersCollection) alternativeNodeDomain(req *http.Request,
 
 	if !switchDomain {
 		for k, v := range c.Config.LBReplaceDomainQueryParams {
-			switchDomain = req.URL.Query().Get(k) == v
+			switchDomain = req.URL.Query().Get(k) == v || strings.Contains(req.URL.RawQuery, fmt.Sprintf("%s=%s", k, v))
 			if switchDomain {
 				break
 			}
