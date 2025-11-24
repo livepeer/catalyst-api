@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -67,7 +66,6 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 // reencodeSegmentation flag controls whether we use a cheap "copy" based
 // segmenting pass or a more expensive re-encoding pass that forces keyframes.
 func (f *ffmpeg) handleStartUploadJob(job *JobInfo, reencodeSegmentation bool) (*HandlerOutput, error) {
-	log.AddContext(job.RequestID, "reencode", reencodeSegmentation)
 	log.Log(job.RequestID, "Handling job via FFMPEG/Livepeer pipeline")
 
 	sourceOutputURL := f.SourceOutputURL.JoinPath(job.RequestID)
@@ -339,13 +337,12 @@ func (f *ffmpeg) probeSourceSegment(requestID string, seg *m3u8.MediaSegment, so
 
 	// check that the segment starts with a keyframe
 	if err := backoff.Retry(func() error {
-		cmd := exec.Command("ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "frame=pict_type", "-of", "csv=p=0", "-read_intervals", "%+#1", probeURL)
-		output, err := cmd.Output()
+		output, err := f.probe.CheckFirstFrame(probeURL)
 		if err != nil {
 			return fmt.Errorf("failed to check segment starts with keyframe: %w", err)
 		}
 		// ffprobe should print I for i-frame
-		if !strings.HasPrefix(string(output), "I") || strings.Contains(string(output), "non-existing PPS") {
+		if !strings.HasPrefix(output, "I") || strings.Contains(output, "non-existing PPS") {
 			return fmt.Errorf("segment does not start with keyframe: %w", ErrKeyframe)
 		}
 		return nil
