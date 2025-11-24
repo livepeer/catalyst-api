@@ -63,7 +63,7 @@ jobs:
       - name: Install dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: ffmpeg
+          packages: ffmpeg libblas3
           version: 1.0
 
       - name: go fmt
@@ -110,7 +110,7 @@ jobs:
       - name: Install dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: ffmpeg
+          packages: ffmpeg libblas3
           version: 1.0
 
       - name: Run cucumber tests
