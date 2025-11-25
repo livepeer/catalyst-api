@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ var (
 
 type Prober interface {
 	ProbeFile(requestID, url string, ffProbeOptions ...string) (InputVideo, error)
+	CheckFirstFrame(url string) (string, error)
 }
 
 type Probe struct {
@@ -287,4 +289,10 @@ func containsStr(slc []string, val string) bool {
 		}
 	}
 	return false
+}
+
+func (p Probe) CheckFirstFrame(url string) (string, error) {
+	cmd := exec.Command("ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "frame=pict_type", "-of", "csv=p=0", "-read_intervals", "%+#1", url)
+	output, err := cmd.CombinedOutput()
+	return string(output), err
 }

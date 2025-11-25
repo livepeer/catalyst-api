@@ -556,6 +556,10 @@ type stubFFprobe struct {
 	Err      error
 }
 
+func (f stubFFprobe) CheckFirstFrame(url string) (string, error) {
+	return "I", nil
+}
+
 func (f stubFFprobe) ProbeFile(_, _ string, _ ...string) (video.InputVideo, error) {
 	if f.Err != nil {
 		return video.InputVideo{}, f.Err

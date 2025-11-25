@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -22,6 +23,10 @@ import (
 )
 
 const LocalSourceFilePattern = "sourcevideo*.mp4"
+
+// ErrKeyframe indicates that a probed segment did not start with a keyframe and
+// requires re-segmenting with different parameters.
+var ErrKeyframe = errors.New("keyframe error")
 
 type ffmpeg struct {
 	// The base of where to output source segments to
@@ -45,7 +50,24 @@ func (f *ffmpeg) Name() string {
 }
 
 func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
+	// First attempt: try cheap "copy" based segmenting.
+	out, err := f.handleStartUploadJob(job, false)
+	if err != nil && errors.Is(err, ErrKeyframe) {
+		// If we hit a keyframe error when probing source segments, re-run the
+		// whole pipeline from the top but with a more expensive segmentation
+		// mode that re-encodes and forces keyframes.
+		log.Log(job.RequestID, "keyframe error while probing source segments, retrying with re-encoding segmentation")
+		return f.handleStartUploadJob(job, true)
+	}
+	return out, err
+}
+
+// handleStartUploadJob contains the core logic of the ffmpeg pipeline. The
+// reencodeSegmentation flag controls whether we use a cheap "copy" based
+// segmenting pass or a more expensive re-encoding pass that forces keyframes.
+func (f *ffmpeg) handleStartUploadJob(job *JobInfo, reencodeSegmentation bool) (*HandlerOutput, error) {
 	log.Log(job.RequestID, "Handling job via FFMPEG/Livepeer pipeline")
+	job.ReencodeSegmentation = reencodeSegmentation
 
 	sourceOutputURL := f.SourceOutputURL.JoinPath(job.RequestID)
 	segmentingTargetURL := sourceOutputURL.JoinPath(config.SEGMENTING_SUBDIR, config.SEGMENTING_TARGET_MANIFEST)
@@ -58,7 +80,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 	var localSourceTmp string
 	if job.InputFileInfo.Format != "hls" {
 		var err error
-		localSourceTmp, err = copyFileToLocalTmpAndSegment(job)
+		localSourceTmp, err = copyFileToLocalTmpAndSegment(job, reencodeSegmentation)
 		if err != nil {
 			return nil, err
 		}
@@ -287,7 +309,7 @@ func (f *ffmpeg) probeSourceSegments(job *JobInfo, sourceSegments []*m3u8.MediaS
 		return nil
 	}
 	segCount := len(sourceSegments)
-	if segCount < 4 {
+	if segCount < 6 {
 		for _, segment := range sourceSegments {
 			if err := f.probeSourceSegment(job.RequestID, segment, job.SegmentingTargetURL); err != nil {
 				return err
@@ -295,7 +317,7 @@ func (f *ffmpeg) probeSourceSegments(job *JobInfo, sourceSegments []*m3u8.MediaS
 		}
 		return nil
 	}
-	segmentsToCheck := []int{0, 1, segCount - 2, segCount - 1}
+	segmentsToCheck := []int{0, 1, 2, 3, segCount - 2, segCount - 1}
 	for _, i := range segmentsToCheck {
 		if err := f.probeSourceSegment(job.RequestID, sourceSegments[i], job.SegmentingTargetURL); err != nil {
 			return err
@@ -313,6 +335,22 @@ func (f *ffmpeg) probeSourceSegment(requestID string, seg *m3u8.MediaSegment, so
 	if err != nil {
 		return fmt.Errorf("failed to create signed url for %s: %w", u.Redacted(), err)
 	}
+
+	// check that the segment starts with a keyframe
+	if err := backoff.Retry(func() error {
+		output, err := f.probe.CheckFirstFrame(probeURL)
+		if err != nil {
+			return fmt.Errorf("failed to check segment starts with keyframe: %w", err)
+		}
+		// ffprobe should print I for i-frame
+		if !strings.HasPrefix(output, "I") || strings.Contains(output, "non-existing PPS") {
+			return fmt.Errorf("segment does not start with keyframe: %w", ErrKeyframe)
+		}
+		return nil
+	}, retries(6)); err != nil {
+		return err
+	}
+
 	if err := backoff.Retry(func() error {
 		_, err = f.probe.ProbeFile(requestID, probeURL)
 		if err != nil {
@@ -335,7 +373,7 @@ func (f *ffmpeg) probeSourceSegment(requestID string, seg *m3u8.MediaSegment, so
 	return nil
 }
 
-func copyFileToLocalTmpAndSegment(job *JobInfo) (string, error) {
+func copyFileToLocalTmpAndSegment(job *JobInfo, reencodeSegmentation bool) (string, error) {
 	// Create a temporary local file to write to
 	localSourceFile, err := os.CreateTemp(os.TempDir(), LocalSourceFilePattern)
 	if err != nil {
@@ -358,7 +396,7 @@ func copyFileToLocalTmpAndSegment(job *JobInfo) (string, error) {
 	}
 
 	// Begin Segmenting
-	log.Log(job.RequestID, "Beginning segmenting via FFMPEG/Livepeer pipeline")
+	log.Log(job.RequestID, "Beginning segmenting via FFMPEG/Livepeer pipeline", "reencode", reencodeSegmentation)
 	job.ReportProgress(clients.TranscodeStatusPreparing, 0.5)
 
 	// FFMPEG fails when presented with a raw IP + Path type URL, so we prepend "http://" to it
@@ -368,7 +406,7 @@ func copyFileToLocalTmpAndSegment(job *JobInfo) (string, error) {
 	}
 
 	destinationURL := fmt.Sprintf("%s/api/ffmpeg/%s/index.m3u8", internalAddress, job.StreamName)
-	if err := video.Segment(localSourceFile.Name(), destinationURL, job.TargetSegmentSizeSecs); err != nil {
+	if err := video.Segment(localSourceFile.Name(), destinationURL, job.TargetSegmentSizeSecs, reencodeSegmentation); err != nil {
 		return "", err
 	}
 

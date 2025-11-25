@@ -63,7 +63,7 @@ type CatalystAPIMetrics struct {
 	AnalyticsMetrics AnalyticsMetrics
 }
 
-var vodLabels = []string{"source_codec_video", "source_codec_audio", "pipeline", "catalyst_region", "num_profiles", "stage", "version", "is_fallback_mode", "is_livepeer_supported", "is_clip", "is_thumbs"}
+var vodLabels = []string{"source_codec_video", "source_codec_audio", "pipeline", "catalyst_region", "num_profiles", "stage", "version", "is_fallback_mode", "is_livepeer_supported", "is_clip", "is_thumbs", "is_reencode"}
 
 func NewMetrics() *CatalystAPIMetrics {
 	m := &CatalystAPIMetrics{

@@ -63,8 +63,15 @@ jobs:
       - name: Install dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: ffmpeg
+          packages: ffmpeg libblas3 liblapack3
           version: 1.0
+
+      - name: Fix BLAS library symlinks
+        run: |
+          # Create symlinks so libblas.so.3 is in a standard search path
+          sudo ln -sf /usr/lib/x86_64-linux-gnu/blas/libblas.so.3 /usr/lib/x86_64-linux-gnu/libblas.so.3
+          sudo ln -sf /usr/lib/x86_64-linux-gnu/lapack/liblapack.so.3 /usr/lib/x86_64-linux-gnu/liblapack.so.3
+          sudo ldconfig
 
       - name: go fmt
         run: |
@@ -110,8 +117,15 @@ jobs:
       - name: Install dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: ffmpeg
+          packages: ffmpeg libblas3 liblapack3
           version: 1.0
+
+      - name: Fix BLAS library symlinks
+        run: |
+          # Create symlinks so libblas.so.3 is in a standard search path
+          sudo ln -sf /usr/lib/x86_64-linux-gnu/blas/libblas.so.3 /usr/lib/x86_64-linux-gnu/libblas.so.3
+          sudo ln -sf /usr/lib/x86_64-linux-gnu/lapack/liblapack.so.3 /usr/lib/x86_64-linux-gnu/liblapack.so.3
+          sudo ldconfig
 
       - name: Run cucumber tests
         run: |

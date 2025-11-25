@@ -232,6 +232,10 @@ func (p *stubProbe) ProbeFile(requestID string, url string, ffProbeOptions ...st
 	return video.InputVideo{}, nil
 }
 
+func (p *stubProbe) CheckFirstFrame(url string) (string, error) {
+	return "I", nil
+}
+
 func Test_probeSegments(t *testing.T) {
 	probe := stubProbe{}
 	f := ffmpeg{
@@ -257,6 +261,6 @@ func Test_probeSegments(t *testing.T) {
 	require.Equal(t, []string{"/0.ts", "/0.ts", "/1.ts", "/1.ts", "/2.ts", "/2.ts", "/3.ts", "/3.ts"}, probe.probedUrls)
 
 	probe.probedUrls = []string{}
-	_ = f.probeSourceSegments(job, []*m3u8.MediaSegment{{URI: "0.ts"}, {URI: "1.ts"}, {URI: "2.ts"}, {URI: "3.ts"}, {URI: "4.ts"}, {URI: "5.ts"}})
-	require.Equal(t, []string{"/0.ts", "/0.ts", "/1.ts", "/1.ts", "/4.ts", "/4.ts", "/5.ts", "/5.ts"}, probe.probedUrls)
+	_ = f.probeSourceSegments(job, []*m3u8.MediaSegment{{URI: "0.ts"}, {URI: "1.ts"}, {URI: "2.ts"}, {URI: "3.ts"}, {URI: "4.ts"}, {URI: "5.ts"}, {URI: "6.ts"}})
+	require.Equal(t, []string{"/0.ts", "/0.ts", "/1.ts", "/1.ts", "/2.ts", "/2.ts", "/3.ts", "/3.ts", "/5.ts", "/5.ts", "/6.ts", "/6.ts"}, probe.probedUrls)
 }
