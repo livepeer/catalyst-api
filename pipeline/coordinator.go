@@ -64,6 +64,7 @@ type UploadJobPayload struct {
 	FragMp4TargetURL      *url.URL
 	ClipTargetURL         *url.URL
 	ThumbnailsTargetURL   *url.URL
+	ReencodeSegmentation  bool
 	Mp4OnlyShort          bool
 	AccessToken           string
 	TranscodeAPIUrl       string
@@ -639,6 +640,7 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 		strconv.FormatBool(job.LivepeerSupported),
 		strconv.FormatBool(job.ClipStrategy.Enabled),
 		strconv.FormatBool(job.ThumbnailsTargetURL != nil),
+		strconv.FormatBool(job.ReencodeSegmentation),
 	}
 
 	metrics.Metrics.VODPipelineMetrics.Count.

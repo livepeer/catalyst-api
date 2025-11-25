@@ -67,6 +67,7 @@ func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
 // segmenting pass or a more expensive re-encoding pass that forces keyframes.
 func (f *ffmpeg) handleStartUploadJob(job *JobInfo, reencodeSegmentation bool) (*HandlerOutput, error) {
 	log.Log(job.RequestID, "Handling job via FFMPEG/Livepeer pipeline")
+	job.ReencodeSegmentation = reencodeSegmentation
 
 	sourceOutputURL := f.SourceOutputURL.JoinPath(job.RequestID)
 	segmentingTargetURL := sourceOutputURL.JoinPath(config.SEGMENTING_SUBDIR, config.SEGMENTING_TARGET_MANIFEST)
