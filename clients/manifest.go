@@ -277,15 +277,6 @@ func GenerateAndUploadManifests(sourceManifest m3u8.MediaPlaylist, targetOSURL s
 			}
 		}
 
-		if isClip {
-			_, totalSegs := video.GetTotalDurationAndSegments(renditionPlaylist)
-			// Only add DISCONTINUITY tag if more than one segment exists in clipped playlist
-			if totalSegs > 1 {
-				renditionPlaylist.Segments[1].Discontinuity = true
-				renditionPlaylist.Segments[totalSegs-1].Discontinuity = true
-			}
-		}
-
 		// Write #EXT-X-ENDLIST
 		renditionPlaylist.Close()
 
@@ -405,24 +396,17 @@ func CreateClippedPlaylist(origManifest m3u8.MediaPlaylist, segs []*m3u8.MediaSe
 		return nil, fmt.Errorf("error clipping: failed to create clipped media playlist: %w", err)
 	}
 	var t time.Time
-	for i, s := range segs {
+	for _, s := range segs {
 		if s == nil {
 			break
 		}
 
-		// TODO/HACK: Currently all segments between the start/end segments will always
+		// TODO/HACK: Currently all segments will always
 		// be in the same place from root folder. Find a smarter way to handle this later.
-		if i != 0 && i != (len(segs)-1) {
-			s.URI = "../" + s.URI
-		}
+		s.URI = "../" + s.URI
 		// Remove PROGRAM-DATE-TIME tag from all segments so that player doesn't
 		// run into seek issues or display incorrect times on playhead
 		s.ProgramDateTime = t
-		// Add a DISCONTINUITY tag to let hls players know about different encoding between
-		// segments. But don't do this if there's a single segment in the clipped manifest
-		if i-1 == 0 || (totalSegs > 2 && i == totalSegs-1) {
-			s.Discontinuity = true
-		}
 
 		// Add segment to clipped manifest
 		err := clippedPlaylist.AppendSegment(s)

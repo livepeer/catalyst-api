@@ -256,13 +256,11 @@ func TestCompliantClippedManifest(t *testing.T) {
 #EXT-X-MEDIA-SEQUENCE:0
 #EXT-X-TARGETDURATION:15
 #EXTINF:10.000,blah0
-source/0.ts
-#EXT-X-DISCONTINUITY
+../source/0.ts
 #EXTINF:15.000,blah1
 ../source/1.ts
-#EXT-X-DISCONTINUITY
 #EXTINF:10.000,blah2
-source/2.ts
+../source/2.ts
 #EXT-X-ENDLIST
 `
 
