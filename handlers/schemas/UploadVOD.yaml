@@ -124,6 +124,8 @@ properties:
       additionalProperties: false
       required:
       -  "name"
+  reencode_segmentation:
+    type: "boolean"
 required:
   - "url"
   - "callback_url"
