@@ -50,6 +50,10 @@ func (f *ffmpeg) Name() string {
 }
 
 func (f *ffmpeg) HandleStartUploadJob(job *JobInfo) (*HandlerOutput, error) {
+	if job.ReencodeSegmentation {
+		return f.handleStartUploadJob(job, true)
+	}
+
 	// First attempt: try cheap "copy" based segmenting.
 	out, err := f.handleStartUploadJob(job, false)
 	if err != nil && errors.Is(err, ErrKeyframe) {

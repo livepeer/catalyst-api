@@ -56,6 +56,8 @@ type UploadVODRequest struct {
 
 	// Forwarded to clipping stage:
 	ClipStrategy video.ClipStrategy `json:"clip_strategy"`
+
+	ReencodeSegmentation bool `json:"reencode_segmentation"`
 }
 
 type UploadVODResponse struct {
@@ -314,6 +316,7 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		SourceCopy:            uploadVODRequest.getSourceCopyEnabled(),
 		ClipStrategy:          uploadVODRequest.ClipStrategy,
 		C2PA:                  uploadVODRequest.C2PA,
+		ReencodeSegmentation:  uploadVODRequest.ReencodeSegmentation,
 	})
 
 	respBytes, err := json.Marshal(UploadVODResponse{RequestID: requestID})
