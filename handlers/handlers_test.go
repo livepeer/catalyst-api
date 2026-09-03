@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
+	"net/url"
 	"testing"
 
 	"github.com/julienschmidt/httprouter"
@@ -30,18 +30,20 @@ func TestOKHandler(t *testing.T) {
 func TestSuccessfulVODUploadHandler(t *testing.T) {
 	require := require.New(t)
 
-	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	defer callbackServer.Close()
-
 	drivers.Testing = true
-	catalystApiHandlers := CatalystAPIHandlersCollection{VODEngine: pipeline.NewStubCoordinator()}
+	catalystApiHandlers := CatalystAPIHandlersCollection{
+		VODEngine: pipeline.NewStubCoordinator(),
+		checkWritePermission: func(string, string, ...*url.URL) error {
+			return nil
+		},
+	}
 	var jsonData = `{
-		"url": "http://localhost/input",
-		"callback_url": "CALLBACK_URL",
+		"url": "https://example.com/input",
+		"callback_url": "https://task-runner.example.com/task-runner/123",
 		"output_locations": [
 			{
 				"type": "object_store",
-				"url": "memory://localhost/output.m3u8",
+				"url": "s3+https://access:secret@storage.example.com/bucket/output.m3u8",
  				"outputs": {
 					"hls": "enabled"
 				}
@@ -55,8 +57,6 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 			}
 		]
 	}`
-	jsonData = strings.ReplaceAll(jsonData, "CALLBACK_URL", callbackServer.URL)
-
 	router := httprouter.New()
 
 	req, _ := http.NewRequest("POST", "/api/vod", bytes.NewBuffer([]byte(jsonData)))
@@ -70,6 +70,31 @@ func TestSuccessfulVODUploadHandler(t *testing.T) {
 	var uvr UploadVODResponse
 	require.NoError(json.Unmarshal(rr.Body.Bytes(), &uvr))
 	require.Greater(len(uvr.RequestID), 1) // Check that we got some value for Request ID
+}
+
+func TestVODUploadRejectsNonPublicSourceBeforeStartingJob(t *testing.T) {
+	catalystAPIHandlers := CatalystAPIHandlersCollection{}
+	payload := []byte(`{
+		"url": "http://127.0.0.1/private",
+		"callback_url": "https://example.com/callback",
+		"output_locations": [{
+			"type": "object_store",
+			"url": "memory://output/result.m3u8",
+			"outputs": {"hls": "enabled"}
+		}]
+	}`)
+
+	router := httprouter.New()
+	router.POST("/api/vod", catalystAPIHandlers.UploadVOD())
+	req, err := http.NewRequest(http.MethodPost, "/api/vod", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusBadRequest, rr.Code)
+	require.Contains(t, rr.Body.String(), "is not public")
 }
 
 func TestInvalidPayloadVODUploadHandler(t *testing.T) {

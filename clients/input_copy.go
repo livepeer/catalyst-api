@@ -2,11 +2,11 @@ package clients
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 	"time"
@@ -50,11 +50,43 @@ func NewInputCopy() *InputCopy {
 func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *url.URL, decryptor *crypto.DecryptionKeys) (video.InputVideo, string, error) {
 	var signedURL string
 	var err error
-	if IsHLSInput(inputFile) {
+	isHLS := IsHLSInput(inputFile)
+	probeURL := ""
+	localHLSProbe := false
+	cleanupProbe := func() {}
+	defer func() {
+		if cleanupProbe != nil {
+			cleanupProbe()
+		}
+	}()
+	hlsDuration := 0.0
+	if isHLS {
 		log.Log(requestID, "skipping copy for hls")
 		signedURL = inputFile.String()
+		if inputFile.String() == osTransferURL.String() {
+			// A clip is itself stored at a request-controlled output. Sign it with
+			// the guarded driver before returning it to downstream consumers.
+			signedURL, err = SignPublicURL(inputFile)
+			if err != nil {
+				return video.InputVideo{}, "", fmt.Errorf("failed to sign HLS output for probing: %w", err)
+			}
+		}
+		if !isLocalObjectStoreURL(inputFile) {
+			ctx, cancel := context.WithTimeout(context.Background(), MaxCopyFileDuration)
+			defer cancel()
+			probeURL, cleanupProbe, hlsDuration, err = DownloadFirstPublicHLSProbeToTemporary(ctx, requestID, signedURL)
+			if err != nil {
+				return video.InputVideo{}, "", fmt.Errorf("failed to safely stage HLS output for probing: %w", err)
+			}
+			localHLSProbe = true
+		} else {
+			probeURL = signedURL
+		}
 	} else {
-		if err := CopyAllInputFiles(requestID, inputFile, osTransferURL, decryptor); err != nil {
+		// Stage the probe input while the uploader consumes the source. The
+		// probe starts only after the upload and file close complete.
+		probeURL, cleanupProbe, err = copyInputFileToOutputAndTemporary(requestID, inputFile, osTransferURL, decryptor)
+		if err != nil {
 			return video.InputVideo{}, "", fmt.Errorf("failed to copy file(s): %w", err)
 		}
 
@@ -62,13 +94,27 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 		if err != nil {
 			return video.InputVideo{}, "", err
 		}
+		if probeURL == "" {
+			probeURL = signedURL
+		}
 	}
 
 	log.Log(requestID, "starting probe", "source", inputFile.Redacted(), "dest", osTransferURL.Redacted())
-	inputFileProbe, err := s.Probe.ProbeFile(requestID, signedURL, "-analyzeduration", "15000000")
+	probeOptions := []string{"-analyzeduration", "15000000"}
+	if localHLSProbe {
+		probeOptions = append(probeOptions, "-protocol_whitelist", "file,crypto")
+	}
+	inputFileProbe, err := s.Probe.ProbeFile(requestID, probeURL, probeOptions...)
 	if err != nil {
 		log.Log(requestID, "probe failed", "err", err, "source", inputFile.Redacted(), "dest", osTransferURL.Redacted())
-		return video.InputVideo{}, "", fmt.Errorf("error probing MP4 input file from S3: %w", err)
+		return video.InputVideo{}, "", catErrs.Public(catErrs.PublicErrorProbeFailed, fmt.Errorf("error probing MP4 input file from S3: %w", err))
+	}
+	if isHLS && hlsDuration > 0 {
+		inputFileProbe.Format = "hls"
+		inputFileProbe.Duration = hlsDuration
+		for i := range inputFileProbe.Tracks {
+			inputFileProbe.Tracks[i].DurationSec = hlsDuration
+		}
 	}
 
 	log.Log(requestID, "probe succeeded", "source", inputFile.Redacted(), "dest", osTransferURL.Redacted())
@@ -77,7 +123,7 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 	// verify the duration of the video track and don't process if we can't determine duration
 	if hasVideoTrack && videoTrack.DurationSec == 0 {
 		duration := 0.0
-		if IsHLSInput(inputFile) {
+		if isHLS {
 			duration = getVideoTrackDuration(requestID, signedURL)
 		}
 		if duration == 0.0 {
@@ -96,7 +142,7 @@ func (s *InputCopy) CopyInputToS3(requestID string, inputFile, osTransferURL *ur
 	}
 	if hasVideoTrack && videoTrack.FPS <= 0 {
 		// unsupported, includes things like motion jpegs
-		return video.InputVideo{}, "", fmt.Errorf("invalid framerate: %f", videoTrack.FPS)
+		return video.InputVideo{}, "", catErrs.Public(catErrs.PublicErrorInvalidInput, fmt.Errorf("invalid framerate: %f", videoTrack.FPS))
 	}
 	if inputFileProbe.SizeBytes > config.MaxInputFileSizeBytes {
 		return video.InputVideo{}, "", fmt.Errorf("input file %d bytes was greater than %d bytes", inputFileProbe.SizeBytes, config.MaxInputFileSizeBytes)
@@ -126,7 +172,7 @@ func getSignedURL(osTransferURL *url.URL) (string, error) {
 	httpURL.Scheme = "https"
 	signedURL := httpURL.String()
 
-	resp, err := http.Head(signedURL)
+	resp, err := publicObjectStoreHTTPClient.Head(signedURL)
 	if resp != nil {
 		resp.Body.Close()
 	}
@@ -134,7 +180,7 @@ func getSignedURL(osTransferURL *url.URL) (string, error) {
 		return signedURL, nil
 	}
 
-	return SignURL(osTransferURL)
+	return SignPublicURL(osTransferURL)
 }
 
 func IsHLSInput(inputFile *url.URL) bool {
@@ -183,6 +229,30 @@ func getSegmentTransferLocation(srcManifestUrl, dstTransferUrl *url.URL, srcSegm
 // CopyAllInputFiles will copy the m3u8 manifest and all ts segments for HLS input whereas
 // it will copy just the single video file for MP4/MOV input
 func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, decryptor *crypto.DecryptionKeys) (err error) {
+	return copyAllInputFiles(requestID, srcInputUrl, dstOutputUrl, decryptor, nil)
+}
+
+func copyInputFileToOutputAndTemporary(requestID string, srcInputURL, dstOutputURL *url.URL, decryptor *crypto.DecryptionKeys) (string, func(), error) {
+	probeFile, err := os.CreateTemp(os.TempDir(), "public-probe-*")
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to create temporary probe file: %w", err)
+	}
+	cleanup := func() { _ = os.Remove(probeFile.Name()) }
+
+	err = copyAllInputFiles(requestID, srcInputURL, dstOutputURL, decryptor, probeFile)
+	closeErr := probeFile.Close()
+	if err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	if closeErr != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("failed to close temporary probe file: %w", closeErr)
+	}
+	return probeFile.Name(), cleanup, nil
+}
+
+func copyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, decryptor *crypto.DecryptionKeys, probeFile *os.File) (err error) {
 	fileList := make(map[string]string)
 	if IsHLSInput(srcInputUrl) {
 		// Download the m3u8 manifest using the input url
@@ -209,12 +279,15 @@ func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, dec
 	} else {
 		fileList[srcInputUrl.String()] = dstOutputUrl.String()
 	}
+	if probeFile != nil && len(fileList) != 1 {
+		return fmt.Errorf("temporary probe staging requires a single input file")
+	}
 
 	var byteCount int64
 	for inFile, outFile := range fileList {
 		log.Log(requestID, "Copying input file to S3", "source", inFile, "dest", outFile)
 
-		size, err := CopyFileWithDecryption(context.Background(), inFile, outFile, "", requestID, decryptor)
+		size, err := copyFileWithDecryption(context.Background(), inFile, outFile, "", requestID, decryptor, probeFile)
 
 		if err != nil {
 			err = fmt.Errorf("error copying input file to S3: %w", err)
@@ -222,7 +295,7 @@ func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, dec
 		}
 		if size <= 0 {
 			if len(fileList) <= 1 {
-				return fmt.Errorf("zero bytes found for source: %s", inFile)
+				return catErrs.Public(catErrs.PublicErrorInvalidInput, fmt.Errorf("zero bytes found for source: %s", log.RedactURL(inFile)))
 			} else {
 				log.Log(requestID, "zero bytes found for file", "file", inFile)
 			}
@@ -234,6 +307,10 @@ func CopyAllInputFiles(requestID string, srcInputUrl, dstOutputUrl *url.URL, dec
 }
 
 func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string, decryptor *crypto.DecryptionKeys) (writtenBytes int64, err error) {
+	return copyFileWithDecryption(ctx, sourceURL, destOSBaseURL, filename, requestID, decryptor, nil)
+}
+
+func copyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID string, decryptor *crypto.DecryptionKeys, probeFile *os.File) (writtenBytes int64, err error) {
 	dStorage := NewDStorageDownload()
 	err = backoff.Retry(func() error {
 		// currently this timeout is only used for http downloads in the getFileHTTP function when it calls http.NewRequestWithContext
@@ -260,8 +337,19 @@ func CopyFileWithDecryption(ctx context.Context, sourceURL, destOSBaseURL, filen
 			defer decryptedFile.Close()
 			c = decryptedFile
 		}
+		c = &boundedReadCloser{ReadCloser: c, remaining: MaxTemporaryProbeFileSizeBytes, limit: MaxTemporaryProbeFileSizeBytes}
 
-		content := io.TeeReader(c, &byteAccWriter)
+		contentWriter := io.Writer(&byteAccWriter)
+		if probeFile != nil {
+			if err := probeFile.Truncate(0); err != nil {
+				return catErrs.Unretriable(fmt.Errorf("failed to reset temporary probe file: %w", err))
+			}
+			if _, err := probeFile.Seek(0, io.SeekStart); err != nil {
+				return catErrs.Unretriable(fmt.Errorf("failed to seek temporary probe file: %w", err))
+			}
+			contentWriter = io.MultiWriter(&byteAccWriter, probeFile)
+		}
+		content := io.TeeReader(c, contentWriter)
 
 		err = UploadToOSURL(destOSBaseURL, filename, content, MaxCopyFileDuration)
 		if err != nil {
@@ -276,15 +364,31 @@ func CopyFile(ctx context.Context, sourceURL, destOSBaseURL, filename, requestID
 	return CopyFileWithDecryption(ctx, sourceURL, destOSBaseURL, filename, requestID, nil)
 }
 
-func GetFile(ctx context.Context, requestID, url string, dStorage *DStorageDownload) (io.ReadCloser, error) {
-	_, err := drivers.ParseOSURL(url, true)
-	if err == nil {
-		return DownloadOSURL(url)
-	} else if IsDStorageResource(url) && dStorage != nil {
-		return dStorage.DownloadDStorageFromGatewayList(url, requestID)
-	} else {
-		return getFileHTTP(ctx, url)
+func GetFile(ctx context.Context, requestID, sourceURL string, dStorage *DStorageDownload) (io.ReadCloser, error) {
+	parsedURL, err := url.Parse(sourceURL)
+	if err != nil {
+		return nil, catErrs.Unretriable(fmt.Errorf("invalid import URL: %w", err))
 	}
+
+	// Local files are used by trusted internal callers and tests. They cannot
+	// enter through /api/vod because ValidateImportURL rejects their scheme.
+	if parsedURL.Scheme == "" || parsedURL.Scheme == "file" {
+		_, err := drivers.ParseOSURL(sourceURL, true)
+		if err != nil {
+			return nil, err
+		}
+		return DownloadOSURL(sourceURL)
+	}
+
+	publicURL, err := ParsePublicImportURL(sourceURL)
+	if err != nil {
+		return nil, err
+	}
+	stream, err := (PublicFetcher{HTTPClient: retryableHttpClient, DStorage: dStorage}).Open(ctx, requestID, publicURL, nil, config.MaxInputFileSizeBytes)
+	if err != nil {
+		return nil, err
+	}
+	return stream.Body, nil
 }
 
 func GetFileWithBackup(ctx context.Context, requestID, url string, dStorage *DStorageDownload) (io.ReadCloser, string, error) {
@@ -311,6 +415,7 @@ func GetFileWithBackup(ctx context.Context, requestID, url string, dStorage *DSt
 	return nil, url, err
 }
 
+var importHTTPClient = newImportHTTPClient(MaxCopyFileDuration)
 var retryableHttpClient = newRetryableHttpClient()
 
 func newRetryableHttpClient() *http.Client {
@@ -318,38 +423,14 @@ func newRetryableHttpClient() *http.Client {
 	client.RetryMax = 5                          // Retry a maximum of this+1 times
 	client.RetryWaitMin = 200 * time.Millisecond // Wait at least this long between retries
 	client.RetryWaitMax = 5 * time.Second        // Wait at most this long between retries (exponential backoff)
-	client.HTTPClient = &http.Client{
-		// Give up on requests that take more than this long - the file is probably too big for us to process locally if it takes this long
-		// or something else has gone wrong and the request is hanging
-		Timeout: MaxCopyFileDuration,
-	}
+	// Give up on requests that take more than this long - the file is probably
+	// too big for us to process locally if it takes this long, or something else
+	// has gone wrong and the request is hanging. The inner client also ensures
+	// every retry and redirect is subject to the import network policy.
+	client.HTTPClient = importHTTPClient
 	client.Logger = log.NewRetryableHTTPLogger()
 
 	return client.StandardClient()
-}
-
-func getFileHTTP(ctx context.Context, url string) (io.ReadCloser, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, catErrs.Unretriable(fmt.Errorf("error creating http request: %w", err))
-	}
-	resp, err := retryableHttpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error on import request: %w", err)
-	}
-
-	if resp.StatusCode >= 300 {
-		resp.Body.Close()
-
-		msg := fmt.Sprintf("bad status code from import request: %d %s", resp.StatusCode, resp.Status)
-		if resp.StatusCode == 404 {
-			return nil, catErrs.NewObjectNotFoundError(msg, nil)
-		} else if resp.StatusCode < 500 {
-			return nil, catErrs.Unretriable(errors.New(msg))
-		}
-		return nil, errors.New(msg)
-	}
-	return resp.Body, nil
 }
 
 type StubInputCopy struct{}

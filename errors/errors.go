@@ -58,6 +58,35 @@ func WriteHTTPInternalServerError(w http.ResponseWriter, msg string, err error) 
 
 type unretriableError struct{ error }
 
+type PublicErrorCode string
+
+const (
+	PublicErrorFileInaccessible PublicErrorCode = "file_inaccessible"
+	PublicErrorInvalidInput     PublicErrorCode = "invalid_input"
+	PublicErrorProbeFailed      PublicErrorCode = "probe_failed"
+	PublicErrorSegmentProbe     PublicErrorCode = "segment_probe_failed"
+)
+
+type PublicError struct {
+	Code PublicErrorCode
+	error
+}
+
+func (e PublicError) Unwrap() error { return e.error }
+
+func Public(code PublicErrorCode, err error) error {
+	if err == nil {
+		return nil
+	}
+	return PublicError{Code: code, error: err}
+}
+
+func PublicCode(err error) (PublicErrorCode, bool) {
+	var publicErr PublicError
+	ok := errors.As(err, &publicErr)
+	return publicErr.Code, ok
+}
+
 // Unretriable returns an error that should be treated as final. This effectively means that the error stops backoff
 // retry loops automatically and that it should be propagated back to the caller as such. This is done through the
 // status callback through the "unretriable" field.
@@ -98,7 +127,7 @@ func NewObjectNotFoundError(msg string, cause error) error {
 
 	// we want 404s to be unretriable at the studio task level but we still want retries at the catalyst-api app level
 	// so we don't use backoff.Permanent or the Unretriable func which uses backoff.Permanent
-	return unretriableError{ObjectNotFoundError{msg: msg, cause: cause}}
+	return unretriableError{Public(PublicErrorFileInaccessible, ObjectNotFoundError{msg: msg, cause: cause})}
 }
 
 // IsObjectNotFound checks if the error is an ObjectNotFoundError.

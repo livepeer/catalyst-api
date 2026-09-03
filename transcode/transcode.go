@@ -19,6 +19,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	c2pa2 "github.com/livepeer/catalyst-api/c2pa"
 	"github.com/livepeer/catalyst-api/clients"
+	catErrs "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/video"
@@ -64,6 +65,17 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	var segmentsCount = 0
 
 	var outputs []video.OutputVideo
+	var remoteBroadcaster *clients.RemoteBroadcasterClient
+	if transcodeRequest.AccessToken != "" {
+		client, err := clients.NewRemoteBroadcasterClient(clients.Credentials{
+			AccessToken:  transcodeRequest.AccessToken,
+			CustomAPIURL: transcodeRequest.TranscodeAPIUrl,
+		})
+		if err != nil {
+			return outputs, segmentsCount, fmt.Errorf("failed to create remote broadcaster client: %w", err)
+		}
+		remoteBroadcaster = &client
+	}
 
 	hlsTargetURL, err := getHlsTargetURL(transcodeRequest)
 	if err != nil {
@@ -92,6 +104,10 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	if err != nil {
 		return outputs, segmentsCount, fmt.Errorf("error generating source segment URLs: %s", err)
 	}
+	// Keep the parsed playlist used for destination validation intact. The
+	// transcoding path may later drop the first segment by reslicing Segments.
+	probeSourceManifest := sourceManifest
+	probeSourceManifest.Segments = append([]*m3u8.MediaSegment(nil), sourceManifest.Segments...)
 	log.Log(transcodeRequest.RequestID, "Fetched Source Segments URLs", "num_urls", len(sourceSegmentURLs))
 
 	// The first segment in an HLS manifest input may have audio/video tracks where the start times
@@ -102,7 +118,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	if inputInfo.Format == "hls" {
 		sourceManifest.Segments, sourceSegmentURLs = HandleAVStartTimeOffsets(transcodeRequest.RequestID, inputInfo, sourceManifest.Segments, sourceSegmentURLs)
 		if len(sourceSegmentURLs) == 0 {
-			return outputs, segmentsCount, fmt.Errorf("no valid segments in stream to transcode")
+			return outputs, segmentsCount, catErrs.Public(catErrs.PublicErrorInvalidInput, fmt.Errorf("no valid segments in stream to transcode"))
 		}
 	}
 
@@ -111,17 +127,33 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// which results in a segment at the end that just contains audio. This segment should *not* be
 	// submitted to the T.
 	lastSegment := sourceSegmentURLs[len(sourceSegmentURLs)-1]
-	lastSegmentURL, err := clients.SignURL(lastSegment.URL)
-	if err != nil {
-		return outputs, segmentsCount, fmt.Errorf("failed to create signed url for last segment %s: %w", lastSegment.URL.Redacted(), err)
+	var lastSegmentURL string
+	cleanupLastSegment := func() {}
+	parsedSourceManifestURL, _ := url.Parse(sourceManifestOSURL)
+	publicHLS := inputInfo.Format == "hls" && parsedSourceManifestURL.Scheme != "" && parsedSourceManifestURL.Scheme != "file"
+	if publicHLS {
+		ctx, cancel := context.WithTimeout(context.Background(), clients.MaxCopyFileDuration)
+		defer cancel()
+		probeSegments := probeSourceManifest.GetAllSegments()
+		lastSegmentURL, cleanupLastSegment, err = clients.DownloadPublicHLSSegmentProbeToTemporary(ctx, transcodeRequest.RequestID, sourceManifestOSURL, probeSourceManifest, len(probeSegments)-1)
+	} else {
+		lastSegmentURL, err = clients.SignURL(lastSegment.URL)
 	}
+	if err != nil {
+		return outputs, segmentsCount, fmt.Errorf("failed to prepare last segment %s for probing: %w", lastSegment.URL.Redacted(), err)
+	}
+	defer cleanupLastSegment()
 	// ignore the following probe errors when checking the last segment
 	var ignoreProbeErrs = []string{
 		"non-existing sps 0",
 	}
 	p := video.Probe{IgnoreErrMessages: ignoreProbeErrs}
 	// ProbeFile will return err for various reasons so we use the subsequent GetTrack method to check for video tracks
-	lastSegmentProbe, _ := p.ProbeFile(transcodeRequest.RequestID, lastSegmentURL)
+	probeOptions := []string{}
+	if publicHLS {
+		probeOptions = append(probeOptions, "-protocol_whitelist", "file,crypto")
+	}
+	lastSegmentProbe, _ := p.ProbeFile(transcodeRequest.RequestID, lastSegmentURL, probeOptions...)
 	// GetTrack will return an err if TrackTypeVideo was not found
 	_, err = lastSegmentProbe.GetTrack(video.TrackTypeVideo)
 	if err != nil {
@@ -179,7 +211,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	// Setup parallel transcode sessions
 	var jobs *ParallelTranscoding
 	jobs = NewParallelTranscoding(sourceSegmentURLs, func(segment segmentInfo) error {
-		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, hlsTargetURL, transcodedStats, &renditionList, broadcaster, segmentChannel)
+		err := transcodeSegment(segment, streamName, manifestID, transcodeRequest, transcodeProfiles, hlsTargetURL, transcodedStats, &renditionList, broadcaster, remoteBroadcaster, segmentChannel)
 		segmentsCount++
 		if err != nil {
 			return err
@@ -250,7 +282,7 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		return outputs, segmentsCount, err
 	}
 
-	var mp4OutputsPre []video.OutputVideoFile
+	var mp4OutputsPre []uploadedMP4File
 	var fmp4ManifestUrls []string
 	// Transmux received segments from T into a single mp4
 	if transcodeRequest.GenerateMP4 {
@@ -369,14 +401,15 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 		}
 	}
 
-	hlsPlaybackBaseURL, mp4PlaybackBaseURL, err := clients.Publish(hlsTargetURL.String(), transcodeRequest.Mp4TargetUrl)
+	hlsPlaybackBaseURL, mp4PlaybackBaseURL, err := clients.PublishPublic(hlsTargetURL.String(), transcodeRequest.Mp4TargetUrl)
 	if err != nil {
 		return outputs, segmentsCount, err
 	}
 
 	var mp4Outputs []video.OutputVideoFile
 	if transcodeRequest.GenerateMP4 {
-		for _, mp4Out := range mp4OutputsPre {
+		for _, uploadedMP4 := range mp4OutputsPre {
+			mp4Out := uploadedMP4.Output
 			mp4Out.Location = strings.ReplaceAll(mp4Out.Location, transcodeRequest.Mp4TargetUrl, mp4PlaybackBaseURL)
 			// Ignore fmp4 manifest files (also ends in .m3u8) since probing these files doesn't reveal much
 			// and ffprobe can either fail or take a long time instead.
@@ -384,26 +417,12 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 			if fileExt != ".mp4" && fileExt != ".m4s" {
 				continue
 			}
-			// Generate signed URLs of all mp4 and fmp4 files to probe
-			mp4TargetUrl, err := url.Parse(mp4Out.Location)
+			// The generated file is still present in the transmux staging directory.
+			// Probe that copy instead of downloading the just-uploaded object into
+			// /tmp a second time.
+			mp4Out, err = video.PopulateOutput(transcodeRequest.RequestID, video.Probe{}, uploadedMP4.LocalPath, mp4Out)
 			if err != nil {
-				return outputs, segmentsCount, fmt.Errorf("failed to parse mp4Out.Location %s: %w", mp4Out.Location, err)
-			}
-			var probeURL string
-			if mp4TargetUrl.Scheme == "ipfs" {
-				// probe IPFS with web3.storage URL, since ffprobe does not support "ipfs://"
-				probeURL = fmt.Sprintf("https://%s.ipfs.w3s.link/%s", mp4TargetUrl.Host, mp4TargetUrl.Path)
-			} else {
-				var err error
-				probeURL, err = clients.SignURL(mp4TargetUrl)
-				if err != nil {
-					return outputs, segmentsCount, fmt.Errorf("failed to create signed url for %s: %w", mp4TargetUrl.Redacted(), err)
-				}
-			}
-			// Populate OutputVideo structs with results from probing step to send back in final response to Studio
-			mp4Out, err = video.PopulateOutput(transcodeRequest.RequestID, video.Probe{}, probeURL, mp4Out)
-			if err != nil {
-				return outputs, segmentsCount, fmt.Errorf("failed to populate output for %s: %w", log.RedactURL(probeURL), err)
+				return outputs, segmentsCount, fmt.Errorf("failed to populate output for %s: %w", log.RedactURL(mp4Out.Location), err)
 			}
 			mp4Outputs = append(mp4Outputs, mp4Out)
 		}
@@ -434,15 +453,19 @@ func RunTranscodeProcess(transcodeRequest TranscodeSegmentRequest, streamName st
 	return outputs, segmentsCount, nil
 }
 
-func uploadMp4Files(basePath *url.URL, mp4OutputFiles []string, prefix string) ([]video.OutputVideoFile, error) {
-	var mp4OutputsPre []video.OutputVideoFile
+type uploadedMP4File struct {
+	Output    video.OutputVideoFile
+	LocalPath string
+}
+
+func uploadMp4Files(basePath *url.URL, mp4OutputFiles []string, prefix string) ([]uploadedMP4File, error) {
+	var mp4OutputsPre []uploadedMP4File
 	// e. Upload all mp4 related output files
 	for _, o := range mp4OutputFiles {
 		var filename string
 		mp4OutputFile, err := os.Open(o)
-		defer os.Remove(o)
 		if err != nil {
-			return []video.OutputVideoFile{}, fmt.Errorf("failed to open %s to upload: %s", o, err)
+			return []uploadedMP4File{}, fmt.Errorf("failed to open %s to upload: %s", o, err)
 		}
 		if prefix != "" {
 			filename = fmt.Sprintf("%s.mp4", prefix)
@@ -450,15 +473,25 @@ func uploadMp4Files(basePath *url.URL, mp4OutputFiles []string, prefix string) (
 			filename = filepath.Base(mp4OutputFile.Name())
 		}
 		err = backoff.Retry(func() error {
+			if _, err := mp4OutputFile.Seek(0, io.SeekStart); err != nil {
+				return backoff.Permanent(fmt.Errorf("failed to seek %s before upload: %w", mp4OutputFile.Name(), err))
+			}
 			return clients.UploadToOSURL(basePath.String(), filename, bufio.NewReader(mp4OutputFile), UploadTimeout)
 		}, clients.UploadRetryBackoff())
+		closeErr := mp4OutputFile.Close()
 		if err != nil {
-			return []video.OutputVideoFile{}, fmt.Errorf("failed to upload %s: %s", mp4OutputFile.Name(), err)
+			return []uploadedMP4File{}, fmt.Errorf("failed to upload %s: %s", mp4OutputFile.Name(), err)
+		}
+		if closeErr != nil {
+			return []uploadedMP4File{}, fmt.Errorf("failed to close %s after upload: %w", mp4OutputFile.Name(), closeErr)
 		}
 
-		mp4Out := video.OutputVideoFile{
-			Type:     "mp4",
-			Location: basePath.JoinPath(filename).String(),
+		mp4Out := uploadedMP4File{
+			Output: video.OutputVideoFile{
+				Type:     "mp4",
+				Location: basePath.JoinPath(filename).String(),
+			},
+			LocalPath: o,
 		}
 		mp4OutputsPre = append(mp4OutputsPre, mp4Out)
 	}
@@ -507,6 +540,7 @@ func transcodeSegment(
 	transcodedStats []*video.RenditionStats,
 	renditionList *video.TRenditionList,
 	broadcaster clients.BroadcasterClient,
+	remoteBroadcaster *clients.RemoteBroadcasterClient,
 	segmentChannel chan<- video.TranscodedSegmentInfo,
 ) error {
 	start := time.Now()
@@ -554,13 +588,8 @@ func transcodeSegment(
 		// If an AccessToken is provided via the request for transcode, then use remote Broadcasters.
 		// Otherwise, use the local harcoded Broadcaster.
 		if transcodeRequest.AccessToken != "" {
-			creds := clients.Credentials{
-				AccessToken:  transcodeRequest.AccessToken,
-				CustomAPIURL: transcodeRequest.TranscodeAPIUrl,
-			}
-			broadcasterClient, _ := clients.NewRemoteBroadcasterClient(creds)
 			// TODO: failed to run TranscodeSegmentWithRemoteBroadcaster: CreateStream(): http POST(https://origin.livepeer.com/api/stream) returned 422 422 Unprocessable Entity
-			tr, err = broadcasterClient.TranscodeSegmentWithRemoteBroadcaster(r, int64(segment.Index), transcodeProfiles, streamName, segment.Input.DurationMillis)
+			tr, err = remoteBroadcaster.TranscodeSegmentWithRemoteBroadcaster(r, int64(segment.Index), transcodeProfiles, streamName, segment.Input.DurationMillis)
 			if err != nil {
 				return fmt.Errorf("failed to run TranscodeSegmentWithRemoteBroadcaster: %s", err)
 			}

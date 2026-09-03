@@ -39,15 +39,24 @@ func (p Probe) ProbeFile(requestID string, url string, ffProbeOptions ...string)
 	for _, ignoreMsg := range p.IgnoreErrMessages {
 		if strings.Contains(errMsg, ignoreMsg) {
 			log.Log(requestID, "ignoring probe error", "err", err)
-			return p.runProbe(url, "-loglevel", "fatal")
+			fatalOptions := append([]string{}, ffProbeOptions...)
+			fatalOptions = append(fatalOptions, "-loglevel", "fatal")
+			return p.runProbe(url, fatalOptions...)
 		}
 	}
 	return InputVideo{}, err
 }
 
 func (p Probe) runProbe(url string, ffProbeOptions ...string) (iv InputVideo, err error) {
-	if len(ffProbeOptions) == 0 {
-		ffProbeOptions = []string{"-loglevel", "error"}
+	hasLogLevel := false
+	for _, option := range ffProbeOptions {
+		if option == "-loglevel" {
+			hasLogLevel = true
+			break
+		}
+	}
+	if !hasLogLevel {
+		ffProbeOptions = append(append([]string{}, ffProbeOptions...), "-loglevel", "error")
 	}
 	var data *ffprobe.ProbeData
 	operation := func() error {

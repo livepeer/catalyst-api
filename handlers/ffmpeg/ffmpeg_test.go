@@ -1,6 +1,7 @@
 package ffmpeg
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/grafov/m3u8"
 	"github.com/julienschmidt/httprouter"
@@ -53,6 +55,21 @@ func TestUploadRetries(t *testing.T) {
 
 	h := HandlersCollection{
 		VODEngine: pipeline.NewStubCoordinator(),
+		upload: func(_ string, _ string, data io.Reader, _ time.Duration) error {
+			req, err := http.NewRequest(http.MethodPut, server.URL, data)
+			if err != nil {
+				return err
+			}
+			resp, err := server.Client().Do(req)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode >= http.StatusMultipleChoices {
+				return fmt.Errorf("upload returned HTTP %d", resp.StatusCode)
+			}
+			return nil
+		},
 	}
 
 	mockServerURL, err := url.Parse(server.URL)

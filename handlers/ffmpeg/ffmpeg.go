@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"path"
 	"regexp"
+	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/grafov/m3u8"
@@ -20,6 +21,7 @@ import (
 
 type HandlersCollection struct {
 	VODEngine *pipeline.Coordinator
+	upload    func(string, string, io.Reader, time.Duration) error
 }
 
 // FFMPEG is called with something like the following:
@@ -96,7 +98,11 @@ func (h *HandlersCollection) NewFile() httprouter.Handle {
 		}
 
 		if err := backoff.Retry(func() error {
-			err := clients.UploadToOSURL(targetURLBase, filename, bytes.NewReader(content), config.SEGMENT_WRITE_TIMEOUT)
+			upload := h.upload
+			if upload == nil {
+				upload = clients.UploadToOSURL
+			}
+			err := upload(targetURLBase, filename, bytes.NewReader(content), config.SEGMENT_WRITE_TIMEOUT)
 			if err != nil {
 				log.Log(job.RequestID, "Copy segment attempt failed", "dest", path.Join(targetURLBase, filename), "err", err)
 			}

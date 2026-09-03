@@ -1,11 +1,11 @@
 package clients
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/url"
+	"os"
 	"path"
 	"sort"
 	"strings"
@@ -26,6 +26,7 @@ const (
 	ManifestUploadTimeout     = 5 * time.Minute
 	Fmp4PostfixDir            = "fmp4"
 	manifestNotFoundTolerance = 10 * time.Second
+	MaxManifestSizeBytes      = 16 << 20
 )
 
 func DownloadRetryBackoffLong() backoff.BackOff {
@@ -35,7 +36,11 @@ func DownloadRetryBackoffLong() backoff.BackOff {
 var DownloadRetryBackoff = DownloadRetryBackoffLong
 
 func DownloadRenditionManifest(requestID, sourceManifestOSURL string) (m3u8.MediaPlaylist, error) {
-	playlist, playlistType, _, err := downloadManifest(requestID, sourceManifestOSURL)
+	return downloadRenditionManifest(context.Background(), requestID, sourceManifestOSURL)
+}
+
+func downloadRenditionManifest(ctx context.Context, requestID, sourceManifestOSURL string) (m3u8.MediaPlaylist, error) {
+	playlist, playlistType, _, err := downloadManifest(ctx, requestID, sourceManifestOSURL)
 	if err != nil {
 		return m3u8.MediaPlaylist{}, err
 	}
@@ -137,7 +142,7 @@ func downloadManifestWithBackup(requestID, sourceManifestOSURL string) (string, 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		playlist, playlistType, size, errPrimary = downloadManifest(requestID, sourceManifestOSURL)
+		playlist, playlistType, size, errPrimary = downloadManifest(context.Background(), requestID, sourceManifestOSURL)
 	}()
 
 	backupManifestURL := config.GetStorageBackupURL(sourceManifestOSURL)
@@ -145,7 +150,7 @@ func downloadManifestWithBackup(requestID, sourceManifestOSURL string) (string, 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			playlistBackup, playlistTypeBackup, sizeBackup, errBackup = downloadManifest(requestID, backupManifestURL)
+			playlistBackup, playlistTypeBackup, sizeBackup, errBackup = downloadManifest(context.Background(), requestID, backupManifestURL)
 		}()
 	}
 	wg.Wait()
@@ -172,11 +177,10 @@ func downloadManifestWithBackup(requestID, sourceManifestOSURL string) (string, 
 	return sourceManifestOSURL, playlist, playlistType, errPrimary
 }
 
-func downloadManifest(requestID, sourceManifestOSURL string) (playlist m3u8.Playlist, playlistType m3u8.ListType, size int, err error) {
-	dStorage := NewDStorageDownload()
+func downloadManifest(ctx context.Context, requestID, sourceManifestOSURL string) (playlist m3u8.Playlist, playlistType m3u8.ListType, size int, err error) {
 	start := time.Now()
 	err = backoff.Retry(func() error {
-		rc, err := GetFile(context.Background(), requestID, sourceManifestOSURL, dStorage)
+		artifact, err := fetchImportToTemp(ctx, requestID, sourceManifestOSURL, MaxManifestSizeBytes)
 		if err != nil {
 			if time.Since(start) > manifestNotFoundTolerance && errors.IsObjectNotFound(err) {
 				// bail out of the retries earlier for not found errors because it will be quite a common scenario
@@ -186,16 +190,15 @@ func downloadManifest(requestID, sourceManifestOSURL string) (playlist m3u8.Play
 			}
 			return err
 		}
-		defer rc.Close() // nolint:errcheck
-
-		data := new(bytes.Buffer)
-		_, err = data.ReadFrom(rc)
+		defer artifact.Close() // nolint:errcheck
+		file, err := os.Open(artifact.Path)
 		if err != nil {
-			return fmt.Errorf("error reading manifest: %s", err)
+			return fmt.Errorf("error opening manifest: %s", err)
 		}
+		defer file.Close() // nolint:errcheck
 
-		size = data.Len()
-		playlist, playlistType, err = m3u8.Decode(*data, true)
+		size = int(artifact.Size)
+		playlist, playlistType, err = m3u8.DecodeFrom(file, true)
 		if err != nil {
 			return fmt.Errorf("error decoding manifest: %s", err)
 		}
@@ -216,6 +219,11 @@ func GetSourceSegmentURLs(sourceManifestURL string, manifest m3u8.MediaPlaylist)
 		u, err := ManifestURLToSegmentURL(sourceManifestURL, segment.URI)
 		if err != nil {
 			return nil, err
+		}
+		if u.Scheme != "" {
+			if err := ValidateImportURL(u); err != nil {
+				return nil, fmt.Errorf("invalid source segment URL: %w", err)
+			}
 		}
 		urls = append(
 			urls,

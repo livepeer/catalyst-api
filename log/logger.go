@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -29,19 +30,25 @@ func AddContext(requestID string, keyvals ...interface{}) {
 }
 
 func Log(requestID string, message string, keyvals ...interface{}) {
-	_ = kitlog.With(getLogger(requestID), "msg", message).Log(keyvals...)
+	_ = kitlog.With(getLogger(requestID), "msg", redactURLsInText(message)).Log(redactKeyvals(keyvals...)...)
 }
 
 // Log in situations where we don't have access to the Request ID.
 // Should be used sparingly and with as much context inserted into the message as possible
 func LogNoRequestID(message string, keyvals ...interface{}) {
-	_ = kitlog.With(newLogger(), "msg", message).Log(keyvals...)
+	_ = kitlog.With(newLogger(), "msg", redactURLsInText(message)).Log(redactKeyvals(keyvals...)...)
 }
 
 func LogError(requestID string, message string, err error, keyvals ...interface{}) {
-	msgLogger := kitlog.With(getLogger(requestID), "msg", message)
-	errLogger := kitlog.With(msgLogger, "err", err.Error())
+	msgLogger := kitlog.With(getLogger(requestID), "msg", redactURLsInText(message))
+	errLogger := kitlog.With(msgLogger, "err", redactURLsInText(err.Error()))
 	_ = errLogger.Log(redactKeyvals(keyvals...)...)
+}
+
+var urlInTextPattern = regexp.MustCompile(`(?i)[a-z][a-z0-9+.-]*://[^\s"'<>]+`)
+
+func redactURLsInText(str string) string {
+	return urlInTextPattern.ReplaceAllStringFunc(str, RedactURL)
 }
 
 func getLogger(requestID string) kitlog.Logger {
@@ -73,13 +80,17 @@ func redactKeyvals(keyvals ...interface{}) []interface{} {
 			res = append(res, k)
 			switch s := v.(type) {
 			case string:
-				res = append(res, RedactURL(s))
+				res = append(res, redactURLsInText(s))
 			case url.URL:
-				res = append(res, s.Redacted())
+				res = append(res, RedactURL(s.String()))
 			case *url.URL:
 				if s != nil {
-					res = append(res, s.Redacted())
+					res = append(res, RedactURL(s.String()))
+				} else {
+					res = append(res, nil)
 				}
+			case error:
+				res = append(res, redactURLsInText(s.Error()))
 			default:
 				res = append(res, v)
 			}
@@ -107,14 +118,22 @@ func RedactLogs(str, delim string) string {
 }
 
 func RedactURL(str string) string {
-	strLower := strings.ToLower(str)
-	if !strings.HasPrefix(strLower, "http") && !strings.HasPrefix(strLower, "s3") {
+	if !strings.Contains(str, "://") {
 		return str
 	}
-
 	u, err := url.Parse(str)
 	if err != nil {
 		return "REDACTED"
 	}
-	return u.Redacted()
+	u.User = nil
+	query := u.Query()
+	for key := range query {
+		query.Set(key, "REDACTED")
+	}
+	u.RawQuery = query.Encode()
+	if u.Fragment != "" {
+		u.Fragment = "REDACTED"
+		u.RawFragment = ""
+	}
+	return u.String()
 }

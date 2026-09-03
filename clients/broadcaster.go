@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/metrics"
 	"github.com/livepeer/catalyst-api/video"
 )
@@ -57,16 +58,20 @@ var client = newRetryableClient(&http.Client{Timeout: TRANSCODE_TIMEOUT})
 // TranscodeSegment sends media to Livepeer network and returns rendition segments
 // If manifestId == "" one will be created and deleted after use, pass real value to reuse across multiple calls
 func transcodeSegment(inputSegment io.Reader, sequenceNumber, mediaDurationMillis int64, broadcasterURL url.URL, manifestId string, transcodeConfigHeader string) (TranscodeResult, error) {
+	return transcodeSegmentWithClient(inputSegment, sequenceNumber, mediaDurationMillis, broadcasterURL, manifestId, transcodeConfigHeader, client)
+}
+
+func transcodeSegmentWithClient(inputSegment io.Reader, sequenceNumber, mediaDurationMillis int64, broadcasterURL url.URL, manifestId string, transcodeConfigHeader string, httpClient *http.Client) (TranscodeResult, error) {
 	t := TranscodeResult{}
 
 	// Send segment to be transcoded
 	requestURL, err := broadcasterURL.Parse(fmt.Sprintf("live/%s/%d.ts", manifestId, sequenceNumber))
 	if err != nil {
-		return t, fmt.Errorf("appending stream to broadcaster url %s: %v", broadcasterURL.String(), err)
+		return t, fmt.Errorf("appending stream to broadcaster url %s: %v", log.RedactURL(broadcasterURL.String()), err)
 	}
 	req, err := http.NewRequest(http.MethodPost, requestURL.String(), inputSegment)
 	if err != nil {
-		return t, fmt.Errorf("NewRequest POST for url %s: %v", requestURL.String(), err)
+		return t, fmt.Errorf("NewRequest POST for url %s: %v", log.RedactURL(requestURL.String()), err)
 	}
 	req.TransferEncoding = append(req.TransferEncoding, "chunked")
 	req.Header.Add("Content-Type", "video/mp2t")
@@ -76,9 +81,9 @@ func transcodeSegment(inputSegment io.Reader, sequenceNumber, mediaDurationMilli
 		req.Header.Add("Livepeer-Transcode-Configuration", transcodeConfigHeader)
 
 	}
-	res, err := metrics.MonitorRequest(metrics.Metrics.BroadcasterClient, client, req)
+	res, err := metrics.MonitorRequest(metrics.Metrics.BroadcasterClient, httpClient, req)
 	if err != nil {
-		return t, fmt.Errorf("http do(%s): %v", requestURL, err)
+		return t, fmt.Errorf("http do(%s): %v", log.RedactURL(requestURL.String()), err)
 	}
 	defer res.Body.Close()
 
@@ -93,14 +98,14 @@ func transcodeSegment(inputSegment io.Reader, sequenceNumber, mediaDurationMilli
 			bodyString = "<Too long to include in error>"
 		}
 
-		return t, fmt.Errorf("http POST(%s) returned %d %s. Response Body: %s", requestURL, res.StatusCode, res.Status, bodyString)
+		return t, fmt.Errorf("http POST(%s) returned %d %s. Response Body: %s", log.RedactURL(requestURL.String()), res.StatusCode, res.Status, bodyString)
 	}
 	mediaType, params, err := mime.ParseMediaType(res.Header.Get("Content-Type"))
 	if err != nil {
-		return t, fmt.Errorf("http POST(%s) ParseMediaType(%s): %v", requestURL, res.Header.Get("Content-Type"), err)
+		return t, fmt.Errorf("http POST(%s) ParseMediaType(%s): %v", log.RedactURL(requestURL.String()), res.Header.Get("Content-Type"), err)
 	}
 	if mediaType != "multipart/mixed" {
-		return t, fmt.Errorf("http POST(%s) mediaType === %s", requestURL, mediaType)
+		return t, fmt.Errorf("http POST(%s) mediaType === %s", log.RedactURL(requestURL.String()), mediaType)
 	}
 	// parse multipart body and return response
 	mr := multipart.NewReader(res.Body, params["boundary"])

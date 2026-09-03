@@ -216,7 +216,13 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 	if err := CheckSourceURLValid(uploadVODRequest.Url); err != nil {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
 	}
-
+	for _, output := range uploadVODRequest.OutputLocations {
+		if output.Type == "object_store" {
+			if err := clients.ValidatePublicObjectStoreURL(output.URL); err != nil {
+				return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+			}
+		}
+	}
 	if !uploadVODRequest.IsProfileValid() {
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("invalid transcode profile requested"))
 	}
@@ -288,7 +294,14 @@ func (d *CatalystAPIHandlersCollection) handleUploadVOD(w http.ResponseWriter, r
 		return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", fmt.Errorf("invalid value provided for pipeline strategy: %q", uploadVODRequest.PipelineStrategy))
 	}
 
-	if err = checkWritePermission(requestID, uploadVODRequest.ExternalID, hlsTargetURL, mp4TargetURL, fragMp4TargetURL, clipTargetURL, thumbsTargetURL); err != nil {
+	writePermissionCheck := d.checkWritePermission
+	if writePermissionCheck == nil {
+		writePermissionCheck = checkWritePermission
+	}
+	if err = writePermissionCheck(requestID, uploadVODRequest.ExternalID, hlsTargetURL, mp4TargetURL, fragMp4TargetURL, clipTargetURL, thumbsTargetURL); err != nil {
+		if clients.IsDestinationPolicyError(err) {
+			return false, errors.WriteHTTPBadRequest(w, "Invalid request payload", err)
+		}
 		return false, errors.WriteHTTPInternalServerError(w, "Internal error", err)
 	}
 
@@ -383,9 +396,5 @@ func CheckSourceURLValid(sourceURL string) error {
 		return err
 	}
 
-	if strings.HasSuffix(u.Hostname(), ".local") {
-		return fmt.Errorf(".local domains are not valid")
-	}
-
-	return nil
+	return clients.ValidateImportURL(u)
 }

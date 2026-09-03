@@ -18,6 +18,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
+	catErrs "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/video"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/stretchr/testify/require"
@@ -81,7 +82,7 @@ func TestCoordinatorDoesNotBlock(t *testing.T) {
 			running.Store(true)
 			defer running.Store(false)
 			<-barrier
-			return nil, errors.New("test error")
+			return nil, errors.New("test error for https://internal.example/object?X-Amz-Signature=secret")
 		},
 	}
 	coord := NewStubCoordinatorOpts("", callbackHandler, blockHandler, blockHandler)
@@ -100,9 +101,64 @@ func TestCoordinatorDoesNotBlock(t *testing.T) {
 	close(barrier)
 	msg = requireReceive(t, callbacks, 1*time.Second)
 	require.Equal(clients.TranscodeStatusError, msg.Status)
-	require.Contains(msg.Error, "test error")
+	require.Equal(publicJobError, msg.Error)
+	require.NotContains(msg.Error, "secret")
 
 	require.Zero(len(callbacks))
+}
+
+func TestPublicJobErrorForTaskRunner(t *testing.T) {
+	details := ": https://user:secret@storage.example/source?X-Amz-Signature=private"
+	tests := []struct {
+		name     string
+		err      error
+		expected string
+	}{
+		{"nil", nil, "transcoding failed"},
+		{"unknown with URL and credentials", errors.New("unknown provider failure" + details), "transcoding failed"},
+		{"typed file access", catErrs.Public(catErrs.PublicErrorFileInaccessible, errors.New("private detail")), "download error for import request: 404 not found"},
+		{"typed invalid input", catErrs.Public(catErrs.PublicErrorInvalidInput, errors.New("private detail")), "unsupported video input"},
+		{"typed probe failure", catErrs.Public(catErrs.PublicErrorProbeFailed, errors.New("private detail")), "failed probe/open"},
+		{"typed segment probe", catErrs.Public(catErrs.PublicErrorSegmentProbe, errors.New("private detail")), "probe failed for segment"},
+		{"typed category precedes legacy marker", catErrs.Public(catErrs.PublicErrorInvalidInput, errors.New("probe failed for segment"+details)), publicInvalidInput},
+		{"unknown typed category does not use legacy fallback", catErrs.Public(catErrs.PublicErrorCode("future"), errors.New("unsupported video input"+details)), publicJobError},
+		{"legacy download timeout", errors.New("download error for import request: 504 gateway timeout" + details), publicFileInaccessible},
+		{"legacy download not found", errors.New("download error for import request: 404 not found" + details), publicFileInaccessible},
+		{"legacy download retries exhausted", errors.New("download error for import request: giving up after 5 attempts" + details), publicFileInaccessible},
+		{"legacy upload EOF", errors.New("upload error: failed to write file: unexpected EOF" + details), publicFileInaccessible},
+		{"legacy MediaConvert access", errors.New("3450: error encountered when accessing" + details), publicFileInaccessible},
+		{"legacy S3 copy download", errors.New("error copying input file to S3: download error" + details), publicFileInaccessible},
+		{"legacy S3 copy EOF", errors.New("error copying input file to S3: unexpected EOF" + details), publicFileInaccessible},
+		{"legacy output access", errors.New("failed to write to OS URL: AccessDenied" + details), publicFileInaccessible},
+		{"legacy invalid transcoder input", errors.New("doesn't have video that the transcoder can consume" + details), publicInvalidInput},
+		{"legacy unsupported video codec", errors.New("is not a supported input video codec" + details), publicInvalidInput},
+		{"legacy unsupported audio codec", errors.New("is not a supported input audio codec" + details), publicInvalidInput},
+		{"legacy packet EOF", errors.New("readpacketdata file read failed - end of file hit" + details), publicInvalidInput},
+		{"legacy no video track", errors.New("no video track found in file" + details), publicInvalidInput},
+		{"legacy no pictures", errors.New("no pictures decoded" + details), publicInvalidInput},
+		{"legacy zero bytes", errors.New("zero bytes found for source" + details), publicInvalidInput},
+		{"legacy invalid framerate", errors.New("invalid framerate" + details), publicInvalidInput},
+		{"legacy maximum resolution", errors.New("maximum resolution is" + details), publicInvalidInput},
+		{"legacy unsupported video", errors.New("unsupported video input" + details), publicInvalidInput},
+		{"legacy scaler rectangle", errors.New("scaler position rectangle is outside output frame" + details), publicInvalidInput},
+		{"legacy non-media manifest", errors.New("received non-media manifest" + details), publicInvalidInput},
+		{"legacy no audio frames", errors.New("no audio frames decoded on" + details), publicInvalidInput},
+		{"legacy missing framerate info", errors.New("there is no frame rate information in the input stream info" + details), publicInvalidInput},
+		{"legacy minimum field value", errors.New("minimum field value of" + details), publicInvalidInput},
+		{"legacy error probing", errors.New("error probing" + details), publicInvalidInput},
+		{"legacy no valid segments", errors.New("no valid segments in stream to transcode" + details), publicInvalidInput},
+		{"legacy probe open", errors.New("failed probe/open" + details), publicProbeFailed},
+		{"legacy unsupported pixel format", errors.New("unsupported input pixel format" + details), "unsupported input pixel format"},
+		{"legacy segment probe", errors.New("probe failed for segment" + details), publicSegmentProbe},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual := publicJobErrorForTaskRunner(tt.err)
+			require.Equal(t, tt.expected, actual)
+			require.NotRegexp(t, "(?i)secret|private|storage\\.example", actual)
+		})
+	}
 }
 
 func TestCoordinatorResistsPanics(t *testing.T) {
@@ -128,7 +184,7 @@ func TestCoordinatorResistsPanics(t *testing.T) {
 
 	msg := requireReceive(t, callbacks, 1*time.Second)
 	require.Equal(clients.TranscodeStatusError, msg.Status)
-	require.Contains(msg.Error, "oh no")
+	require.Equal(publicJobError, msg.Error)
 }
 
 func TestCoordinatorCatalystDominance(t *testing.T) {
@@ -164,6 +220,9 @@ func TestCoordinatorSourceCopy(t *testing.T) {
 	job.SourceFile = "file://" + inputFile.Name()
 	job.SourceCopy = true
 	job.HlsTargetURL = coord.SourceOutputURL
+	// This test exercises coordinator routing with a local filesystem fixture.
+	// The /api/vod boundary separately proves local request outputs are rejected.
+	coord.InputCopy = clients.NewInputCopy()
 	coord.StartUploadJob(job)
 
 	j := requireReceive(t, calls, 1*time.Second)
@@ -381,7 +440,7 @@ func Test_EmptyFile(t *testing.T) {
 	requireReceive(t, callbacks, 1*time.Second) // discard initial TranscodeStatusPreparing message
 	msg := requireReceive(t, callbacks, 1*time.Second)
 	require.Equal(t, clients.TranscodeStatusError, msg.Status)
-	require.Equal(t, "error copying input to storage: failed to copy file(s): zero bytes found for source: "+job.SourceFile, msg.Error)
+	require.Equal(t, "unsupported video input", msg.Error)
 }
 
 func Test_ProbeErrors(t *testing.T) {
@@ -400,7 +459,7 @@ func Test_ProbeErrors(t *testing.T) {
 		{
 			name:        "invalid framerate",
 			fps:         -1,
-			expectedErr: "error copying input to storage: invalid framerate: -1.000000",
+			expectedErr: "unsupported video input",
 		},
 		{
 			name:        "audio only",
@@ -410,12 +469,12 @@ func Test_ProbeErrors(t *testing.T) {
 		{
 			name:        "filesize greater than max",
 			size:        config.MaxInputFileSizeBytes + 1,
-			expectedErr: "error copying input to storage: input file 32212254721 bytes was greater than 32212254720 bytes",
+			expectedErr: publicJobError,
 		},
 		{
 			name:        "probe error",
 			probeErr:    errors.New("probe failed"),
-			expectedErr: "error copying input to storage: error probing MP4 input file from S3: probe failed",
+			expectedErr: publicProbeFailed,
 		},
 	}
 
