@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"context"
 	"crypto/rsa"
 	"database/sql"
 	"fmt"
@@ -44,7 +45,18 @@ const (
 	maxMP4OutDuration          = 2 * time.Minute
 	maxRecordingMP4Duration    = 12 * time.Hour
 	maxRecordingThumbsDuration = maxRecordingMP4Duration
+	publicJobError             = "transcoding failed"
+	publicFileInaccessible     = "download error for import request: 404 not found"
+	publicInvalidInput         = "unsupported video input"
+	publicProbeFailed          = "failed probe/open"
+	publicPixelFormat          = "unsupported input pixel format"
+	publicSegmentProbe         = "probe failed for segment"
+	taskRunnerInvalidInput     = "doesn't have video that the transcoder can consume\x00is not a supported input video codec\x00is not a supported input audio codec\x00" +
+		"readpacketdata file read failed - end of file hit\x00no video track found in file\x00no pictures decoded\x00zero bytes found for source\x00invalid framerate\x00maximum resolution is\x00unsupported video input\x00" +
+		"scaler position rectangle is outside output frame\x00received non-media manifest\x00no audio frames decoded on\x00there is no frame rate information in the input stream info\x00minimum field value of\x00error probing\x00no valid segments in stream to transcode"
 )
+
+var publicJobErrorByCode = map[errors.PublicErrorCode]string{errors.PublicErrorFileInaccessible: publicFileInaccessible, errors.PublicErrorInvalidInput: publicInvalidInput, errors.PublicErrorProbeFailed: publicProbeFailed, errors.PublicErrorSegmentProbe: publicSegmentProbe}
 
 func (s Strategy) IsValid() bool {
 	switch s {
@@ -372,7 +384,15 @@ func checkClipResolution(p UploadJobPayload, inputVideoProbe *video.InputVideo, 
 		return
 	}
 
-	iv, err := video.Probe{IgnoreErrMessages: clients.IgnoreProbeErrs}.ProbeFile(p.RequestID, originalSource.String())
+	ctx, cancel := context.WithTimeout(context.Background(), clients.MaxCopyFileDuration)
+	defer cancel()
+	probeFile, cleanup, _, err := clients.DownloadFirstPublicHLSProbeToTemporary(ctx, p.RequestID, originalSource.String())
+	if err != nil {
+		log.LogError(p.RequestID, "checkClipResolution safe probe download error", err)
+		return
+	}
+	defer cleanup()
+	iv, err := video.Probe{IgnoreErrMessages: clients.IgnoreProbeErrs}.ProbeFile(p.RequestID, probeFile, "-protocol_whitelist", "file,crypto")
 	if err != nil {
 		log.LogError(p.RequestID, "checkClipResolution probe error", err)
 		return
@@ -610,7 +630,8 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 			// an empty url will skip actually sending the callback. we still want the log tho
 			callbackURL = ""
 		}
-		tsm = clients.NewTranscodeStatusError(callbackURL, job.RequestID, err.Error(), errors.IsUnretriable(err))
+		// Expose only a safe category; detailed errors can contain credentials and stay in server-side logs.
+		tsm = clients.NewTranscodeStatusError(callbackURL, job.RequestID, publicJobErrorForTaskRunner(err), errors.IsUnretriable(err))
 		job.state = "failed"
 	} else {
 		tsm = clients.NewTranscodeStatusCompleted(job.CallbackURL, job.RequestID, out.Result.InputVideo, out.Result.Outputs)
@@ -670,6 +691,39 @@ func (c *Coordinator) finishJob(job *JobInfo, out *HandlerOutput, err error) {
 	c.sendDBMetrics(job, out)
 
 	job.result <- success
+}
+
+func publicJobErrorForTaskRunner(err error) string {
+	if code, ok := errors.PublicCode(err); ok {
+		if publicError, known := publicJobErrorByCode[code]; known {
+			return publicError
+		}
+		return publicJobError
+	}
+	if err == nil {
+		return publicJobError
+	}
+
+	msg := strings.ToLower(err.Error())
+	fileInaccessible := (strings.Contains(msg, "download error") && strings.Contains(msg, "import request") &&
+		(strings.Contains(msg, "504 gateway timeout") || strings.Contains(msg, "404 not found") || strings.Contains(msg, "giving up after"))) ||
+		(strings.Contains(msg, "upload error") && strings.Contains(msg, "failed to write file") && strings.Contains(msg, "unexpected eof")) || (strings.Contains(msg, "3450") && strings.Contains(msg, "error encountered when accessing")) ||
+		(strings.Contains(msg, "error copying input file to s3") && (strings.Contains(msg, "download error") || strings.Contains(msg, "unexpected eof"))) ||
+		(strings.Contains(msg, "failed to write to os url") && strings.Contains(msg, "accessdenied"))
+	if fileInaccessible {
+		return publicFileInaccessible
+	}
+	for _, output := range []string{publicSegmentProbe, publicProbeFailed, publicPixelFormat} {
+		if strings.Contains(msg, output) {
+			return output
+		}
+	}
+	for _, marker := range strings.Split(taskRunnerInvalidInput, "\x00") {
+		if strings.Contains(msg, marker) {
+			return publicInvalidInput
+		}
+	}
+	return publicJobError
 }
 
 func getProfileCount(out *HandlerOutput) int {

@@ -18,8 +18,12 @@ func TestIsObjectNotFound(t *testing.T) {
 }
 
 func TestUnretriable(t *testing.T) {
-	err := Unretriable(fmt.Errorf("bar"))
+	cause := fmt.Errorf("private detail")
+	err := Unretriable(Public(PublicErrorInvalidInput, cause))
 	require.True(t, IsUnretriable(err))
 	var permErr *backoff.PermanentError
 	require.True(t, errors.As(err, &permErr))
+	code, _ := PublicCode(err)
+	require.Equal(t, PublicErrorInvalidInput, code)
+	require.ErrorIs(t, err, cause)
 }

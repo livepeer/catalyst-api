@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -165,12 +166,12 @@ func TestDownloadDStorageFromGatewayListLooping(t *testing.T) {
 		require.NoError(t, err)
 		config.ImportIPFSGatewayURLs = append(config.ImportIPFSGatewayURLs, u)
 	}
-	dStorage := NewDStorageDownload()
+	dStorage := NewDStorageDownload(http.DefaultClient)
 
 	var runTest = func(s int, errExpected bool, expectedCalls []int) {
 		successfulGateway = s
 		gatewayCalls = []int{}
-		_, err := dStorage.DownloadDStorageFromGatewayList("ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID")
+		_, err := dStorage.DownloadDStorageFromGatewayList(context.Background(), "ipfs://Qme7ss3ARVgxv6rXqVPiikMJ8u2NLgmgszg13pYrDKEoiu", "reqID")
 		if errExpected {
 			require.Error(t, err)
 		} else {
@@ -291,7 +292,7 @@ func Test_IPFSResourceIDParsing(t *testing.T) {
 
 func copyDStorageToS3(url, s3URL string, requestID string) error {
 	return backoff.Retry(func() error {
-		content, err := NewDStorageDownload().DownloadDStorageFromGatewayList(url, requestID)
+		content, err := NewDStorageDownload(http.DefaultClient).DownloadDStorageFromGatewayList(context.Background(), url, requestID)
 		if err != nil {
 			return err
 		}

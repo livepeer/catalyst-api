@@ -131,15 +131,16 @@ func TestItCanTranscode(t *testing.T) {
 		},
 	}
 
-	statusClient := clients.NewPeriodicCallbackClient(100*time.Minute, map[string]string{})
 	// Check we don't get an error downloading or parsing it
 	outputs, segmentsCount, err := RunTranscodeProcess(
 		TranscodeSegmentRequest{
 			CallbackURL:       callbackServer.URL,
 			SourceManifestURL: manifestFile.Name(),
 			ReportProgress: func(stage clients.TranscodeStatus, completionRatio float64) {
-				err := statusClient.SendTranscodeStatus(clients.NewTranscodeStatusProgress(callbackServer.URL, "", stage, completionRatio))
-				require.NoError(t, err)
+				callback := map[string]interface{}{"completion_ratio": clients.OverallCompletionRatio(stage, completionRatio)}
+				callbacksLock.Lock()
+				callbacks = append(callbacks, callback)
+				callbacksLock.Unlock()
 			},
 			HlsTargetURL: dir,
 		},
@@ -177,22 +178,54 @@ low-bitrate/index.m3u8
 	require.Equal(t, totalSegments-1, segmentsCount)
 	require.Equal(t, expectedMasterManifest, string(masterManifestBytes))
 
-	// Start the callback client, to let it run for one iteration
-	statusClient.SendCallbacks()
-
-	// Wait for the callbacks to arrive
-	time.Sleep(100 * time.Millisecond)
-
 	// Check we received periodic progress callbacks
 	callbacksLock.Lock()
 	defer callbacksLock.Unlock()
-	require.Equal(t, 1, len(callbacks))
-	require.Equal(t, 0.9, callbacks[0]["completion_ratio"])
+	require.GreaterOrEqual(t, len(callbacks), 1)
+	require.Equal(t, 0.9, callbacks[len(callbacks)-1]["completion_ratio"])
 
 	// Check we received a final Transcode Completed callback
 	require.Equal(t, 1, len(outputs))
 	require.Equal(t, path.Join(dir, "index.m3u8"), outputs[0].Manifest)
 	require.Equal(t, 2, len(outputs[0].Videos))
+}
+
+func TestHLSRejectsPrivateLastSegmentBeforeProbe(t *testing.T) {
+	manifest := filepath.Join(t.TempDir(), "index.m3u8")
+	err := os.WriteFile(manifest, []byte("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\nhttps://169.254.169.254/latest/meta-data\n#EXT-X-ENDLIST\n"), 0o600)
+	require.NoError(t, err)
+
+	_, _, err = RunTranscodeProcess(
+		TranscodeSegmentRequest{
+			SourceManifestURL: manifest,
+			RequestID:         "request-controlled-hls",
+			ReportProgress:    func(clients.TranscodeStatus, float64) {},
+		},
+		"stream",
+		video.InputVideo{
+			Format: "hls",
+			Tracks: []video.InputTrack{{
+				Type:       video.TrackTypeVideo,
+				VideoTrack: video.VideoTrack{Width: 1280, Height: 720, FPS: 30},
+			}},
+		},
+		nil,
+	)
+	require.ErrorContains(t, err, "not public")
+}
+
+func TestUploadMP4FilesRetainsLocalFileForProbe(t *testing.T) {
+	stagingDir := t.TempDir()
+	localFile := filepath.Join(stagingDir, "source.mp4")
+	require.NoError(t, os.WriteFile(localFile, []byte("media"), 0o600))
+
+	outputDir := t.TempDir()
+	uploaded, err := uploadMp4Files(&url.URL{Scheme: "file", Path: outputDir}, []string{localFile}, "rendition")
+	require.NoError(t, err)
+	require.Len(t, uploaded, 1)
+	require.Equal(t, localFile, uploaded[0].LocalPath)
+	require.FileExists(t, uploaded[0].LocalPath)
+	require.FileExists(t, filepath.Join(outputDir, "rendition.mp4"))
 }
 
 func TestProcessTranscodeResult(t *testing.T) {

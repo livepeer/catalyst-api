@@ -68,3 +68,30 @@ func TestPublish(t *testing.T) {
 	require.Equal("", hlsPlaybackUrl)
 	require.Equal("", mp4PlaybackUrl)
 }
+
+func TestUploadToOSURLRejectsPrivateNetwork(t *testing.T) {
+	err := UploadToOSURL("s3+https://access:secret@127.0.0.1/bucket/output.m3u8", "", strings.NewReader("data"), time.Second)
+	require.Error(t, err)
+	require.True(t, IsDestinationPolicyError(err))
+}
+
+func TestValidatePublicObjectStoreURL(t *testing.T) {
+	require.NoError(t, ValidatePublicObjectStoreURL("s3://access:secret@us-east-1/public-bucket/output"))
+	require.Error(t, ValidatePublicObjectStoreURL("gs://credentials@public-bucket/output"))
+	require.Error(t, ValidatePublicObjectStoreURL("s3://access:secret@us-east-1"))
+}
+
+func TestUploadToOSURLAllowsLocalFile(t *testing.T) {
+	dir := t.TempDir()
+	err := UploadToOSURL("file://"+dir, exampleFilename, strings.NewReader(exampleFileContents), time.Second)
+	require.NoError(t, err)
+
+	rc, err := DownloadOSURL(path.Join(dir, exampleFilename))
+	require.NoError(t, err)
+	defer rc.Close()
+
+	buf := new(strings.Builder)
+	_, err = io.Copy(buf, rc)
+	require.NoError(t, err)
+	require.Equal(t, exampleFileContents, buf.String())
+}

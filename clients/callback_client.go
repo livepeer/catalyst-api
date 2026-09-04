@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"path"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,25 +36,44 @@ type PeriodicCallbackClient struct {
 	httpClient               *http.Client
 	callbackInterval         time.Duration
 	headers                  map[string]string
+	apiServer                string
+	done                     chan struct{}
+	stopOnce                 sync.Once
 }
 
-func NewPeriodicCallbackClient(callbackInterval time.Duration, headers map[string]string) *PeriodicCallbackClient {
+func NewPeriodicCallbackClient(callbackInterval time.Duration, headers map[string]string, apiServer string) *PeriodicCallbackClient {
+	return newPeriodicCallbackClient(
+		callbackInterval,
+		headers,
+		apiServer,
+		newPublicHTTPClientForSurface(5*time.Second, "callback", false, false),
+	)
+}
+
+// newPeriodicCallbackClient permits unit tests to inject an isolated client. Production
+// callers must use NewPeriodicCallbackClient so callback URLs are checked at delivery time.
+func newPeriodicCallbackClient(callbackInterval time.Duration, headers map[string]string, apiServer string, httpClient *http.Client) *PeriodicCallbackClient {
 	client := retryablehttp.NewClient()
 	client.RetryMax = 2                          // Retry a maximum of this+1 times
 	client.RetryWaitMin = 200 * time.Millisecond // Wait at least this long between retries
 	client.RetryWaitMax = 1 * time.Second        // Wait at most this long between retries (exponential backoff)
 	client.CheckRetry = metrics.HttpRetryHook
-	client.HTTPClient = &http.Client{
-		Timeout: 5 * time.Second, // Give up on requests that take more than this long
-	}
+	client.HTTPClient = httpClient
 	client.Logger = log.NewRetryableHTTPLogger()
 
+	standardClient := client.StandardClient()
+	standardClient.CheckRedirect = httpClient.CheckRedirect
+	standardClient.Jar = httpClient.Jar
+	standardClient.Timeout = httpClient.Timeout
+
 	return &PeriodicCallbackClient{
-		httpClient:               client.StandardClient(),
+		httpClient:               standardClient,
 		callbackInterval:         callbackInterval,
 		requestIDToLatestMessage: map[string]TranscodeStatusMessage{},
 		mapLock:                  sync.RWMutex{},
 		headers:                  headers,
+		apiServer:                apiServer,
+		done:                     make(chan struct{}),
 	}
 }
 
@@ -59,14 +81,22 @@ func NewPeriodicCallbackClient(callbackInterval time.Duration, headers map[strin
 // and then pausing for a set amount of time
 func (pcc *PeriodicCallbackClient) Start() *PeriodicCallbackClient {
 	go func() {
+		ticker := time.NewTicker(pcc.callbackInterval)
+		defer ticker.Stop()
 		for {
-			recoverer(func() {
-				time.Sleep(pcc.callbackInterval)
-				pcc.SendCallbacks()
-			})
+			select {
+			case <-ticker.C:
+				recoverer(pcc.SendCallbacks)
+			case <-pcc.done:
+				return
+			}
 		}
 	}()
 	return pcc
+}
+
+func (pcc *PeriodicCallbackClient) Stop() {
+	pcc.stopOnce.Do(func() { close(pcc.done) })
 }
 
 func recoverer(f func()) {
@@ -149,6 +179,10 @@ func (pcc *PeriodicCallbackClient) SendCallbacks() {
 }
 
 func (pcc *PeriodicCallbackClient) sendCallback(tsm TranscodeStatusMessage) error {
+	if err := ValidateCallbackURL(tsm.URL, pcc.apiServer); err != nil {
+		return err
+	}
+
 	j, err := json.Marshal(tsm)
 	if err != nil {
 		log.LogError(tsm.RequestID, "failed to marshal callback JSON", err)
@@ -169,6 +203,35 @@ func (pcc *PeriodicCallbackClient) sendCallback(tsm TranscodeStatusMessage) erro
 	return nil
 }
 
+func ValidateCallbackURL(rawURL, apiServer string) error {
+	callback, err := url.Parse(rawURL)
+	if err != nil {
+		return rejectDestination("callback", "callback URL is invalid")
+	}
+	if err := ValidatePublicURL(callback, "callback", false, "https"); err != nil {
+		return err
+	}
+	server, err := url.Parse(apiServer)
+	if err != nil || !strings.EqualFold(server.Scheme, "https") || server.Hostname() == "" {
+		return rejectDestination("callback", "callback policy requires an HTTPS API server")
+	}
+	port := func(u *url.URL) string {
+		if u.Port() != "" {
+			return u.Port()
+		}
+		return "443"
+	}
+	callbackPath := path.Clean("/" + strings.TrimPrefix(callback.Path, "/"))
+	if !strings.EqualFold(callback.Hostname(), server.Hostname()) || port(callback) != port(server) ||
+		(callbackPath != "/task-runner" && !strings.HasPrefix(callbackPath, "/task-runner/")) {
+		return rejectDestination("callback", "callback URL is not a Task Runner endpoint for the API server")
+	}
+	if callback.RawPath != "" || callback.Fragment != "" {
+		return rejectDestination("callback", "encoded paths and fragments are not allowed")
+	}
+	return nil
+}
+
 func (pcc *PeriodicCallbackClient) doWithRetries(r *http.Request) error {
 	for k, v := range pcc.headers {
 		r.Header.Set(k, v)
@@ -176,12 +239,12 @@ func (pcc *PeriodicCallbackClient) doWithRetries(r *http.Request) error {
 
 	resp, err := metrics.MonitorRequest(metrics.Metrics.TranscodingStatusUpdate, pcc.httpClient, r)
 	if err != nil {
-		return fmt.Errorf("failed to send callback to %q. Error: %s", r.URL.Redacted(), err)
+		return fmt.Errorf("failed to send callback to %q. Error: %s", log.RedactURL(r.URL.String()), err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("failed to send callback to %q. HTTP Code: %d", r.URL.Redacted(), resp.StatusCode)
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("failed to send callback to %q. HTTP Code: %d", log.RedactURL(r.URL.String()), resp.StatusCode)
 	}
 
 	return nil

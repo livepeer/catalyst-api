@@ -108,9 +108,36 @@ func TestGetTargetOutputs(t *testing.T) {
 	}
 }
 
-func TestItRejectsLocalDomain(t *testing.T) {
-	err := CheckSourceURLValid("http://ipfs.libraries.svc.cluster.local:8080/ipfs/asdasd")
-	require.EqualError(t, err, ".local domains are not valid")
+func TestItRejectsNonPublicSourceURLs(t *testing.T) {
+	tests := []string{
+		"http://localhost/input",
+		"http://LOCALHOST./input",
+		"http://service.localhost/input",
+		"http://ipfs.libraries.svc.cluster.local:8080/ipfs/asdasd",
+		"http://127.0.0.1/input",
+		"http://127.255.255.254/input",
+		"http://0.0.0.0/input",
+		"http://10.0.0.1/input",
+		"http://172.16.0.1/input",
+		"http://172.31.255.254/input",
+		"http://192.168.0.1/input",
+		"http://100.64.0.1/input",
+		"http://169.254.169.254/latest/meta-data",
+		"http://192.0.2.1/input",
+		"http://198.18.0.1/input",
+		"http://224.0.0.1/input",
+		"http://240.0.0.1/input",
+		"http://[::1]/input",
+		"http://[fc00::1]/input",
+		"http://[fe80::1]/input",
+		"http://[2001:db8::1]/input",
+		"file:///etc/passwd",
+	}
+	for _, sourceURL := range tests {
+		t.Run(sourceURL, func(t *testing.T) {
+			require.Error(t, CheckSourceURLValid(sourceURL))
+		})
+	}
 }
 
 func TestItRejectsEmptyURL(t *testing.T) {
@@ -121,6 +148,8 @@ func TestItRejectsEmptyURL(t *testing.T) {
 func TestItAcceptsValidSourceURLs(t *testing.T) {
 	require.NoError(t, CheckSourceURLValid("http://www.google.com"))
 	require.NoError(t, CheckSourceURLValid("http://www.google.com:8080/123/asdsdf"))
+	require.NoError(t, CheckSourceURLValid("http://8.8.8.8/source.mp4"))
+	require.NoError(t, CheckSourceURLValid("http://[2606:4700:4700::1111]/source.mp4"))
 	require.NoError(t, CheckSourceURLValid("ipfs://sfsdf234fdsdfsd"))
 	require.NoError(t, CheckSourceURLValid("ar://123456"))
 }

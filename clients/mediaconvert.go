@@ -46,7 +46,7 @@ type ByteAccumulatorWriter struct {
 
 func (acc *ByteAccumulatorWriter) Write(p []byte) (int, error) {
 	acc.count += int64(len(p))
-	return 0, nil
+	return len(p), nil
 }
 
 type MediaConvertOptions struct {
@@ -190,7 +190,7 @@ func (mc *MediaConvert) Transcode(ctx context.Context, args TranscodeJobArgs) (o
 		}
 	}
 
-	hlsPlaybackBaseURL, mp4PlaybackBaseURL, err := Publish(toStr(hlsTarget), toStr(mp4Target))
+	hlsPlaybackBaseURL, mp4PlaybackBaseURL, err := PublishPublic(toStr(hlsTarget), toStr(mp4Target))
 	if err != nil {
 		return nil, err
 	}

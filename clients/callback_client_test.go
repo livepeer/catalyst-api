@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -13,6 +14,25 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+const (
+	callbackTestServer = "https://callback.example.com"
+	callbackTestURL    = callbackTestServer + "/task-runner/status"
+)
+
+func callbackTestClient(t *testing.T, server *httptest.Server) *http.Client {
+	t.Helper()
+	target, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	base := server.Client().Transport
+	return &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		clone := req.Clone(req.Context())
+		clone.URL = new(url.URL)
+		*clone.URL = *req.URL
+		clone.URL.Scheme, clone.URL.Host = target.Scheme, target.Host
+		return base.RoundTrip(clone)
+	})}
+}
 
 func TestItRetriesOnFailedCallbacks(t *testing.T) {
 	// Counter for the number of retries we've done
@@ -45,10 +65,11 @@ func TestItRetriesOnFailedCallbacks(t *testing.T) {
 	defer svr.Close()
 
 	// Create a client that sends heartbeats very irregularly, to let us assert things about a single iteration of the callback
-	client := NewPeriodicCallbackClient(100*time.Hour, map[string]string{"Foo": "bar"})
+	client := newPeriodicCallbackClient(100*time.Hour, map[string]string{"Foo": "bar"}, callbackTestServer, callbackTestClient(t, svr))
+	t.Cleanup(client.Stop)
 
 	// Send the status in, but it shouldn't get sent yet because we haven't started the client
-	err := client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusCompleted, 1))
+	err := client.SendTranscodeStatus(NewTranscodeStatusProgress(callbackTestURL, "example-request-id", TranscodeStatusCompleted, 1))
 	require.NoError(t, err)
 
 	// Trigger the callback client to send any pending callbacks
@@ -81,8 +102,9 @@ func TestItSendsPeriodicHeartbeats(t *testing.T) {
 	defer svr.Close()
 
 	// Send the callback and confirm the number of times we retried
-	client := NewPeriodicCallbackClient(100*time.Millisecond, map[string]string{}).Start()
-	err := client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusCompleted, 1))
+	client := newPeriodicCallbackClient(100*time.Millisecond, map[string]string{}, callbackTestServer, callbackTestClient(t, svr)).Start()
+	t.Cleanup(client.Stop)
+	err := client.SendTranscodeStatus(NewTranscodeStatusProgress(callbackTestURL, "example-request-id", TranscodeStatusCompleted, 1))
 	require.NoError(t, err)
 
 	time.Sleep(400 * time.Millisecond)
@@ -110,8 +132,9 @@ func TestTranscodeStatusErrorNotifcation(t *testing.T) {
 	defer svr.Close()
 
 	// Send the callback and confirm the number of times we retried
-	client := NewPeriodicCallbackClient(100*time.Millisecond, map[string]string{}).Start()
-	err := client.SendTranscodeStatus(NewTranscodeStatusError(svr.URL, "example-request-id", "something went wrong", false))
+	client := newPeriodicCallbackClient(100*time.Millisecond, map[string]string{}, callbackTestServer, callbackTestClient(t, svr)).Start()
+	t.Cleanup(client.Stop)
+	err := client.SendTranscodeStatus(NewTranscodeStatusError(callbackTestURL, "example-request-id", "something went wrong", false))
 	require.NoError(t, err)
 
 	time.Sleep(200 * time.Millisecond)
@@ -150,10 +173,11 @@ func TestItDoesntSendOutOfOrderUpdates(t *testing.T) {
 	defer svr.Close()
 
 	// Send the callback and confirm the number of times we retried
-	client := NewPeriodicCallbackClient(100*time.Millisecond, map[string]string{}).Start()
-	err := client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusTranscoding, 1))
+	client := newPeriodicCallbackClient(100*time.Millisecond, map[string]string{}, callbackTestServer, callbackTestClient(t, svr)).Start()
+	t.Cleanup(client.Stop)
+	err := client.SendTranscodeStatus(NewTranscodeStatusProgress(callbackTestURL, "example-request-id", TranscodeStatusTranscoding, 1))
 	require.NoError(t, err)
-	err = client.SendTranscodeStatus(NewTranscodeStatusProgress(svr.URL, "example-request-id", TranscodeStatusPreparing, 1))
+	err = client.SendTranscodeStatus(NewTranscodeStatusProgress(callbackTestURL, "example-request-id", TranscodeStatusPreparing, 1))
 	require.NoError(t, err)
 	time.Sleep(400 * time.Millisecond)
 
@@ -182,4 +206,41 @@ func TestItCalculatesTheOverallCompletionRatioCorrectly(t *testing.T) {
 			require.Equal(t, tc.expectedOverallCompletionRatio, OverallCompletionRatio(tc.status, tc.completionRatio))
 		})
 	}
+}
+
+func TestCallbackRejectsPrivateDestinationBeforeRequest(t *testing.T) {
+	client := NewPeriodicCallbackClient(time.Hour, nil, callbackTestServer)
+	t.Cleanup(client.Stop)
+	err := client.SendTranscodeStatus(NewTranscodeStatusProgress("https://127.0.0.1/callback", "request", TranscodeStatusCompleted, 1))
+	require.Error(t, err)
+	require.True(t, IsDestinationPolicyError(err))
+}
+
+func TestValidateCallbackURL(t *testing.T) {
+	require.NoError(t, ValidateCallbackURL(callbackTestURL, callbackTestServer))
+	for _, callback := range []string{
+		"http://callback.example.com/task-runner/1",
+		"https://user:secret@callback.example.com/task-runner/1",
+		"https://attacker.example/task-runner/1",
+		"https://callback.example.com/not-task-runner/1",
+		"https://callback.example.com/task-runner%2F..%2Fadmin",
+		"https://127.0.0.1/task-runner/1",
+	} {
+		require.Error(t, ValidateCallbackURL(callback, callbackTestServer), callback)
+	}
+}
+
+func TestCallbackRequiresTwoHundredResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "https://example.com/redirect")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer server.Close()
+
+	httpClient := callbackTestClient(t, server)
+	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	client := newPeriodicCallbackClient(time.Hour, nil, callbackTestServer, httpClient)
+	t.Cleanup(client.Stop)
+	err := client.SendTranscodeStatus(NewTranscodeStatusProgress(callbackTestURL, "request", TranscodeStatusCompleted, 1))
+	require.ErrorContains(t, err, "HTTP Code: 302")
 }

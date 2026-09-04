@@ -15,6 +15,7 @@ import (
 	"github.com/grafov/m3u8"
 	"github.com/livepeer/catalyst-api/clients"
 	"github.com/livepeer/catalyst-api/config"
+	catErrs "github.com/livepeer/catalyst-api/errors"
 	"github.com/livepeer/catalyst-api/log"
 	"github.com/livepeer/catalyst-api/thumbnails"
 	"github.com/livepeer/catalyst-api/transcode"
@@ -410,7 +411,7 @@ func (f *ffmpeg) probeSourceSegment(requestID string, seg *m3u8.MediaSegment, so
 			if strings.Contains(err.Error(), "non-existing SPS") {
 				log.LogError(requestID, "probeSourceSegment warning", err)
 			} else {
-				return fmt.Errorf("probe failed for segment %s: %w", u, err)
+				return catErrs.Public(catErrs.PublicErrorSegmentProbe, fmt.Errorf("probe failed for segment %s: %w", u, err))
 			}
 		}
 		return nil

@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,13 +21,18 @@ const SCHEME_ARWEAVE = "ar"
 
 type DStorageDownload struct {
 	gatewaysListPosition int
+	httpClient           *http.Client
 }
 
-func NewDStorageDownload() *DStorageDownload {
-	return &DStorageDownload{}
+func NewDStorageDownload(httpClients ...*http.Client) *DStorageDownload {
+	httpClient := importHTTPClient
+	if len(httpClients) > 0 && httpClients[0] != nil {
+		httpClient = httpClients[0]
+	}
+	return &DStorageDownload{httpClient: httpClient}
 }
 
-func (d *DStorageDownload) DownloadDStorageFromGatewayList(u, requestID string) (io.ReadCloser, error) {
+func (d *DStorageDownload) DownloadDStorageFromGatewayList(ctx context.Context, u, requestID string) (io.ReadCloser, error) {
 	var err error
 	var gateways []*url.URL
 	dStorageURL, err := url.Parse(u)
@@ -69,7 +75,7 @@ func (d *DStorageDownload) DownloadDStorageFromGatewayList(u, requestID string) 
 	for i := d.gatewaysListPosition; i < until; i++ {
 		d.gatewaysListPosition = i % length
 		gateway := gateways[d.gatewaysListPosition]
-		opContent, err := downloadDStorageResourceFromSingleGateway(gateway, resourceID, requestID)
+		opContent, err := d.downloadDStorageResourceFromSingleGateway(ctx, gateway, resourceID, requestID)
 		if err == nil {
 			return opContent, nil
 		}
@@ -79,24 +85,24 @@ func (d *DStorageDownload) DownloadDStorageFromGatewayList(u, requestID string) 
 	return nil, fmt.Errorf("failed to fetch %s from any of the gateways: %w", u, lastErr)
 }
 
-func downloadDStorageResourceFromSingleGateway(gateway *url.URL, resourceId, requestID string) (io.ReadCloser, error) {
+func (d *DStorageDownload) downloadDStorageResourceFromSingleGateway(ctx context.Context, gateway *url.URL, resourceId, requestID string) (io.ReadCloser, error) {
 	fullURL := gateway.JoinPath(resourceId).String()
 	log.Log(requestID, "downloading from gateway", "resourceID", resourceId, "url", fullURL)
-	resp, err := http.DefaultClient.Get(fullURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
+	if err != nil {
+		return nil, catErrs.Unretriable(fmt.Errorf("invalid gateway request: %w", err))
+	}
+	resp, err := d.httpClient.Do(req)
 
 	if err != nil {
 		log.LogError(requestID, "failed to fetch content from gateway", err, "url", fullURL)
 		return nil, err
 	}
 
-	if resp.StatusCode == 404 {
-		resp.Body.Close()
-		log.Log(requestID, "dstorage gateway not found", "status_code", resp.StatusCode, "url", fullURL)
-		return nil, catErrs.NewObjectNotFoundError("not found in dstorage", nil)
-	} else if resp.StatusCode >= 300 {
+	if err := classifyImportHTTPStatus(resp.StatusCode); err != nil {
 		resp.Body.Close()
 		log.Log(requestID, "unexpected response from gateway", "status_code", resp.StatusCode, "url", fullURL)
-		return nil, fmt.Errorf("unexpected response from gateway: %d", resp.StatusCode)
+		return nil, err
 	}
 
 	return resp.Body, nil

@@ -1,7 +1,12 @@
 package handlers
 
-import "github.com/livepeer/catalyst-api/pipeline"
+import (
+	"net/url"
+
+	"github.com/livepeer/catalyst-api/pipeline"
+)
 
 type CatalystAPIHandlersCollection struct {
-	VODEngine *pipeline.Coordinator
+	VODEngine            *pipeline.Coordinator
+	checkWritePermission func(string, string, ...*url.URL) error
 }
